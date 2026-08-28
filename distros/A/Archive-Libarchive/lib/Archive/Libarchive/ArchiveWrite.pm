@@ -13,7 +13,7 @@ use experimental qw( signatures );
 use parent qw( Archive::Libarchive::Archive );
 
 # ABSTRACT: Libarchive write archive class
-our $VERSION = '0.09'; # VERSION
+our $VERSION = '0.10'; # VERSION
 
 my $ffi = Archive::Libarchive::Lib->ffi;
 my %keep;
@@ -172,7 +172,7 @@ Archive::Libarchive::ArchiveWrite - Libarchive write archive class
 
 =head1 VERSION
 
-version 0.09
+version 0.10
 
 =head1 SYNOPSIS
 
@@ -415,7 +415,7 @@ Graham Ollis <plicease@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2021,2022 by Graham Ollis.
+This software is copyright (c) 2021-2024 by Graham Ollis.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

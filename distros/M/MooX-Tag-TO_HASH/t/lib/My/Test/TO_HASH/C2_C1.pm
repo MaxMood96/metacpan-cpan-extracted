@@ -8,5 +8,7 @@ with 'MooX::Tag::TO_HASH';
 
 has pig => ( is => 'ro', to_hash => 1 );
 
+has '+porcupine' => ( is => 'ro', default => 'Prickly', to_hash => 1 );
+
 1;
 

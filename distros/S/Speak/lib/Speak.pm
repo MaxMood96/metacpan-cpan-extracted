@@ -15,7 +15,7 @@ Andrew DeFaria <Andrew@DeFaria.com>
 
 =item Revision
 
-$Revision: 1.03 $
+$Revision: 1.04 $
 
 =item Created
 
@@ -44,13 +44,15 @@ package Speak;
 use strict;
 use warnings;
 use feature 'signatures';
+## no critic (TestingAndDebugging::ProhibitNoWarnings)
 no warnings 'experimental::signatures';
+## use critic
 
 use base 'Exporter';
 
 use Clipboard;
 
-our $VERSION = '1.03';
+our $VERSION = '1.04';
 
 {
 
@@ -64,7 +66,7 @@ our $VERSION = '1.03';
   use IO::Handle;
   use Carp;
 
-sub new ($class, %args) {
+  sub new ($class, %args) {
     my $self = {
       path        => $args{path} || '.',
       name        => $args{name} || 'speak',
@@ -112,7 +114,7 @@ sub new ($class, %args) {
       } else {
         print $fh $timestamp, $msg, "\n";
       }
-    }
+    } ## end if ($self->{handle})
 
     return;
   } ## end sub log
@@ -146,6 +148,9 @@ sub _get_config ($file) {
   return %config;
 } ## end sub _get_config
 
+use Sys::Hostname;
+use JSON::PP;
+use HTTP::Request;
 use LWP::UserAgent;
 use URI::Escape;
 use File::Temp qw(tempfile);
@@ -153,7 +158,15 @@ use File::Path qw(rmtree);
 use File::Basename;
 use Carp;
 
-our @EXPORT_OK = qw(speak);
+our @EXPORT_OK = qw(speak say_persona);
+
+# Config paths searched in order; override @Speak::CONFIG_PATHS before calling
+# speak() to redirect config loading (useful in tests).
+our @CONFIG_PATHS = (
+  ($ENV{HOME} || q{}) . '/.speak/speak.conf',
+  '/etc/speak/speak.conf', '/etc/speak.conf',
+  '/opt/clearscm/Speak/etc/speak.conf',
+);
 
 sub _split_text ($text) {
   return unless defined $text;
@@ -165,13 +178,14 @@ sub _split_text ($text) {
     } elsif ($text =~ s/^(.{1,100})\s//) {
       push @sentences, $1;
     } else {
-      # Fallback: force-slice the first 100 characters if no punctuation is found within 100 chars
-      push @sentences, substr($text, 0, 100, "");
+
+# Fallback: force-slice the first 100 characters if no punctuation is found within 100 chars
+      push @sentences, substr ($text, 0, 100, "");
     }
-  }
+  } ## end while (length $text)
 
   return @sentences;
-} ## end sub _split_text ($text)
+} ## end sub _split_text
 
 sub _fetch_mp3 ($ua, $text, $lang) {
 
@@ -201,7 +215,7 @@ sub _fetch_mp3 ($ua, $text, $lang) {
     carp "Failed to fetch TTS: " . $response->status_line;
     return;
   }
-} ## end sub _fetch_mp3 ($$$)
+} ## end sub _fetch_mp3
 
 sub _convert_mp3_to_wav ($mp3, $wav) {
 
@@ -222,14 +236,14 @@ sub _convert_mp3_to_wav ($mp3, $wav) {
 
   # Fallback to sox (might fail if no mp3 handler)
   return system ("sox \"$mp3\" \"$wav\"") == 0;
-} ## end sub _convert_mp3_to_wav ($$)
+} ## end sub _convert_mp3_to_wav
 
 ## no critic (Subroutines::ProhibitExcessComplexity)
-sub speak ($msg, $log = undef, $lang = undef) {
+sub speak ($msg, $log = undef, $lang = undef, $persona = undef) {
 
 =pod
 
-=head2 speak($msg, $log, $lang)
+=head2 speak($msg, $log, $lang, $persona)
 
 Convert $msg to speech.
 
@@ -252,6 +266,10 @@ If provided, errors and messages will be logged to the logfile, otherwise to spe
 =item $lang
 
 Language code (e.g. 'en', 'en-gb', 'en-au'). Defaults to $ENV{SPEAK_LANG} or 'en'.
+
+=item $persona
+
+Optional. The persona name to use for the voice. If provided, the MCP server is used instead of standard TTS.
 
 =back
 
@@ -280,8 +298,32 @@ Returns:
     append      => 1,
   ) unless $log;
 
-  $msg = Clipboard->paste unless $msg;
+  unless ($msg) {
+    $msg = eval {
+      ## no critic (InputOutput::RequireBriefOpen)
+      open my $olderr, '>&', \*STDERR    or croak "Cannot dup STDERR: $!";
+      open STDERR,     '>',  '/dev/null' or croak "Cannot redirect STDERR: $!";
+      my $res = Clipboard->paste;
+      open STDERR, '>&', $olderr or croak "Cannot restore STDERR: $!";
+      close $olderr;
+      ## use critic
+      $res;
+    };
+    $msg //= '';
+  } ## end unless ($msg)
   $msg = do {local $/; <$msg>} if ref $msg eq 'GLOB';
+
+  my %sys_conf;
+  foreach my $conf_file (@CONFIG_PATHS) {
+    if (-f $conf_file) {
+      %sys_conf = _get_config ($conf_file);
+      last;
+    }
+  } ## end foreach my $conf_file (@CONFIG_PATHS)
+
+  $persona ||= $ENV{SPEAK_PERSONA} || $sys_conf{persona};
+  my $server = $ENV{SPEAK_SERVER} || $sys_conf{server};
+  my $port   = $ENV{SPEAK_PORT}   || $sys_conf{port};
 
   # Sanitize escape sequences
   # 1. Remove bells (\a)
@@ -311,6 +353,61 @@ Returns:
 
   $log->log ($msg);
 
+  if ($server && $port) {
+    if (hostname () eq $server) {
+      local $ENV{TTS_DAEMON_URL} = "http://127.0.0.1:$port";
+      say_persona (undef, $msg, $persona);
+      return;
+    } else {
+      my $ua = LWP::UserAgent->new;
+      $ua->agent ("Mozilla/5.0");
+      my $json     = JSON::PP->new->utf8;
+      my $req_data = {text => $msg};
+      $req_data->{ref_audio} = $persona if $persona;
+      my $req_json = $json->encode ($req_data);
+
+      my $url = "http://$server:$port/clone_voice_audio";
+      my $req = HTTP::Request->new ('POST', $url);
+      $req->header  ('Content-Type' => 'application/json');
+      $req->header  ('Accept'       => 'audio/wav');
+      $req->content ($req_json);
+
+      my $res = $ua->request ($req);
+      if ($res->is_success) {
+        my ($fh, $filename) = tempfile (SUFFIX => '.wav', UNLINK => 0);
+        binmode $fh;
+        print $fh $res->content;
+        close $fh;
+
+        my $os = $^O;
+        if ($os eq 'darwin') {
+          system ("afplay \"$filename\"");
+        } elsif ($os eq 'MSWin32' || $os eq 'cygwin') {
+          my $cmd_wav =
+"powershell -c (New-Object Media.SoundPlayer '$filename').PlaySync()";
+          system ($cmd_wav) == 0 or system ("play -q \"$filename\"");
+        } else {
+          my $player =
+            -x '/usr/bin/paplay'
+            ? 'paplay'
+            : (-x '/bin/paplay' ? 'paplay' : 'play -q');
+          system ("$player \"$filename\"");
+        } ## end else [ if ($os eq 'darwin') ]
+        unlink $filename;
+        return;
+      } else {
+        carp "Failed to fetch TTS from $url: " . $res->status_line;
+        $msg     = "Warning - could not reach $server. " . $msg;
+        $persona = undef;    # clear persona so it falls through to Google TTS
+      }
+    } ## end else [ if (hostname () eq $server)]
+  } ## end if ($server && $port)
+
+  if ($persona) {
+    say_persona (undef, $msg, $persona);
+    return;
+  }
+
   # New Implementation
   my $ua = LWP::UserAgent->new;
   $ua->agent ("Mozilla/5.0");
@@ -322,25 +419,8 @@ Returns:
   # 4. Default 'en'
 
   unless ($lang) {
-    if ($ENV{SPEAK_LANG}) {
-      $lang = $ENV{SPEAK_LANG};
-    } else {
-      my @config_paths =
-        ($ENV{HOME} . "/.speak/speak.conf", "/etc/speak/speak.conf");
-
-      foreach my $conf_file (@config_paths) {
-        if (-f $conf_file) {
-          my %conf = _get_config ($conf_file);
-          if ($conf{language}) {
-            $lang = $conf{language};
-            last;
-          }
-        } ## end if (-f $conf_file)
-      } ## end foreach my $conf_file (@config_paths)
-    } ## end else [ if ($ENV{SPEAK_LANG}) ]
-
-    $lang ||= 'en';
-  } ## end unless ($lang)
+    $lang = $ENV{SPEAK_LANG} || $sys_conf{language} || 'en';
+  }
 
   my @sentences = _split_text ($msg);
   my @mp3_files;
@@ -357,7 +437,7 @@ Returns:
     print $fh $mp3_data;
     close $fh;
 
-    push @mp3_files, $filename;
+    push @mp3_files,       $filename;
     push @valid_sentences, $sentence;
   } ## end foreach my $sentence (@sentences)
 
@@ -370,21 +450,28 @@ Returns:
     # Concatenate using sox if multiple files
     my $final_file;
     if (@mp3_files > 1) {
+
       # Trim boundary silences for artificial (non-punctuation) splits
       for (my $i = 0; $i < $#mp3_files; $i++) {
         my $sentence = $valid_sentences[$i];
         if ($sentence !~ /[.!?;]$/) {
+
           # Trim trailing silence of $mp3_files[$i]
           my ($fh_t, $trimmed_t) = tempfile (SUFFIX => '.mp3', UNLINK => 0);
           close $fh_t;
-          if (system ("sox \"$mp3_files[$i]\" \"$trimmed_t\" reverse silence 1 0.01 1% reverse") == 0) {
+          if (
+            system (
+"sox \"$mp3_files[$i]\" \"$trimmed_t\" reverse silence 1 0.01 1% reverse"
+            ) == 0
+            )
+          {
             unlink $mp3_files[$i];
             $mp3_files[$i] = $trimmed_t;
           } else {
             unlink $trimmed_t;
           }
-        }
-      }
+        } ## end if ($sentence !~ /[.!?;]$/)
+      } ## end for (my $i = 0; $i < $#mp3_files...)
 
       my ($fh, $joined) = tempfile (SUFFIX => '.mp3', UNLINK => 0);
       close $fh;
@@ -491,6 +578,51 @@ Returns:
   return;
 }    # speak
 
+=head2 say_persona($self, $text, $persona)
+
+Experimental subroutine that requires an MCP server.
+Converts the given C<$text> to speech using the specified C<$persona> voice.
+
+=over
+
+=item C<$self>
+
+Object reference (if called as a method) or class name.
+
+=item C<$text>
+
+The text message to be spoken.
+
+=item C<$persona>
+
+The persona name to use for the voice. The system will look for a file named C<lc($persona)> with extensions like .mp3, .wav, or .flac in the voices directory. If not found, it defaults to C<default.mp3>.
+
+=back
+
+=cut
+
+sub say_persona {
+
+  # Experimental - requires MCP server
+  my ($self, $text, $persona) = @_;
+
+  my $mcp_client = '/opt/tts/mcp_client.pl';
+
+  unless (-x $mcp_client) {
+    carp "Warning: MCP client not found or not executable at $mcp_client";
+    return;
+  }
+
+  my @cmd = ($mcp_client, "--text", $text);
+  if ($persona) {
+    push @cmd, "--voice", $persona;
+  }
+
+  system (@cmd);
+
+  return;
+} ## end sub say_persona
+
 1;
 
 =pod
@@ -500,6 +632,9 @@ Returns:
 SPEAK_LANG: Language code (e.g. 'en', 'en-gb', 'en-au'). 
             See etc/speak.conf for available languages.
             Defaults to $ENV{SPEAK_LANG} or 'en'.
+
+SPEAK_PERSONA: Default persona to use for the voice (e.g. 'picard').
+               If set, the MCP TTS engine is used by default.
 
 SPEAK_MUTE: If set to a true value, speech output is muted.
             Alternatively, if a file exists at $ENV{HOME}/.speak/shh
@@ -519,6 +654,7 @@ Format:
 
 Supported keys:
   language - Default language code for speech generation.
+  persona  - Default persona to use for the MCP voice engine.
 
 =head1 DEPENDENCIES
 

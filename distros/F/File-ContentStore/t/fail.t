@@ -1,4 +1,4 @@
-use strict;
+use v5.20;
 use warnings;
 use Test::More;
 

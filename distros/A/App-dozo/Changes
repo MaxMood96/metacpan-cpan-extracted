@@ -1,5 +1,24 @@
 Revision history for Perl extension App-dozo
 
+1.01 2026-08-28T08:24:38Z
+
+    - require bash 4.4+ and Getopt::Long::Bash 1.0.0+ (incompatible change)
+    - detect host address from the default route instead of the last
+      inet address of ifconfig, which was wrong or missing on Linux
+    - pass working directory and environment variables to docker exec so
+      that live containers behave like newly created ones
+    - start container in created state instead of failing with a name
+      conflict
+    - do not read the same .dozorc twice when $HOME is the git top
+      directory
+    - keep the last line of .dozorc without a trailing newline, and stop
+      with a message when a line cannot be parsed
+    - handle path containing glob characters such as [ and ]
+    - resolve relative path given to -V, and keep protocol suffix out of
+      the host port for -P
+    - document .dozorc parsing rules, value splitting of repeatable
+      options, and fix stale description of the default image
+
 1.00 2026-01-05T06:40:24Z
 
     - version 1.00 release

@@ -1,189 +1,45 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
- <meta charset="utf-8" />
- <title>Mail::DMARC</title>
- <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/2.3.7/css/dataTables.dataTables.min.css" />
- <script type="text/javascript" src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
- <script type="text/javascript" src="https://cdn.datatables.net/2.3.7/js/dataTables.min.js"></script>
-
-<style type="text/css">
-html, body {
-  margin: 0;
-  padding: 0;
-  font-size: 80%;
-  font-family: sans-serif;
-}
-td.dt-control {
-  cursor: pointer;
-}
-td.dt-control::before {
-  content: '\25B6';
-  color: #888;
-}
-tr.shown td.dt-control::before {
-  content: '\25BC';
-}
-.dmarc-pass, .dmarc-none       { background-color: #CCFFCC; }
-.dmarc-fail, .dmarc-reject     { background-color: #FFCCCC; }
-.dmarc-quarantine              { background-color: #FFFFCC; }
-span.dmarc-cell {
-  display: block;
-  padding: 2px 4px;
-}
-table.child-detail {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 4px 0;
-}
-table.child-detail th, table.child-detail td {
-  border: 1px solid #ccc;
-  padding: 4px 6px;
-}
-.child-loading { padding: 4px; }
-thead input {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 2px 4px;
-  font-size: 100%;
-}
-</style>
-
-<script type="text/javascript">
-const dmarcCell = (value) => {
-  if (!value) return '';
-  return `<span class="dmarc-cell dmarc-${value.toLowerCase()}">${value}</span>`;
-};
-
-const escAttr = (s) => String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-
-const formatChildRows = (rows) => {
-  if (!rows || !rows.length) return '<p>No detail rows found.</p>';
-  const body = rows.map(r => `<tr>
-    <td>${r.header_from   || ''}</td>
-    <td>${r.source_ip     || ''}</td>
-    <td>${r.count         || ''}</td>
-    <td>${dmarcCell(r.disposition)}</td>
-    <td>${dmarcCell(r.spf)}</td>
-    <td>${dmarcCell(r.dkim)}</td>
-    <td>${r.envelope_to   || ''}</td>
-    <td>${r.envelope_from || ''}</td>
-  </tr>`).join('');
-  return `<table class="child-detail"><thead><tr>
-    <th>Header From</th><th>IP</th><th>#</th><th>Disposition</th>
-    <th>SPF</th><th>DKIM</th><th>Envelope To</th><th>Envelope From</th>
-  </tr></thead><tbody>${body}</tbody></table>`;
-};
-
-jQuery(document).ready(() => {
-  let filterDomain = '';
-  let filterAuthor = '';
-
-  const table = jQuery('#grid').DataTable({
-    processing: true,
-    serverSide: true,
-    rowId: 'rid',
-    ajax: (data, callback) => {
-      const orderCol = data.order?.[0];
-      const sortCol  = orderCol ? (data.columns[orderCol.column].name || 'r.id') : 'r.id';
-      const sortDir  = orderCol?.dir || 'desc';
-      const params   = {
-        start:    data.start,
-        length:   data.length,
-        sort_col: sortCol,
-        sort_dir: sortDir,
-      };
-      if (filterDomain) params.search_domain = filterDomain;
-      if (filterAuthor) params.search_author = filterAuthor;
-      fetch('/dmarc/json/report?' + new URLSearchParams(params))
-        .then(r => r.json())
-        .then(json => callback({
-          draw:            data.draw,
-          recordsTotal:    json.recordsTotal,
-          recordsFiltered: json.recordsFiltered || json.recordsTotal,
-          data:            json.data || [],
-        }))
-        .catch(() => callback({
-          draw:            data.draw,
-          recordsTotal:    0,
-          recordsFiltered: 0,
-          data:            [],
-        }));
-    },
-    columns: [
-      { data: 'rid',         name: null,        title: '',             className: 'dt-control', orderable: false,
-        render: () => '' },
-      { data: 'rid',         name: 'r.id',      title: 'Id',
-        render: (data, type, row) => type === 'display' ? `<span title="${escAttr(row.uuid)}">${data}</span>` : data },
-      { data: 'from_domain', name: 'fd.domain', title: 'Sender/From' },
-      { data: 'author',      name: 'a.org_name', title: 'Org Name' },
-      { data: 'begin',       name: 'r.begin',   title: 'Begin' },
-      { data: 'end',         name: 'r.end',     title: 'End' },
-    ],
-    order: [[1, 'desc']],
-    pageLength: 100,
-    lengthMenu: [50, 100, 500],
-    searching: false,
-    initComplete: function() {
-      const api = this.api();
-      const searchTr = jQuery('<tr>');
-      api.columns().every(function(i) {
-        const th = jQuery('<th>');
-        if (i === 2 || i === 3) {
-          const placeholder = i === 2 ? 'Filter sender\u2026' : 'Filter org\u2026';
-          let timer;
-          jQuery('<input type="text" />')
-            .attr('placeholder', placeholder)
-            .on('input', function() {
-              clearTimeout(timer);
-              const val = this.value;
-              timer = setTimeout(() => {
-                if (i === 2) filterDomain = val;
-                else filterAuthor = val;
-                api.draw();
-              }, 300);
-            })
-            .appendTo(th);
-        }
-        searchTr.append(th);
-      });
-      jQuery('#grid thead').append(searchTr);
-    },
-  });
-
-  jQuery('#grid tbody').on('click', 'td.dt-control', function() {
-    const tr  = jQuery(this).closest('tr');
-    const rid = tr[0].id;
-    if (!rid) return;
-    const row = table.row(tr);
-    if (row.child.isShown()) {
-      row.child.hide();
-      tr.removeClass('shown');
-      return;
-    }
-    row.child('<p class="child-loading">Loading\u2026</p>').show();
-    tr.addClass('shown');
-    fetch(`/dmarc/json/row?rid=${rid}`)
-      .then(r => {
-        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-        return r.json();
-      })
-      .then(json => {
-        table.row(tr[0]).child(formatChildRows(json.data)).show();
-      })
-      .catch(() => {
-        table.row(tr[0]).child.hide();
-        tr.removeClass('shown');
-      });
-  });
-});
-</script>
-
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DMARC reports</title>
+<link rel="stylesheet" href="/dmarc/dmarc.css" />
+<script type="module" src="/dmarc/js/app.js"></script>
 </head>
 <body>
 
-<table id="grid" class="display" style="width:100%"><caption>DMARC Reports</caption></table>
-<p>by <a href="https://metacpan.org/dist/Mail-DMARC">Mail::DMARC</a>.</p>
+<header class="masthead">
+ <h1>Mail<span class="colons">::</span>DMARC</h1>
+
+ <div class="scope">
+  <div class="field">
+   <label class="field-label" for="scope-domain">Domain</label>
+   <span id="scope-domain-mount"></span>
+  </div>
+  <label class="field">
+   <span class="field-label">Window</span>
+   <select id="scope-window"></select>
+  </label>
+ </div>
+
+ <nav class="views" id="views">
+  <a href="#/overview">Overview</a>
+  <a href="#/sources">Sources</a>
+  <a href="#/reports">Reports</a>
+ </nav>
+
+ <button type="button" id="theme" class="theme" aria-label="Switch between light and dark"></button>
+</header>
+
+<main id="view" aria-live="polite"></main>
+
+<footer class="footer">
+ <p>
+  Served by <a href="https://metacpan.org/dist/Mail-DMARC">Mail::DMARC</a>.
+  Volumes are message counts as reported by receivers, not messages observed locally.
+ </p>
+</footer>
 
 </body>
 </html>

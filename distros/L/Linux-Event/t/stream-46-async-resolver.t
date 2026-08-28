@@ -9,7 +9,7 @@ use Socket qw(AF_INET AF_INET6);
 use Linux::Event::Loop;
 use Linux::Event::Listener;
 use Linux::Event::Stream;
-use Linux::Event::Stream::_Resolver ();
+use Linux::Event::_Resolver ();
 use Linux::Event::Timer;
 
 our ($RESOLVED, $READY, $ERROR, $LOOP);
@@ -61,7 +61,7 @@ is_deeply([ map { $_->{sockaddr} } @$order ],
     'resolved IPv6 and IPv4 candidates are interleaved');
 
 my $resolver_loop = Linux::Event::Loop->new;
-my $resolver = Linux::Event::Stream::_Resolver->for_loop($resolver_loop);
+my $resolver = Linux::Event::_Resolver->for_loop($resolver_loop);
 my $target = T::ResolverTarget->new($resolver_loop);
 my $request = $resolver->submit($target, 'localhost', 80);
 ok($request, 'private resolver accepts a hostname request');

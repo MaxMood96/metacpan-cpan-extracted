@@ -16,6 +16,7 @@ my %WriteMakefileArgs = (
   "LICENSE" => "perl",
   "NAME" => "OpenMP::Environment",
   "PREREQ_PM" => {
+    "Dispatch::Fu" => "1.07",
     "Util::H2O" => "0.18",
     "Validate::Tiny" => 0
   },
@@ -23,7 +24,7 @@ my %WriteMakefileArgs = (
     "Test::Exception" => 0,
     "Test::More" => 0
   },
-  "VERSION" => "1.4.0",
+  "VERSION" => "1.5.0",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -31,6 +32,7 @@ my %WriteMakefileArgs = (
 
 
 my %FallbackPrereqs = (
+  "Dispatch::Fu" => "1.07",
   "Test::Exception" => 0,
   "Test::More" => 0,
   "Util::H2O" => "0.18",

@@ -2,34 +2,28 @@ TYPEMAP
 
 INPUT
 T_MAGICEXT
-	{
-	SV* arg = $arg;
-	MAGIC* magic = SvROK(arg) && SvMAGICAL(SvRV(arg)) ? mg_findext(SvRV(arg), PERL_MAGIC_ext, &${type}_magic) : NULL;
-	if (magic)
-		$var = ($type)magic->mg_ptr;
+	SV* ${var}_arg = $arg;
+	MAGIC* ${var}_magic = SvROK(${var}_arg) && SvMAGICAL(SvRV(${var}_arg)) ? mg_findext(SvRV(${var}_arg), PERL_MAGIC_ext, &${type}_magic) : NULL;
+	if (${var}_magic)
+		$var = ($type)${var}_magic->mg_ptr;
 	else
 		Perl_croak(aTHX_ \"%s object is lacking magic\", \"$ntype\");
-	}
 
 T_MAGICEXT_BASE
-	{
-	SV* arg = $arg;
-	MAGIC* magic = SvROK(arg) && SvMAGICAL(SvRV(arg)) ? mg_find(SvRV(arg), PERL_MAGIC_ext) : NULL;
-	if (magic && magic->mg_virtual)
-		$var = ($type)magic->mg_ptr;
+	SV* ${var}_arg = $arg;
+	MAGIC* ${var}_magic = SvROK(${var}_arg) && SvMAGICAL(SvRV(${var}_arg)) ? mg_find(SvRV(${var}_arg), PERL_MAGIC_ext) : NULL;
+	if (${var}_magic && ${var}_magic->mg_virtual)
+		$var = ($type)${var}_magic->mg_ptr;
 	else
 		Perl_croak(aTHX_ \"%s object is lacking magic\", \"$ntype\");
-	}
 
 T_MAGICBUF
-	{
-	SV* arg = $arg;
-	MAGIC* magic = SvROK(arg) && SvRMAGICAL(SvRV(arg)) ? mg_findext(SvRV(arg), PERL_MAGIC_ext, NULL) : NULL;
-	if (magic)
-		$var = ($type)magic->mg_ptr;
+	SV* ${var}_arg = $arg;
+	MAGIC* ${var}_magic = SvROK(${var}_arg) && SvRMAGICAL(SvRV(${var}_arg)) ? mg_findext(SvRV(${var}_arg), PERL_MAGIC_ext, NULL) : NULL;
+	if (${var}_magic)
+		$var = ($type)${var}_magic->mg_ptr;
 	else
 		Perl_croak(aTHX_ \"%s object is lacking magic\", \"$ntype\");
-	}
 
 T_INTOBJ
     {
@@ -52,16 +46,12 @@ T_INTREF
 
 OUTPUT
 T_MAGICEXT
-	{
-	MAGIC* magic = sv_magicext(newSVrv($arg, "$ntype"), NULL, PERL_MAGIC_ext, &${type}_magic, (const char*)$var, 0);
-	magic->mg_flags |= MGf_COPY|MGf_DUP;
-	}
+	MAGIC* magic_${var} = sv_magicext(newSVrv($arg, "$ntype"), NULL, PERL_MAGIC_ext, &${type}_magic, (const char*)$var, 0);
+	magic_${var}->mg_flags |= MGf_DUP;
 
 T_MAGICBUF
-	{
-	MAGIC* magic = sv_magicext(newSVrv($arg, "$ntype"), NULL, PERL_MAGIC_ext, NULL, (const char*)$var, 0);
-	magic->mg_len = sizeof(*$var);
-	}
+	MAGIC* magic_${var} = sv_magicext(newSVrv($arg, "$ntype"), NULL, PERL_MAGIC_ext, NULL, (const char*)$var, 0);
+	magic_${var}->mg_len = sizeof(*$var);
 
 T_INTOBJ
 	{

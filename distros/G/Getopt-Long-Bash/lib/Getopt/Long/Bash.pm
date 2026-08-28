@@ -1,6 +1,6 @@
 package Getopt::Long::Bash;
 
-our $VERSION = "0.8.1";
+our $VERSION = "1.0.0";
 
 1;
 
@@ -191,7 +191,8 @@ After installation, C<getoptlong.sh> is in your PATH.
 
 =head1 REQUIREMENTS
 
-Bash 4.2 or later (for associative arrays and C<declare -n>).
+Bash 4.4 or later (for associative arrays, C<declare -n> and
+C<${parameter@Q}>).
 
 =head1 SEE ALSO
 

@@ -3,7 +3,7 @@ package EV::Telegram::TDLib::Files;
 use strict;
 use warnings;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 sub CLONE_SKIP { 1 }
 
@@ -55,8 +55,9 @@ sub _update_file {
 }
 
 sub download {
-    my ($self, $file_id, @rest) = @_;
-    my $cb = ref $rest[-1] eq 'CODE' ? pop @rest : sub {};
+    my ($self, @args) = @_;
+    my $cb = ref $args[-1] eq 'CODE' ? pop @args : sub {};
+    my ($file_id, @rest) = @args;
     my %opt = @rest;
     my $id = 0 + $file_id;
     # one registration per file id: overwriting would silently drop the
@@ -123,6 +124,112 @@ sub on_upload {
     my ($self, $file_id, $cb) = @_;
     if ($cb) { $self->_uploads->{ 0 + $file_id } = $cb }
     else     { delete $self->_uploads->{ 0 + $file_id } }
+    return;
+}
+
+sub file {
+    my ($self, @args) = @_;
+    my $cb = ref $args[-1] eq 'CODE' ? pop @args : sub {};
+    my ($file_id, @rest) = @args;
+    _need('file_id', $file_id);
+    $self->send({ '@type' => 'getFile', file_id => 0 + $file_id }, $cb);
+    return;
+}
+
+# a remote file id is the persistent one that travels in a message; file_type
+# must match what it actually is or TDLib refuses it
+sub remote_file {
+    my ($self, @args) = @_;
+    my $cb = ref $args[-1] eq 'CODE' ? pop @args : sub {};
+    my ($remote_id, @rest) = @args;
+    my %opt = @rest;
+    _need('remote_file_id', $remote_id);
+    my $t = $opt{file_type} // 'Unknown';
+    $t = "fileType$t" unless $t =~ /\AfileType/;
+    $self->send({ '@type' => 'getRemoteFile', remote_file_id => "$remote_id",
+                  file_type => { '@type' => $t } }, $cb);
+    return;
+}
+
+sub delete_file {
+    my ($self, @args) = @_;
+    my $cb = ref $args[-1] eq 'CODE' ? pop @args : sub {};
+    my ($file_id, @rest) = @args;
+    _need('file_id', $file_id);
+    $self->send({ '@type' => 'deleteFile', file_id => 0 + $file_id }, $cb);
+    return;
+}
+
+sub add_to_downloads {
+    my ($self, @args) = @_;
+    my $cb = ref $args[-1] eq 'CODE' ? pop @args : sub {};
+    my ($file_id, $chat_id, $message_id, @rest) = @args;
+    my %opt = @rest;
+    _need('file_id, chat_id, message_id', $file_id, $chat_id, $message_id);
+    $self->send({ '@type' => 'addFileToDownloads', file_id => 0 + $file_id,
+                  chat_id => 0 + $chat_id, message_id => 0 + $message_id,
+                  priority => 0 + ($opt{priority} // 1) }, $cb);
+    return;
+}
+
+sub remove_from_downloads {
+    my ($self, @args) = @_;
+    my $cb = ref $args[-1] eq 'CODE' ? pop @args : sub {};
+    my ($file_id, @rest) = @args;
+    my %opt = @rest;
+    _need('file_id', $file_id);
+    $self->send({ '@type' => 'removeFileFromDownloads', file_id => 0 + $file_id,
+                  delete_from_cache => _json_bool($opt{delete_cache}) }, $cb);
+    return;
+}
+
+sub pause_download {
+    my ($self, @args) = @_;
+    my $cb = ref $args[-1] eq 'CODE' ? pop @args : sub {};
+    my ($file_id, $paused, @rest) = @args;
+    _need('file_id', $file_id);
+    $self->send({ '@type' => 'toggleDownloadIsPaused', file_id => 0 + $file_id,
+                  is_paused => _json_bool(defined $paused ? $paused : 1) }, $cb);
+    return;
+}
+
+sub storage_statistics {
+    my ($self, @args) = @_;
+    my $cb = ref $args[-1] eq 'CODE' ? pop @args : sub {};
+    my (@rest) = @args;
+    $self->send({ '@type' => 'getStorageStatisticsFast' }, $cb);
+    return;
+}
+
+# a long-lived client accumulates gigabytes; this is how it prunes them
+sub optimize_storage {
+    my ($self, @args) = @_;
+    my $cb = ref $args[-1] eq 'CODE' ? pop @args : sub {};
+    my (@rest) = @args;
+    my %opt = @rest;
+    $self->send({
+        '@type'          => 'optimizeStorage',
+        size             => 0 + ($opt{size}  // -1),
+        ttl              => 0 + ($opt{ttl}   // -1),
+        count            => 0 + ($opt{count} // -1),
+        immunity_delay   => 0 + ($opt{immunity_delay} // -1),
+        file_types       => [],
+        chat_ids         => [ map { 0 + $_ } @{ $opt{chats} || [] } ],
+        exclude_chat_ids => [ map { 0 + $_ } @{ $opt{exclude_chats} || [] } ],
+        return_deleted_file_statistics => _json_bool($opt{statistics}),
+        chat_limit       => 0 + ($opt{chat_limit} // 0),
+    }, $cb);
+    return;
+}
+
+sub suggested_file_name {
+    my ($self, @args) = @_;
+    my $cb = ref $args[-1] eq 'CODE' ? pop @args : sub {};
+    my ($file_id, @rest) = @args;
+    my %opt = @rest;
+    _need('file_id', $file_id);
+    $self->send({ '@type' => 'getSuggestedFileName', file_id => 0 + $file_id,
+                  directory => $opt{directory} // '' }, $cb);
     return;
 }
 

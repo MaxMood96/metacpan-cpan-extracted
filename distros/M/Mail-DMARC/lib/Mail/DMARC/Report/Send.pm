@@ -3,19 +3,19 @@ use strict;
 use warnings;
 use feature 'signatures';
 
-our $VERSION = '2.20260724';
+our $VERSION = '2.20260827';
 
 use parent 'Mail::DMARC::Base';
-use Mail::DMARC::Report::Send::SMTP;
-use Mail::DMARC::Report::Send::HTTP;
 
 sub http($self) {
     return $self->{http} if ref $self->{http};
+    require Mail::DMARC::Report::Send::HTTP;
     return $self->{http} = Mail::DMARC::Report::Send::HTTP->new();
 }
 
 sub smtp($self) {
     return $self->{smtp} if ref $self->{smtp};
+    require Mail::DMARC::Report::Send::SMTP;
     return $self->{smtp} = Mail::DMARC::Report::Send::SMTP->new();
 }
 
@@ -60,7 +60,7 @@ Mail::DMARC::Report::Send - report sending dispatch class
 
 =head1 VERSION
 
-version 2.20260724
+version 2.20260827
 
 =head1 DESCRIPTION
 

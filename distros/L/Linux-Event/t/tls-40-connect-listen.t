@@ -99,7 +99,8 @@ my $client = T::IntegratedTLSClient->connect(
     data => $STATE,
 );
 $CLIENT_ID = refaddr($client);
-ok(!$client->write('ping'), 'TLS client queues application data before add');
+ok($client->write('ping'),
+    'TLS pre-connect write below high watermark permits more output');
 $LOOP->add($client);
 $LOOP->run_for(5);
 

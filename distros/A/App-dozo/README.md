@@ -84,7 +84,8 @@ To install the latest version from GitHub:
 Alternatively, you can simply place `dozo` and `getoptlong.sh` in
 your PATH.
 
-**Dôzo** requires Bash 4.3 or later.
+**Dôzo** requires Bash 4.4 or later, as does the `getoptlong.sh`
+script it uses.
 
 # DESCRIPTION
 
@@ -111,6 +112,9 @@ for option parsing.
 
     If you are working in a git environment, the git top directory is
     automatically mounted. Otherwise the current directory is mounted.
+    When the current directory is under the git top directory, the
+    corresponding subdirectory in the container is used as the working
+    directory.
 
 - **Live Container**
 
@@ -126,19 +130,22 @@ for option parsing.
 
 - **Flexible Mounting**
 
-    Various mount options: current directory (`-W`), home directory
-    (`-H`), additional volumes (`-V`), read-only mode (`-R`), or no
-    mount (`-U`).
+    The directory is mounted on `/work` in the container, and it is used
+    as the working directory. Various mount options are available: current
+    directory (`-W`), home directory (`-H`), additional volumes (`-V`),
+    read-only mode (`-R`), or no mount (`-U`).
 
 - **X11 Support**
 
-    When `DISPLAY` is set, the host IP is automatically detected and
-    passed to the container, enabling GUI applications.
+    When `DISPLAY` is set, the address of the interface used for the
+    default route is detected and passed to the container as `DISPLAY`,
+    enabling GUI applications.
 
 - **Configuration File**
 
-    Use `.dozorc` to set default options. Searched in current directory,
-    git top directory, and home directory.
+    Use `.dozorc` to set default options. Loaded from the home directory,
+    the git top directory, and the current directory, in that order, so
+    that a closer file takes precedence.
 
 - **Standalone Operation**
 
@@ -149,9 +156,21 @@ for option parsing.
 
 # OPTIONS
 
+Repeatable options (**-E**, **-V**, **-P** and **-O**) can be given more
+than once, and a single value is also split into multiple elements at
+spaces, tabs and commas.  Thus `-P 8000,9000` gives two port mappings,
+and **-O** with the value `--memory 2g` gives two docker options.  As a
+consequence, a value containing a space cannot be given as a single
+element: **-E** with the value `MSG=hello world` defines two variables,
+`MSG=hello` and `world`.
+
 - **-h**, **--help**
 
     Show help message.
+
+- **--version**
+
+    Show version number.
 
 - **-d**, **--debug**
 
@@ -163,7 +182,15 @@ for option parsing.
 
 - **-q**, **--quiet**
 
-    Quiet mode.
+    Quiet mode. Suppress the informational line printed to standard error
+    before the container is started:
+
+        docker run image=alpine env=13 command=echo hi
+
+    It summarizes the image name, the number of environment variables to be
+    inherited, the container name (with **-L**) and the command to be
+    executed. This line is shown regardless of **-n**; use **-d** to see the
+    whole docker command line instead.
 
 - **-n**, **--dryrun**
 
@@ -178,13 +205,14 @@ for option parsing.
 - **-D**, **--default**
 
     Use the default Docker image. If `DOZO_DEFAULT_IMAGE` environment
-    variable is set, use that image. Otherwise, use
-    `tecolicom/xlate:VERSION` where VERSION is the current Dôzo version.
-    See ["DEFAULT IMAGE"](#default-image) section for details about the default image.
+    variable is set, use that image. Otherwise, use `tecolicom/xlate`,
+    that is, its `latest` tag. See ["DEFAULT IMAGE"](#default-image) section for details
+    about the default image.
 
 - **-E** _name_\[=_value_\], **--env**=_name_\[=_value_\]
 
-    Specify environment variable to inherit. Repeatable.
+    Specify environment variable to pass to the container. If _value_ is
+    omitted, the value is inherited from the host environment. Repeatable.
 
 - **-W**, **--mount-cwd**
 
@@ -192,13 +220,8 @@ for option parsing.
 
 - **-H**, **--mount-home**
 
-    Mount home directory.
-
-- **-V** _path_, **-V** _from_:_to_, **--volume**=_from_:_to_
-
-    Specify additional directory to mount. If only _path_ is given
-    (without `:`), it is mounted to the same path in the container.
-    Repeatable.
+    Mount home directory. The `HOME` environment variable in the
+    container is set to the mount point (`/work`).
 
 - **-U**, **--unmount**
 
@@ -206,16 +229,27 @@ for option parsing.
 
 - **--mount-mode**=_mode_
 
-    Set mount mode. _mode_ is either `rw` (read-write, default) or `ro`
-    (read-only).
+    Set mount mode of the automatically mounted directory. _mode_ is
+    either `rw` (read-write, default) or `ro` (read-only). This does not
+    affect volumes given by **-V**; append `:ro` to them instead.
 
 - **-R**, **--mount-ro**
 
     Mount directory as read-only. Shortcut for `--mount-mode=ro`.
 
+- **-V** _path_, **-V** _from_:_to_, **--volume**=_from_:_to_
+
+    Specify additional directory to mount. If only _path_ is given
+    (without `:`), it is mounted to the same path in the container; a
+    relative path is resolved against the current directory. Repeatable.
+
 - **-B**, **--batch**
 
     Run in batch mode (non-interactive).
+
+- **-L**, **--live**
+
+    Use live (persistent) container.
 
 - **-N** _name_, **--name**=_name_
 
@@ -225,22 +259,26 @@ for option parsing.
 
     Kill and remove existing container.
 
-- **-L**, **--live**
-
-    Use live (persistent) container.
-
 - **-P** _port_, **-P** _host_:_container_, **--port**=_host_:_container_
 
     Specify port mapping. If only _port_ is given (without `:`), it is
     mapped to the same port in the container (e.g., `-P 8000` becomes
-    `8000:8000`). Repeatable.
+    `8000:8000`, and `-P 8000/udp` becomes `8000:8000/udp`).
+    Repeatable.
 
 - **-O** _option_, **--other**=_option_
 
     Specify additional docker options. Repeatable.
 
-    Note: Spaces and commas in option values are treated as delimiters and
-    will split the value into multiple elements.
+# INTERACTIVE MODE
+
+Unless the **-B** (batch) option is given, the container is started
+with Docker's `--interactive` option, and `--tty` is added as well
+when the standard input is a terminal (TTY). The same rule is applied
+to `docker exec` in live container mode.
+
+This allows seamless interactive use when attaching to containers or
+running interactive commands.
 
 # LIVE CONTAINER
 
@@ -266,9 +304,10 @@ When `-L` is specified, **Dôzo** behaves as follows:
 
     Unpause the container with `docker unpause`, then proceed as above.
 
-- 4. **Container exists but is exited**
+- 4. **Container exists but is not started**
 
-    Start the container with `docker start`, then proceed as above.
+    If the container is in the `created` or `exited` state, start it
+    with `docker start`, then proceed as above.
 
 ## Container Naming
 
@@ -300,6 +339,9 @@ You can override the auto-generated name using the `-N` option:
         dozo -I myimage -L ls -la
 
     Runs the command in the existing container using `docker exec`.
+    Environment variables are passed just as for a new container, and when
+    the current directory is under the mounted directory, the
+    corresponding subdirectory is used as the working directory.
 
 - **Kill and recreate container**
 
@@ -313,17 +355,6 @@ You can override the auto-generated name using the `-N` option:
         dozo -I myimage -K
 
     Without `-L`, the container is removed and the command exits.
-
-## Interactive Mode
-
-In live container mode, interactive mode (`-i` and `-t` flags for
-Docker) is automatically enabled when:
-
-- Standard input is a terminal (TTY)
-- The `-B` (batch) option is not specified
-
-This allows seamless interactive use when attaching to containers or
-running interactive commands.
 
 # CONFIGURATION FILE
 
@@ -345,7 +376,28 @@ You can use any command line option in the configuration file:
     -E CUSTOM_VAR=value
     -V /data:/data
 
-Lines starting with `#` are treated as comments.
+Lines starting with `#` are treated as comments.  A `#` in the middle
+of a line does **not** start a comment, and a trailing comment is not
+supported.
+
+Each line is split into arguments in the same way as the shell does, so
+quotation marks have to be balanced.  A line which cannot be parsed is
+an error, and **Dôzo** stops after showing the file name, the line
+number and the line itself.
+
+Write nothing but options in the configuration file.  Its contents are
+placed before the command line arguments, and option parsing stops at
+the first argument which is not an option.  Everything after it,
+including options given on the command line, is passed to the container
+as the command to execute.  This is the rule which lets you write
+`dozo -I alpine ls -la` without `-la` being taken as an option of
+**Dôzo**, but it also means that a stray word in `.dozorc` disables
+option parsing altogether.  With a trailing comment like this:
+
+    -I alpine  # use alpine
+
+`dozo -n ls` does not show the docker command line but runs
+`# use alpine -n ls` in the container.
 
 # DOCKER-IN-DOCKER
 
@@ -432,8 +484,8 @@ and PowerPoint (.pptx) files directly with git
 - `DOZO_DEFAULT_IMAGE`
 
     Specifies the default Docker image used when `-D` (`--default`) option
-    is given. If not set, `tecolicom/xlate:VERSION` is used where VERSION
-    is the current Dôzo version.
+    is given. If not set, `tecolicom/xlate` is used, which resolves to its
+    `latest` tag.
 
 ## Inherited Variables
 

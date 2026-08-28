@@ -7,7 +7,7 @@ concepts, not functions or line numbers.
 ## Why this exists
 
 Cavil reviews the licensing of software by scanning source code for the text of known licenses. The scanning
-is done by matching every file against a large, ever-growing collection of *patterns* — normalized fragments
+is done by matching every file against a large, ever-growing collection of *patterns* - normalized fragments
 of license text. The previous engine did this well and fast, and this one keeps its core idea unchanged. What
 it changes is everything around that core, because the old design had three operational problems that grow
 worse over time:
@@ -20,8 +20,8 @@ worse over time:
 - **The on-disk form was fragile.** The compiled file had no header, version, or checksum; it was trusted
   blindly. A format change or a truncated file could be silently misread.
 
-The goal of this engine is to fix those three things — cheap incremental updates, one shared copy per machine,
-and a safe, versioned on-disk format — while keeping matching itself bit-for-bit identical, so switching to it
+The goal of this engine is to fix those three things - cheap incremental updates, one shared copy per machine,
+and a safe, versioned on-disk format - while keeping matching itself bit-for-bit identical, so switching to it
 requires no re-processing of existing data.
 
 ## The Perl/native split, and why
@@ -30,8 +30,8 @@ Only one thing in a license scan is genuinely performance-critical: walking ever
 the pattern collection. That inner loop, and the hashing that feeds it, is where nearly all the time goes, and
 it is written in a small, carefully-frozen C++ core.
 
-Everything else — deciding which patterns are active, recording that a pattern was removed, choosing when to
-compact, reading and writing the little file that describes the collection — happens rarely and on small data.
+Everything else - deciding which patterns are active, recording that a pattern was removed, choosing when to
+compact, reading and writing the little file that describes the collection - happens rarely and on small data.
 All of that is plain Perl, because that is where the team is strongest, because it is where a newcomer can
 follow the logic without a debugger, and because none of it is on the hot path, so nothing is lost by keeping
 it in Perl. The native side is deliberately dumb: it is handed a list of things to search and simply searches
@@ -40,7 +40,7 @@ them. Every *decision* is made in Perl.
 The native core is C++ rather than a rewrite in another language for a simple reason: the matching algorithm
 and its hashing are already proven on a legal tool, where a subtle behavioural change is the worst kind of
 bug. Reusing that code unchanged is the safest possible choice, so the core stays in the language it is
-already written in. The genuinely new native code — the reader for the on-disk format — is small and only ever
+already written in. The genuinely new native code - the reader for the on-disk format - is small and only ever
 reads files this same software wrote, and it validates everything it reads, which removes the one real
 weakness the old format had.
 
@@ -50,7 +50,7 @@ A pattern is neither a regular expression nor a literal string. Before anything 
 and the files being scanned are put through the same normalization: text is lower-cased and split into words,
 punctuation and common comment or markup noise is discarded, and each surviving word is reduced to a number.
 Only those numbers are ever compared. This is what lets a match survive reformatting, rewrapping, and
-different comment styles — the layout simply disappears during normalization.
+different comment styles - the layout simply disappears during normalization.
 
 One wildcard exists. A pattern may say "skip one to N words here" (at least one word, at most N - it does not
 match a zero-word gap), which lets a single pattern absorb the parts of a license that legitimately vary, such
@@ -85,7 +85,7 @@ This is the whole point of the design, and it follows the model search engines h
   not touched. Absorbing a new pattern is therefore cheap and local, no matter how large the collection has
   grown.
 - **Removing a pattern writes a tombstone** in the manifest and nothing else. At scan time, matches belonging
-  to a tombstoned pattern are dropped before overlap resolution — so removing a pattern correctly reveals any
+  to a tombstoned pattern are dropped before overlap resolution - so removing a pattern correctly reveals any
   smaller matches it had been hiding, exactly as if it had never existed. No segment is recompiled.
 - **A query searches all active segments at once**, gathers their matches, discards the tombstoned ones, and
   then applies the ordinary overlap resolution to the combined set. The result is identical to what a single
@@ -93,7 +93,7 @@ This is the whole point of the design, and it follows the model search engines h
 
 Because deltas and tombstones accumulate, an occasional **compaction** folds the current pattern set back into
 a single fresh base segment and clears the tombstones. This is the one operation that reads the full pattern
-set from the database — Cavil's source of truth — and it is rare and runs in the background, off the scanning
+set from the database - Cavil's source of truth - and it is rare and runs in the background, off the scanning
 path. It exists only to keep the number of segments and the length of the tombstone list bounded over time.
 
 ## Shared memory and reproducibility
@@ -106,14 +106,14 @@ a full duplicate each. This is what lifts the memory ceiling that limited the pr
 
 The generation number in the manifest gives reproducibility. A scan pins the generation it ran against, and a
 report can record it, so re-running an old report can use exactly the same patterns it originally saw. Updates
-are published atomically — a new segment and an updated manifest are written to the side and swapped into place
-in one step — so a reader never observes a half-written collection.
+are published atomically - a new segment and an updated manifest are written to the side and swapped into place
+in one step - so a reader never observes a half-written collection.
 
 ## The on-disk format
 
 Each segment file begins with a header identifying it, stating its format version, and carrying a checksum of
-everything that follows. Opening a segment always validates its **structure** — the header fields, the size,
-and every internal reference — so a file that is truncated, of the wrong version, structurally impossible, or
+everything that follows. Opening a segment always validates its **structure** - the header fields, the size,
+and every internal reference - so a file that is truncated, of the wrong version, structurally impossible, or
 simply not a segment at all is rejected cleanly; it is never partially trusted and never able to send the
 scanner off the end of the data. This structural validation is cheap and always on, so memory safety never
 depends on the checksum.
@@ -122,7 +122,7 @@ The whole-payload **checksum** is a separate, corruption-detection concern, and 
 recomputed on the hot scan path. A segment is Cavil's own derived cache: it is checksummed when compiled,
 published atomically (written to the side and renamed into place), and thereafter immutable and regenerable
 from the database. Re-checksumming a multi-hundred-megabyte payload on every one of the thousands of indexing
-opens — where the mmap already shares one physical copy — is almost the entire cost of a load (measured at
+opens - where the mmap already shares one physical copy - is almost the entire cost of a load (measured at
 ~97%), and it guards against a corruption that atomic publishing already prevents. So the CRC is verified where
 it is meaningful: once when the segment is written, and on demand through the engine's `verify` entry point (an
 fsck for operators). The manifest additionally records a checksum for each segment for that on-demand check.
@@ -135,7 +135,91 @@ deliberately malformed samples that security tools ship as test data, files full
 single-line files with no structure at all. The matcher treats all of this as ordinary input: it reads files
 in bounded chunks, stops cleanly at the end of usable data, and bounds the amount of a file it holds in memory
 at once. Unreadable paths and missing files produce empty results rather than errors. The guiding rule is
-simple and absolute — no input, however hostile or malformed, may crash the scan.
+simple and absolute - no input, however hostile or malformed, may crash the scan.
+
+## The fingerprint index (snippet provenance)
+
+The pattern engine answers "which known licenses does this file contain". A second, closely related
+question is "which known open source code does this snippet resemble", and it is what powers a service
+where someone submits a fragment (for example AI-generated code) and asks how much of it already exists in
+the open source Cavil has seen. This is a different lookup from license matching and it is kept
+deliberately separate, but it reuses almost everything above: the same frozen tokenizer and hashing, and
+the same on-disk discipline of a versioned, checksummed, structure-validated, memory-mapped segment
+published atomically.
+
+The idea is the one plagiarism detectors have used for decades, called winnowing. A file's tokens are
+grouped into overlapping runs (k tokens each), every run is hashed, and a stable subset of those hashes is
+selected by taking the smallest hash in each sliding window of the runs. The selection is deterministic
+and shift-stable, so the same code always yields the same fingerprints no matter how it is chopped up
+while reading, and it survives reformatting and renaming because the layout has already disappeared during
+tokenization. The window width is the one knob: a wider window keeps fewer fingerprints (cheaper) and a
+narrower window keeps more (more robust), with the fingerprint count landing near two divided by the
+window-plus-one, times the number of runs.
+
+Where a pattern segment is a prefix tree walked by a file, a fingerprint segment is simply a sorted array
+of 16-byte records, each a fingerprint value paired with a reference to the *content* it came from and the
+exact line range it covers. The content reference points into a small per-segment table of 128-bit content
+hashes, not file names: the content hash is the stable, deduplication-native key that the Cavil database
+maps to every path, package, version and piece of metadata. Keeping the record minimal and content-keyed
+is deliberate, because this is the huge, expensive-to-rebuild part of the system; anything richer that a
+future feature needs lives in the database keyed by that hash and never forces the index to be re-emitted.
+A query winnows the submitted snippet the same way and binary-searches each of its fingerprints into the
+array. The score reported for a candidate is containment: the fraction of the snippet's distinct
+fingerprints found in it (and, because each content also records its own fingerprint count, the reverse
+fraction too, so a caller can tell "your snippet is inside this file" from "this file is your snippet").
+That is the same "match percentage" commercial tools show, and a risk indicator is built from it by
+weighting containment with the license risk Cavil already knows for the matched code, so that resembling
+copyleft code reads louder than resembling permissive code. The result is advisory and probabilistic,
+never an automated verdict.
+
+Containment is set membership over the whole file, not an alignment: it asks whether each of the snippet's
+fingerprints exists anywhere in the content, not whether they line up in one place. That makes it robust to
+edits, which is the point for provenance: rename a function or change a few tokens and it still matches its
+origin. The flip side is that it is position-blind, and a single change lowers the score only if the one
+fingerprint it perturbs appears nowhere else in the matched file, which in a file that already uses those
+tokens it usually does. So a lightly modified copy can still report 100%, and that "100%" means "every
+fingerprint of your snippet is present in this file", not "byte-identical". Telling a verbatim copy from a
+modified one would need positional/alignment scoring layered on top; containment alone does not, by design.
+
+Two properties matter for correctness. First, the index never collapses a fingerprint: every occurrence
+is a separate record, so a fingerprint present in fifty files returns all fifty. Nothing that was indexed
+becomes unfindable. Second, the index is content-addressed by a package version's checksum and lives under
+its own manifest and generation, completely independent of the pattern generation. Editing a license
+pattern and re-scanning a package changes its license conclusions but not its source bytes, so it must not
+touch the fingerprint index at all. A package version is fingerprinted once and reused on every later
+re-scan of that same version. The one-time full build is therefore the only time the whole corpus is
+fingerprinted; from then on the cost tracks churn, which is what makes a weekly full re-scan and constant
+pattern-driven re-scans cost the fingerprint index almost nothing.
+
+The care point is document-frequency. Boilerplate that appears across genuinely unrelated code is noise
+and is worth pruning, but the same good function repeated across many *versions* of one package must not be
+mistaken for boilerplate and dropped. The obvious grouping, "count once per package", does not work here,
+because package names carry their version (rust1.23, go-1.23) and are not reliably parseable back to a
+project, and because every Cavil deployment uses its own naming scheme, so any name-based grouping would
+be an unportable guess. So identity is taken from content, not names: fingerprints are deduplicated and document
+frequency is counted per distinct *file content* (the checksum Cavil already computes). Fifty versions
+shipping a byte-identical file collapse to one stored copy and contribute one to document frequency, while
+a line that truly appears across thousands of unrelated file contents is still high-frequency and prunes.
+A matched fingerprint resolves through its content checksum back to every package, version and path that
+carries it, so nothing becomes unfindable and the version list is recovered from the database rather than
+guessed from a name. Verbatim vendored copies fall out of the same rule: one content, kept and detectable,
+not mistaken for noise.
+
+Measured on a few hundred megabytes of real C, Python and JavaScript source, each fingerprint costs about
+sixteen bytes on disk (the sorted record alone; filenames map back through the database in production),
+the index holds roughly three fingerprints per kilobyte of source at the wide window, a snippet scores in
+well under a millisecond against a cached segment, and detection quality is essentially unchanged across
+window widths even though storage falls several-fold at the wide window. So the cheap large window is the
+right default, and the storage of a very large corpus is dominated by that sixteen-bytes-per-fingerprint
+record cost times the corpus size, before per-content document-frequency pruning trims the boilerplate
+tail.
+
+Because each record already carries the exact matched line range, the same index also answers "which
+files contain code like this snippet, and where", so it doubles as a snippet code-search engine over the
+whole corpus, not just a provenance check. The point that keeps this cheap is that it needs no change to
+the index: results are ranked by containment straight from the records, and any richer convenience a
+consumer wants (filtering, expanding a match to every copy, language or license facets) is a lookup keyed
+by the content hash, never a wider record or a scan of the whole corpus.
 
 ## What deliberately stays the same
 
@@ -175,5 +259,5 @@ snippets. Those tests are how equivalence is proven during the transition; once 
 can simply be deleted, and the self-contained suite stands on its own.
 
 A change to the pattern set flows through the system in the obvious way: adding patterns writes a new segment,
-removing one writes a tombstone, and compaction periodically rewrites a single clean base — none of which
+removing one writes a tombstone, and compaction periodically rewrites a single clean base - none of which
 disturbs the data an in-flight scan is already using.

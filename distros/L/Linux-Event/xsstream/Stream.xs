@@ -1471,8 +1471,11 @@ les_write_submit(pTHX_ les_xsstate_t *st, SV *bytes_sv)
             result = les_transport_write(st, data, (size_t)len);
 
             if (st->transport_ops != &les_plain_transport_ops
-                && result.status != LES_TRANSPORT_INTERRUPT)
+                && result.status != LES_TRANSPORT_INTERRUPT) {
                 les_call_transport_event(aTHX_ st, result.status, "write");
+                if (result.status == LES_TRANSPORT_ERROR)
+                    return 0;
+            }
 
             if (result.status == LES_TRANSPORT_OK && result.count > 0) {
                 off = (STRLEN)result.count;
@@ -1579,8 +1582,11 @@ les_write_ready(pTHX_ les_xsstate_t *st)
         result = les_transport_writev(st, iov, iovcnt);
 
         if (st->transport_ops != &les_plain_transport_ops
-            && result.status != LES_TRANSPORT_INTERRUPT)
+            && result.status != LES_TRANSPORT_INTERRUPT) {
             les_call_transport_event(aTHX_ st, result.status, "write");
+            if (result.status == LES_TRANSPORT_ERROR)
+                return;
+        }
 
         if (result.status == LES_TRANSPORT_OK && result.count > 0) {
             st->bytes_written += (unsigned long long)result.count;
@@ -1901,6 +1907,8 @@ _resume(state_obj)
   PREINIT:
     les_xsstate_t *st;
   CODE:
+    ENTER;
+    SAVEFREESV(SvREFCNT_inc(state_obj));
     st = les_state_from_sv(state_obj);
     if (!st->closed && !st->read_eof) {
         st->read_paused = 0;
@@ -1912,6 +1920,7 @@ _resume(state_obj)
             LEAVE;
         }
     }
+    LEAVE;
 
 void
 _set_activity_tracking(state_obj, enabled)
@@ -1962,6 +1971,8 @@ _transition_ready(state_obj)
   PREINIT:
     les_xsstate_t *st;
   CODE:
+    ENTER;
+    SAVEFREESV(SvREFCNT_inc(state_obj));
     st = les_state_from_sv(state_obj);
     if (!st->closed && !st->read_paused && !st->read_eof
         && st->input_dispatch_depth == 0 && st->input_len) {
@@ -1971,6 +1982,7 @@ _transition_ready(state_obj)
         les_process_existing_input(aTHX_ st);
         LEAVE;
     }
+    LEAVE;
 
 void
 _close(state_obj)

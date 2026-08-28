@@ -534,6 +534,178 @@ conversation: sending to a user id it has never heard from fails with
 to "Not enough rights to send text messages to the chat". Both mean
 the same thing -- that user has not started the bot.
 
+=head2 Receiving data from a Mini App
+
+Problem: your bot offers a Mini App and you want what the page sends
+back through C<Telegram.WebApp.sendData()>.
+
+Offer the app with a Web App button on a reply keyboard, then handle
+the data. The page's payload is a plain string, usually JSON you
+encoded yourself:
+
+    $td->on_message(sub {
+        my ($msg) = @_;
+        return if $msg->{is_outgoing};
+        return unless ($msg->{content}{text}{text} // '') =~ m{^/start};
+        $td->send_message($msg->{chat_id}, 'Open the app to order:',
+            reply_markup => $td->reply_keyboard([
+                [ { text => 'Order', web_app => 'https://example.com/app' } ],
+            ]), sub { });
+    });
+
+    $td->on_web_app_data(sub {
+        my ($msg, $data, $button_text) = @_;
+        my $order = eval { decode_json($data) } or return;
+        $td->send_message($msg->{chat_id}, "Got your order", sub { });
+    });
+
+Nothing renders the page here: the button carries a URL and Telegram's
+own client opens it. The bot only ever sees the data.
+
+Treat C<$data> as untrusted. It is whatever the page put in it, and a
+page can be opened by anyone who can reach the bot, so validate it
+before acting rather than trusting its shape.
+
+Two related methods sit on the bot side. C<answer_web_app_query>
+answers a page that called C<Telegram.WebApp.switchInlineQuery()> with
+a single inline result, and C<web_app_request> makes a custom method
+call on the app's behalf, taking its parameters as a JSON string.
+
+To drive the same flow from a user client, for a test or an
+automation, call
+L<EV::Telegram::TDLib/send_web_app_data($bot_user_id, $button_text, $data, $cb)>
+with the button's exact text. That is what the real client does when
+the page calls sendData, so the bot cannot tell the difference.
+
+=head2 Launching a Mini App from a client
+
+Problem: you are writing a client, not a bot, and want to open a bot's
+Mini App.
+
+TDLib does not render anything. It gives you a URL and a launch id; you
+load the URL in a webview and tell TDLib when it closes. Get the URL
+from a Web App button, a direct link short name, or the bot's main app:
+
+    $td->web_app_link($chat_id, $bot_id, 'probe', sub {
+        my ($url, $err) = @_;
+        die "link: $err->{message}\n" if $err;
+        # $url->{url} is ready to load
+    });
+
+    $td->open_web_app($chat_id, $bot_id, $button_url, sub {
+        my ($info, $err) = @_;
+        die "open: $err->{message}\n" if $err;
+        show_webview($info->{url});
+        $td->close_web_app($info->{launch_id}, sub { }) if user_closed_it();
+    });
+
+There is a third route: C<main_web_app> opens the app a bot nominates
+as its main one, which is what tapping the bot's own button does. A bot
+with only named apps answers "The bot has no main Mini App", so treat
+that as a normal answer rather than a failure.
+
+C<web_app_placeholder> fetches the outline a client can draw while the
+page loads, if you want the launch to look less abrupt.
+
+C<$button_url> comes from a Web App button on a message. An empty
+string is accepted only for a bot that sits in the attachment menu, and
+otherwise answers BOT_INVALID; C<toggle_attachment_menu> is what puts a
+bot there.
+
+The URL you get back carries the signed init data in its fragment: the
+user's name, username, photo URL and an authentication hash. Treat it
+as a credential and keep it out of logs.
+
+=head2 Driving a bot from a user account
+
+Problem: script an interaction with someone else's bot, or test your
+own bot end to end.
+
+These are the user's half of the bot API. C<start_bot> sends the
+C</start> a deep link produces, C<press> taps an inline keyboard button
+on a message the bot sent, and C<inline_query> asks a bot for inline
+results as if you had typed its username:
+
+    $td->start_bot($bot_id, 'ref9', sub { });
+
+    use MIME::Base64 qw(decode_base64);
+    $td->on_message(sub {
+        my ($msg) = @_;
+        my $rows = $msg->{reply_markup}{rows} or return;
+        my $button = $rows->[0][0];
+        $td->press($msg->{chat_id}, $msg->{id},
+            decode_base64($button->{type}{data}), sub {
+            my ($answer, $err) = @_;
+            print "bot said: $answer->{text}\n" unless $err;
+        });
+    });
+
+C<press> takes and returns plain payload bytes; the base64 the JSON
+interface requires is handled for you, the same way
+C<on_callback_query> decodes it on the bot side. The decode above is
+needed because C<press> takes plain bytes, while a button read off a
+raw message still carries the encoded form.
+
+To drive a Mini App without a webview, C<send_web_app_data> sends data
+as if the page had called C<Telegram.WebApp.sendData()>, so a bot
+cannot tell the difference. That is how F<xt/live_webapp.t> tests the
+round trip with no browser involved.
+
+=head2 Asking the user to pick a chat or some people
+
+Problem: your bot needs a chat or a few users, and typing a username is
+error-prone.
+
+Two reply keyboard buttons ask Telegram's own picker instead. A
+constraint applies only for a key you actually mention, so leaving one
+out means "either":
+
+    $td->send_message($chat_id, 'Where should I post?',
+        reply_markup => $td->reply_keyboard([
+            [ { text => 'Pick a channel',
+                request_chat => { id => 1, channel => 1, created => 1 } } ],
+            [ { text => 'Pick people',
+                request_users => { id => 2, max => 5, bot => 0 } } ],
+        ]), sub { });
+
+C<< { bot => 0 } >> means "not a bot"; omitting C<bot> accepts either.
+The C<id> is yours to choose and comes back in the update so you can
+tell two pickers apart. Ask for extra detail with C<want_title>,
+C<want_username> and C<want_photo>.
+
+The other half is the answer. A user's client responds with
+C<share_chat_with_bot> or C<share_users_with_bot>, naming the message
+the button was on and the C<id> you gave it:
+
+    $td->share_chat_with_bot($chat_id, $message_id, 1, $picked_chat, sub { });
+
+You need this when scripting a client, or when testing your own bot end
+to end; a real client sends it for the user when they tap the button.
+Pass C<< check_only => 1 >> to ask whether the share would be permitted
+without actually making it.
+
+
+=head2 Editing a message a bot sent through inline mode
+
+Problem: update a message that came from an inline query result.
+
+An inline-mode message has no chat: it lives wherever the user inserted
+it, and is addressed by the C<inline_message_id> string that came with
+the result. That is a different address from the
+C<(chat_id, message_id)> pair C<edit_message_text> takes, and the two
+are not interchangeable:
+
+    $td->edit_inline_text($inline_message_id, '*Updated*',
+        parse_mode => 'markdown',
+        reply_markup => $td->inline_keyboard([
+            [ { text => 'Again', data => 'again' } ] ]),
+        sub { my (undef, $err) = @_; warn $err->{message} if $err });
+
+C<edit_inline_caption> and C<edit_inline_media> change a media result,
+C<edit_inline_markup> only the buttons, and C<edit_inline_location> a
+live location. A markdown or HTML parse failure reaches your callback
+instead of being sent to TDLib, exactly as with C<send_message>.
+
 =head2 Marking a chat read, and showing typing
 
 Problem: clear a chat's unread count, and look like a real client.
@@ -617,6 +789,171 @@ unix timestamp for a temporary ban:
 C<block_user($user_id)> is the account-level block, independent of any
 chat; C<< block_user($user_id, unblock => 1) >> reverses it.
 
+=head2 Moderating: who is in a chat, and what they may do
+
+Problem: inspect membership and set what ordinary members can do.
+
+C<member> and C<admins> read one member and the administrator list;
+C<search_members> scans by name, optionally filtered to
+C<administrators>, C<bots>, C<restricted>, C<banned>, C<contacts> or
+C<members>:
+
+    $td->search_members($chat, '', filter => 'administrators', sub {
+        my ($res, $err) = @_;
+        print "$_->{member_id}{user_id}\n" for @{ $res->{members} };
+    });
+
+Permissions are all-or-nothing, and that is the part worth care.
+C<set_permissions> replaces the entire set, so anything you leave out is
+denied, not left alone:
+
+    # members may talk and post photos, and nothing else
+    $td->set_permissions($chat, {
+        can_send_basic_messages => 1,
+        can_send_photos         => 1,
+    }, sub { });
+
+Read the current permissions off the chat first if you mean to change
+one thing rather than define the lot. A misspelled key croaks instead of
+being ignored, precisely because absence means denial and a silent typo
+would remove a right you meant to keep.
+
+=head2 Inviting people with a link
+
+Problem: hand out a joinable link, with limits, and see who used it.
+
+    $td->invite_link($chat, name => 'launch', limit => 10,
+                     expires => time + 86400, sub {
+        my ($link, $err) = @_;
+        print "share this: $link->{invite_link}\n" unless $err;
+    });
+
+C<join_request => 1> makes the link produce requests to approve rather
+than admitting people straight away. C<invite_links> lists what exists,
+C<invite_link_members> shows who came in through one, and
+C<revoke_invite_link> kills it. C<replace_primary_invite_link> rotates
+the chat's main link, invalidating the old one.
+
+C<check_invite_link> and C<join_by_link> take only the link and work for
+a chat you are not in yet, which is how you accept an invitation.
+
+=head2 Selling something for Telegram Stars
+
+Problem: charge for a digital product from a bot.
+
+Stars (currency C<XTR>) need no payment provider, no merchant account
+and no shipping flow, which makes the whole sale three steps: offer,
+approve, deliver.
+
+    $td->send_invoice($chat, {
+        title       => 'Sticker pack',
+        description => 'Ten stickers',
+        payload     => "order-$order_id",   # your id, handed back at checkout
+        currency    => 'XTR',
+        prices      => [ [ 'Pack' => 100 ] ],   # 100 Stars
+    }, sub { });
+
+Telegram then asks the bot to confirm, and gives it only seconds to
+answer. An unanswered query fails the payment, so answer inside the
+handler rather than after any slow work:
+
+    $td->on_pre_checkout_query(sub {
+        my ($q) = @_;
+        my ($order) = $q->{payload} =~ /^order-(\d+)$/;
+        if (still_available($order)) {
+            $td->answer_pre_checkout_query($q->{id}, sub { });
+        }
+        else {
+            $td->answer_pre_checkout_query($q->{id},
+                error => 'Sorry, that just sold out', sub { });
+        }
+    });
+
+Approving is not delivery. The payment completes afterwards and arrives
+as an ordinary message whose content is a messagePaymentSuccessful, so
+watch L<EV::Telegram::TDLib/on_message($cb)> for it and hand over the
+goods there. C<refund_star_payment> undoes a charge, and
+C<star_transactions> reads the ledger.
+
+For real currencies the shape is the same, plus a C<provider_token> from
+BotFather and amounts in the smallest unit -- 500 is five euros. If you
+set C<< need_shipping => 1 >> you must also answer
+C<on_shipping_query> with the options you offer, under the same
+few-second deadline.
+
+=head2 Approving join requests
+
+Problem: you handed out a C<join_request> link and now people are queued
+behind it.
+
+A link created with C<< join_request => 1 >> does not admit anyone; it
+files a request you have to answer, and until you do, nothing happens.
+Watch for them and decide:
+
+    $td->on_join_request(sub {
+        my ($req) = @_;
+        # bio is whatever the applicant typed; treat it as untrusted
+        my $ok = $req->{bio} =~ /invited by dave/i;
+        $td->process_join_request($req->{chat_id}, $req->{user_id}, $ok, sub { });
+    });
+
+C<join_requests> lists whoever is already waiting, which is what you
+need on startup since requests filed while you were offline do not
+replay as updates:
+
+    $td->join_requests($chat, sub {
+        my ($res, $err) = @_;
+        $td->process_join_request($chat, $_->{user_id}, 1, sub { })
+            for @{ $res->{requests} || [] };
+    });
+
+C<process_join_requests> answers everyone at once, optionally only those
+who came through one C<link>. The approve flag defaults to true in both,
+so declining is always explicit.
+
+
+=head2 Answering in the right forum topic
+
+Problem: your bot is in a supergroup with topics and its replies all
+land in the wrong place.
+
+A forum supergroup splits into topics, and a message carries the one it
+belongs to. Without saying which, everything you send goes to General,
+which is what makes a bot look broken in a modern group. Pass C<topic>,
+and take it from the message you are answering:
+
+    $td->on_message(sub {
+        my ($msg) = @_;
+        return if $msg->{is_outgoing};
+        my $topic = $msg->{topic_id}{forum_topic_id};
+        $td->send_message($msg->{chat_id}, 'on it',
+            topic => $topic, reply_to => $msg->{id}, sub { });
+    });
+
+C<topic> works on every sending method, not just send_message. Manage
+the topics themselves with C<create_topic>, C<edit_topic>,
+C<close_topic>, C<pin_topic> and C<delete_topic>, and list them with
+C<topics>. A topic id is the id of the message that opened it, so it is
+an ordinary message id.
+
+=head2 Sending a message later
+
+Problem: post at a chosen time without keeping a process alive until
+then.
+
+Hand the send a Unix time and the server holds it:
+
+    $td->send_message($chat, 'good morning', schedule => $epoch, sub {
+        my ($msg, $err) = @_;
+        warn $err->{message} if $err;
+    });
+
+The callback fires as soon as Telegram accepts the message for later
+delivery, not when it is delivered. That is why C<wait> defaults to
+C<accepted> here, and why asking for C<< wait => 'sent' >> with a
+schedule croaks rather than hanging until the due date. C<scheduled>
+lists what is pending in a chat.
+
 =head2 Asking a question with a poll
 
 Problem: collect answers without parsing replies.
@@ -634,6 +971,124 @@ updateMessageContent for the poll message, carrying the new
 messagePoll content -- both updatePoll and updatePollAnswer are
 bots-only, so a user session never sees them. Watch for it with
 L<EV::Telegram::TDLib/"on_update($cb), on_error($cb)">.
+
+=head2 Taming a noisy chat list
+
+Problem: a group will not stop talking, and your chat list is a mess.
+
+    $td->mute($chat, 8 * 3600, sub { });   # eight hours
+    $td->mute($chat, sub { });             # until you say otherwise
+    $td->unmute($chat, sub { });
+
+    $td->archive($chat, sub { });
+    $td->pin_chat($chat, sub { });         # unpin with a false second argument
+    $td->mark_unread($chat, sub { });
+
+Muting deserves one note. TDLib keeps all of a chat's notification
+choices in a single object, so a naive write replaces the lot. These
+methods send every other field as "use the default", which means muting
+a chat cannot silently reset its sound or preview settings as a
+side effect.
+
+C<chats> lists a chat list, and every method taking a C<list> option
+accepts C<main> (the default), C<archive>, or a folder id as a number:
+
+    $td->chats(list => 'archive', limit => 50, sub {
+        my ($res, $err) = @_;
+        print scalar @{ $res->{chat_ids} }, " archived\n" unless $err;
+    });
+
+=head2 Searching one chat, or all of them
+
+Problem: find a message when you do not know where it was.
+
+C<search_messages> looks inside one chat; C<search_all> looks across a
+whole chat list:
+
+    $td->search_all('invoice', limit => 20, sub {
+        my ($res, $err) = @_;
+        printf "%d matches\n", $res->{total_count} unless $err;
+    });
+
+Both page with C<offset>, and search_all also takes C<min_date> and
+C<max_date> to bound the range.
+
+=head2 Voting in a poll, and closing it
+
+Problem: your bot posted a poll and now needs to act on it, or you want
+to answer someone else's.
+
+Option ids are zero-based positions in the list the poll was created
+with, and the arrayref is what makes multiple-answer polls work:
+
+    $td->answer_poll($chat, $message_id, [0], sub { });
+    $td->stop_poll($chat, $message_id, sub { });
+
+Results arrive as an C<updateMessageContent> carrying the updated poll,
+not as a poll-specific update.
+
+=head2 Finding out which of your contacts use Telegram
+
+Problem: you have phone numbers and want the accounts behind them.
+
+C<import_contacts> matches on the number and tells you which resolved:
+
+    $td->import_contacts([
+        { phone => '+15550001', first_name => 'Ann' },
+        { phone => '+15550002', first_name => 'Bob' },
+    ], sub {
+        my ($res, $err) = @_;
+        # user_ids has a 0 for each number with no account
+        print "matched: @{ $res->{user_ids} }\n" unless $err;
+    });
+
+C<contacts> lists the address book, C<search_contacts> filters it, and
+C<add_contact> and C<remove_contacts> change it. Sharing your own number
+back is the C<share_phone> option, and it is off unless you ask.
+
+=head2 Auditing the devices logged into an account
+
+Problem: check what has access, and cut off what should not.
+
+    $td->sessions(sub {
+        my ($res, $err) = @_;
+        for my $s (@{ $res->{sessions} }) {
+            printf "%s  %s %s  %s\n", $s->{id}, $s->{device_model},
+                $s->{platform}, $s->{is_current} ? '(this one)' : '';
+        }
+    });
+
+C<terminate_session> takes one id, and C<terminate_other_sessions>
+clears everything except the client you are running. Session ids are TL
+C<int64>, so keep them as strings; a number would lose precision.
+C<set_session_ttl> sets how many days of inactivity ends a session by
+itself.
+
+=head2 Organising chats into folders
+
+Problem: group chats into the tabs Telegram's clients show above the
+chat list.
+
+A folder is a filter, not a container: it names chats explicitly and
+also takes flags for whole categories.
+
+    $td->create_folder({
+        name              => 'Work',
+        icon              => 'Work',
+        included_chat_ids => [ $chat_a, $chat_b ],
+        include_groups    => 1,
+        exclude_muted     => 1,
+    }, sub { });
+
+C<folder_chat_count> answers how many chats a spec would match without
+creating anything, which is the cheap way to try a filter out. The
+folder list itself arrives through C<updateChatFolders> rather than
+being fetched, so watch for it with C<on_update> if you need to track
+changes.
+
+A shareable folder can be handed out as a link with
+C<folder_invite_link>, and C<add_folder_by_link> accepts one, taking a
+C<chats> option to pick which of the offered chats to actually join.
 
 =head2 Text that is not ASCII
 
@@ -674,7 +1129,27 @@ L<EV::Telegram::TDLib/UNICODE> for the details.
 Problem: use one of the roughly one thousand TDLib methods the mixins
 do not cover.
 
-C<send> takes any raw request hashref and correlates the reply by
+C<call> is the usual way in. It fills in the C<@type> from the method
+name and checks the argument names against a catalogue of every TDLib
+function, so a typo fails in Perl with the valid names listed instead
+of coming back as an opaque server error:
+
+    $td->call(getChatMember => {
+        chat_id   => $chat_id,
+        member_id => { '@type' => 'messageSenderUser', user_id => $user_id },
+    }, sub {
+        my ($member, $err) = @_;
+        die "getChatMember: $err->{message}\n" if $err;
+        print "status: $member->{status}{'\@type'}\n";
+    });
+
+A method the catalogue does not know is passed straight through, so a
+TDLib newer than the shipped catalogue still works; a missing argument
+is not an error, since TDLib supplies its own defaults.
+
+C<send> is the same thing without the check, and is what C<call> uses
+underneath. Reach for it when you want no validation at all. It takes
+any raw request hashref and correlates the reply by
 C<@extra>, which it assigns itself and returns. Never set C<@extra>
 by hand: a caller-supplied value is overwritten on purpose, because a
 collision would misroute a reply to the wrong callback. C<execute> is

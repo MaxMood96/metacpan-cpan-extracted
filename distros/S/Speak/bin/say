@@ -23,13 +23,14 @@ Wed 24 Feb 2021 12:01:12 PM PST
 =head1 SYNOPSIS
 
  Usage: speak [-usa|ge] [-h|elp] [-v|erbose] [-de|bug]
-              [-c|lipboard] [-f|ile <filename>] ["message"]
+              [-c|lipboard] [-f|ile <filename>] [-p|ersona <name>] ["message"]
 
  Where:
    -usa|ge:          Print this usage
    -h|elp:           Detailed help
    -c|lipboard:      Speak the contents of the clipboard
    -f|ile <filename> Speak the contents of <filename>
+   -p|ersona <name>  Use a specific persona voice
    "message"         Speak the message
 
 =head1 DESCRIPTION
@@ -45,6 +46,8 @@ no warnings 'experimental::signatures';
 
 use Getopt::Long;
 use Pod::Usage;
+use FindBin;
+use lib "$FindBin::Bin/../lib";
 
 use Speak qw(speak);
 use Clipboard;
@@ -66,7 +69,7 @@ my %opts = (
 );
 
 ## Main
-GetOptions (\%opts, 'usage', 'help', 'verbose', 'debug', 'clipboard', 'file=s',)
+GetOptions (\%opts, 'usage', 'help', 'verbose', 'debug', 'clipboard', 'file=s', 'persona=s',)
   || pod2usage;
 
 my $msg = join ' ', @ARGV;
@@ -77,7 +80,16 @@ if ($opts{clipboard}) {
   } elsif ($msg) {
     error 'Cannot specify both -clipboard and <message>', 1;
   } else {
-    $msg = Clipboard->paste;
+    $msg = eval {
+      open my $olderr, '>&', \*STDERR;
+      open STDERR, '>', '/dev/null';
+      my $res = Clipboard->paste;
+      open STDERR, '>&', $olderr;
+      $res;
+    };
+    if (!defined $msg || $msg eq '') {
+      error 'Clipboard is empty or inaccessible', 1;
+    }
   }    # if
 } elsif ($opts{file}) {
   if ($msg) {
@@ -92,4 +104,4 @@ if ($opts{clipboard}) {
   }    # if
 }    # if
 
-speak $msg;
+speak ($msg, undef, undef, $opts{persona});

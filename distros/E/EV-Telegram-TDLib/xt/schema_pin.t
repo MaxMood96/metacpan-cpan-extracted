@@ -75,7 +75,7 @@ is "@bad_chat", '', 'every %CHAT_FIELDS update type exists in the pinned schema'
 my %tabled;
 for my $f (@src) {
     my $s = slurp($f);
-    $tabled{$1} = $f while $s =~ /=>\s*'(chatAction\w+|chatMemberStatus\w+|inputMessage\w+|input(?:Document|Photo|Video|Audio|Animation|VoiceNote|VideoNote|Sticker))'/g;
+    $tabled{$1} = $f while $s =~ /=>\s*'(chatAction\w+|chatMemberStatus\w+|inputMessage\w+|input(?:Document|Photo|Video|Audio|Animation|VoiceNote|VideoNote|Sticker)|webAppOpenMode\w+|getBot(?:Name|Info\w+)|chatMembersFilter\w+|chatList(?:Main|Archive)|notificationSettingsScope\w+|blockList\w+|supergroupMembersFilter\w+)'/g;
 }
 for my $f (@src) {
     my $s = slurp($f);

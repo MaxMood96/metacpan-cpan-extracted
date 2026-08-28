@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::PKey;
-$Crypt::OpenSSL3::PKey::VERSION = '0.010';
+$Crypt::OpenSSL3::PKey::VERSION = '0.011';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::PKey - An asymmetric key
 
 =head1 VERSION
 
-version 0.010
+version 0.011
 
 =head1 SYNOPSIS
 
@@ -96,8 +96,6 @@ A C<PKey> can be any kind of asymmetric key. This is a fat interface: no single 
 
 =head2 get_bits
 
-=head2 get_bn_param
-
 =head2 get_default_digest_name
 
 =head2 get_default_digest_nid
@@ -114,10 +112,6 @@ A C<PKey> can be any kind of asymmetric key. This is a fat interface: no single 
 
 =head2 get_id
 
-=head2 get_int_param
-
-=head2 get_octet_string_param
-
 =head2 get_param
 
 =head2 get_raw_private_key
@@ -128,11 +122,7 @@ A C<PKey> can be any kind of asymmetric key. This is a fat interface: no single 
 
 =head2 get_size
 
-=head2 get_size_t_param
-
 =head2 get_type_name
-
-=head2 get_utf8_string_param
 
 =head2 is_a
 
@@ -144,23 +134,13 @@ A C<PKey> can be any kind of asymmetric key. This is a fat interface: no single 
 
 =head2 print_public
 
-=head2 set_bn_param
-
 =head2 set_encoded_public_key
 
-=head2 set_int_param
-
-=head2 set_octet_string_param
-
 =head2 set_params
-
-=head2 set_size_t_param
 
 =head2 set_type
 
 =head2 set_type_str
-
-=head2 set_utf8_string_param
 
 =head2 todata
 

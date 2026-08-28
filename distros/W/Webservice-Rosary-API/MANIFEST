@@ -11,5 +11,9 @@ README.md
 bin/avemaria
 dist.ini
 lib/Webservice/Rosary/API.pm
+lib/Webservice/Rosary/Stream.pm
 t/01-basic.t
+t/02-api.t
+t/03-stream.t
+t/04-cli.t
 t/release-kwalitee.t

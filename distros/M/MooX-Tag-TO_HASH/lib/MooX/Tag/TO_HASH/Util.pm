@@ -5,9 +5,10 @@ use v5.10;
 use strict;
 use warnings;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 use Exporter 'import';
+use Ref::Util qw( is_ref is_blessed_ref is_arrayref is_hashref );
 
 use Sub::Util qw( set_subname );
 
@@ -21,8 +22,8 @@ BEGIN {
         UC_TO_JSON => 'TO_JSON',
         UC_TO_HASH => 'TO_HASH',
         map { uc() => $_ } 'omit_if_empty',
-        'if_exists', 'if_defined', 'no_recurse', 'alt_name', 'predicate',
-        'type',      'bool',       'num',        'str',
+        'if_exists', 'if_defined', 'recurse', 'no_recurse', 'alt_name', 'predicate',
+        'type',      'bool',       'num',     'str',
     );
 }
 
@@ -30,11 +31,12 @@ use constant \%CONSTANTS;
 
 use constant TYPES => ( BOOL, NUM, STR );
 
-our %EXPORT_TAGS = ( all => [ 'make_tag_handler', keys %CONSTANTS ] );
+our %EXPORT_TAGS = ( all => [ 'make_tag_handler', 'process_value', keys %CONSTANTS ] );
 our @EXPORT_OK   = ( map { @$_ } values %EXPORT_TAGS );
 
 our %ALLOWED = (
-    +( LC_TO_JSON ) => { map { $_ => undef } OMIT_IF_EMPTY, IF_EXISTS, IF_DEFINED, BOOL, NUM, STR },
+    +( LC_TO_JSON ) =>
+      { map { $_ => undef } OMIT_IF_EMPTY, IF_EXISTS, IF_DEFINED, RECURSE, BOOL, NUM, STR },
     +( LC_TO_HASH ) => { map { $_ => undef } OMIT_IF_EMPTY, IF_EXISTS, IF_DEFINED, NO_RECURSE },
 );
 
@@ -53,6 +55,45 @@ sub _croak_tag_attr {
 
 
 
+
+
+sub process_value {
+
+    return $_[0] unless is_ref( $_[0] );
+
+    my ( $ref, $method ) = @_;
+    my $value = $ref;
+
+    if ( is_blessed_ref( $ref ) ) {
+        # turtles all the way down...
+        my $mth = $ref->can( $method );
+        $value = $ref->$mth if defined $mth;
+    }
+    elsif ( is_arrayref( $ref ) ) {
+        my %new;
+        for my $idx ( 0 .. @{$ref} - 1 ) {
+            $new{$idx} = process_value( $ref->[$idx], $method );
+        }
+        if ( keys %new ) {
+            my @replace = @$ref;
+            $replace[$_] = delete $new{$_} for keys %new;
+            $value = \@replace;
+        }
+    }
+    elsif ( is_hashref( $ref ) ) {
+        my %new;
+        for my $key ( keys %$ref ) {
+            $new{$key} = process_value( $ref->{$key}, $method );
+        }
+        if ( keys %new ) {
+            my %replace = %$ref;
+            $replace{$_} = delete $new{$_} for keys %new;
+            $value = \%replace;
+        }
+    }
+
+    return $value;
+}
 
 sub make_tag_handler {    ## no critic(Subroutines::ProhibitExcessComplexity)
     my ( $tag ) = @_;
@@ -118,6 +159,10 @@ sub make_tag_handler {    ## no critic(Subroutines::ProhibitExcessComplexity)
 
         my %to;
         for my $attr ( ref $attrs ? @{$attrs} : $attrs ) {
+
+            # if attribute is being overridden, it'll start with a '+'
+            $attr =~ s/^[+]//;
+
             $to{$attr} = {%spec};
             if ( $spec{ +IF_EXISTS } ) {
                 $opt{ +PREDICATE } //= 1;
@@ -146,9 +191,10 @@ MooX::Tag::TO_HASH::Util
 
 =head1 VERSION
 
-version 0.05
+version 0.06
 
 =for Pod::Coverage make_tag_handler
+ process_value
 
 =head1 SUPPORT
 
@@ -160,11 +206,11 @@ Please report any bugs or feature requests to bug-moox-tag-to_hash@rt.cpan.org  
 
 Source is available at
 
-  https://gitlab.com/djerius/moox-tag-to_hash
+  https://codeberg.org/djerius/p5-MooX-Tag-TO_HASH
 
 and may be cloned from
 
-  https://gitlab.com/djerius/moox-tag-to_hash.git
+  https://codeberg.org/djerius/p5-MooX-Tag-TO_HASH.git
 
 =head1 SEE ALSO
 
@@ -180,7 +226,7 @@ L<MooX::Tag::TO_HASH|MooX::Tag::TO_HASH>
 
 =head1 AUTHOR
 
-Diab Jerius <djerius@cpan.org>
+Diab Jerius <djerius@cfa.harvard.edu>
 
 =head1 COPYRIGHT AND LICENSE
 

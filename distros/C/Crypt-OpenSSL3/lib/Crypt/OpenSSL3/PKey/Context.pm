@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::PKey::Context;
-$Crypt::OpenSSL3::PKey::Context::VERSION = '0.010';
+$Crypt::OpenSSL3::PKey::Context::VERSION = '0.011';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::PKey::Context - An operation using a PKey
 
 =head1 VERSION
 
-version 0.010
+version 0.011
 
 =head1 SYNOPSIS
 
@@ -55,6 +55,8 @@ version 0.010
 =head2 decrypt_init
 
 =head2 derive
+
+=head2 derive_SKey
 
 =head2 derive_init
 

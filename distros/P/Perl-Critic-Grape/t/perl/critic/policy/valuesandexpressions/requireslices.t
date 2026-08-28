@@ -292,3 +292,7 @@ subtest 'Other'=>sub {
 	}
 };
 
+# Note:  If prepare_to_scan_document does NOT clear the cache,
+# many of the above tests will fail, thus an effective test that
+# the caching mechanism works as intended, since most ->location()
+# will be the same in the above examples (eg 1,1,1,1,U)

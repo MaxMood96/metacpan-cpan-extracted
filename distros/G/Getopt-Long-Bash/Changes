@@ -1,5 +1,10 @@
 Revision history for Getopt-Long-Bash
 
+1.0.0 2026-08-27T14:22:49Z
+
+    - Require bash 4.4 or later, and report the required version when
+      running on an older bash
+
 0.8.1 2026-03-30T17:04:10Z
 
     - Document negative alias feature and getoptlong version subcommand

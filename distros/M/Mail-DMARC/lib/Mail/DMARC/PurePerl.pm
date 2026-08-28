@@ -1,5 +1,5 @@
 package Mail::DMARC::PurePerl;
-our $VERSION = '2.20260724';
+our $VERSION = '2.20260827';
 use strict;
 use warnings;
 use feature 'signatures';
@@ -68,7 +68,7 @@ sub validate( $self, $policy = undef ) {
     my $sub_exists
         = !$is_sub
         || !defined $policy->np
-        || $self->_subdomain_exists_in_dns($from_dom);
+        || $self->_author_domain_exists($from_dom);
 
     my $effective_p;
     if ( $is_sub && !$sub_exists && defined $policy->np ) {
@@ -511,9 +511,9 @@ sub _psl_organizational_domain( $self, $from_dom ) {
     return join '.', reverse( @labels[ 0 .. $greatest ] );
 }
 
-sub _subdomain_exists_in_dns( $self, $dom ) {
+sub _dns_name_exists( $self, $dom ) {
 
-    # RFC 9989 4.7: a subdomain is non-existent only when DNS consistently
+    # RFC 9989 3.2.13: a name is non-existent only when DNS consistently
     # returns NXDOMAIN. NOERROR/NODATA means the name exists but lacks that
     # record type. Timeouts and other errors are treated conservatively as
     # existing.
@@ -526,6 +526,10 @@ sub _subdomain_exists_in_dns( $self, $dom ) {
         $got_response = 1;
     }
     return $got_response ? 0 : 1;
+}
+
+sub _author_domain_exists( $self, $dom ) {
+    return $self->_dns_name_exists($dom);
 }
 
 sub exists_in_dns( $self, $from_dom = undef ) {
@@ -547,10 +551,7 @@ sub exists_in_dns( $self, $from_dom = undef ) {
     my $matched = 0;
     foreach (@todo) {
         last if $matched;
-        $matched++ and next if $self->has_dns_rr( 'MX',   $_ );
-        $matched++ and next if $self->has_dns_rr( 'NS',   $_ );
-        $matched++ and next if $self->has_dns_rr( 'A',    $_ );
-        $matched++ and next if $self->has_dns_rr( 'AAAA', $_ );
+        $matched = 1 if $self->_dns_name_exists($_);
     }
     if ( !$matched ) {
         $self->result->result('none');
@@ -771,7 +772,7 @@ Mail::DMARC::PurePerl - Pure Perl implementation of DMARC
 
 =head1 VERSION
 
-version 2.20260724
+version 2.20260827
 
 =head1 METHODS
 

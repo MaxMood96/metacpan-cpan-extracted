@@ -16,7 +16,7 @@
 #include <unistd.h>
 #include <sys/socket.h>
 
-MODULE = Linux::Event::Listener::_Engine    PACKAGE = Linux::Event::Listener::_Engine
+MODULE = Linux::Event::Listener    PACKAGE = Linux::Event::Listener
 PROTOTYPES: DISABLE
 
 SV *

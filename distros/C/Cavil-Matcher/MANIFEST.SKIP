@@ -1,5 +1,7 @@
 ^blib/
 ^Matcher\.c$
+^tools/
+^MANIFEST\.bak$
 ^Makefile$
 ^Makefile\.old$
 ^pm_to_blib

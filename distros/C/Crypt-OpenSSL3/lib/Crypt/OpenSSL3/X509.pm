@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::X509;
-$Crypt::OpenSSL3::X509::VERSION = '0.010';
+$Crypt::OpenSSL3::X509::VERSION = '0.011';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::X509 - An X509 certificate
 
 =head1 VERSION
 
-version 0.010
+version 0.011
 
 =head1 METHODS
 
@@ -32,6 +32,8 @@ version 0.010
 =head2 add_ext
 
 =head2 check_ca
+
+=head2 check_certificate_times
 
 =head2 check_email
 
@@ -64,6 +66,8 @@ version 0.010
 =head2 get_authority_key_id
 
 =head2 get_authority_serial
+
+=head2 get_basic_constraints
 
 =head2 get_ct_precert_scts
 
@@ -139,7 +143,13 @@ version 0.010
 
 =head2 self_signed
 
+=head2 set_basic_constraints
+
+=head2 set_ct_precert_scts
+
 =head2 set_distinguishing_id
+
+=head2 set_issuer_alt_names
 
 =head2 set_issuer_name
 
@@ -154,6 +164,8 @@ version 0.010
 =head2 set_pubkey
 
 =head2 set_serialNumber
+
+=head2 set_subject_alt_names
 
 =head2 set_subject_name
 
@@ -188,6 +200,26 @@ version 0.010
 =item CHECK_FLAG_NO_WILDCARDS
 
 =item CHECK_FLAG_SINGLE_LABEL_SUBDOMAINS
+
+=back
+
+=head1 CONSTANTS
+
+=over 4
+
+=item * ADD_APPEND
+
+=item * ADD_DEFAULT
+
+=item * ADD_DELETE
+
+=item * ADD_KEEP_EXISTING
+
+=item * ADD_REPLACE
+
+=item * ADD_REPLACE_EXISTING
+
+=item * ADD_SILENT
 
 =back
 

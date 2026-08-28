@@ -1,5 +1,5 @@
 package HTTP::Tiny::Paranoid;
-$HTTP::Tiny::Paranoid::VERSION = '0.07';
+$HTTP::Tiny::Paranoid::VERSION = '0.08';
 use strict;
 use warnings;
 
@@ -21,17 +21,10 @@ around _open_handle => sub {
 
   my ($req, $scheme, $host, $port, $peer) = @_;
 
-  if ($peer) {
-    my ($ips, $error) = $dns->resolve($peer);
-    die "$peer: $error\n" if defined $error;
-    $self->$next($req, $scheme, $host, $port, $peer);
-  }
-  else {
-    my ($ips, $error) = $dns->resolve($host);
-    die "$host: $error\n" if defined $error;
-    die "$host: no IP address found\n" unless @$ips;
-    $self->$next($req, $scheme, $host, $port, $ips->[0]);
-  }
+  my ($ips, $error) = $dns->resolve($peer || $host);
+  die "$host: $error\n" if defined $error;
+  die "$host: no IP address found\n" unless @$ips;
+  $self->$next($req, $scheme, $host, $port, $ips->[0]);
 };
 
 1;
@@ -112,13 +105,13 @@ L<https://github.com/robn/HTTP-Tiny-Paranoid>
 
 =item *
 
-Robert Norris <rob@eatenbyagrue.org>
+Rob Norris <robn@despairlabs.com>
 
 =back
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2014 by Robert Norris.
+This software is copyright (c) 2014 by Rob Norris <robn@despairlabs.com>
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

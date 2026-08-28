@@ -32,6 +32,7 @@ Scripts
 07-gtk4-chat.pl     a GTK4 chat window driven by EV, not by gtk_main
 08-tickit-chat.pl   the same two panes in a terminal, also driven by EV
 09-mcp-server.pl    exposes Telegram as MCP tools over JSON-RPC on stdio
+10-webapp-bot.pl    offers a Mini App button and prints the data it returns
 
 07-gtk4-chat.pl needs GTK4 and Glib::Object::Introspection. It loads
 them at run time, so the file still compiles where they are absent.
@@ -50,3 +51,9 @@ than a blocking loop, so the protocol and the TDLib pump share one loop,
 and a tools/call is answered when TDLib replies instead of by waiting
 for it. It needs a session that already exists: a server started on
 stdio has nowhere to ask for a login code, so run 01-login.pl first.
+
+10-webapp-bot.pl needs a Mini App configured on the bot with /newapp in
+BotFather, and TD_WEBAPP_URL pointing at the URL you gave it. Nothing in
+the example renders the page: the button carries a URL that the user's
+own Telegram client opens, and the bot only ever sees the data the page
+sends back.

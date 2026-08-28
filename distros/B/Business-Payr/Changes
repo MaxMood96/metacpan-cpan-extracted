@@ -1,0 +1,13 @@
+Revision history for Business-Payr
+
+0.02     2026-08-28
+        - Fix POD issues
+
+0.01     2026-04-13
+        - First release
+        - Support for /thirdparty/onboarding/ endpoint (onboard_user)
+        - Support for /thirdparty/user-login/ endpoint (create_payment_session)
+        - Support for /thirdparty/rotate-token/ endpoint (rotate_token)
+        - Business::Payr::PaymentSession with iframe_html helper
+        - Business::Payr::Webhook with HMAC-SHA256 signature verification
+        - Business::Payr::Webhook::Payment for typed access to webhook payloads

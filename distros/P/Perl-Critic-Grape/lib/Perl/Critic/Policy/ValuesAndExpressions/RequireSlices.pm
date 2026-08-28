@@ -9,7 +9,7 @@ use Scalar::Util qw/refaddr/;
 use Perl::Critic::Utils qw/:severities/; # :classification
 use base 'Perl::Critic::Policy';
 
-our $VERSION = '0.0.8';
+our $VERSION = '0.0.9';
 
 Readonly::Scalar my $DESC  => q{Write chains of array/hash access as slices};
 Readonly::Scalar my $EXPL  => undef;
@@ -91,29 +91,63 @@ sub countViolations {
 	return;
 }
 
-my (%scache,@scacherecent);
+my $cachekey;
 sub stmtViolates {
 	my ($self,$elem,$statement)=@_;
-	my $skey=join(',',map {$_//'U'} $statement->location());
-	if($scache{$skey} &&($scache{$skey}[0]<$#scacherecent)) {
-		push @scacherecent,$skey;
-		splice(@scacherecent,$scache{$skey}[0],1);
-		$scache{$skey}[0]=$#scacherecent;
+	my $nodes;
+	if($cachekey) {
+		my ($cache,$recent)=@{$$self{$cachekey}}{qw/cache recent/};
+		my $skey=join(',',map {$_//'U'} @{$statement->location()});
+		if($$cache{$skey}&&($$cache{$skey}[0]<$#$recent)) {
+			push @$recent,$skey;
+			splice(@$recent,$$cache{$skey}[0],1);
+			$$cache{$skey}[0]=$#$recent;
+		}
+		elsif(!$$cache{$skey}) {
+			push @$recent,$skey;
+			my @parsed=parseStatement($statement);
+			countViolations($$self{_minimum},\@parsed);
+			$$cache{$skey}=[$#$recent,\@parsed];
+			while($#$recent>63) {
+				my $rkey=shift(@$recent);
+				delete($$cache{$rkey});
+			}
+		}
+		# else the cache key is defined and the most recent, do nothing
+		$nodes=$$cache{$skey}[1];
 	}
-	else {
-		push @scacherecent,$skey;
+	else { # no caching support
 		my @parsed=parseStatement($statement);
 		countViolations($$self{_minimum},\@parsed);
-		$scache{$skey}=[$#scacherecent,\@parsed];
-		while($#scacherecent>63) {
-			my $rkey=shift(@scacherecent);
-			delete($scache{$rkey});
-		}
+		$nodes=\@parsed;
 	}
-	foreach my $node (@{$scache{$skey}[1]}) {
+	foreach my $node (@$nodes) {
 		if($$node{violates} && (refaddr($$node{node})==refaddr($elem))) { return $self->invalid($elem) }
 	}
 	return;
+}
+
+# Create a statement cache inside the policy instance.  While unlikely, this permits
+# parallel scans launched by perlcritic, and prevents bleed across scanned documents.
+sub initialize_if_enabled {
+	my ($self,$config)=@_;
+	my $name='__REQUIRESLICES__';
+	my $suffix=int(rand(1e9));
+	my $retry=3;
+	while($retry&&exists($$self{"$name$suffix"})) { $suffix=int(rand(1e9)); $retry-- }
+	if(exists($$self{"$name$suffix"})) { warn 'RequireSlices unable to build statement cache' }
+	else {
+		$cachekey="$name$suffix";
+		$$self{$cachekey}={cache=>{},recent=>[]};
+	}
+	return 1;
+}
+
+# Reset the cache between documents
+sub prepare_to_scan_document {
+	my ($self,$doc)=@_;
+	if($cachekey) { $$self{$cachekey}={cache=>{},recent=>[]} }
+	return 1;
 }
 
 sub violates {

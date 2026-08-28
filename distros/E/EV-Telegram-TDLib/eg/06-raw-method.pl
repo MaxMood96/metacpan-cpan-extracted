@@ -2,6 +2,9 @@
 # 06-raw-method.pl - the escape hatch: send() and execute() with raw requests
 #
 # Demonstrates: calling TDLib methods the mixins do not wrap.
+#   call({...}) is the usual way in: it fills in @type from the method
+#   name and rejects an argument name TDLib does not have, so a typo
+#   fails here instead of coming back as an opaque server error.
 #   execute({...}) is synchronous td_execute: no network, no authorization.
 #   send({...}) is asynchronous: the reply arrives on the loop, correlated
 #   by @extra. @extra is assigned by send() itself (and returned), so it
@@ -37,6 +40,21 @@ my $parsed = EV::Telegram::TDLib->execute({
 if ($parsed && ($parsed->{'@type'} // '') ne 'error') {
     print "entities: ", scalar(@{ $parsed->{entities} }), "\n";
 }
+
+# call() checks argument names against the shipped catalogue of every
+# TDLib function before anything reaches the wire
+my $bad = do {
+    local $@;
+    eval { $td->call(getOption => { nmae => 'version' }, sub {}) };
+    $@;
+};
+print "call() rejected a typo: $bad" if $bad;
+
+$td->call(getOption => { name => 'version' }, sub {
+    my ($res, $err) = @_;
+    print $err ? "call() failed: $err->{message}\n"
+               : "call() reply: $res->{value}\n";
+});
 
 my $extra = $td->send({ '@type' => 'getOption', name => 'version' }, sub {
     my ($res, $err) = @_;

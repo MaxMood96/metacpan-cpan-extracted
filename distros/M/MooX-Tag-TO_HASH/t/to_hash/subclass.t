@@ -24,14 +24,14 @@ subtest 'specify all values' => sub {
         lives {
             $obj = CLASS->new(
                 cow            => 'Daisy',
-                hen            => 'Ruby',
                 duck           => 'Donald',
+                hen            => 'Ruby',
                 horse          => 'Ed',
                 pig            => 'Wilbur',
-                secret_admirer => 'Nemo'
+                secret_admirer => 'Nemo',
             );
         },
-        'obj created'
+        'obj created',
     ) or bail_out $@;
 
     is( $obj, D(), 'obj defined' ) or bail_out;
@@ -39,11 +39,12 @@ subtest 'specify all values' => sub {
     is(
         $obj->TO_HASH,
         hash {
-            field cow   => 'Daisy';
-            field hen   => 'Ruby';
-            field pig   => 'Wilbur';
-            field goose => 'Donald';
-            field horse => 'Ed';
+            field cow       => 'Daisy';
+            field goose     => 'Donald';
+            field hen       => 'Ruby';
+            field horse     => 'Ed';
+            field pig       => 'Wilbur';
+            field porcupine => 'Prickly';
             end;
         },
         'value'
@@ -60,7 +61,7 @@ subtest 'omit values' => sub {
         lives {
             $obj = CLASS->new( secret_admirer => 'Nemo' );
         },
-        'obj created'
+        'obj created',
     ) or bail_out $@;
 
     is( $obj, D(), 'obj defined' ) or bail_out;
@@ -68,12 +69,13 @@ subtest 'omit values' => sub {
     is(
         $obj->TO_HASH,
         hash {
-            field cow => U();
-            field hen => U();
-            field pig => U();
+            field cow       => U();
+            field hen       => U();
+            field pig       => U();
+            field porcupine => 'Prickly';
             end;
         },
-        'value'
+        'value',
     );
 };
 

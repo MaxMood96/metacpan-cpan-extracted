@@ -425,6 +425,79 @@
     }
     .btn-refresh:hover { background: #f0f0f0; }
 
+    /* Graph page layout */
+    .graph-title {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: #1a2a5a;
+      margin: 0.75rem 0 0.5rem;
+    }
+    .graph-export-bar {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .btn-graph-export {
+      padding: 0.28rem 0.75rem;
+      border: 1px solid #888;
+      border-radius: 6px;
+      background: transparent;
+      color: #444;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .btn-graph-export:hover { background: #f0f0f0; }
+    .graph-container {
+      overflow-x: auto;
+      text-align: center;
+    }
+    .graph-container svg { display: block; margin: 0 auto; }
+
+    /* Line-graph button in the toolbar */
+    .btn-graph {
+      flex-shrink: 0;
+      padding: 0.28rem 0.75rem;
+      border: 1px solid #888;
+      border-radius: 6px;
+      background: transparent;
+      color: #444;
+      font-size: 0.82rem;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .btn-graph:hover { background: #f0f0f0; }
+
+    /* Graph panel: selects + buttons on one row */
+    .graph-fields-row {
+      display: flex;
+      gap: 0.75rem 1rem;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      margin-bottom: 0.5rem;
+    }
+    .graph-fields-row .join-field {
+      flex: 1;
+      min-width: 160px;
+    }
+    .graph-btn-col {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      flex-shrink: 0;
+    }
+    .graph-btn-spacer {
+      font-size: 0.8rem;
+      line-height: 1;
+      visibility: hidden;
+      display: block;
+    }
+    .graph-btn-row {
+      display: flex;
+      gap: 0.5rem;
+    }
+
     /* Export save-to-disc panel */
     .export-panel {
       background: #f5f8f0;

@@ -1,0 +1,10 @@
+/var/log/speak.log {
+    weekly
+    rotate 4
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su root syslog
+}

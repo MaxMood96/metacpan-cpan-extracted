@@ -18,7 +18,7 @@ use Class::Autouse qw{
 	I18N::LangTags::Detect
 };
 
-our $VERSION = '0.84';
+our $VERSION = '0.85';
 
 # ── Module-level constants ───────────────────────────────────────────────────
 # Gathering magic strings here makes behavioural changes one-edit operations.
@@ -35,6 +35,43 @@ Readonly my $UA_MAX              => 512;              # max bytes we accept from
 Readonly my $GEO_UNKNOWN         => -1;               # geo-module sentinel: not yet probed
 Readonly my $GEO_ABSENT          =>  0;               # geo-module sentinel: unavailable
 Readonly my $GEO_PRESENT         =>  1;               # geo-module sentinel: loaded OK
+
+# Package-level sentinel for Locale::Object's SQLite database.  undef = not yet
+# probed; 0 = database absent (Windows installers often omit it); 1 = available.
+# Package-level (not per-object) because the database either exists on the
+# filesystem or it doesn't — there is no per-request variability.
+my $_locale_object_db_ok;
+
+# Package-level sentinel for Data::Validate::IP / NetAddr::IP availability.
+# NetAddr::IP::UtilPP fails to build on Windows (mask4to6 bad-argument error),
+# which cascades to Data::Validate::IP.  undef = not yet probed; 0 = broken;
+# 1 = available.  On first country() call we try to load the module and, if it
+# fails, install pure-Perl aliases for the four functions we use.
+my $_have_dvip;
+
+# Short-name overrides used when Locale::Object's database is absent and we
+# fall back to Locale::Codes::Country.  Locale::Codes carries full ISO official
+# names (e.g. "United Kingdom of Great Britain and Northern Ireland") while
+# Locale::Object returns the common short form ("United Kingdom").  Only
+# entries that differ are listed; everything else comes from Locale::Codes.
+my %COUNTRY_SHORT_NAMES = (
+	bo => 'Bolivia',
+	cd => 'Democratic Republic of the Congo',
+	fk => 'Falkland Islands',
+	fm => 'Micronesia',
+	gb => 'United Kingdom',
+	ir => 'Iran',
+	kp => 'North Korea',
+	kr => 'South Korea',
+	md => 'Moldova',
+	nl => 'Netherlands',
+	ps => 'Palestine',
+	tw => 'Taiwan',
+	tz => 'Tanzania',
+	us => 'United States',
+	ve => 'Venezuela',
+);
+
 Readonly my %RTL_LANGS           => (map { $_ => 1 }  # ISO 639-1 codes whose primary script is RTL
 	qw(ar dv fa he ku ps sd ug ur yi));
 
@@ -44,7 +81,7 @@ CGI::Lingua - Create a multilingual web page
 
 =head1 VERSION
 
-Version 0.84
+Version 0.85
 
 =cut
 
@@ -740,8 +777,15 @@ sub _resolve_base_match
 		$sl = $self->_code2country($1);
 		$requested_sublanguage //= $1;
 	} elsif($header =~ /..-([a-z]{2,3})$/i) {
-		eval { $sl = Locale::Object::Country->new(code_alpha3 => $1) };
-		$self->_info($@) if $@;
+		if($_locale_object_db_ok // 1) {
+			eval { $sl = Locale::Object::Country->new(code_alpha3 => $1) };
+			if($@) {
+				$_locale_object_db_ok = 0 if $@ =~ /database was not in/;
+				$self->_info($@);
+			} else {
+				$_locale_object_db_ok = 1;
+			}
+		}
 	}
 
 	if($sl) {
@@ -856,23 +900,38 @@ sub _resolve_sublanguage_match
 			# Cache stores "countryname=langcode" (e.g. "United Kingdom=en").
 			# Splitting on = gives the country name as the first field.
 			($language_name) = split(/=/, $from_cache);
-		} else {
-			my $db = Locale::Object::DB->new();
-			my @results = @{$db->lookup(
-				table         => 'country',
-				result_column => 'name',
-				search_column => 'code_alpha2',
-				value         => $variety
-			)};
-			if(defined($results[0])) {
-				eval { $language_name = $self->_code2countryname($variety) };
-			} else {
-				$self->_debug("Can't find the country code for $variety in Locale::Object::DB");
+		} elsif($_locale_object_db_ok // 1) {
+			# Locale::Object's SQLite database is absent on some Windows
+			# installations; the sentinel avoids repeated failed new() calls.
+			eval {
+				my $db = Locale::Object::DB->new();
+				my @results = @{$db->lookup(
+					table         => 'country',
+					result_column => 'name',
+					search_column => 'code_alpha2',
+					value         => $variety
+				)};
+				$_locale_object_db_ok = 1;
+				if(defined($results[0])) {
+					$language_name = $self->_code2countryname($variety);
+				} else {
+					$self->_debug("Can't find the country code for $variety in Locale::Object::DB");
+				}
+			};
+			if($@) {
+				$_locale_object_db_ok = 0
+					if $@ =~ /database was not in/;
+				# fall through: $language_name stays undef, caught below
 			}
 		}
 
 		if($@ || !defined($language_name)) {
 			$self->_warn({ warning => $@ }) if $@;
+			# Locale::Object DB may be absent (common on Windows CI); fall back to
+			# the short-name table / Locale::Codes before giving up.
+			$language_name = $self->_country_short_name($variety);
+		}
+		if(!defined($language_name)) {
 			$self->_debug(__PACKAGE__, ': ', __LINE__, ': setting sublanguage to Unknown');
 			$self->{_sublanguage} = 'Unknown';
 			$self->_warn({ warning => "Can't determine values for $header" });
@@ -1189,8 +1248,23 @@ sub country {
 		return;
 	}
 
-	require Data::Validate::IP;
-	Data::Validate::IP->import();
+	# Data::Validate::IP depends on NetAddr::IP, which fails to build on Windows
+	# (NetAddr::IP::UtilPP::mask4to6 bad-argument error).  Try to load it once;
+	# on failure install pure-Perl aliases for the four bare function names used
+	# below so the rest of the function is unchanged on both platforms.
+	if(!defined($_have_dvip)) {
+		local $SIG{__DIE__};
+		if(eval { require Data::Validate::IP; Data::Validate::IP->import(); 1 }) {
+			$_have_dvip = 1;
+		} else {
+			$_have_dvip = 0;
+			no warnings 'redefine';
+			*CGI::Lingua::is_ipv4       = \&_is_ipv4;
+			*CGI::Lingua::is_ipv6       = \&_is_ipv6;
+			*CGI::Lingua::is_private_ip  = \&_is_private_ip;
+			*CGI::Lingua::is_loopback_ip = \&_is_loopback_ip;
+		}
+	}
 
 	if(!is_ipv4($ip)) {
 		$self->_debug("$ip isn't IPv4. Is it IPv6?");
@@ -1436,21 +1510,43 @@ sub _clean_country_code
 	return;
 }
 
+# ── _in_baidu_subnet ──────────────────────────────────────────────────────
+# Purpose:      Pure-Perl fallback check for the Baidu IPv4 subnet
+#               185.10.104.0/22.  Used when Net::Subnet is absent (e.g. on
+#               Windows where its Socket6 dependency fails to build).
+# Entry:        $ip — untainted IPv4 string.
+# Exit:         Returns true if $ip is within the /22 block, false otherwise.
+sub _in_baidu_subnet
+{
+	my $ip = shift;
+	return 0 unless $ip =~ /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/;
+	# pack/unpack avoids signed-integer overflow on 32-bit Perl
+	my $n   = unpack('N', pack('C4', $1, $2, $3, $4));
+	my $net = unpack('N', pack('C4', 185, 10, 104, 0));
+	return (($n & 0xFFFFFC00) == ($net & 0xFFFFFC00));
+}
+
 # ── _handle_eu_country ────────────────────────────────────────────────────
 # Purpose:      Resolve the ambiguous 'eu' country code.  RT-86809 shows that
 #               Baidu reports itself as EU when it is actually in CN.  All
 #               other 'eu' addresses are logged as Unknown.
 # Entry:        $ip — validated, untainted IP string.
 # Exit:         Sets $self->{_country} to 'cn' or 'Unknown'.
-# Side Effects: Loads Net::Subnet; writes info log entry.
+# Side Effects: Optionally loads Net::Subnet; writes info log entry.
 sub _handle_eu_country
 {
 	my ($self, $ip) = @_;
 
-	require Net::Subnet;
-	Net::Subnet->import();
+	# Prefer Net::Subnet for correctness; fall back to the pure-Perl helper
+	# when it is absent (Socket6, its indirect dep, fails to build on Windows).
+	my $in_baidu;
+	if(eval { require Net::Subnet; Net::Subnet->import(); 1 }) {
+		$in_baidu = subnet_matcher($BAIDU_SUBNET)->($ip);
+	} else {
+		$in_baidu = _in_baidu_subnet($ip);
+	}
 
-	if(subnet_matcher($BAIDU_SUBNET)->($ip)) {
+	if($in_baidu) {
 		$self->{_country} = 'cn';
 	} else {
 		$self->_info("$ip has country of eu");
@@ -1713,7 +1809,15 @@ sub time_zone {
 			chomp $tz;
 			$self->{_timezone} = $tz;
 		} else {
-			$self->{_timezone} = DateTime::TimeZone::Local->TimeZone()->name();
+			# DateTime::TimeZone::Local::TimeZone() is not available on all
+			# platforms/versions (absent on some Windows Perl builds); guard
+			# so time_zone() degrades to undef rather than dying.
+			eval {
+				local $SIG{__DIE__};
+				require DateTime::TimeZone::Local;
+				$self->{_timezone} = DateTime::TimeZone::Local->TimeZone()->name();
+			};
+			$self->_warn({ warning => "DateTime::TimeZone::Local failed: $@" }) if $@;
 		}
 	}
 
@@ -2092,15 +2196,44 @@ sub _code2country
 	}
 
 	my $rc;
-	{
-		# Scope the signal handler tightly — only suppress the one known-harmless warning
+	if($_locale_object_db_ok // 1) {
+		# Suppress the routine "No result found" warning; catch the database-
+		# absent exception that Windows installations sometimes throw.
 		local $SIG{__WARN__} = sub {
 			warn $_[0] unless $_[0] =~ /No result found in country table/;
 		};
-		$rc = Locale::Object::Country->new(code_alpha2 => $code);
+		eval { $rc = Locale::Object::Country->new(code_alpha2 => $code) };
+		if($@) {
+			$_locale_object_db_ok = 0
+				if $@ =~ /database was not in/;
+			$rc = undef;
+		} else {
+			$_locale_object_db_ok = 1;
+		}
 	}
 	$self->_trace('<_code2country ', $code || 'undef');
 	return $rc;
+}
+
+# ── _country_short_name ───────────────────────────────────────────────────
+# Purpose:      Return the common short English name for an ISO 3166-1 alpha-2
+#               code when Locale::Object's database is unavailable.  Uses
+#               %COUNTRY_SHORT_NAMES overrides for codes where Locale::Codes
+#               returns the full ISO official name rather than the short form.
+# Entry:        $code — 2-char country code (any case).
+# Exit:         Short name string, or undef.
+sub _country_short_name
+{
+	my ($self, $code) = @_;
+	return unless defined($code);
+	my $lc = lc($code);
+	return $COUNTRY_SHORT_NAMES{$lc} if exists $COUNTRY_SHORT_NAMES{$lc};
+	# Locale::Object may have partially initialised Locale::Codes::Country as a
+	# dependency before we get here; suppress the spurious 'redefine' warning
+	# that some Perl/Locale::Codes combinations produce on first full load.
+	{ local $SIG{__WARN__} = sub { warn $_[0] unless $_[0] =~ /redefined/ };
+	  require Locale::Codes::Country; }
+	return Locale::Codes::Country::code2country($lc, 'alpha-2');
 }
 
 # ── _code2countryname ─────────────────────────────────────────────────────
@@ -2118,7 +2251,8 @@ sub _code2countryname
 
 	unless($self->{_cache}) {
 		my $country = $self->_code2country($code);
-		return defined($country) ? $country->name : undef;
+		return $country->name if defined($country);
+		return $self->_country_short_name($code);
 	}
 
 	if(my $from_cache = $self->{_cache}->get($CACHE_NS . "code2countryname:$code")) {
@@ -2126,11 +2260,18 @@ sub _code2countryname
 		return $from_cache;
 	}
 
+	my $name;
 	if(my $country = $self->_code2country($code)) {
+		$name = $country->name();
+	} else {
+		# Locale::Object database absent (common on Windows); fall back to
+		# Locale::Codes::Country with a short-name correction table.
+		$name = $self->_country_short_name($code);
+	}
+
+	if(defined($name)) {
 		$self->_debug('_code2countryname not in cache, storing');
-		my $name = $country->name();
 		$self->_trace('<_code2countryname ', $name);
-		# Store then return explicitly — don't rely on set() return value
 		$self->{_cache}->set($CACHE_NS . "code2countryname:$code", $name, $CACHE_TTL_LONG);
 		return $name;
 	}
@@ -2186,6 +2327,53 @@ sub _warn
 		$self->_log('warn', $msg);
 		carp($msg);
 	}
+}
+
+# ── Pure-Perl IP-validation helpers ──────────────────────────────────────────
+# These are installed into the CGI::Lingua symbol table as is_ipv4() etc. when
+# Data::Validate::IP / NetAddr::IP are unavailable (see country()).
+
+sub _is_ipv4 {
+	my $ip = shift;
+	return unless defined($ip) && $ip =~ /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+	return !(grep { $_ > 255 } ($1, $2, $3, $4));
+}
+
+sub _is_ipv6 {
+	my $ip = shift;
+	return unless defined($ip) && $ip =~ /:/;
+	# Socket::inet_pton is core since Perl 5.14 and validates IPv6 reliably
+	if(defined &Socket::inet_pton) {
+		require Socket;
+		return defined Socket::inet_pton(Socket::AF_INET6(), $ip);
+	}
+	# Structural fallback: hex+colons, at least two colons, at most one ::
+	return ($ip =~ /^[0-9a-fA-F:]+$/ || $ip =~ /^[0-9a-fA-F:]+:\d{1,3}(?:\.\d{1,3}){3}$/)
+		&& ($ip =~ tr/:://) <= 1
+		&& ($ip =~ tr/://) >= 2;
+}
+
+sub _is_private_ip {
+	my $ip = shift;
+	return unless defined($ip);
+	if($ip =~ /^(\d+)\.(\d+)/) {
+		my ($a, $b) = ($1 + 0, $2 + 0);
+		return 1 if $a == 10;
+		return 1 if $a == 172 && $b >= 16 && $b <= 31;
+		return 1 if $a == 192 && $b == 168;
+		return 1 if $a == 169 && $b == 254;     # link-local / APIPA
+		return 0;
+	}
+	return 1 if $ip =~ /^fe[89ab][0-9a-f]:/i;  # fe80::/10 link-local
+	return 1 if $ip =~ /^f[cd]/i;              # fc00::/7 ULA
+	return 0;
+}
+
+sub _is_loopback_ip {
+	my $ip = shift;
+	return unless defined($ip);
+	return 1 if $ip eq '::1';
+	return $ip =~ /^127\./;
 }
 
 =head1 LIMITATIONS

@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.102';
+our $VERSION = '0.103';
 
 use Carp qw(croak);
 use Config ();
@@ -22,7 +22,7 @@ use utf8 ();
 use Linux::Event::Address;
 use Linux::Event::Error;
 use Linux::Event::_SocketConfig ();
-use Linux::Event::Stream::_Resolver ();
+use Linux::Event::_Resolver ();
 require Linux::Event::Timer;
 require XSLoader;
 XSLoader::load(__PACKAGE__, $VERSION);
@@ -648,7 +648,7 @@ sub _attach_to_loop ($self, $loop) {
         $self->{state} = 'resolving';
         my ($resolver, $id);
         my $submitted = eval {
-            $resolver = Linux::Event::Stream::_Resolver->for_loop($loop);
+            $resolver = Linux::Event::_Resolver->for_loop($loop);
             $self->{resolver} = $resolver;
             $id = $resolver->submit(
                 $self, $self->{host}, $self->{port}, SOCK_DGRAM,

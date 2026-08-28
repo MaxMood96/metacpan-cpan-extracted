@@ -3,10 +3,10 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.102';
+our $VERSION = '0.103';
 
 use Carp qw(croak);
-use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
+use Fcntl qw(F_GETFD F_GETFL F_SETFD F_SETFL FD_CLOEXEC O_NONBLOCK);
 use mro ();
 use POSIX qw(isfinite);
 use Scalar::Util qw(looks_like_number weaken);
@@ -189,7 +189,7 @@ sub _descriptor_for ($class) {
         $native->{read_mode},
         $callback{on_data},
         $callback{on_message},
-        $callback{on_drain},
+        $callback{on_drain} ? \&_xs_drain : undef,
         \&_xs_read_eof,
         \&_xs_read_error,
         \&_xs_write_error,
@@ -258,6 +258,20 @@ sub _xs_write_empty ($self) {
     $self->_rearm_stream_deadline if $self->{deadline_started};
     $self->{watcher}->disable_write if $self->{watcher};
     $self->_finish_write_side if $self->{write_ending} && !$self->{write_ended};
+    return;
+}
+
+sub _xs_drain ($self) {
+    return if $self->{closed};
+    if ($self->{preconnect_write_blocked}
+        && !($self->{transport_ready_fired} & 0x02)) {
+        $self->{preconnect_drain_reached} = 1;
+        return;
+    }
+    delete $self->{preconnect_write_blocked};
+    delete $self->{preconnect_drain_reached};
+    my $callback = $self->{descriptor}{callbacks}{on_drain};
+    $callback->($self) if $callback;
     return;
 }
 
@@ -658,6 +672,12 @@ sub _fire_ready ($self) {
     if (my $callback = $self->{descriptor}{callbacks}{on_ready}) {
         $callback->($self);
     }
+    return if $self->{closed};
+    if ($self->{preconnect_write_blocked}
+        && ($self->{preconnect_drain_reached}
+            || !$self->{xs_state}->is_write_blocked)) {
+        $self->_xs_drain;
+    }
     return;
 }
 
@@ -696,7 +716,7 @@ sub is_read_eof ($self) { !!$self->{read_eof} }
 sub is_write_ended ($self) { !!$self->{write_ended} }
 sub is_write_blocked ($self) {
     return !!$self->{xs_state}->is_write_blocked if $self->{xs_state};
-    return 0;
+    return !!$self->{preconnect_write_blocked};
 }
 
 sub data ($self, @arg) {
@@ -829,7 +849,7 @@ sub deadline_operation ($self) {
 }
 
 sub _deadline_now () {
-    require Linux::Event::Stream::_Deadline;
+    require Linux::Event::Timer;
     return Linux::Event::Stream::_Deadline->now;
 }
 
@@ -1027,7 +1047,11 @@ sub write ($self, $bytes) {
         }
         push @{ $self->{preconnect_output} //= [] }, "$bytes";
         $self->{preconnect_bytes} = $pending;
-        return 0;
+        if ($pending > $self->{descriptor}{options}{high_watermark}) {
+            $self->{preconnect_write_blocked} = 1;
+            return 0;
+        }
+        return 1;
     }
 
     my $was_pending = $self->pending_bytes;
@@ -1297,6 +1321,8 @@ sub _close_now ($self, $close_fh) {
     }
     $self->{preconnect_output} = [];
     $self->{preconnect_bytes} = 0;
+    delete $self->{preconnect_write_blocked};
+    delete $self->{preconnect_drain_reached};
     $self->_cancel_stream_deadline;
     $self->_destroy_transport_deadline;
 
@@ -1319,9 +1345,16 @@ sub _close_now ($self, $close_fh) {
 sub _set_nonblocking ($fh) {
     my $flags = fcntl($fh, F_GETFL, 0);
     croak "new(): fcntl(F_GETFL): $!" if !defined $flags;
-    return if $flags & O_NONBLOCK;
-    fcntl($fh, F_SETFL, $flags | O_NONBLOCK)
-        or croak "new(): fcntl(F_SETFL O_NONBLOCK): $!";
+    if (!($flags & O_NONBLOCK)) {
+        fcntl($fh, F_SETFL, $flags | O_NONBLOCK)
+            or croak "new(): fcntl(F_SETFL O_NONBLOCK): $!";
+    }
+    my $descriptor_flags = fcntl($fh, F_GETFD, 0);
+    croak "new(): fcntl(F_GETFD): $!" if !defined $descriptor_flags;
+    if (!($descriptor_flags & FD_CLOEXEC)) {
+        fcntl($fh, F_SETFD, $descriptor_flags | FD_CLOEXEC)
+            or croak "new(): fcntl(F_SETFD FD_CLOEXEC): $!";
+    }
 }
 
 1;
@@ -1331,6 +1364,16 @@ sub CLONE_SKIP ($class) { 1 }
 
 package Linux::Event::Stream::XSState;
 sub CLONE_SKIP ($class) { 1 }
+
+package Linux::Event::Stream::_Deadline;
+use parent -norequire, 'Linux::Event::Timer';
+
+sub on_timer ($timer) {
+    my $state = $timer->data;
+    my $stream = $state->{stream};
+    $stream->_stream_deadline_fired($timer) if $stream;
+    return;
+}
 
 package Linux::Event::Stream;
 
@@ -1414,11 +1457,12 @@ cannot be instantiated directly.
 =head2 new(fh => $fh, loop => $loop, data => $value)
 
 C<fh> is required for an already-established Stream. Stream takes ownership of
-the filehandle and sets it nonblocking. Supply C<loop> to attach before C<new>
-returns, or omit it and attach with C<< $loop->add($stream) >>. Both forms are
-primary APIs and C<add> returns the same Stream. C<data> is optional
-per-connection state. Use C<detach> to transfer a still-open plain handle back
-to the application; TLS Streams cannot be detached.
+the filehandle, sets it nonblocking, and enables close-on-exec. Supply C<loop>
+to attach before C<new> returns, or omit it and attach with
+C<< $loop->add($stream) >>. Both forms are primary APIs and C<add> returns the
+same Stream. C<data> is optional per-connection state. Use C<detach> to transfer
+a still-open plain handle back to the application; TLS Streams cannot be
+detached.
 
 A TLS-declared Stream normally obtains its role from C<connect> or Listener
 acceptance. Supplying an already-connected C<fh> is ambiguous, so that advanced
@@ -1637,7 +1681,9 @@ Application callback exceptions are not swallowed.
 
 Writes immediately when possible and queues any remainder. Returns false after
 queued bytes exceed the high watermark; the bytes were still accepted. Wait for
-C<on_drain> before producing more.
+C<on_drain> before producing more. Output queued before attachment or connection
+readiness uses the same return contract and produces one drain notification if
+that blocked interval clears during establishment.
 
 C<$bytes> must be a byte string. Encode character text before writing it.
 
@@ -1719,7 +1765,8 @@ provider-owned wire state rather than application plaintext.
 
 =head2 pending_bytes / is_write_blocked
 
-Report native output-queue and flow-control state.
+Report total output-queue and flow-control state, including output accepted
+while an outbound connection is still being established.
 
 =head2 idle_timeout / read_timeout / write_timeout
 

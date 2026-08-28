@@ -97,7 +97,11 @@ callback exists; write interest is enabled when a write callback exists.
 Terminal/error flags are always watched so the reactor can surface fd closure
 and failure conditions.
 
-Registering the same fd again replaces its existing registration.
+Registering the same fd again replaces its existing registration. The old
+handle becomes inert: its methods cannot affect the replacement even if native
+watcher storage or the fd number is reused. Cancellation and Loop destruction
+release the handle's retained filehandle, callbacks, data, and Loop reference as
+soon as no callback is actively dispatching through that registration.
 
 ## Callback order
 
@@ -187,6 +191,14 @@ $loop->run_for(0.250);
 
 `run_for` uses a monotonic deadline.
 
+Only one driver method may be active on a particular Loop. Calling `run`,
+`run_once`, or `run_for` recursively for that same Loop throws; a callback may
+drive a different Loop. A callback exception propagates after restoring the
+Loop's driver and dispatch state, so the same Loop remains usable after the
+application catches it. `set_event_capacity` is rejected while the Loop is
+running or dispatching. A prior `stop` request does not suppress a later
+`run_once` call.
+
 ## No-argument fast callbacks
 
 When a closure already captures everything it needs, the registration argument can
@@ -210,7 +222,8 @@ the extra reduction matters.
 
 The registry enforces one active registration per integer fd. Re-registering an fd
 replaces the old registration. `unwatch_fd` and handle `cancel` are safe when the
-registration is already absent/inactive.
+registration is already absent/inactive. An obsolete handle cannot observe or
+mutate a later registration that happens to reuse the same native storage.
 
 This model also prevents ambiguous dispatch when file-descriptor numbers are
 reused by the operating system.

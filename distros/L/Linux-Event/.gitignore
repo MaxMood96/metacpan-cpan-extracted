@@ -69,7 +69,7 @@
 /xslistener/MYMETA.yml
 /xslistener/Listener.c
 /xslistener/Listener.o
-/xslistener/_Engine.bs
+/xslistener/Listener.bs
 /xslistener/pm_to_blib
 /xswakeup/Makefile
 /xswakeup/Makefile.old

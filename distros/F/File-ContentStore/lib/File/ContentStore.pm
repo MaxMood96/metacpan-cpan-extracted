@@ -1,17 +1,19 @@
 package File::ContentStore;
-$File::ContentStore::VERSION = '1.005';
-use 5.020;
+$File::ContentStore::VERSION = '1.006';
+use v5.20;
 use warnings;
-use experimental 'signatures';
 
-use Carp qw( carp croak );
-use Types::Standard qw( slurpy Object Bool Int Str ArrayRef HashRef CodeRef );
+use Carp              qw( carp croak );
+use List::Util        qw( sum );
+use Types::Standard   qw( slurpy Object Bool Int Str ArrayRef HashRef CodeRef );
 use Types::Path::Tiny qw( Dir File );
-use Type::Params qw( signature_for );
+use Type::Params      qw( signature_for );
 use Digest;
 
 use Moo;
 use namespace::clean;
+
+use experimental 'signatures';
 
 has path => (
     is       => 'ro',
@@ -67,11 +69,10 @@ has inode => (
         }x;
         my $root = $self->path;
         $root->visit(
-            sub {
-                my ( $path, $inode ) = @_;
+            sub ( $path, $inode ) {
                 my $rel = $path->relative($root)->stringify;
                 $inode->{ $path->stat->ino } = $rel
-                  if -f && $rel =~ $re;
+                  if -f && !-l && $rel =~ $re;
             },
             { recurse => 1 }
         );
@@ -116,18 +117,19 @@ sub link_file ( $self, $file ) {
     my $root = $self->path;
 
     # skip files on a different filesystem than the store
-    if ( $file->stat->dev != $self->dev ) {
+    my $stat = $file->stat;
+    if ( $stat->dev != $self->dev ) {
         local our @CARP_NOT = qw( Path::Tiny );
         carp sprintf
           "%s (%d) and %s (%d) are on different devices. Skipping",
-          $file, $file->stat->dev, $root, $self->dev;
+          $file, $stat->dev, $root, $self->dev;
         return;
     }
 
     my ( $digest, $content, $done );
 
     # check if the file's inode is in the cache already
-    if ( $content = $self->inode->{ $file->stat->ino } ) {
+    if ( $content = $self->inode->{ $stat->ino } ) {
         $digest  = $content =~ s{/}{}gr;
         $content = $root->child($content);
         $done    = 1;
@@ -135,11 +137,11 @@ sub link_file ( $self, $file ) {
 
     # compute content file name
     else {
+        my $parts = $self->parts;
         $digest = $file->digest( $DIGEST_OPTS, $self->digest );
         $content =
-          $root->child(
-            map( { substr $digest, 2 * $_, 2 } 0 .. $self->parts - 1 ),
-            substr( $digest, 2 * $self->parts ) );
+          $root->child( map( { substr $digest, 2 * $_, 2 } 0 .. $parts - 1 ),
+            substr( $digest, 2 * $parts ) );
     }
 
     $self->file_callback->( $file, $digest, $content )
@@ -189,16 +191,15 @@ sub link_dir ( $self, $dirs ) {
 sub fsck ($self) {
     my $root = $self->path;
     $root->visit(
-        sub {
-            my ( $path, $state ) = @_;
+        sub ( $path, $state ) {
 
-            if ( -d $path ) {
+            if ( -l $path ) {
+                push @{ $state->{symlink} }, $path;
+            }
+            elsif ( -d $path ) {
 
                 # empty directory
                 push @{ $state->{empty} }, $path unless $path->children;
-            }
-            elsif ( -l $path ) {
-                push @{ $state->{symlink} }, $path;
             }
             else {
 
@@ -216,6 +217,29 @@ sub fsck ($self) {
     );
 }
 
+sub stats ($self) {
+    my $root  = $self->path;
+    my $stats = {};
+    for my $path ( values $self->inode->%* ) {
+        my $stat  = $root->child($path)->stat;
+        my $nlink = $stat->nlink;
+        my $size  = $stat->size;
+        $stats->{$nlink}{count}++;
+        $stats->{$nlink}{total} += $size;
+    }
+    return $stats;
+}
+
+sub stats_summary ($self) {
+    my $stats = $self->stats;
+    return {
+        store_count  => sum( 0, map $_->{count}, values %$stats ),
+        store_total  => sum( 0, map $_->{total}, values %$stats ),
+        linked_count => sum( 0, map $stats->{$_}{count} * ( $_ - 1 ), keys %$stats ),
+        linked_total => sum( 0, map $stats->{$_}{total} * ( $_ - 1 ), keys %$stats ),
+    };
+}
+
 1;
 
 __END__
@@ -231,7 +255,7 @@ File::ContentStore - A store for file content built with hard links
 
 =head1 VERSION
 
-version 1.005
+version 1.006
 
 =head1 SYNOPSIS
 
@@ -353,7 +377,7 @@ For example, the empty file would be linked to:
     # digest = SHA-256, parts = 2
     e3/b0/c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 
-    # digest = SHA-256, parts = 4
+    # digest = SHA-512, parts = 4
     cf/83/e1/35/7eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e
 
 =head2 check_for_collisions
@@ -372,7 +396,7 @@ stronger one.
     my $md5_store = File::ContentStore->( path => $old, digest => 'MD5' );
 
     # expose a collision
-    $old_store->link_file($file);    # dies
+    $md5_store->link_file($file);    # dies
 
     # create a new SHA-1 store
     my $sha1_store = File::ContentStore->new( path => $new, digest => 'SHA-1' );
@@ -405,8 +429,7 @@ Usage example:
 
     File::ContentStore->new(
         path          => $dir,
-        file_callback => sub {
-            my ( $file, $digest, $content ) = @_;
+        file_callback => sub ( $file, $digest, $content ) {
             print STDERR "Linking $file ($digest) to $content\n";
         }
     );
@@ -428,6 +451,79 @@ Link a single file into the content store.
     $store->link_dir(@dirs);
 
 Recursively link all the files under the given directories.
+
+=head2 stats
+
+Compute and return some statistics about the store, as a hash reference.
+
+The keys are the number of links to the files (I<nlink>) and
+the values are hash references with the keys C<count> and C<total>,
+giving the total number of files are their total size.
+
+In this example:
+
+    {
+        '2' => {
+            count => 19520,
+            total => '96484298049',
+        },
+        '3' => {
+            count => 8269,
+            total => '45776931167',
+        },
+        '6' => {
+            count => 3048,
+            total => '11895935243',
+        },
+        '13' => {
+            count => 1,
+            total => 3459967,
+        },
+    }
+
+there are 19520 files in the store with 2 links (one in the store and one
+outside the store), and the total size of those files is 96,484,298,049
+bytes.
+
+=head2 stats_summary
+
+Compute and return a summary of the store statistics, as a hash reference.
+
+The keys are:
+
+=over 4
+
+=item store_count
+
+number of files in the content store,
+
+=item store_total
+
+total size of the files in the content store,
+
+=item linked_count
+
+number of external files hard-linked into the content store,
+
+=item linked_total
+
+total size of the external files hard-linked into the content store
+(if they were not hard-linked together).
+
+=back
+
+Assuming the same store as in the L</stats> example:
+
+    {
+        store_count  => 30838,
+        store_total  => '154160624426',
+        linked_count => 51310,
+        linked_total => '247559356202',
+    }
+
+This gives an estimate of how much space the content store saves.
+Orphan files (i.e., files that only exist in the content store) are not
+counted in C<linked_count> and C<linked_total>.
 
 =head2 fsck
 

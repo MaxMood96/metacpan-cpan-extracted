@@ -105,9 +105,9 @@ Note: The release process has hooks (in `minil.toml`) that:
 
 **Runtime:**
 - Perl 5.24+ (for the module wrapper)
-- Bash 4.3+ (for the main script)
+- Bash 4.4+ (for the main script)
 - Docker (runtime requirement, not checked by tests)
-- Getopt::Long::Bash 0.6.0+ (provides `getoptlong.sh`)
+- Getopt::Long::Bash 1.0.0+ (provides `getoptlong.sh`)
 
 **Development:**
 - Minilla (build tool)

@@ -12,5 +12,7 @@ has c2_num  => ( is => 'ro', to_json => ',num',  default => '24' );
 
 has pig => ( is => 'ro', to_json => 1 );
 
+has '+porcupine' => ( is => 'ro', default => 'Prickly', to_json => 1 );
+
 1;
 

@@ -1,4 +1,10 @@
 Changes
+MANIFEST			This list of files
+MANIFEST.SKIP
+Makefile.PL
+README
+TDLib.xs
+author/gen-schema.pl
 eg/01-login.pl
 eg/02-bot-echo.pl
 eg/03-list-chats.pl
@@ -8,6 +14,7 @@ eg/06-raw-method.pl
 eg/07-gtk4-chat.pl
 eg/08-tickit-chat.pl
 eg/09-mcp-server.pl
+eg/10-webapp-bot.pl
 eg/README
 lib/EV/Telegram/TDLib.pm
 lib/EV/Telegram/TDLib/Bots.pm
@@ -15,12 +22,14 @@ lib/EV/Telegram/TDLib/Chats.pm
 lib/EV/Telegram/TDLib/Connection.pm
 lib/EV/Telegram/TDLib/Cookbook.pod
 lib/EV/Telegram/TDLib/Files.pm
+lib/EV/Telegram/TDLib/Folders.pm
+lib/EV/Telegram/TDLib/Forum.pm
 lib/EV/Telegram/TDLib/Messages.pm
+lib/EV/Telegram/TDLib/Payments.pm
+lib/EV/Telegram/TDLib/Schema.pm
+lib/EV/Telegram/TDLib/Secret.pm
 lib/EV/Telegram/TDLib/Users.pm
-Makefile.PL
-MANIFEST			This list of files
-MANIFEST.SKIP
-README
+lib/EV/Telegram/TDLib/WebApps.pm
 t/00_use.t
 t/01_execute.t
 t/02_transport.t
@@ -44,7 +53,19 @@ t/19_keepalive.t
 t/20_login_kick.t
 t/21_new_api.t
 t/22_fork_clean.t
-TDLib.xs
+t/23_webapps.t
+t/24_bot_buttons.t
+t/25_bots_api.t
+t/26_schema.t
+t/27_forum.t
+t/28_chat_admin.t
+t/29_housekeeping.t
+t/30_folders.t
+t/31_final_planes.t
+t/32_payments.t
+t/33_secret_provisioning.t
+t/34_chat_management.t
+t/35_practical_planes.t
 tdpump.h
 xt/asan.t
 xt/docs.t
@@ -55,9 +76,14 @@ xt/lib/TeardownAudit.pm
 xt/live_api.t
 xt/live_auth.t
 xt/live_bot.t
+xt/live_planes.t
+xt/live_webapp.t
 xt/pod.t
+xt/provides.t
 xt/readme.t
+xt/schema_drift.t
 xt/schema_pin.t
+xt/schema_slots.t
 xt/teardown_audit.t
 xt/tsan-suppressions.txt
 xt/tsan.t

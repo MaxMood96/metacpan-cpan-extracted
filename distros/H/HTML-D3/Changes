@@ -1,5 +1,19 @@
 Revision history for HTML-D3 - Visualise various charts using D3
 
+0.09	Thu Aug 27 09:16:02 PM EDT 2026
+	[ Enhancements ]
+	- render_line_chart_snippet: accept an optional third element per data pair — a hashref of extra key/value pairs serialised as an "extra" property in the D3 data binding and appended as additional rows in the mouseover tooltip
+
+0.08	Thu Aug 27 01:30:10 PM EDT 2026
+	[ Enhancements ]
+	- Use Params::Get
+	- Added test dashboard
+	- Added support for Object::Configure
+	- Added render_line_chart_snippet() returning an embeddable {svg_id, html} fragment for use in Mojolicious TT (and similar) layouts without post-processing
+	[ Bug Fixes ]
+	- Escape </b> as <\/b> in all JavaScript tooltip .html() strings to fix html-tidy '<' + '/' + letter failures on cpantesters
+	  https://www.cpantesters.org/cpan/report/8321add6-d178-11ef-8e88-00fe6d8775ea
+
 0.07	Fri Jan 10 21:16:49 EST 2025
 	Added support for interactive legends
 

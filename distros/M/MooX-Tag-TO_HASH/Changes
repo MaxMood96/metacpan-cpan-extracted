@@ -1,5 +1,30 @@
 Revision history for MooX-Tag-TO_HASH
 
+0.06      2026-08-27 18:19:02 EDT
+
+  [BUG FIX]
+
+    * adding a to_hash or to_json flag while overridding an attribute
+      in a subclass resulted in a run-time exception..
+
+  [DOCUMENTATION FIX]
+
+    * TO_JSON was documented as recursively processing the attribute
+      if it was not a scalar.  It did not do that, as typically it is
+      used by serializers which will descend into the structure
+      returned by TO_JSON.  Having TO_JSON do this as well is
+      redundant.  See the new recurse tag option to change this
+      behavior on a per attribute basis.
+
+  [ENHANCEMENT]
+
+    * attributes tagged for TO_JSON may have a tag option of
+      'recurse', which directs TO_JSON to recurse into that attribute.
+
+  [META]
+
+    * fiducial repo has been moved to codeberg.org
+
 0.05      2023-04-01 13:50:03-04:00 America/New_York
 
   [BUILD FIX]

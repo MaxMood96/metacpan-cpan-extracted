@@ -1,5 +1,35 @@
 Revision history for Linux-Event
 
+0.103  2026-08-27
+    - Make raw Loop registration handles stable lifecycle tokens. Cancelled,
+      replaced, and Loop-destroyed handles are now inert even after native
+      watcher storage or file-descriptor numbers are reused, and retained Perl
+      state is released as soon as dispatch safety permits.
+    - Restore Loop driver state after callback exceptions, reject recursive
+      driving of the same Loop, reject event-capacity changes during dispatch,
+      let run_once ignore an old stop request, and correct idle run_for
+      statistics.
+    - Apply Stream's normal high/low-watermark contract to output queued before
+      attachment or connection readiness, including pending-byte reporting and
+      exactly one delayed on_drain notification after the transport is usable.
+    - Set adopted Stream descriptors nonblocking and close-on-exec, install the
+      native drain callback only when requested by the subclass, and make
+      callback-driven close safe throughout readiness, transition, drain, EOF,
+      and transport-error dispatch.
+    - Close Process stdin after max_pending_stdin overflow before reporting the
+      typed output_limit error, so an over-limit producer cannot continue
+      feeding that pipe.
+    - Release Wakeup owner state on cancellation and reject attachment of a
+      terminal Wakeup.
+    - Add regression coverage for registration reuse and dispatch recovery,
+      Loop driver contracts, Stream pre-connect flow control, adopted descriptor
+      flags, callback-close safety, Process stdin limits, Signal recovery,
+      Wakeup lifecycle, and TLS protocol transitions with leftover input.
+    - Remove private implementation layers without changing the public API:
+      Listener now uses its XS implementation directly, Stream and Datagram
+      share Linux::Event::_Resolver, and the tiny Stream deadline helper lives
+      in Stream.pm.
+
 0.102  2026-08-21
     - Fix Linux::Event::Wakeup compilation on Perl builds without
       PERL_IMPLICIT_CONTEXT, including ordinary non-threaded Perl. Such builds

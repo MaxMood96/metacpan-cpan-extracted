@@ -1,4 +1,5 @@
 ^Build$
+^Makefile$
 ^MooX-Tag-TO_HASH
 ~$
 ^blib/

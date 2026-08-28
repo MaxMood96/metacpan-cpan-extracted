@@ -4,12 +4,15 @@ Build a documentation website for a Perl project.
 
 `fuguweb` renders one static site from the documentation that a Perl project
 already keeps: mdoc(7) manuals, POD sidecars, and Markdown. There is no
-templating language and no JavaScript. The tool runs `mandoc`, `lowdown`, and
-`pod2man`, and wraps each result in one shared chrome. A project describes its
-site in one `.fuguwebrc` at its root and needs no build recipe of its own.
+templating language and no JavaScript.
 
-FuguWeb is written in Perl (v5.36) over the
-[Fugu](https://github.com/FuguBSD/Fugu) library, with zero CPAN dependencies.
+The tool runs `mandoc`, `lowdown`, and `pod2man`, and wraps each result in one
+shared chrome. A project describes its site in one `.fuguwebrc` at its root and
+needs no build recipe of its own.
+
+FuguWeb uses Perl (v5.36) over the [Fugu](https://github.com/FuguBSD/Fugu)
+library, with zero CPAN dependencies. The specification in
+[spec/](spec/index.md) states the design.
 
 ## Quick start
 
@@ -28,11 +31,6 @@ bin/fuguweb check --out web/build
 `man fuguweb` — or `mandoc man/fuguweb/fuguweb.1 | less` from a checkout — holds
 the full command, option, and exit-code reference. Each module documents its API
 in a `.pod` sidecar; start with `lib/App/FuguWeb.pod`.
-
-## Development
-
-See [CLAUDE.md](CLAUDE.md) for the development guide: style, testing,
-documentation placement, and the release flow.
 
 ## License
 

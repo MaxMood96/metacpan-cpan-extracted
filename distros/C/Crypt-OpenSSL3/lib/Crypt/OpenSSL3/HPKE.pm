@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::HPKE;
-$Crypt::OpenSSL3::HPKE::VERSION = '0.010';
+$Crypt::OpenSSL3::HPKE::VERSION = '0.011';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::HPKE - Hybrid Public Key Encryption (RFC 9180) suite
 
 =head1 VERSION
 
-version 0.010
+version 0.011
 
 =head1 DESCRIPTION
 

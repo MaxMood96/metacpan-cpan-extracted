@@ -1,0 +1,2160 @@
+NAME
+    EV::WebKit - async WebKitGTK 6.0 (GTK4) browser automation on EV
+
+SYNOPSIS
+        use EV;
+        use EV::WebKit;
+
+        # run under `xvfb-run -a perl script.pl` for a headless display,
+        # or with a real $DISPLAY for a visible, interactive window.
+
+        die "WebKitGTK 6.0 / GTK4 typelibs not available\n"
+            unless EV::WebKit->available;
+
+        my $b = EV::WebKit->new(
+            window     => [1024, 768],
+            on_console => sub { warn "console: $_[0]\n" },
+            on_error   => sub { warn "error: $_[0]\n" },
+        );
+
+        $b->go('https://example.com', sub {
+            my (undef, $err) = @_;
+            # A die inside an EV callback goes to $EV::DIED, which by default only
+            # warns -- so report and break, or the loop keeps spinning.
+            if ($err) { warn "navigation failed: $err\n"; return EV::break }
+
+            $b->find('h1', sub {
+                my ($el, $err) = @_;
+                if ($err) { warn "find failed: $err\n"; return EV::break }
+                $el->text(sub { print "H1: $_[0]\n" }) if $el;
+            });
+
+            $b->wait_for('#maybe-async', timeout => 5, sub {
+                my ($el, $err) = @_;   # $err eq 'timeout' just means it never showed up
+
+                $b->screenshot('shot.png', sub {
+                    my (undef, $err) = @_;
+                    warn "screenshot failed: $err\n" if $err;
+                    # quit() resolves anything STILL in flight with 'browser
+                    # closed' -- so only quit once you have the results you want.
+                    $b->quit;
+                    EV::break;
+                });
+            });
+        });
+
+        EV::run;
+
+    Pass "chrome => 1" to "new" and export a real $DISPLAY (instead of
+    "xvfb-run") for a visible, interactive window with basic
+    back/forward/reload chrome; every method above keeps working unchanged.
+
+DESCRIPTION
+    EV::WebKit drives a real, in-process WebKitGTK 6.0 web view for browser
+    automation: navigation, DOM queries and manipulation, JavaScript
+    execution, screenshots, PDF export, cookies, and basic network control.
+    It is pure Perl over GObject Introspection -- no XS, and the only thing
+    compiled at install is one small optional extension (see "REQUIREMENTS")
+    -- and integrates WebKitGTK's GLib main loop into EV via EV::Glib, so it
+    composes with other EV-based code in the same process.
+
+    DOM access works by injecting JavaScript through WebKit's
+    "call_async_javascript_function" and JSON-marshalling the result back
+    into Perl data; elements found via "find"/"find_all" are returned as
+    lightweight EV::WebKit::Element handles (a page-side registry id plus a
+    back-reference to the browser), not live DOM references held on the Perl
+    side -- see EV::WebKit::Element.
+
+    EV::WebKit does not manage a display of its own; see "LIMITATIONS".
+
+CALLBACK CONVENTION
+    EV::WebKit is entirely single-threaded and cooperative: every operation
+    that talks to the web view is asynchronous and runs on the ambient EV
+    loop. The caller starts and stops that loop ("EV::run", "EV::break") --
+    no EV::WebKit method ever calls either for you. Methods that need to
+    wait for a result take a trailing callback:
+
+        sub { my ($result, $err) = @_; ... }
+
+    On success, $err is "undef" and $result holds the method's result (shape
+    documented per method below). On failure, $result is "undef" and $err is
+    a short, human-readable string -- Perl's own " at FILE line N."
+    diagnostic suffix is stripped where it would otherwise appear -- such as
+    "timeout", "browser closed", or a cleaned JavaScript exception message.
+    Methods never throw for ordinary runtime failures; always check $err.
+    Some methods are plain synchronous accessors/mutators and take no
+    callback at all: the state readers ("uri", "title", "is_loading",
+    "status", "can_go_back", "can_go_forward"), "stop", the configuration
+    setters ("settings", "set_user_agent"/"user_agent", "set_proxy", "zoom",
+    "show_devtools", "mock_scheme"), the user-content methods
+    ("add_user_script"/"add_user_style" and their removes), the fingerprint
+    accessors, and "quit". Where it is not obvious from the usage line, the
+    method's own entry says so.
+
+    "EV::break" is safe to call directly from the trailing "($result, $err)"
+    callbacks described above, and from "on_load", "on_error", "on_close"
+    and "on_navigate", since all of those run on a clean EV tick. So do
+    "on_request" and "on_response", which run in the proxy rather than in
+    WebKit at all. "on_console", "on_dialog", "on_policy",
+    "on_file_chooser", "on_download", "on_authenticate" and a "mock_scheme"
+    producer, however, all fire synchronously inside WebKit's own dispatch
+    frame -- do NOT call "EV::break" directly from those; schedule it
+    instead, e.g. "EV::timer(0, 0, sub { EV::break })". (Calling "quit" from
+    them is safe: it detects the frame and defers its own teardown.)
+
+CONSTRUCTOR
+  available
+        my $ok = EV::WebKit->available;
+
+    Returns true if the required
+    WebKit-6.0/Gtk-4.0/Gdk-4.0/JavaScriptCore-6.0 and Soup-3.0
+    GObject-Introspection typelibs can be loaded, false otherwise. Safe to
+    call before "new" to fail gracefully (e.g. to "plan skip_all" a test)
+    instead of letting "new" die. Checking typelib availability does not
+    require a display.
+
+  new
+        my $b = EV::WebKit->new(%options);
+
+    Constructs a new browser: sets up (once per process) the GObject
+    Introspection typelibs, initializes GTK4 (only once a display is known
+    -- see "LIMITATIONS"), creates a WebKit network session, user content
+    manager, web context and view, and shows a native GTK4 window containing
+    it. Dies if the typelibs are unavailable or if no X display can be
+    determined (see "display" below). %options:
+
+    "window => [$width, $height]"
+        Initial window size in pixels. Default "[1280, 1024]".
+
+        A "fingerprint" profile overrides this where the two would
+        contradict each other, since a window larger than the screen it
+        claims to be on is itself a tell: a mobile profile sizes the window
+        to the profile's own screen and ignores "window" outright, and a
+        desktop profile caps each dimension at its screen's.
+
+    "display => ':N'"
+        Sets $ENV{DISPLAY} to this value before initializing GTK. If
+        omitted, an already-exported $DISPLAY is used; if neither is
+        available, "new" dies telling you to run under "xvfb-run" or pass
+        this option -- EV::WebKit never starts an X server itself (see
+        "LIMITATIONS").
+
+        One display per process. GTK connects to a display once and cannot
+        be moved to another, so every instance after the first shares the
+        first one's display. Passing a "display" that disagrees with it
+        croaks rather than being silently ignored.
+
+    "timeout => $seconds"
+        Default per-operation timeout, in seconds. Applies to every async
+        operation that can block -- navigation
+        ("go"/"load_html"/"back"/"forward"/ "reload"),
+        "script"/"script_async", "find"/"find_all"/"find_js"/ "find_all_js"
+        and the EV::WebKit::Element accessors, "frames" and everything
+        routed through a frame, "resize", "html", "screenshot", "pdf", and
+        the cookie operations
+        ("set_cookie"/"cookies"/"clear_cookies"/"save_cookies"/"load_cookies
+        ") -- and is the default for "wait_for"'s and "pdf"'s own "timeout"
+        option, and "wait_for_navigation"'s. On expiry the operation's
+        callback is resolved with "$err eq 'timeout'". Default 30.
+
+        "download" is the deliberate exception: a large file legitimately
+        takes longer than any per-operation timeout would allow, so a
+        download is bounded only by the server and by "quit". Use
+        "$dl->cancel" to end one early.
+
+    "popups => 'follow' | 'block'"
+        What to do with a navigation that asks for a new window. Documented
+        in full under "EVENTS", with the rest of the options that shape how
+        the browser reacts to the page.
+
+    "user_agent => $string"
+        Sets the initial User-Agent (equivalent to calling "set_user_agent"
+        right after construction).
+
+    "ephemeral => $bool"
+        Use an ephemeral (in-memory, non-persistent) network session when
+        true, or an on-disk/persistent one when false. Default 1. Forced to
+        0 automatically when "cookie_jar" is given -- native cookie
+        persistence requires a non-ephemeral session (see "cookie_jar"
+        below).
+
+    "devtools => 1"
+        Enables the "enable-developer-extras" setting at construction time
+        (required before the Web Inspector will do anything useful; see
+        "show_devtools").
+
+    "title => $string"
+        Sets the native GTK4 window's title.
+
+    "chrome => 1"
+        Build a minimal browser chrome: a GNOME header bar with back,
+        forward and reload buttons and an address entry, installed as the
+        window title bar. Intended for visible use on a real display;
+        harmless under xvfb-run. The reload button turns into a stop button
+        while a page is loading. The address entry navigates on Enter
+        (https:// is assumed when no scheme is given) and tracks the current
+        page uri except while it has keyboard focus. The window title
+        follows the page title. Automation methods keep working unchanged.
+
+    "cookie_jar => $path"
+        Configures $path as this instance's native, WebKit-managed
+        persistent cookie store (forces a non-ephemeral session -- see
+        "ephemeral" above). Cookies with a real expiry (a "max_age" greater
+        than 0, or a "Set-Cookie: ...; Max-Age="/"Expires=" response header)
+        are written to $path automatically and read back automatically by
+        any later instance pointed at the same file -- no
+        "save_cookies"/"load_cookies" call needed. SESSION cookies (no
+        expiry) are *excluded* from this store by design (RFC 6265, same as
+        every real browser); use "save_cookies"/"load_cookies" to snapshot
+        those. See "Cookie Management" and "LIMITATIONS". Do not point
+        save_cookies/load_cookies at the same file as cookie_jar: the native
+        store and the JSON snapshot are different formats written by
+        independent writers, and sharing a path will corrupt the file.
+
+    "jar_format => 'sqlite' | 'text'"
+        Storage format for the persistent cookie store. "sqlite" (default)
+        is queryable with "sqlite3"; "text" is a human-readable
+        Netscape-format cookie file. It applies to whichever store exists:
+        "cookie_jar"'s file if you gave one, otherwise "data_dir"'s own
+        ("cookies.txt" under "text", rather than "cookies.sqlite"). Ignored
+        only when neither option is given.
+
+    "data_dir => $path"
+        Points this instance's entire session -- cookies, "localStorage",
+        "IndexedDB", the HTTP cache, service-worker state -- at $path, and
+        restores it whenever an instance is later built with the same $path.
+        Two instances with different "data_dir"s share nothing. Forces a
+        non-ephemeral session (see "ephemeral" above); "data_dir => ...,
+        ephemeral => 1" croaks.
+
+        "data_dir" persists what "cookie_jar" does and more: "localStorage",
+        "IndexedDB", the cache and service-worker state, none of which
+        "cookie_jar" touches. Cookies persist under the same rule as
+        "cookie_jar" -- those with a real expiry -- written to a
+        "$data_dir/cookies.sqlite", or "cookies.txt" under "jar_format =>
+        'text'" (see "LIMITATIONS"), and only when "cookie_jar" was not
+        given as well. Two things are never written to disk: session cookies
+        (no expiry -- RFC 6265, use "save_cookies"/"load_cookies" to
+        snapshot those) and "sessionStorage" (WebKit treats it as inherently
+        per-session).
+
+        "data_dir" and "cookie_jar" compose, but not additively for cookies:
+        there is one cookie store, and "cookie_jar" replaces the one
+        "data_dir" would have used rather than adding to it. Everything else
+        -- "localStorage", "IndexedDB", the cache, service workers -- still
+        goes under "data_dir". So a session saved with both and later
+        reopened with "data_dir" alone finds no cookies: keep passing
+        "cookie_jar" if you passed it once. A relative $path is resolved
+        against the current directory at construction time. $path (and any
+        missing parent directories) is created for you; an empty string, a
+        path that is already a non-directory file, or a path with no
+        writable ancestor croaks from "new" rather than failing later.
+
+        Do not point "save_cookies"/"load_cookies" at "data_dir"'s own
+        cookie file ("$path/cookies.sqlite", or "cookies.txt"), for the same
+        reason as "cookie_jar": they are different formats written by
+        independent writers. And note "load_cookies" replaces any cookie
+        with the same name/domain/path -- since a loaded cookie comes back
+        as a session cookie (no expiry survives a snapshot), loading a
+        snapshot into a "data_dir" instance can downgrade an
+        already-persisted cookie of that identity, dropping it from the
+        store on the next "quit".
+
+        One live instance per "data_dir" at a time. WebKit's "localStorage"
+        and "IndexedDB" databases are not built for concurrent writers, so
+        two live instances pointed at the same "data_dir" in one process can
+        corrupt them -- the same caution as not sharing a file between
+        "cookie_jar" and "save_cookies".
+
+    "cache_dir => $path"
+        Overrides where "data_dir"'s disposable cache is written (default:
+        "$data_dir/cache"). Useful for putting the regenerable cache on
+        "tmpfs", or keeping a backed-up "data_dir" free of it. A relative
+        "cache_dir" is resolved against the current directory (like
+        "data_dir"), not nested inside "data_dir". Ignored -- and a croak --
+        unless "data_dir" is given, since a cache dir with no data dir would
+        leak cache to WebKit's shared location and defeat the isolation.
+
+    "proxy => $uri" or "proxy => { default => $uri, ignore => [@hosts] }"
+        Equivalent to calling "set_proxy" right after construction (see
+        "Network"). An invalid proxy URI croaks out of the constructor
+        itself, same as calling "set_proxy" directly.
+
+    "fingerprint => 'windows-chrome'" or "fingerprint => { profile =>
+    'windows-chrome', ... }"
+        Present this instance as a coherent real device at the JavaScript
+        layer, using NATIVE property getters (installed by a bundled
+        web-process extension) that report "[native code]" and so defeat the
+        "toString" detection a pure-JS override cannot. A preset name
+        selects a shipped profile; a hashref takes a preset as its "profile"
+        base and overrides individual fields. Construct-time only (the
+        device cannot change mid-session). Passing both "fingerprint" and
+        "user_agent" croaks -- the profile sets the UA; override it via
+        "fingerprint => { ..., user_agent => ... }".
+
+        Requires the web-process extension, compiled at install if "cc" +
+        glib/gobject are present; check "fingerprint_available". Note: if
+        the extension is present but fails to load inside the web process
+        (an arch/symbol mismatch), the profile's User-Agent is still applied
+        while the JS-property spoof is not -- an incoherent state the module
+        cannot detect from the UI process. Coverage: "navigator" (platform,
+        vendor, languages, hardwareConcurrency, deviceMemory,
+        maxTouchPoints), "screen", "devicePixelRatio", and the WebGL GPU
+        vendor/renderer strings. The navigator/screen getters are installed
+        natively, on the prototype and enumerable, so they read as the
+        engine's own to everything except "Function.prototype.toString" --
+        see the Ceiling below, which is where the remaining tells are
+        enumerated honestly.
+
+        A coherence layer fills the gaps a bare navigator/screen spoof would
+        leave: a Chrome profile also gets "window.chrome" and a working
+        "navigator.userAgentData" (brands/platform plus an async
+        "getHighEntropyValues"); a mobile profile sizes the window to the
+        profile's screen (so "window.innerWidth <= screen.width"), adds
+        "ontouchstart", and overrides the "pointer"/"hover"/"resolution"
+        media queries. Unlike the native navigator/screen getters, this
+        layer -- and the WebGL "getParameter" override -- is installed as JS
+        (a native replacement cannot delegate the non-spoofed cases: a JSC C
+        function receives no "this"). The values are correct and consistent,
+        but their getters/methods show JS source under a
+        "Function.prototype.toString.call" (or a getter-"toString") check,
+        so a determined script can still detect the
+        "userAgentData"/"matchMedia"/WebGL wrappers.
+
+        WebGL spoofs the full per-profile capability set, not only the
+        UNMASKED vendor/renderer strings: the numeric parameters
+        ("MAX_TEXTURE_SIZE" and friends), the supported-extension list, and
+        "getShaderPrecisionFormat" all return the claimed GPU family's
+        values on both WebGL1 and WebGL2, coherent with the renderer string.
+        The advertised list is authoritative: "getExtension" returns "undef"
+        for anything not on it, the real object when the host GL genuinely
+        has it, and otherwise a minimal stub (carrying that extension's
+        constants for the commonly probed ones, an empty object for the rest
+        -- see the Ceiling notes below). Extension names are matched
+        case-insensitively, as the spec requires, and an extension's own
+        pnames (the UNMASKED pair, "MAX_TEXTURE_MAX_ANISOTROPY_EXT") are
+        answered only once "getExtension" has enabled that extension on the
+        context -- before that they report "null" and raise "INVALID_ENUM",
+        exactly as a real context does.
+
+        The capability tables are a curated subset covering the parameters
+        fingerprinters actually read; a pname not in the table falls through
+        to the real host value.
+
+        The DOM interface set is aligned per profile too: a Chrome profile
+        exposes "navigator.connection", "usb", "bluetooth", "getBattery",
+        "scheduling" and "RTCPeerConnection" (the Android profile correctly
+        omits "hid"/"serial"); a Safari profile exposes only "storage" and
+        "RTCPeerConnection". Every stub is installed only when the build
+        lacks the real API, so a WebKitGTK that ships one keeps it.
+
+        PDF viewer presence follows the profile as well. The HTML
+        specification hardcodes both states: a browser that displays PDFs
+        inline reports "navigator.pdfViewerEnabled" true and five fixed
+        plugin names, one that does not reports false and empty
+        "plugins"/"mimeTypes" lists. WebKitGTK reports the viewer-present
+        state, which is correct for desktop Chrome, desktop Safari and iOS
+        Safari -- but not for "pixel-chrome": Chrome for Android had no
+        inline PDF viewer at 131 (it shipped 2024-11, the Android viewer
+        appeared behind a flag in 2024-12 and became default-on only in
+        Chrome 135, 2025-04), so that profile reports the empty state.
+        Override per instance with "pdf_viewer => 0|1". The empty lists are
+        real "PluginArray"/ "MimeTypeArray" objects, cached like a real
+        browser's, with "length" left on the prototype where it belongs.
+
+        Ceiling: the spoof is thorough but not perfect, and these residuals
+        remain. Workers are not covered at all. The extension hooks
+        "window-object-cleared", which fires only for window globals, so a
+        "Worker"/"SharedWorker"/"ServiceWorker" global keeps the real
+        "navigator.platform", "languages" and hardware values and gets no
+        readback noise -- while its "userAgent" is spoofed (that comes from
+        the browser settings, not this extension). Reading
+        "navigator.platform" on both sides of a "postMessage", or hashing an
+        "OffscreenCanvas" inside a worker, defeats the whole layer; treat a
+        page that uses workers as unprotected. The native navigator/screen
+        getters are also still identifiable by the source text
+        "Function.prototype.toString" reports for them: a real accessor
+        renders as "function <prop>() { [native code] }" while these render
+        as "function get() { [native code] }". The name and "[native code]"
+        marker are correct, but the embedded identifier is not, and it
+        cannot be corrected without replacing the getter with JavaScript --
+        which costs far more than it saves. The JS-installed layers
+        ("userAgentData"/"matchMedia"/WebGL/readback/feature stubs) show JS
+        source under "Function.prototype.toString.call" and under a plain
+        toString(), so a determined script can still detect them. They
+        deliberately carry no own "toString" mask: such a mask defeats only
+        the plain check -- "Function.prototype.toString.call" bypasses an
+        own property and reveals the wrapper anyway -- while leaving an
+        artifact no real function has, which "Object.keys" enumerates across
+        the whole JS layer with no false positives. Trading a weak defence
+        for a precise tell is a bad exchange, so the wrappers are left
+        honest. Readback noise, when "seed" is set, is content-independent,
+        so a script that renders a known image and reads it back can recover
+        and undo it. It is also applied at read time rather than stored, so
+        it does not survive a round trip: writing back what was just read
+        ("putImageData"), or encoding and re-decoding through
+        "toDataURL"/"toBlob", yields the un-noised pixels, and comparing the
+        two detects that noise is active without knowing the content.
+        Without "seed", canvas/AudioContext/WebGL-pixel readback reflects
+        the real host output (often software/llvmpipe) and is not disguised
+        at all. The "matchMedia" override answers JS queries (including
+        compound and comma-separated ones), but CSS @media rules are
+        evaluated by the engine and still reflect the real device, so a page
+        that compares "getComputedStyle" against "matchMedia" sees a
+        contradiction on a mobile or hi-DPI profile. The WebGL capability
+        values are the canonical set for each GPU family, so a fingerprinter
+        with a per-driver database could still find a mismatch, and any
+        pname outside the curated tables still reports the host's real
+        value. Stubbed extensions and "RTCPeerConnection" have no real
+        runtime behaviour (no ICE, no devices), so a script that exercises
+        their functionality -- rather than merely detecting their presence
+        -- can spot the stub; an advertised extension the host GL lacks is
+        an object with the right constants but no working methods.
+        "navigator.languages" is a real array with the profile's tags, but
+        not a "FrozenArray": a real browser caches one frozen array and
+        returns it every time, so "navigator.languages ===
+        navigator.languages" and "Object.isFrozen(navigator.languages)" are
+        both true there and false here. Closing that was built and then
+        reverted -- caching one frozen array per JS context works, but a
+        "JSCValue" holds a strong reference to its "JSCContext", making
+        cache/array/context a refcount cycle whose destroy notify never
+        runs, which leaks an entire JS context per navigation; and anchoring
+        the array on the JavaScript side instead would turn "languages" into
+        a data property where every real browser has an accessor, a louder
+        tell than the one being fixed. Encoding a large canvas through
+        "toDataURL" is markedly slower with "seed" set, which is itself
+        weakly timeable. And this is the JS layer only -- the network-layer
+        fingerprint (TLS JA3/JA4, HTTP/2) is untouched unless you also
+        enable "network_fingerprint" (below). A self-consistent custom
+        profile is your responsibility.
+
+    "seed => 12345"
+        Enable seeded readback noise on canvas, "AudioContext", and WebGL
+        pixel readback (opt-in; requires "fingerprint"). The seed is a
+        non-negative integer. The perturbation is a content-independent
+        function of the seed and the readback position -- absolute canvas or
+        drawing-buffer coordinates for pixels, the frame index for audio
+        samples -- so the same sample re-read through any API, rectangle or
+        offset gives the same value. A fully opaque pixel gets an LSB flip.
+        A partially transparent one is moved to an adjacent reachable value
+        instead: "getImageData" returns un-premultiplied bytes, so only a
+        lattice of values is producible at a given alpha and an LSB flip
+        would land off it (the step is therefore larger than one LSB at low
+        alpha). WebGL "readPixels" returns the premultiplied value directly,
+        so there the step is applied to that value. Only engine-rendered
+        audio buffers are touched, never one the page authored. The seed is
+        reduced modulo 2**32, so seeds congruent mod 2**32 give identical
+        noise. That makes the hardware-readback hash stable within a
+        session, yet different from the automation host's real output
+        (hiding llvmpipe/software GL) and different across seeds -- so the
+        same profile can present distinct machines. Wrapped: "getImageData",
+        "toDataURL"/"toBlob" (via an offscreen copy, so the encoded image
+        carries the noise and WebGL-backed canvases are covered too),
+        "AudioBuffer.getChannelData"/"copyFromChannel", the "AnalyserNode"
+        frequency and time-domain readers, and "readPixels". Without "seed",
+        none of this is installed and readback behaves exactly as before.
+        See the Ceiling notes under "fingerprint" above for the residuals.
+
+    "network_fingerprint => 1" or "network_fingerprint => 'chrome124'"
+        Also match the connection fingerprint (TLS JA3/JA4 + HTTP/2 Akamai)
+        to the "fingerprint" profile, so the origin sees one coherent device
+        at the network layer too. Requires "fingerprint". It spins an
+        in-process Proxy::Impersonate on this instance's EV loop and routes
+        the browser through it: the proxy terminates WebKit's TLS locally
+        and re-originates each request as the matching real browser via
+        "libcurl-impersonate". The curl target is derived from the profile
+        ("windows-chrome" -> "chrome131", "macos-safari" -> "safari18_0",
+        "iphone-safari" -> "safari18_0_ios", "pixel-chrome" ->
+        "chrome131_android"); pass a string to override it.
+
+        The profile's identity headers (User-Agent + "Sec-CH-UA") are forced
+        over the curl target's defaults, so even a Windows profile is
+        coherent on the (macOS-built) "chrome131" target -- Windows and
+        macOS Chrome share the same TLS/HTTP2, so only the header values
+        differ. WebKit is told to accept the proxy's self-signed cert
+        (set_tls_errors_policy('ignore')); this is safe because the
+        browser-to-proxy hop is localhost and the proxy re-verifies the real
+        origin upstream. WebKitGTK 6.0 exposes no custom-CA path (a spike
+        confirmed it honors neither "SSL_CERT_FILE" nor a settable
+        "GTlsDatabase"), which is why the "IGNORE" policy is used.
+
+        Requires the optional Proxy::Impersonate toolchain (which builds
+        "curl-impersonate" via Alien::curlimpersonate); croaks if it is
+        unavailable. Mutually exclusive with an explicit "proxy". Out of
+        scope: WebSockets, HTTP/3. See "network_fingerprint" and
+        "proxy_port".
+
+    "on_error", "on_load", "on_navigate", "on_close", "on_console",
+    "on_dialog", "on_policy", "on_file_chooser", "on_download",
+    "on_authenticate", "on_request", "on_response"
+        Event callbacks -- see "EVENTS", which documents each one and what
+        it is handed. ("popups", above, is documented there too: it is what
+        happens when no "on_policy" is set.)
+
+METHODS
+  Navigation
+    Load pages and read basic document state.
+
+   go
+        $b->go($uri, sub { my ($result, $err) = @_; ... });
+
+    Loads $uri. On success $result is true; on failure (or timeout) $err is
+    set. If a previous navigation on this instance was still in-flight, its
+    callback is immediately invoked with $err eq 'superseded'. The callback
+    fires just after WebKit's own "load-changed:finished" signal -- once the
+    document "title" has crossed from the web process, which it does a
+    fraction of a millisecond later ("uri" needs no such wait; it is set
+    before "finished"). A page with no "<title>" never sends that
+    notification, and settles on a 150ms deadline instead. "on_load" (if
+    configured) fires right after the callback. Returns $b (chainable).
+
+    Same-document navigation is not observable from here, and resolves with
+    "$err eq 'timeout'". A fragment-only go("$here#section"), and
+    "back"/"forward" across such a boundary, change the uri without loading
+    anything -- and WebKitGTK emits no load event for them, so nothing tells
+    this module they happened. The uri does move ("uri" reports it, and the
+    page really did navigate); only the callback is left waiting.
+
+    Predicting it instead of observing it was tried and abandoned: every
+    rule for "this one will not reload" is falsifiable -- by the outgoing
+    page touching its own hash while the new load is in flight, by
+    "history.pushState" having moved the uri out from under the guess, by a
+    web-process crash -- and each falsification reports success for a page
+    that never loaded, which is worse than the wait it removes. So drive
+    these from the page, where they are not a guess:
+
+        $b->script('location.hash = "section"; return location.href;', $cb);
+
+    and use "wait_for"/"wait_for_js" if the page reacts asynchronously.
+
+   load_html
+        $b->load_html($html, sub { my ($result, $err) = @_; ... });
+
+    Loads a literal HTML string as the document, with the same completion
+    semantics as "go" (no URI, so it does not count toward "save_cookies"'s
+    default URI list). Returns $b.
+
+  Navigation history
+        $b->back(sub { my ($ok, $err) = @_; ... });     # optional callback
+        $b->forward($cb);
+        $b->reload($cb);
+        $b->stop;
+        $b->can_go_back;      # 1 or 0
+        $b->can_go_forward;   # 1 or 0
+
+    back, forward and reload behave like go: the optional trailing callback
+    is invoked as ($ok, $err) when the resulting navigation finishes (or
+    fails or times out). Calling back/forward when the history has no entry
+    in that direction invokes the callback with the error 'cannot go back' /
+    'cannot go forward', and reload on an instance that has never navigated
+    with 'nothing to reload' (as go with no uri gives 'go: uri required').
+    stop aborts the current load and returns the browser object; it takes no
+    callback. can_go_back / can_go_forward are synchronous and return 1 or
+    0.
+
+    Note: load_html does not add entries to the back-forward list; only real
+    navigations (go, links, redirects) do.
+
+   uri
+        my $uri = $b->uri;
+
+    Current document URI. Synchronous.
+
+   title
+        my $title = $b->title;
+
+    Current document title. Synchronous.
+
+   is_loading
+        my $bool = $b->is_loading;
+
+    True while a navigation is in progress. Synchronous.
+
+   status
+        my $code = $b->status;      # 200, 404, 500, ... or undef
+
+    HTTP status of the current document, or "undef" if the load had none.
+    Synchronous, and available from the moment the document commits -- so
+    reading it inside a "go" callback works.
+
+    You need this to detect a failed page, because the navigation callback
+    will not tell you. WebKit treats a 404 or a 500 as a perfectly
+    successful load -- they have bodies and it displays them -- so $ok is
+    true and $err is "undef" for both:
+
+        $b->go($uri, sub {
+            my ($ok, $err) = @_;
+            # warn + break, not die: a die here only reaches $EV::DIED
+            if ($err) { warn "navigation failed: $err\n"; return EV::break }   # transport-level only
+            my $st = $b->status // 0;
+            if ($st >= 400) { warn "server said $st\n"; return EV::break }     # what you actually meant
+        });
+
+    A redirect chain reports the final response, not the redirect: a 301
+    that lands on a 200 reports 200.
+
+    "undef" means the load carried no HTTP status, which covers two cases
+    worth telling apart in your head:
+
+    *   There was no HTTP transaction at all -- "load_html", and some custom
+        schemes.
+
+    *   There was a transaction but no response line -- some custom schemes,
+        and a connection the engine reports as reaching an error page rather
+        than failing.
+
+    A refused connection and a DNS failure do not land here: they resolve
+    the navigation with $ok "undef" and $err set to a "load failed: ..."
+    string, so check $err first and only then "status". (One exception is
+    worth knowing because it looks like a counter-example: a connection to a
+    port the host blocks outright, rather than refusing, can be reported by
+    the engine as a completed load of its own error page -- $ok true with
+    "undef" status.)
+
+   html
+        $b->html(sub { my ($html, $err) = @_; ... });
+
+    Fetches the full serialized document markup as $html
+    ("document.documentElement.outerHTML"), or "undef" if there is no
+    document element. Asynchronous, like "script".
+
+  JavaScript Execution
+    Run arbitrary JavaScript in the page and get JSON-marshalled results
+    back. Strings crossing this bridge in either direction are full Unicode
+    CHARACTER data, not bytes -- a Perl string with non-ASCII characters
+    (e.g. built with "\x{e9}" escapes, or read from a ":utf8" filehandle)
+    passed via "script_async"'s "\%args" or an element's "type"/"send_keys"
+    arrives in JS as the same text, and a JS string returned from "script"
+    or read via an element accessor ("text", "value", ...) comes back as the
+    same Perl character string. Do not "utf8::encode" a string before
+    handing it to any of these; that would turn it into a byte string and
+    produce mojibake on the JS side instead.
+
+   script
+        $b->script($js, sub { my ($result, $err) = @_; ... });
+
+    Runs $js as the body of an "async" function (so top-level "await" works)
+    and JSON-marshals its "return" value back as $result (a plain scalar,
+    arrayref, or hashref; JS "undefined" or no "return" becomes Perl
+    "undef"). A thrown JS exception becomes $err. Returns $b.
+
+   script_async
+        $b->script_async($body, \%args, sub { my ($result, $err) = @_; ... });
+        $b->script_async($body, sub { ... });          # no arguments to pass
+
+    Same as "script", but "\%args" is JSON-encoded and made available inside
+    $body as the const "A" (e.g. "A.foo"). This is the primitive
+    "find"/"find_all"/element methods are built on. Returns $b.
+
+    "\%args" may be omitted entirely, which spells this exactly like
+    "script".
+
+   press
+        $b->press($key, %modifiers, $cb);   # $cb->($not_cancelled, $err)
+
+    Sends "keydown", optionally "keypress", then "keyup" to whatever
+    currently has focus (else "document.body"). Modifiers: "shift", "ctrl",
+    "alt", "meta". Resolves false if a handler called "preventDefault" on
+    the keydown.
+
+        $b->press('Escape', sub { ... });          # close a modal
+        $b->press('Enter', ctrl => 1, sub { ... });
+
+    For keyboard handlers -- Escape closing a dialog, Enter submitting a
+    form that listens for it, arrows driving a widget.
+
+    It does not type. A synthetic "KeyboardEvent" has "isTrusted" false, and
+    no engine performs the default text insertion for one, so press('a')
+    leaves an input's value untouched -- silently. Use "type" in
+    EV::WebKit::Element to edit a field.
+
+    As in a real browser, "keypress" is sent only for keys that produce a
+    character -- which includes "Enter", so "onkeypress" handlers testing
+    for "keyCode" 13 work -- and not at all if the keydown was cancelled.
+    "keyup" goes to whatever has focus when it is sent, not to whatever had
+    it at "keydown", so a handler that moves focus (the usual thing for
+    "Tab" and "Enter") behaves as it does under a real key.
+
+    "keyCode" and "event.code" both carry what a real browser sends, from
+    one table so they cannot disagree:
+
+    *   Named keys ("Enter", "Escape", "Tab", "Backspace", "Delete", the
+        arrows, "Home", "End", "PageUp", "PageDown") get their usual
+        "keyCode", and the name itself as "code".
+
+    *   A letter gets its uppercase ordinal and "KeyQ"; a digit its ordinal
+        and "Digit5".
+
+    *   ASCII punctuation gets the legacy US-layout value -- "." is 190 and
+        "Period", "'" is 222 and "Quote", and so on for "," ";" "/" "-" "="
+        "[" "]" "\" "`" and space.
+
+    *   A shifted character such as "!", or any non-ASCII one, names no
+        physical key by itself -- which key produced it depends on the
+        layout. Those report "code" '' and "keyCode" 0, the pair a browser
+        uses for a key it cannot identify. (Deriving a number from the
+        character instead would not merely be wrong, it would impersonate
+        another key: ord('.') is 46, which is "Delete", and ord("'") is 39,
+        which is "ArrowRight".)
+
+   scroll
+        $b->scroll(y => 500, $cb);                  # absolute
+        $b->scroll(x => 40, y => 500, $cb);         # both axes
+        $b->scroll(by => 1, y => 100, $cb);         # relative to where you are
+        $b->scroll(to => 'bottom', $cb);            # the infinite-scroll case
+        $b->scroll(y => 500, cb => $cb);            # the callback, named
+
+    Scrolls the page and resolves with the resulting "{ x, y }". Options are
+    "x" and "y" (absolute offsets in CSS pixels), "by => 1" to make them
+    relative to the current position, and "to => 'top'" / "to => 'bottom'".
+    "to => 'bottom'" computes the document height rather than guessing a
+    large number, which is what makes it reliable for lazy-loading pages.
+    "to => 'top'" resets both axes; "to => 'bottom'" moves only "y" and
+    leaves "x" where it was.
+
+    The callback may be passed as a trailing argument, like every other
+    method here, or as the named "cb" option ("callback" is accepted as a
+    synonym) -- this is the one method that takes both, because every other
+    argument it takes is named. Passing it both ways at once croaks rather
+    than silently using one of them.
+
+    The scroll is instant, and deliberately overrides the page's own CSS
+    "scroll-behavior: smooth" if it has one. Under that property the scroll
+    is an animation: it has not happened yet when the callback runs, so the
+    reported position would be the one you started from and anything you did
+    next -- a screenshot, a "box" in EV::WebKit::Element -- would see the
+    old viewport. "scroll_into_view" in EV::WebKit::Element does the same.
+
+   resize
+        $b->resize($width, $height, sub { my ($size, $err) = @_; ... });
+
+    Resizes the window, and so the viewport. $size is "{ width, height }" as
+    the page sees it ("window.innerWidth"/"innerHeight"), read back after
+    the resize has actually landed rather than assumed from the request --
+    GTK round trips through the display server, and under a real window
+    manager the request can be clamped or refused outright. A resize that
+    never takes effect is therefore not an error: you get the size you
+    actually have.
+
+    The numbers are CSS pixels, so "zoom" scales them: at zoom(2) a
+    400-pixel-wide window reports 200. "chrome => 1" takes its own share too
+    -- the header bar and GTK4's client-side decorations leave a 400x320
+    request with a 390x264 viewport (measured) -- which is why this settles
+    on the viewport holding still rather than on it reaching the numbers you
+    asked for.
+
+    "window" at construction is the same setting; this is for changing it
+    afterwards, e.g. to render a page at a mobile width without building a
+    second instance.
+
+   zoom
+        my $level = $b->zoom;      # get
+        $b->zoom(2);               # set, returns $b
+
+    Page zoom as a multiplier; 1 is unzoomed. Synchronous both ways. This is
+    the browser's own zoom, so it changes "devicePixelRatio" and the CSS
+    pixel size of the viewport -- which is exactly what you want for a
+    hi-dpi screenshot, and exactly what you do not want if a "fingerprint"
+    profile has already fixed "devicePixelRatio" for you.
+
+  Elements
+    Locate DOM elements and hand back EV::WebKit::Element handles.
+
+   find
+        $b->find($selector, sub { my ($el, $err) = @_; ... });
+
+    Runs "document.querySelector($selector)". $el is an EV::WebKit::Element
+    on a match, or "undef" if nothing matched -- not-found is not an error
+    ($err is "undef" in that case too).
+
+   Addressing an iframe
+    "find", "find_all" and "wait_for" take an optional "frame =>" naming a
+    frame to search inside, instead of the top-level document. There are two
+    forms, and the frame's origin decides which one you can use.
+
+    For a same-origin frame, give a CSS selector for the "<iframe>" element
+    itself:
+
+        $b->find('#card-number', frame => '#payment', sub { ... });
+
+    Pass an arrayref to walk a chain of nested frames, outermost first:
+
+        $b->find('#deep', frame => ['#outer', '#inner'], sub { ... });
+
+    This form is page script walking "contentDocument", so it stops dead at
+    a cross-origin boundary: such a frame fails with an error naming
+    cross-origin as the reason rather than reporting the element as merely
+    absent. For "find" and "find_all", a frame selector that matches nothing
+    is likewise an error, not a silent miss -- the two are worth telling
+    apart when a page is still loading.
+
+    "wait_for" is the deliberate exception: a frame that is not there yet is
+    the ordinary case for a page that injects its iframe after load, so
+    "wait_for" polls through a missing frame rather than failing on it, and
+    gives up only at its own timeout. With "gone => 1" a missing frame
+    resolves true, since the selector inside it matches nothing -- which
+    does mean a typo'd frame selector plus "gone => 1" succeeds immediately.
+
+    A dead "{ id => }" is the one thing it will not wait for. An id names a
+    frame that already existed, and once that frame is gone the id can never
+    name anything again, so "wait_for" fails on it at once with "frame is
+    gone" instead of polling to its timeout.
+
+    For a cross-origin frame -- a hosted payment form, a third-party widget
+    -- name it by URL instead:
+
+        $b->find('#card-number', frame => { url => 'https://pay.example/form' }, sub { ... });
+        $b->find('#card-number', frame => { url => qr{^https://pay\.} },         sub { ... });
+
+    The URL is matched against the frame's current URL, exactly for a string
+    or by pattern for a "qr//", and must identify one frame: both no match
+    and more than one are errors, because acting on the wrong payment iframe
+    is worse than not acting at all. Only child frames are considered -- the
+    main frame is what you get by leaving "frame" out.
+
+    Two frames on the same URL are the one case this cannot resolve, and
+    "frames" will not resolve it either: it returns them in the web
+    process's own order, which is stable within a run but is not document
+    order, and no field it gives you (id, url, is_main) says which is which.
+    Sorting by id does not recover document order. So:
+
+    *   If they are same-origin, use the selector form -- "frame =>
+        '#checkout'" -- which addresses them positionally through the DOM.
+
+    *   If they are cross-origin, make the URLs distinguishable. A query
+        parameter the page controls is enough, and you are usually the one
+        embedding them.
+
+    A "frame => { id => $id }" is still the right thing when you have an id
+    you trust -- one you kept from an earlier "find" whose handle you still
+    hold, say -- but do not derive it by position from "frames".
+
+    "url" and "id" are alternatives: give exactly one.
+
+    This form does not run in the page at all. It goes to the web-process
+    extension, which sees every frame directly and is not bound by the
+    same-origin policy, so it reaches what the selector form cannot. That
+    means it needs the extension to have been built at install time (see
+    EV::WebKit::Fingerprint), and says so plainly rather than timing out if
+    it was not.
+
+    An element found through either form behaves like any other: its methods
+    act on the node inside the frame.
+
+    The two forms differ in where that happens, and "$el->frame_id" says
+    which. A handle from the "{ url|id => }" form carries the frame's id,
+    and every later call on it -- and on anything "find" returns from it --
+    is evaluated by the extension in that frame. A handle from the selector
+    form has "frame_id" "undef", because it was reached by main-frame script
+    walking "contentDocument" and is operated on the same way; so is any
+    handle from the main frame itself.
+
+    Neither kind outlives its page, but they report that differently. Once
+    the frame is removed or the page navigates away, a frame-bound handle
+    fails with "frame is gone", while a selector-reached one fails with the
+    ordinary "stale element". Either way, resolve the frame again after a
+    navigation rather than holding onto anything across one.
+
+   frames
+        $b->frames(sub { my ($frames, $err) = @_; ... });
+
+    The frames the page has right now, as an arrayref of "{ id, url, main
+    }". Use it to see what "frame => { url => ... }" has to choose between.
+    The "id" is opaque, page-scoped and only meaningful while that frame
+    lives, so pass it straight back as "frame => { id => $id }" rather than
+    writing it down and reusing it after a navigation.
+
+    The order is the web process's own -- stable within a run, but not
+    document order, and not recoverable by sorting. So this does not tell
+    apart two frames on the same URL either; see "frame =>" above for what
+    to do instead.
+
+    Like the "{ url => }" form above, this needs the web-process extension.
+
+   find_all
+        $b->find_all($selector, sub { my ($els, $err) = @_; ... });
+
+    Like "find", but "querySelectorAll": $els is a (possibly empty) arrayref
+    of EV::WebKit::Element.
+
+   find_js / find_all_js
+        $b->find_js($javascript, %opts, sub { my ($el, $err) = @_; ... });
+        $b->find_all_js($javascript, %opts, sub { my ($els, $err) = @_; ... });
+
+    Find elements with your own JavaScript instead of a CSS selector, and
+    get the same EV::WebKit::Element handles back. The snippet is a function
+    body: it must "return" a DOM node (or "undef"/"null" for no match) for
+    "find_js", and an array or NodeList of nodes for "find_all_js".
+
+    This is the way to reach what CSS cannot name:
+
+        # XPath
+        $b->find_js('return document.evaluate("//tr[td[contains(.,\'Invoice 42\')]]//a",
+                                              document, null, 9, null).singleNodeValue;', $cb);
+
+        # by visible text
+        $b->find_js('return [...document.querySelectorAll("button")]
+                            .find(b => b.textContent.trim() === "Next");', $cb);
+
+        # inside a shadow root, which querySelector does not cross at all
+        $b->find_js('return document.querySelector("#host").shadowRoot.querySelector(".deep");', $cb);
+
+    %opts:
+
+    "args => \%hash"
+        Values the snippet reads as "A.name", marshalled as JSON exactly as
+        "script_async"'s are.
+
+    "frame => { url => ... }" or "frame => { id => ... }"
+        Run the snippet in that frame (see "Addressing an iframe"). The
+        selector chain form is not accepted here -- it is a walk through
+        "contentDocument" that the snippet can do for itself, and rewriting
+        the snippet's idea of "document" is not something this can do behind
+        your back.
+
+    Unlike "script", the snippet runs in the module's own isolated world --
+    the same one the element registry lives in, which is what makes handing
+    a node back possible at all. It therefore does not see the page's own
+    globals; use "script" for those. A snippet that returns something other
+    than a node (or a list of them) fails with an error saying so, rather
+    than a handle to nothing.
+
+   wait_for
+        $b->wait_for($selector, %opts, sub { my ($el, $err) = @_; ... });
+
+    Polls find($selector) until it matches (and, if "visible" is set, until
+    it is also visible), or until "timeout" elapses. %opts:
+
+    "timeout => $seconds"
+        Default: this instance's own "timeout" (see "new").
+
+    "interval => $seconds"
+        Poll interval. Default 0.05. A non-positive value (0 or negative) is
+        meaningless for a poll and snaps to the default instead, so it can't
+        stall the deadline check and busy-loop the EV loop.
+
+    "visible => $bool"
+        Also wait for the matched element's "is_visible" to become true
+        before resolving.
+
+    "gone => $bool"
+        Invert it: wait for the selector to match nothing. The usual reason
+        is a spinner or overlay that must disappear before the page is
+        usable. There is no element to hand back, so the callback receives a
+        plain true value rather than one -- and "gone" with "visible"
+        croaks, since "wait for it to be visible" and "wait for it to not
+        exist" cannot both be meant.
+
+    On timeout, $el is "undef" and "$err eq 'timeout'". Returns $b.
+
+   wait_for_navigation
+        $b->wait_for_navigation(%opts, sub { my ($uri, $err) = @_; ... });
+        $el->click;                                  # ...and only then start it
+
+    Resolves when the next navigation finishes, whoever started it -- a link
+    click, a form submit, a script-driven redirect, or one of this module's
+    own navigation methods. $uri is where it landed.
+
+    It waits for a navigation that loads a document. A same-document one --
+    a hash-route link, "history.pushState" -- loads nothing and emits no
+    load event, so it is not seen here either; see "go" for why that is not
+    guessed at, and what to do instead.
+
+    This is the other half of every multi-step flow. "go"'s callback covers
+    what you started yourself; a navigation the page starts has no
+    completion signal otherwise: "on_load" deliberately does not fire for
+    one, "on_navigate" fires at commit rather than at finish, and
+    "is_loading" can read false for the whole of a fast load. So:
+
+        $b->wait_for_navigation(sub {
+            my ($uri, $err) = @_;
+            return warn "submit went nowhere: $err\n" if $err;
+            $b->find('#dashboard', $cb);             # safe: this IS the next page
+        });
+        $b->find('#submit', sub { $_[0]->click });
+
+    Arm it before you click, as above. It waits for the next navigation, not
+    the last one, so a fast page that finishes first is simply missed.
+
+    Do not reach for wait_for($selector) instead: armed before the click it
+    runs against the page you are leaving, so a selector present on both
+    resolves at once, with the old document -- a wrong answer rather than an
+    error.
+
+    %opts:
+
+    "timeout => $seconds"
+        Default: this instance's own "timeout". On expiry $err is 'timeout'.
+        Passing a non-positive value here croaks: there is nothing a zero
+        deadline could mean, and unlike "wait_for" -- which polls, so a zero
+        timeout there means "probe once and give up" -- this has nothing to
+        probe. An instance-wide "timeout => 0" is inherited as-is and means
+        what it means everywhere else in this module: time out at once.
+
+    An unknown option croaks, and so does a last argument that is not a code
+    reference; both are caller mistakes visible at the call site.
+
+    A navigation that fails resolves with that failure's $err and no $uri.
+    That includes one this API started, so a "go" and a waiter armed across
+    it both report the same failure.
+
+   wait_for_js
+        $b->wait_for_js($expr, %opts, sub { my ($value, $err) = @_; ... });
+
+    Polls a JavaScript expression until it is truthy, then resolves with its
+    value. Takes the same "timeout" and "interval" options as "wait_for".
+    For waiting on application state rather than on the DOM:
+
+        $b->wait_for_js('window.app && window.app.ready', sub { ... });
+
+    An expression that throws is not an error, it is "not yet".
+    "window.app.ready" raises a "TypeError" for as long as "window.app" is
+    undefined, which is exactly the state you are waiting through -- so a
+    throw is treated as false and polling continues. The cost is that a
+    genuine typo also just times out, so the timeout message carries both
+    the expression and the last JavaScript error:
+
+        timeout waiting for: no_such_fn() (last JS error: ReferenceError: ...)
+
+    The expression is evaluated in the page's own world, as "script" does,
+    so it sees the page's globals.
+
+    Truthiness is JavaScript's, not Perl's. The verdict is reached in the
+    page and sent back beside the value, so the two languages cannot
+    disagree about it: the string "0" is true here, as it is in JavaScript,
+    and a function is true even though it has no JSON representation. That
+    last point is what makes the most common form of this call work at all
+    --
+
+        $b->wait_for_js('window.jQuery', sub { ... });   # a function
+
+    -- and the price is that $value is "undef" for such a value: the wait
+    succeeds, but there is nothing meaningful to marshal back. The same
+    holds for anything else JSON cannot carry -- a BigInt, or an object
+    containing a cycle, which most framework objects do. Wait on the
+    expression you care about, and read what you need afterwards.
+
+  Downloads and file upload
+    Fetch resources to disk, and drive file inputs.
+
+   download
+        $b->download($uri, $path, sub { my ($path, $err) = @_; ... });
+
+    Fetches $uri straight to $path without navigating to it. $path is a
+    plain filesystem path. On success the callback receives that path; on
+    failure, "undef" and an error string. Returns $b.
+
+    Note that a custom scheme registered with "mock_scheme" is not reachable
+    this way: "mock_scheme" is registered on the web context, while
+    downloads run on the network session, which has never heard of the
+    scheme and reports "The URL can't be shown".
+
+    "file://" URIs, on the other hand, do work: "download" copies the local
+    file, and a missing one comes back as an ordinary error. This is worth
+    knowing before you hand "download" a URI from an untrusted source, and
+    doubly so before you put a browser on a control socket --
+    "download('file:///etc/passwd', $out)" reads any file the process can
+    read, which page JavaScript cannot do. The socket is already a
+    full-trust boundary (see "SECURITY" in EV::WebKit::Control), but the
+    reach is wider than a network fetch.
+
+    A download still in flight when "quit" is called resolves with 'browser
+    closed', like every other pending operation.
+
+   on_authenticate
+    Answer an HTTP (or proxy) authentication challenge:
+
+        my $b = EV::WebKit->new(on_authenticate => sub {
+            my ($auth) = @_;
+            return $auth->cancel if $auth->is_retry;      # wrong password: stop, don't loop
+            $auth->login('alice', 'hunter2');
+        });
+
+    $auth is an EV::WebKit::Auth, valid only for the duration of the call.
+
+    Without a handler the challenge is cancelled, and the navigation fails
+    immediately. That is deliberate: nobody answering a challenge means
+    WebKit waits, so the navigation used to resolve 'timeout' after the full
+    instance timeout with "status" "undef" -- indistinguishable from an
+    unreachable host. A handler that dies is treated the same way, and so is
+    one that returns without deciding.
+
+    WebKit reports every refused challenge as a bare "Load request
+    cancelled", which reads like you cancelled the navigation yourself, so
+    the error is annotated with which route it took: "no on_authenticate
+    handler answered it", "the on_authenticate handler died", "the
+    on_authenticate handler answered nothing", or -- when you called
+    "$auth->cancel" deliberately -- "the on_authenticate handler cancelled
+    it".
+
+    Credentials embedded in a URI ("http://user:pass@host/") are applied by
+    WebKit itself and never reach this handler.
+
+   on_download
+    Called when the page starts a download (a link with "download", a
+    response WebKit will not display). The handler must name a destination:
+
+        on_download => sub {
+            my ($d) = @_;
+            $d->save_to("/tmp/" . $d->suggested);
+            $d->on_finish(sub { my ($path, $err) = @_; ... });
+        }
+
+    A download whose handler names no destination is cancelled,
+    deliberately: WebKit's own default writes into the user's Downloads
+    directory, which an automation run must not do behind the caller's back.
+    With no "on_download" at all, every page-initiated download is
+    cancelled.
+
+    The object passed in offers "uri", "suggested" (the server's suggested
+    filename), "destination", "progress", "received", "save_to($path,
+    overwrite => $bool)", on_finish($cb) and "cancel". It stays valid until
+    the download finishes or fails, unlike the dialog and policy objects.
+
+   on_file_chooser
+    Called when the page opens a file chooser -- a click on "<input
+    type=file>", which is the only way to populate one, since a file input's
+    value cannot be set from JavaScript:
+
+        on_file_chooser => sub { $_[0]->select('/tmp/photo.png') }
+
+    The object offers "mime_types" (the "accept=" list), "multiple",
+    "selected", select(@paths) and "cancel". "select" croaks on a path that
+    does not exist, or on several paths when the input accepts only one --
+    WebKit itself would silently hand the page an unreadable entry.
+
+    The selection is applied asynchronously. Reading "files.length" in the
+    callback of the "click" that opened the chooser still sees 0; it becomes
+    correct a tick later. Poll for it (or wait) rather than reading once.
+
+    Without an "on_file_chooser" handler nothing changes: WebKit runs its
+    own native GTK file chooser, exactly as before. A handler that dies, or
+    that decides nothing, cancels the request rather than leaving the page
+    waiting on a chooser that never resolves.
+
+   on_request
+    Intercept every request the browser makes -- rewrite it, answer it
+    locally, or refuse it:
+
+        my $b = EV::WebKit->new(on_request => sub {
+            my ($req) = @_;
+            return { status => 403, body => 'no ads here' } if $req->{host} =~ /ads\./;
+            $req->{headers}{'x-trace'} = 'yes';        # rewrite in place
+            return;                                    # ...and let it proceed
+        });
+
+    $req has "method", "url", "headers", "body" and "host". Return nothing
+    to proceed (carrying any rewrites), a hashref ("status", "headers",
+    "body") to answer without touching the network, or the string 'abort' to
+    drop the connection. A handler that dies refuses the request with a 502
+    and warns -- it fails closed, since this hook exists to block traffic
+    and an exception must not let through exactly what you were stopping.
+    Construct-time only.
+
+    This works by routing the browser through the same in-process
+    Proxy::Impersonate that "network_fingerprint" uses, because WebKitGTK
+    6.0 offers nothing better: the UI process exposes only the observational
+    "sent-request", the mutable "send-request" lives solely in the
+    web-process extension, and libsoup is unreachable since WebKit2 runs
+    networking in a separate process. Interception therefore happens at the
+    one place the plaintext exists. Requires Proxy::Impersonate 0.01 (croaks
+    otherwise, rather than silently not intercepting), and is mutually
+    exclusive with "proxy".
+
+    Two consequences worth knowing:
+
+    Requests to local addresses are not intercepted.
+        WebKit routes localhost and private addresses directly, bypassing
+        the proxy, so the hook never sees them. This is WebKit's own
+        behaviour -- "network_fingerprint" has always had it too -- and it
+        cannot be turned off from here.
+
+    Your connection fingerprint changes.
+        The proxy always re-originates through "libcurl-impersonate"; there
+        is no passthrough. With "fingerprint" set, the matching target is
+        used; without one, a current Chrome. If that matters, set
+        "fingerprint" (or "network_fingerprint") explicitly rather than
+        relying on the default.
+
+    Headers are the set forced on top of the impersonation template
+    ("Cookie", "Referer", "Sec-Fetch-*", ...), not the template's own
+    ("User-Agent", "Accept", ...) -- see "on_request" in Proxy::Impersonate.
+    Setting those keys still overrides the template.
+
+   on_response
+        my $b = EV::WebKit->new(on_response => sub {
+            my ($res) = @_;
+            delete $res->{headers}{'content-security-policy'};   # the usual reason
+            delete $res->{headers}{'x-frame-options'};
+            return;
+        });
+
+    The counterpart to "on_request", called when each response's head
+    arrives and before any of it reaches the page. $res has "status",
+    "headers", and the request's "url", "method" and "host". Modify "status"
+    or "headers" in place; the return value is ignored. Construct-time only,
+    and it carries the same caveats as "on_request" -- local addresses are
+    not intercepted, and the connection fingerprint changes.
+
+    Stripping a policy header is what this is usually for: a page that
+    refuses to frame, or a "Content-Security-Policy" that blocks the script
+    you want to inject, can be relaxed here rather than worked around.
+
+    Framing is not yours to change: "Content-Length", "Connection" and the
+    hop-by-hop headers are restored after the handler runs, because a
+    handler that edits them desynchronises the browser's connection rather
+    than its own.
+
+    Response bodies are not available here at all -- they stream through the
+    proxy with backpressure, and buffering them to hand over would defeat
+    that. To replace a body, answer the request outright with "on_request"'s
+    synthetic response. To read one -- the "what did that XHR return" case
+    -- fetch it from the page instead, where it is already parsed:
+
+        $b->script_async('const r = await fetch(A.url); return await r.json();',
+                         { url => $api }, $cb);
+
+    That runs in the page's own origin and session, so it carries the
+    cookies and headers the page would have sent.
+
+    Unlike "on_request", a handler that dies passes the response through and
+    warns. It fails open deliberately: the request has already been made, so
+    there is no longer anything to protect by refusing, and breaking the
+    page over a bug in an observer would be worse.
+
+  Screenshots and PDF
+    Capture the rendered page.
+
+   screenshot
+        $b->screenshot($path, sub { my ($result, $err) = @_; ... });
+        $b->screenshot(\%opts, sub { my ($result, $err) = @_; ... });
+        $b->screenshot($path, %opts, sub { my ($result, $err) = @_; ... });
+
+    Captures a PNG of the current page. With a plain $path, the PNG is
+    written there and $result is $path. The "\%opts"-only form has no $path,
+    so it requires "bytes => 1" (below) -- calling it with neither a path
+    nor "bytes" errors with 'screenshot path required (or bytes => 1)'.
+    %opts:
+
+    "full => $bool"
+        Capture the full scrollable document instead of just the visible
+        viewport.
+
+    "transparent => $bool"
+        Transparent background instead of opaque white.
+
+    "bytes => $bool"
+        Return the raw PNG byte string as $result instead of writing a file
+        -- no file is written even if $path was also given.
+
+    Returns $b.
+
+   pdf
+        $b->pdf($path, %opts, sub { my ($result, $err) = @_; ... });
+
+    Renders the current page to a PDF file at $path via
+    "WebKit::PrintOperation". %opts: "paper" (a PWG paper-size name --
+    "iso_a4" (the default), "na_letter", "na_legal", "iso_a3"; not "a4" or
+    "letter", which GTK does not recognise and which render at the default
+    size with only a warning on stderr), "margin" (mm, all four sides,
+    default 0), "resolution" (dpi, default 300), "timeout" (seconds,
+    overriding the instance default for this call). $result is $path on
+    success. Returns $b.
+
+    "resolution" is passed through to the GTK print settings, but do not
+    expect it to change anything: WebKitGTK's print-to-PDF path does not
+    consult it (72, 300 and 1200 dpi produce byte-identical files), because
+    the output is vector rather than rasterised. It is accepted for
+    completeness. pdf($path) errors with 'pdf: no page loaded' if called
+    before the view has navigated anywhere.
+
+    Calls are serialized: two "WebKit::PrintOperation"s running on one view
+    at once race at the engine level (and crash it), so pdf() queues each
+    request and runs exactly one at a time. You may fire several pdf() calls
+    back-to-back; each resolves its own callback in turn, and their outcomes
+    are deterministic.
+
+    The "timeout" bounds how long your callback waits, counted from the
+    pdf() call itself -- not from the moment the job reaches the head of the
+    queue. So it covers the time spent queued behind other prints as well as
+    the printing, and a call made while an earlier print is stuck still
+    resolves on its own deadline with "$err eq 'timeout'".
+
+    What that error means depends on whether the print had started:
+
+    *   Still queued at the deadline: it never runs. Nothing was printed and
+        no file is written -- the job is dropped when its turn comes.
+
+    *   Already printing at the deadline: the print is not aborted.
+        WebKit-6.0's "WebKit::PrintOperation" has no cancel method at all,
+        so nothing can stop one once it is under way. Treat 'timeout' here
+        as "took too long, outcome unknown", not "did not happen": the
+        operation may still complete afterwards and write its file to $path.
+
+    For that second case the queue does not advance past a timed-out
+    operation until the engine actually finishes it (starting the next print
+    alongside a live one would crash the engine). A subsequent pdf() to the
+    same path is therefore safely queued behind it, never racing its write.
+
+  Settings
+    User-Agent and arbitrary WebKitSettings properties.
+
+   set_user_agent
+        $b->set_user_agent($ua_string);
+
+    Sets the User-Agent. Synchronous, returns $b.
+
+   user_agent
+        my $ua = $b->user_agent;
+
+    Current User-Agent. Synchronous.
+
+   settings
+        $b->settings({ enable_javascript => 0, ... });
+
+    Sets arbitrary "WebKit::Settings" GObject properties: each key has its
+    underscores turned into hyphens ("enable_javascript" becomes the
+    "enable-javascript" property). Synchronous, returns $b. A reference
+    value, or a key naming a property that does not exist, croaks. Not
+    transactional: a croak on an unknown property name may leave earlier
+    keys in the same call already applied (reference values are all rejected
+    up front, so a typed-value mistake is caught before anything is set).
+
+   show_devtools
+        $b->show_devtools;
+
+    Enables "enable-developer-extras" (if not already) and opens the Web
+    Inspector window. Synchronous, returns $b.
+
+  Network
+    Proxy configuration and custom URI-scheme handlers.
+
+   set_proxy
+        $b->set_proxy($uri);
+        $b->set_proxy({ default => $uri, ignore => [@hosts] });
+        $b->set_proxy(undef);          # or 'no-proxy'
+
+    Configures (or clears) this instance's proxy. Synchronous, no callback.
+    Returns $b. Equivalent to the constructor's "proxy" option.
+
+    Only "undef" and the literal string 'no-proxy' clear the proxy; any
+    other value is treated as a custom proxy to set, and its default URI is
+    validated up front (must look like "scheme://authority"). WebKit itself
+    only prints a C-level CRITICAL and silently falls back to a direct
+    connection for a malformed proxy URI -- not a Perl exception "eval"
+    could catch -- so an invalid or empty default URI (including a "{
+    default => ... }" hash with no "default") makes this method
+    "Carp::croak" instead, fail-fast rather than silently discarding the
+    proxy.
+
+   mock_scheme
+        $b->mock_scheme($scheme, sub { my ($uri) = @_; return ($body, $content_type) });
+
+    Registers a custom URI-scheme handler on this instance's private (not
+    the shared default) "WebKit::WebContext". The producer callback is
+    invoked once per request to $scheme; $content_type defaults to
+    "text/html" if omitted. Must be registered before the first navigation
+    to $scheme. Pass $body as a character string (e.g. plain ASCII, or
+    containing "\x{e9}"-style non-ASCII text); it is served as its UTF-8
+    encoding. Do not pass pre-encoded octets -- a byte string that already
+    holds UTF-8 bytes would be encoded a second time and corrupt the output.
+    As with any HTTP response, WebKit's HTML parser still needs to be told
+    the encoding: include "charset=utf-8" in $content_type (or a "<meta
+    charset="utf-8">" tag in the body itself) whenever it isn't plain ASCII,
+    the same as a real web server would. Synchronous, returns $b.
+
+    If the producer dies, the request fails cleanly instead of crashing the
+    process. Whether anyone hears about it depends on what was being
+    fetched: for the document of a navigation this instance started, that
+    navigation's callback receives a defined $err describing the failure;
+    for a subresource (an image, a script, an iframe) the page simply does
+    not get it, exactly as a browser treats any failed subresource, and the
+    navigation still succeeds. $err's exact wording is this module's own,
+    not a native WebKit network error ("finish_error", WebKit's normal way
+    to report this, is unusable with the currently supported
+    "Glib::Object::Introspection" -- see the source comment on
+    "mock_scheme"'s "register_uri_scheme" callback for why).
+
+  Cookie Management
+    "set_cookie"/"cookies"/"clear_cookies" operate on this instance's live
+    session. "cookie_jar" (see "new") gives native persistent storage for
+    non-session cookies automatically; "save_cookies"/"load_cookies" below
+    are an explicit, opt-in JSON snapshot mechanism -- see "LIMITATIONS".
+
+   set_cookie
+        $b->set_cookie(\%spec, sub { my ($ok, $err) = @_; ... });
+
+    %spec: "name", "value", "domain", "path" (default "/"), "max_age"
+    (seconds, default -1 = session cookie), "secure" (bool), "http_only"
+    (bool). $ok is true on success. Errors with "set_cookie: missing
+    '<key>'" if "name"/"value"/"domain" is missing from %spec. Returns $b.
+
+   cookies
+        $b->cookies($uri, sub { my ($list, $err) = @_; ... });
+
+    $list is an arrayref of "{ name, value, domain, path, secure, http_only
+    }" hashrefs visible to $uri ("secure"/"http_only" are 1 or 0). Errors
+    with 'cookies: uri required' if $uri is missing/empty. Returns $b.
+
+   clear_cookies
+        $b->clear_cookies(sub { my ($ok, $err) = @_; ... });
+
+    Clears every cookie in this instance's session (not scoped to a single
+    domain/URI). Returns $b.
+
+   save_cookies
+        $b->save_cookies($file, sub { my ($count, $err) = @_; ... });
+        $b->save_cookies($file, \@uris, sub { my ($count, $err) = @_; ... });
+
+    Writes this instance's cookies to $file as a JSON snapshot, enumerated
+    per-URI (via the same path as "cookies") over "\@uris", or, if omitted,
+    every URI this instance has "go"ne to. $count is the number of
+    (deduplicated) cookies written. $file is written as UTF-8 text, so
+    cookie values containing non-ASCII characters round-trip correctly. This
+    is an explicit, opt-in mechanism, distinct from "cookie_jar"'s native
+    persistence (see "new") -- it is the only way to capture SESSION
+    cookies, which native persistence excludes by design. Errors with
+    'snapshot file required' if $file is missing/empty, 'no URIs to save
+    ...' if there is no URI list (navigate first, or pass "\@uris"
+    explicitly), or a filesystem error. Cookie *expiry* is deliberately not
+    part of the saved data -- see "LIMITATIONS". Returns $b.
+
+   load_cookies
+        $b->load_cookies($file, sub { my ($loaded, $err) = @_; ... });
+
+    Reads $file (as written by "save_cookies", UTF-8 text) and replays each
+    row through "set_cookie". $loaded is the number successfully re-applied.
+    If the file doesn't exist, or exists but isn't valid JSON, this is not
+    an error -- $loaded is simply 0. Individual rows are treated the same
+    way: a row that isn't a hashref, or is missing "name"/"value"/ "domain",
+    is silently skipped rather than failing the whole load -- $loaded only
+    counts rows that were actually well-formed. Every cookie in a snapshot
+    this module wrote is loaded back as a session cookie, even if it had an
+    expiry when saved -- "save_cookies" cannot read expiries back out of
+    WebKit, so it never records one (see "LIMITATIONS"). A hand-written
+    snapshot may carry an "expires" key (epoch seconds), and that one is
+    honoured: the cookie is restored with its remaining lifetime and, in a
+    "cookie_jar" session, persists across restarts. Errors with 'snapshot
+    file required' if $file is missing/empty. Returns $b.
+
+  User content injection
+    Inject your own JavaScript and CSS into the pages this instance loads.
+
+   add_user_script
+        my $h = $b->add_user_script($js, %opts);
+
+    Inject $js into every page this instance loads, from the next navigation
+    onward (WebKit injects user content at load time, so it does not affect
+    the page already showing). Returns an "EV::WebKit::UserContent" handle
+    whose "remove" takes just this script back out.
+
+    Options:
+
+    at => 'end' (default) | 'start'
+        When the script runs relative to the page's own scripts. "start"
+        runs before any page script -- but the DOM does not exist yet
+        ("document.body" is "undef"), so a script that touches the DOM
+        should use "end".
+
+    world => 'main' (default) | 'isolated'
+        "main" shares the page's JavaScript globals (what the page's own
+        code sees). "isolated" gets a private global scope the page cannot
+        read or corrupt, while still sharing the one DOM -- use it to
+        observe or rewrite a page without the page noticing your variables.
+
+    frames => 'all' (default) | 'top'
+        Inject into all frames, or only the top-level document.
+
+    allow => [ globs ], deny => [ globs ]
+        Optional URL-pattern allow/deny lists (WebKit
+        "UserContentURLPattern" syntax). A pattern is "scheme://host/path"
+        with "*" wildcards and must include a path component
+        ('https://*.example.com/*', not 'https://*.example.com'). With
+        "allow", the script runs only on matching URLs; "deny" excludes
+        matching URLs; "deny" wins over "allow". Each entry must be a
+        non-empty string (undef, empty, and non-string entries croak); a
+        syntactically malformed pattern is not caught here and simply never
+        matches. Omit a list to match every URL -- an empty list ("allow =>
+        []") is rejected rather than silently meaning match-all.
+
+    $js should be a decoded Perl character string (not raw bytes): it is
+    handed to WebKit as UTF-8, so a byte string with high bytes would be
+    re-encoded (mojibake).
+
+    Croaks on a source that is undef, a reference, or contains a NUL byte
+    (which would silently truncate the injected content); on an invalid
+    option value or an unknown option key; and -- unlike the quiet-no-op
+    mutators (see "Lifecycle") -- on a call after the browser is closed
+    (there is no handle it could meaningfully return).
+
+   add_user_style
+        my $h = $b->add_user_style($css, %opts);
+
+    Like "add_user_script" but injects a CSS stylesheet. Accepts "frames",
+    "allow", and "deny" as above (no "world" -- a world does not change how
+    a stylesheet affects the document, so it is not surfaced), plus:
+
+    level => 'author' (default) | 'user'
+        "author" mixes with the page's own author styles. "user" is a
+        user-agent-level override that beats page CSS -- use it to reliably
+        hide elements ('div.ad { display:none !important }').
+
+    Returns an "EV::WebKit::UserContent" handle.
+
+   remove_all_user_scripts
+        $b->remove_all_user_scripts;
+
+    Remove every script added with "add_user_script". Does not touch the
+    module's own internal injection (the element registry that "find" and
+    "html" rely on). Chainable.
+
+   remove_all_user_styles
+        $b->remove_all_user_styles;
+
+    Remove every stylesheet added with "add_user_style". Chainable.
+
+  Fingerprinting
+    See the "fingerprint" constructor option above for the device-profile
+    spoofing this exposes.
+
+   fingerprint
+        my $profile = $b->fingerprint;   # resolved hashref, or undef
+
+    The resolved fingerprint profile for this instance (read-only), or
+    "undef".
+
+   network_fingerprint
+        my $target = $b->network_fingerprint;   # e.g. 'chrome131', or undef
+
+    The active curl-impersonate target, or "undef" when the in-process proxy
+    is not running. Note that "on_request"/"on_response" start that proxy
+    too, and it always re-originates, so this reports a target ("chrome131"
+    by default) under those options as well -- see the "network_fingerprint"
+    constructor option above.
+
+   proxy_port
+        my $port = $b->proxy_port;   # or undef
+
+    The localhost port of the in-process re-origination proxy, or "undef"
+    when it is not running. As with "network_fingerprint" above,
+    "on_request" and "on_response" start it too.
+
+   fingerprint_profiles
+        my @names = EV::WebKit->fingerprint_profiles;
+
+    The names of the shipped presets.
+
+   fingerprint_available
+        EV::WebKit::fingerprint_available() or warn "no fingerprint support";
+
+    Whether the web-process extension was built at install.
+
+  Lifecycle
+    Tear the instance down.
+
+   quit
+        $b->quit;
+
+    Tears down this instance: resolves every in-flight callback -- including
+    a still-pending navigation -- exactly once with "$err eq 'browser
+    closed'", destroys the native GTK window (the X display itself is left
+    alone -- see "LIMITATIONS"), and drops the view/session/etc. Idempotent
+    -- safe to call more than once, and run automatically from "DESTROY": an
+    instance holds only weak references to itself from its native signal
+    handlers, so a plain "undef $b" or a scope exit collects it and tears it
+    down (calling "quit") without an explicit call. Calling "quit" yourself
+    is still useful to release the native window/session promptly and
+    deterministically rather than whenever the instance is next collected.
+    After "quit", any method that would otherwise run JavaScript ("script",
+    "script_async", "find", "find_all", "html", and all EV::WebKit::Element
+    methods) resolves immediately with "$err eq 'browser closed'".
+    Synchronous accessors ("uri", "title", "is_loading", "user_agent")
+    instead degrade quietly after "quit", returning "undef" (0 for
+    "is_loading"), and synchronous mutators ("set_user_agent", "settings",
+    "set_proxy", "mock_scheme", "show_devtools") become no-ops that just
+    return $b.
+
+    An operation already in flight at the moment "quit" is called is
+    resolved deterministically, exactly once, rather than left dangling.
+    Every pending
+    "script"/"script_async"/"find"/"find_all"/"html"/"screenshot"/"pdf"
+    call, cookie call, outstanding "wait_for", and navigation resolves with
+    "$err eq 'browser closed'". Any call made *after* "quit" has returned
+    likewise resolves immediately with 'browser closed'.
+
+    "quit" never throws. It has to run your callbacks in order to resolve
+    them, and one of them dying must not abort the teardown -- that would
+    drop every callback still queued behind it and leak the window, view and
+    session for the life of the process (nothing could retry: "quit" is
+    already marked done). An exception from a callback is caught and
+    reported with "warn".
+
+    Calling "quit" from inside an event handler ("on_dialog", "on_policy",
+    "on_console", "on_file_chooser", "on_download", "on_authenticate", or a
+    "mock_scheme" producer) is safe. Those run inside WebKit's own dispatch
+    frame, so "quit" defers the teardown -- and the callbacks it resolves --
+    to the next clean tick of the loop rather than running them nested
+    inside that frame, where an "EV::break" from one of them would wedge the
+    loop (see "CALLBACK CONVENTION").
+
+    'browser closed' reports how the callback was resolved, not whether the
+    operation's effect took place. A cookie mutation already in flight when
+    "quit" lands -- "set_cookie", "save_cookies" (which may still write its
+    file), or "clear_cookies" -- can still complete its native effect even
+    though its callback reports 'browser closed', because cancelling it
+    mid-flight would risk a use-after-free during teardown. Treat 'browser
+    closed' on an in-flight mutation as "outcome unknown", not "did not
+    happen". (This does not apply to calls made *after* "quit", which never
+    start any native work.)
+
+  Handler accessors
+        my $cb = $b->on_console;          # get
+        $b->on_console(sub { ... });      # set, returns $b
+        $b->on_console(undef);            # clear
+
+    Ten of the twelve "on_*" handlers have a get/set accessor: "on_load",
+    "on_error", "on_close", "on_navigate", "on_console", "on_dialog",
+    "on_policy", "on_file_chooser", "on_download" and "on_authenticate". The
+    other two, "on_request" and "on_response", are construct-time only --
+    they need the in-process proxy built during "new" -- and have none.
+
+    An accessor means code that did not construct the browser can still
+    observe a handler, and can chain an existing one rather than clobbering
+    it:
+
+        my $prev = $b->on_console;
+        $b->on_console(sub { $prev->(@_) if $prev; ...also mine... });
+
+    Croaks on a non-coderef. Enabling "on_console" after a page has loaded
+    takes effect from the next navigation: the console proxy is a user
+    script, and those are injected at document start.
+
+EVENTS
+    Optional callbacks passed to "new", and the one option that shapes what
+    the browser does when it has none ("popups"):
+
+    "on_error => sub { my ($err) = @_ }"
+        Called for a navigation failure that has no "go"/"load_html"
+        callback waiting for it (e.g. a stray "load-failed" signal).
+        Ordinary navigation failures go to that call's own callback instead,
+        not here.
+
+    "on_load => sub { }"
+        Called with no arguments when a navigation started through this API
+        ("go", "load_html", "back", "forward", or "reload") finishes
+        successfully, right after that navigation's own callback (if any).
+        It does NOT fire for user- or page-JS-initiated navigations (e.g.
+        clicking a link, or a script-driven redirect) -- only for
+        navigations this instance itself started through one of the methods
+        above.
+
+    "on_console => sub { my ($text) = @_ }"
+        Called for each "console.log"/"warn"/"error"/"info" from page
+        JavaScript. $text is a single string of the form "$level: $args",
+        e.g. "log: hi". Implemented by monkey-patching "console" via an
+        injected user script plus a script-message handler, not WebKit's
+        native console-message signal.
+
+    "on_dialog => sub { my ($dialog) = @_ }"
+        Called for "window.alert"/"confirm"/"prompt" and the beforeunload
+        confirmation. $dialog is an "EV::WebKit::Dialog" object, valid only
+        for the duration of this call. If "on_dialog" is not given, every
+        dialog is auto-dismissed so the page is never blocked.
+
+    "on_navigate => sub { my ($uri) = @_ }"
+        Called for every navigation that commits, whoever started it --
+        including one the page starts itself, which is what a human clicking
+        a link in a visible window looks like.
+
+        "on_load" is not that. It fires only for a navigation this API
+        started, so without "on_navigate" a browser you are also using by
+        hand can change page and tell you nothing at all. An API navigation
+        fires both.
+
+        Delivered on a clean EV tick, so "EV::break" is safe from it.
+
+    "on_close => sub { }"
+        Called when the user closes the window (the titlebar close button,
+        alt-F4, the window manager) -- not when you call "quit" yourself.
+        Only reachable in the visible mode (a real $DISPLAY, usually with
+        "chrome => 1").
+
+        The instance is torn down first: every in-flight callback resolves
+        with 'browser closed', the native window is destroyed, and only then
+        is "on_close" called. So by the time it runs, $b is already closed
+        -- it is a notification, not a veto.
+
+        It does not stop your "EV::run" -- nothing in this module ever does;
+        you own the loop. For a browser window whose closing should end the
+        program, that is the whole handler:
+
+            my $b = EV::WebKit->new(chrome => 1, on_close => sub { EV::break });
+            ...
+            EV::run;   # returns when the window is closed
+
+        Unlike "on_console"/"on_dialog"/"on_policy", "on_close" is delivered
+        on a clean EV tick, so calling "EV::break" directly from it is safe.
+
+    "popups => 'follow' | 'block'"
+        What to do with a navigation that asks for a new window -- a
+        "target="_blank"" link, or "window.open". WebKit allows such a
+        navigation and then asks for a window to put it in; a one-view
+        browser has none to give, so the click would otherwise do nothing
+        whatsoever: no navigation, no error, no event. The default 'follow'
+        takes it in this view instead. 'block' keeps it dropped.
+
+        The two arrive by different routes, which matters if you set
+        "on_policy". A "target="_blank"" link is a policy decision, so that
+        handler sees it first, with "type => 'new-window-action'", and can
+        refuse it outright with "$p->block".
+
+        "window.open" is not a window request WebKitGTK asks about, so no
+        "new-window-action" ever arrives for it -- there is nothing to
+        refuse at that stage. Under the default 'follow', though, the popup
+        is re-issued in this view as an ordinary navigation, and that does
+        reach "on_policy" as a "navigation-action" carrying the popup's own
+        url. So selective filtering is possible for both mechanisms; only
+        the decision "type" differs. (Under 'block' the popup is dropped
+        before any navigation, so "on_policy" sees nothing at all.)
+
+        One caveat if you are testing this: WebKit's own popup blocker drops
+        a "window.open" made from an inline script with no user gesture
+        behind it, and then nothing reaches "on_policy" either. Drive it
+        from a real click -- "$el->click" counts -- as a page would.
+
+        What "on_policy" does not decide is where an allowed one goes:
+        WebKit asks for a window afterwards either way, and this option is
+        what answers. So an "on_policy" that allows a "target="_blank"" link
+        still lands it in this view under 'follow', and still drops it under
+        'block'. If you want to route it yourself, "$p->block" and navigate
+        from a clean tick -- starting a navigation inside the handler runs
+        it in WebKit's own dispatch frame.
+
+    "on_policy => sub { my ($info) = @_ }"
+        Called for each navigation/new-window/response decision WebKit asks
+        about. $info is an "EV::WebKit::Policy" object, valid only for the
+        duration of this call. If "on_policy" is not given, WebKit's own
+        default (allow) applies; if the handler doesn't call
+        "allow"/"block", allow happens automatically once it returns.
+
+        If the handler dies before deciding, the navigation is blocked and
+        the exception reported with "warn". This handler is a gate, so it
+        fails closed: a page that could provoke a die (a URI that breaks the
+        handler's own parsing, say) would otherwise walk straight through
+        it, since an exception escaping the handler leaves WebKit to apply
+        its own default -- allow. A handler that already called "allow" or
+        "block" keeps that decision even if it then dies.
+
+    "on_download => sub { my ($download) = @_ }"
+        Called when the page starts a download. The handler must name a
+        destination with "save_to" or the download is cancelled -- see
+        "on_download" under "Downloads and file upload" for the object's
+        full interface and the reasoning.
+
+    "on_file_chooser => sub { my ($chooser) = @_ }"
+        Called when the page opens a file chooser, which is the only way to
+        populate an "<input type=file>". Without this handler WebKit runs
+        its own native chooser, unchanged. See "on_file_chooser" for the
+        object it receives.
+
+    "on_authenticate => sub { my ($auth) = @_ }"
+        Answer an HTTP or proxy authentication challenge. Without a handler
+        the challenge is cancelled and the navigation fails at once rather
+        than waiting. See "on_authenticate".
+
+    "on_request => sub { my ($req) = @_ }"
+        Intercept, rewrite, mock or block every request the browser makes.
+        Routes through the in-process proxy, so it does not see
+        local-address traffic and it sets a connection fingerprint -- see
+        "on_request" for both caveats.
+
+    "on_response => sub { my ($res) = @_ }"
+        Observe or rewrite each response's status and headers before the
+        page sees them -- stripping "Content-Security-Policy" is the usual
+        reason. Same proxy, same caveats. See "on_response".
+
+EV::WebKit::Dialog
+    Passed to "on_dialog". Valid only for the duration of that call.
+
+    "type"
+        Nick string: "alert", "confirm", "prompt", or
+        "before-unload-confirm".
+
+    "message"
+        The dialog's message text.
+
+    accept($text)
+        Accept the dialog. For "prompt", $text (if defined) becomes the
+        entered value; for "confirm"/"before-unload-confirm", marks it
+        confirmed; "alert" has nothing to set and this just acknowledges it.
+
+    "dismiss"
+        Cancel the dialog ("confirm"/"before-unload-confirm" resolve false;
+        "alert"/"prompt" just close).
+
+EV::WebKit::Policy
+    Passed to "on_policy". Valid only for the duration of that call.
+
+    "uri"
+        The request URI for this decision (best-effort; may be "undef").
+
+    "type"
+        Nick string: "navigation-action", "new-window-action", or
+        "response".
+
+    "allow"
+        Let the navigation/response proceed.
+
+    "block"
+        Cancel the navigation/response.
+
+EV::WebKit::Auth
+    Passed to "on_authenticate". Valid only for the duration of that call.
+
+    "host", "port", "realm", "scheme"
+        What is being asked for. "scheme" is WebKit's own nick for the
+        authentication scheme ("http-basic", "http-digest", ...); "realm" is
+        the server's realm string, which is what distinguishes two
+        challenges from the same host.
+
+    "for_proxy"
+        True when the challenge came from a proxy rather than the origin
+        server.
+
+    "is_retry"
+        True when the credentials you last supplied were rejected. WebKit
+        re-asks after every rejection, so a handler that answers with the
+        same pair regardless of this loops forever.
+
+    "login($user, $password, persist => $how)"
+        Answer the challenge. "persist" is 'for-session' (the default --
+        remembered until this instance closes, so the same realm is not
+        asked again on every request), 'permanent' (written to the platform
+        credential store), or 'none'.
+
+    "cancel"
+        Refuse the challenge. This is also what happens if the handler
+        returns without deciding, dies, or was never set at all.
+
+EV::WebKit::Download
+    Passed to "on_download". Unlike the dialog and policy objects, this one
+    outlives the handler that received it: WebKit reports progress and
+    completion later, so it stays valid until the download finishes, fails,
+    or the browser closes.
+
+    "uri"
+        The URI being downloaded.
+
+    "suggested"
+        The filename the server suggested (from "Content-Disposition", else
+        derived from the URI). Only known once WebKit asks for a
+        destination, which is when "on_download" runs -- so it is available
+        there, and "undef" before.
+
+    "save_to($path, overwrite => $bool)"
+        Choose where the download lands. Required: a download whose handler
+        names no destination is cancelled, because WebKit's own default
+        would write into the user's Downloads directory behind the caller's
+        back. $path is a plain filesystem path (a "file://" URI is accepted
+        and stripped).
+
+    on_finish($cb)
+        Register the completion callback: "$cb->($path, $err)". $path is
+        where the file landed; on failure $path is "undef" and $err a
+        message. Fires exactly once. Registering after the download has
+        already finished still delivers, so there is no race in setting it
+        late.
+
+    "destination"
+        The path chosen by "save_to", or "undef".
+
+    "progress"
+        Estimated completion, 0 to 1.
+
+    "received"
+        Bytes received so far.
+
+    "cancel"
+        Abort the download. "on_finish" then reports the cancellation.
+
+EV::WebKit::FileChooser
+    Passed to "on_file_chooser". Valid only for the duration of that call.
+
+    select(@paths)
+        Answer the chooser with these files. Croaks on a path that does not
+        exist, or on several paths when the input accepts only one -- WebKit
+        itself would silently hand the page an unreadable entry instead.
+
+        Note the page does not see the files immediately: WebKit applies the
+        selection asynchronously, so "files.length" read in the callback of
+        the "click" that opened the chooser is still 0, and correct a tick
+        later.
+
+    "cancel"
+        Refuse the chooser. This is also what happens automatically if the
+        handler returns without deciding, or dies -- an unanswered request
+        would leave the page waiting on a chooser that never resolves.
+
+    "mime_types"
+        The "accept=" list as a plain list of strings; empty means anything.
+
+    "multiple"
+        True if the input accepts more than one file.
+
+    "selected"
+        Files already selected on the input, as a list.
+
+EV::WebKit::UserContent
+    The handle returned by "add_user_script" and "add_user_style".
+
+  remove
+        $h->remove;
+
+    Remove just this injected script or stylesheet. Takes effect from the
+    next navigation. Idempotent and safe: calling it twice, or after the
+    browser has been closed or collected, is a harmless no-op.
+
+LIMITATIONS
+    A small, fixed per-call residue in long-running processes
+        Glib::Object::Introspection does not release a "GAsyncReadyCallback"
+        closure after it fires, so every asynchronous call leaves one
+        closure shell behind for the life of the process. EV::WebKit clears
+        everything it owns from inside those closures on completion -- your
+        callback, the "Cancellable", the watchdog timer -- so nothing you
+        pass in is retained; but the shell itself is GI's and cannot be
+        freed from Perl. Measured at roughly 2kB per call, against roughly
+        68kB per call before the release was added.
+
+        This is invisible in ordinary use and matters only for a process
+        making hundreds of thousands of calls -- a poller running for days,
+        where "wait_for" and "wait_for_js" spend one call per tick. If that
+        is you, recycle the instance periodically: "quit" and construct a
+        new one.
+
+    Bring-your-own-display
+        EV::WebKit never spawns or kills an X server. Run under "xvfb-run -a
+        your-script.pl" for headless use, or export a real $DISPLAY for a
+        visible, fully-interactive GTK4 window -- the "display" constructor
+        option only sets $ENV{DISPLAY} before GTK initializes, it does not
+        start Xvfb.
+
+    Cookie persistence
+        "cookie_jar" gives WebKit-native persistent cookie storage: cookies
+        with a real expiry round-trip correctly (expiry included) across
+        instances and processes. SESSION cookies (no expiry) are permanently
+        excluded from that store by design (RFC 6265) --
+        "save_cookies"/"load_cookies" are the only way to snapshot/restore
+        those (or any cookie; snapshots lose expiry, so every cookie loaded
+        back from one becomes a session cookie regardless of what it was
+        when saved). "clear_cookies" clears the whole session, not a single
+        domain/URI. WebKitGTK's own bulk "all cookies" enumeration
+        ("get_all_cookies") is avoided entirely: a real memory-safety bug
+        was independently confirmed under valgrind when such a call is left
+        in-flight at teardown, so this module never calls it, using per-URI
+        "get_cookies" throughout instead.
+
+    GDK backend
+        "GDK_BACKEND" is forced to "x11" (unless already set) since this
+        module targets X11/Xvfb; it is not tested against a Wayland-native
+        GDK backend.
+
+    Single EV loop
+        Native EV watchers, the GLib main context (bridged in by EV::Glib),
+        and WebKitGTK's own IPC to its web/network processes all share one
+        "EV::run". EV::WebKit delivers its result callbacks on a clean tick,
+        so "EV::break" is safe from those -- and from "on_load", "on_error",
+        "on_close" and "on_navigate".
+
+        It is not safe from the seven handlers that run nested inside
+        WebKit's own dispatch frame: "on_console", "on_dialog", "on_policy",
+        "on_file_chooser", "on_download", "on_authenticate", and a
+        "mock_scheme" producer. Breaking from one of those does not raise an
+        error. The "EV::run" you are in returns, and then the next one
+        blocks forever -- at 0% CPU, with live watchers that never fire, so
+        the symptom is a script stopped dead rather than one spinning.
+        Schedule it instead:
+
+            EV::timer(0, 0, sub { EV::break })
+
+        Calling "quit" from them is safe; it detects the frame and defers
+        its own teardown. See "CALLBACK CONVENTION".
+
+    Overlapping navigation identity
+        When navigations overlap -- a "go" superseded by another "go", or by
+        "back"/"forward"/"reload"/"load_html", including a "mock_scheme"
+        producer that reentrantly navigates -- each callback is resolved by
+        the navigation that asked for it, not by whatever happens to be
+        pending when a signal arrives. The superseded one gets 'superseded';
+        the survivor gets its own outcome. A per-navigation timeout can
+        never fire against the wrong navigation. This holds for both the
+        failure and the success path, is confirmed live, and the gates that
+        implement it are described at "_finished_is_stray" and the
+        "load-failed" handler in the source, with xt/66-nav-finished.t
+        covering the success side.
+
+        Two cases are irreducible, and neither changes the outcome a caller
+        sees.
+
+        If the superseded navigation was headed to the same uri the new one
+        is headed to, or already showing, the two cannot be told apart from
+        WebKit's signals alone: a callback may be resolved by the
+        wrong-but-identical event rather than by its own navigation. Since
+        the uri is the same either way, the result delivered is still
+        truthful.
+
+        And a navigation with no tracked target uri -- "back", "forward",
+        "reload", "load_html" -- that genuinely fails before its own
+        "started" fires, for a uri that was never superseded, cannot be told
+        apart from a stray. That one has not been reproduced live and is not
+        believed reachable: "back"/"forward" only proceed past
+        "can_go_back"/"can_go_forward", and "load_html" always reaches
+        "started" for any markup.
+
+        A same-document navigation is a different matter entirely -- it
+        produces no "load-changed" cycle for identity to work on, and
+        resolves 'timeout'. See "go".
+
+    Element registry isolation
+        The "find"/"find_all" element registry ("window.__evwk") lives in a
+        dedicated named JavaScript isolated world, not the page's own main
+        world. An isolated world has its own global object and its own
+        built-in prototypes and shares only the DOM with the page, so page
+        script cannot see or overwrite "window.__evwk", and every internal
+        DOM call ("find", "find_all", "wait_for", "html", and all
+        EV::WebKit::Element methods) marshals its result with the world's
+        own "JSON.stringify" and "Object.prototype". A hostile or buggy page
+        that redefines "JSON.stringify" or pollutes
+        "Object.prototype.toJSON" therefore cannot corrupt an element handle
+        into pointing at the wrong node, nor stall a callback: those calls
+        keep returning correct results regardless of what the page does to
+        its own world. ("find"/"find_all" additionally shape-check every
+        decoded result and surface a clean error rather than dereferencing
+        anything unexpected, as defence in depth.)
+
+        "script" and "script_async" are the deliberate exception: they run
+        *your* JavaScript in the page's main world so it can reach the
+        page's own globals and libraries, and so their results are
+        marshalled by the page's (possibly tampered) "JSON.stringify". That
+        is inherent to running code in the page; a page that has redefined
+        "JSON.stringify" can make your own "script" return a wrong value or
+        a plain marshal error (never a hang). If you need a trustworthy
+        result from an untrusted page, prefer "find"/"find_all" and the
+        element accessors, which run in the isolated world.
+
+        Each navigation gets a brand new registry (ids restart at 0) stamped
+        with a fresh per-document epoch; every EV::WebKit::Element handle
+        carries the epoch of the registry it was created from, so a handle
+        from a page you have since navigated away from is correctly detected
+        as stale even though the new page's registry happens to reuse the
+        same numeric id -- see "DESCRIPTION" in EV::WebKit::Element. "id"
+        and "epoch" are therefore reserved argument names for any JavaScript
+        run through an EV::WebKit::Element method.
+
+    Async completion closures
+        Several operations ("script", "find", "find_all", "wait_for",
+        "screenshot", and the cookie methods) register their completion with
+        WebKitGTK's asynchronous ("GAsyncReadyCallback"-style)
+        GObject-Introspection methods, which do not release the Perl closure
+        passed to them once it fires. EV::WebKit is deliberately written
+        around this: each such closure holds only a weak reference to the
+        browser (or element), so instances become collectable shortly after
+        "quit" instead of only at interpreter exit. This is an internal
+        implementation detail and requires nothing from calling code.
+
+REQUIREMENTS
+    WebKitGTK 6.0, GTK4, JavaScriptCore 6.0 and libsoup3, with their
+    GObject-Introspection typelibs ("WebKit-6.0", "Gtk-4.0", "Gdk-4.0",
+    "JavaScriptCore-6.0", "Soup-3.0"); Glib::Object::Introspection, Glib,
+    Glib::IO, EV, EV::Glib, File::ShareDir and Cpanel::JSON::XS. Xvfb (or a
+    real X server) to actually run anything. Linux only.
+
+  Running in a container
+    WebKitGTK sandboxes its web process with bubblewrap, which needs to
+    create user and network namespaces. Where it cannot -- most containers,
+    and hosts that restrict unprivileged user namespaces -- the web process
+    dies as soon as a page is needed, and the API call aborts the whole
+    program with "SIGABRT" from inside the introspection layer. There is
+    nothing this module can catch: by the time it happens the process is
+    already going down. The symptom is
+
+        ERROR **: Failed to fully launch dbus-proxy: Child process exited with code 1
+        Aborted
+
+    Two ways out. Give the container what bubblewrap needs -- for Docker or
+    Podman, "--cap-add SYS_ADMIN" or "--security-opt seccomp=unconfined",
+    depending on the host -- or, if you accept losing the sandbox for a
+    browser you are driving yourself,
+
+        WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1
+
+    That variable is exactly as dangerous as its name says: it removes
+    WebKit's own isolation of the process that parses untrusted web content.
+    Set it only where the browser visits content you control, or where the
+    container is already the isolation boundary. The test suite detects this
+    case and skips rather than aborting, naming the same fix.
+
+    This distribution has no XS. It does compile one small shared object at
+    install time -- the web-process extension behind "fingerprint" and frame
+    addressing -- needing only a C compiler and the glib/gobject
+    "pkg-config" files, not the WebKit headers. Where that toolchain is
+    absent, the build says so and installs anyway; everything except those
+    two features works, and both then fail with an error that names the
+    missing extension rather than hanging. "available" in
+    EV::WebKit::Fingerprint reports which you have.
+
+EXAMPLES
+    Runnable scripts ship in "eg/". Each is headless under "xvfb-run -a" and
+    visible with a real $DISPLAY.
+
+    "eg/scrape.pl"
+        The commonest shape: navigate, pull structured data out of the DOM,
+        save a screenshot. Start here -- it also shows which accessors are
+        synchronous ("title", "uri") and which take a callback (everything
+        that touches the page).
+
+    "eg/fingerprint.pl"
+        Present as another device, then print what the page actually sees,
+        side by side with what the profile claims. Takes a profile name.
+
+    "eg/element-shot.pl"
+        Screenshot a single element, by cropping a full-page capture to its
+        "box" in EV::WebKit::Element. Uses Imager if it is installed and
+        says what it skipped if not. This is a recipe rather than an API
+        because cropping needs an image library and this distribution does
+        not depend on one for a single method.
+
+        Worth reading for one detail even if you never crop anything: the
+        scale between CSS pixels and captured pixels is measured (image
+        width against "window.innerWidth") rather than read from
+        "window.devicePixelRatio" -- which "fingerprint" spoofs in
+        JavaScript while the real rendering scale is unchanged, so trusting
+        it would put the crop in the wrong place on a spoofed profile.
+
+    "eg/intercept.pl"
+        Log, block, mock and rewrite requests through "on_request". Needs
+        Proxy::Impersonate 0.01 and a real external URI (local addresses
+        bypass the proxy -- see "on_request").
+
+    "eg/browser.pl"
+        A real browser window with chrome, optionally listening on a control
+        socket so another process can drive it while you watch.
+
+    "eg/control.pl"
+        The other end of that socket: drives a running browser from a
+        separate process.
+
+SEE ALSO
+    EV::WebKit::Element, EV, EV::Glib, Glib::Object::Introspection.
+
+    Firefox::Marionette is a similar-spirited Perl browser-automation module
+    (for Firefox, via the Marionette protocol) that was a source of
+    API-design inspiration for this one. The WebKitGTK 6.0 API reference is
+    at <https://webkitgtk.org/reference/webkitgtk/stable/>.
+
+AUTHOR
+    vividsnow
+
+LICENSE
+    This library is free software; you can redistribute it and/or modify it
+    under the same terms as Perl itself.
+

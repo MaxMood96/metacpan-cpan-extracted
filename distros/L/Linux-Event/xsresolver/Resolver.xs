@@ -60,7 +60,7 @@ ler_from_sv(SV *object)
 {
     SV *inner;
     if (!SvROK(object) || !sv_derived_from(object,
-            "Linux::Event::Stream::_Resolver::_Native"))
+            "Linux::Event::_Resolver::_Native"))
         croak("invalid native resolver object");
     inner = SvRV(object);
     return INT2PTR(ler_resolver *, SvIV(inner));
@@ -188,7 +188,7 @@ ler_worker(void *argument)
     return NULL;
 }
 
-MODULE = Linux::Event::Stream::_Resolver    PACKAGE = Linux::Event::Stream::_Resolver::_Native
+MODULE = Linux::Event::_Resolver    PACKAGE = Linux::Event::_Resolver::_Native
 PROTOTYPES: DISABLE
 
 SV *

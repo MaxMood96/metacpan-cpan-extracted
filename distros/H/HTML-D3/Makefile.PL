@@ -14,10 +14,10 @@ if($^O eq 'darwin') {
 WriteMakefile(
 	NAME => 'HTML::D3',
 	VERSION_FROM => 'lib/HTML/D3.pm', # finds $VERSION in the module
-	AUTHOR => 'Nigel Horne <njh@bandsman.co.uk>',
-	ABSTRACT => 'A simple Perl module for generating bar charts using D3.js',
+	AUTHOR => 'Nigel Horne <njh@nigelhorne.com>',
+	ABSTRACT => 'A simple Perl module for generating charts using D3.js',
 	((defined($ExtUtils::MakeMaker::VERSION) && ($ExtUtils::MakeMaker::VERSION >= 6.3002))
-		? ('LICENSE'=> 'GPL')
+		? ('LICENSE'=> 'gpl_2')
 		: ()),
 	META_MERGE => {
 		resources => {
@@ -34,8 +34,11 @@ WriteMakefile(
 	PREREQ_PM => {
 		'ExtUtils::MakeMaker' => 6.64,	# Minimum version for TEST_REQUIRES
 		'JSON::MaybeXS' => 0,	# Required for encoding data to JSON
+		'Object::Configure' => 0.24,
+		'Params::Get' => 0,
 		'Scalar::Util' => 0,
 	}, TEST_REQUIRES => {
+		'IPC::System::Simple' => 0,
 		'Test::DescribeMe' => 0,
 		'Test::HTML::T5' => 0,
 		'Test::Most' => 0,

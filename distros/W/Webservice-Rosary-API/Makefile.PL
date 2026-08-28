@@ -7,7 +7,7 @@ use 5.010;
 use ExtUtils::MakeMaker;
 
 my %WriteMakefileArgs = (
-  "ABSTRACT" => "Perl API client for the Rosary API at https://therosaryapi.cf and https://dailyrosary.cf.",
+  "ABSTRACT" => "Perl API client for the Rosary API at https://the-rosary-api.vercel.app and https://dailyrosary.cf.",
   "AUTHOR" => "oodler <oodler\@cpan.org>",
   "CONFIGURE_REQUIRES" => {
     "ExtUtils::MakeMaker" => 0
@@ -23,6 +23,7 @@ my %WriteMakefileArgs = (
     "Dispatch::Fu" => "1.06",
     "HTTP::Tiny" => 0,
     "JSON" => 0,
+    "Term::ReadKey" => 0,
     "Text::Fold" => 0,
     "Util::H2O::More" => "0.4.2"
   },
@@ -31,11 +32,12 @@ my %WriteMakefileArgs = (
     "File::Temp" => 0,
     "HTTP::Tiny" => 0,
     "JSON" => 0,
+    "Term::ReadKey" => 0,
     "Test::More" => 0,
     "Text::Fold" => 0,
     "Util::H2O::More" => "0.4.2"
   },
-  "VERSION" => "0.1.5",
+  "VERSION" => "0.1.6",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -47,6 +49,7 @@ my %FallbackPrereqs = (
   "File::Temp" => 0,
   "HTTP::Tiny" => 0,
   "JSON" => 0,
+  "Term::ReadKey" => 0,
   "Test::More" => 0,
   "Text::Fold" => 0,
   "Util::H2O::More" => "0.4.2"

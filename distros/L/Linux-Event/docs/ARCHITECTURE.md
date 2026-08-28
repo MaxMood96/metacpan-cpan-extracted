@@ -88,10 +88,17 @@ the replacement.
 
 ## Native registration lifetime
 
-The loop owns native watcher records. `cancel`/`unwatch_fd` removes the epoll
-registration and marks the watcher inactive. Experimental reclamation can defer
-reuse until a returned epoll batch has finished, avoiding reuse while an event
-array may still contain the old `data.ptr`.
+The public opaque handle is a stable registration token that refers to a native
+watcher while it is active. Epoll continues to store the watcher pointer
+directly. `cancel`/`unwatch_fd` removes the epoll registration, marks the token
+inert, and releases its retained Perl state immediately outside dispatch or
+after the active callback returns. Replacing an fd or destroying the Loop also
+makes every obsolete token inert, so native watcher or fd reuse cannot redirect
+an old handle to a new resource.
+
+Experimental watcher reclamation can defer watcher reuse until a returned epoll
+batch has finished, avoiding reuse while an event array may still contain the
+old `data.ptr`.
 
 The performance default keeps aggressive reclaim disabled because the memory
 savings measured in earlier experiments came with a throughput cost.
@@ -229,10 +236,11 @@ a later lifecycle change, not part of the Timer API itself.
 to it. During success, Stream binds native state to the connected fd. The
 application-visible object is never replaced.
 
-Hostname resolution lives in a separate private XS extension. Two lazy native
-workers per Loop run `getaddrinfo` without touching Perl state, copy results to
-a native completion queue, and signal one eventfd. An ordinary raw Loop watcher
-drains that queue on the reactor thread. The connection engine interleaves
+Hostname resolution lives in the shared private `Linux::Event::_Resolver` XS
+extension used by Stream and Datagram. Two lazy native workers per Loop run
+`getaddrinfo` without touching Perl state, copy results to a native completion
+queue, and signal one eventfd. An ordinary raw Loop watcher drains that queue
+on the reactor thread. The connection engine interleaves
 IPv6/IPv4 candidates, starts pending alternatives at 250 ms intervals, and
 transfers only the first successful socket while closing every loser. Numeric,
 Unix, and packed addresses do not start the resolver.

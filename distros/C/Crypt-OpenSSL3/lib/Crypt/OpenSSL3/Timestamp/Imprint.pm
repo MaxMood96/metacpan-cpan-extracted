@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::Timestamp::Imprint;
-$Crypt::OpenSSL3::Timestamp::Imprint::VERSION = '0.010';
+$Crypt::OpenSSL3::Timestamp::Imprint::VERSION = '0.011';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::Timestamp::Imprint - A Timestamp Protocol imprint
 
 =head1 VERSION
 
-version 0.010
+version 0.011
 
 =head1 METHODS
 

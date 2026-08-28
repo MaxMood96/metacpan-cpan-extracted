@@ -18,7 +18,7 @@
 use v5.36;
 
 package App::FuguWeb::Check;
-our $VERSION = '0.1.1';
+our $VERSION = '0.2.0';
 
 use App::FuguWeb;
 use Fugu::File;
@@ -64,7 +64,9 @@ sub pages ($self)
 #	class never fetches one.
 sub external ($self)
 {
-	return sort keys %{ $self->{external} };
+	my @links = sort keys %{ $self->{external} };
+
+	return @links;
 }
 
 # $self->run:

@@ -1,5 +1,8 @@
 Changes file for Speak
 
+1.04    2026-08-27
+        - Added logrotate configuration definition in etc/speak.logrotate for /var/log/speak.log.
+
 1.03    2026-07-30
         - Adjusted the text-splitting algorithm in Speak::_split_text to respect
           word boundaries by splitting on whitespace instead of mid-word.

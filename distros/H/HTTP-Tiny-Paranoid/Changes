@@ -1,3 +1,7 @@
+0.08      2026-08-28 13:33:20+10:00 Australia/Melbourne
+- Protect against DNS rebind attacks via overridable peer address
+- Add a basic test suite
+
 0.07      2017-10-30 17:42:57+11:00 Australia/Melbourne
 - Don't require peer address to match resolved address
 

@@ -157,6 +157,14 @@ state. The loop rechecks pause and close state after every callback.
 EAGAIN creates independent native queue segments. EPOLLOUT drains those segments
 with `writev()` without first concatenating them in Perl.
 
+Before attachment or connection readiness, accepted output remains in the
+Stream's Perl acquisition queue. `pending_bytes` includes those bytes and
+`write()` applies the same high-watermark rule as established native output.
+When acquisition transfers the queue into the transport, a blocked interval
+ends with exactly one `on_drain` after the Stream is ready and pending output
+has reached the low watermark. Producers can therefore use one backpressure
+contract before and after connection establishment.
+
 Crossing `high_watermark` makes `write()` return false even though the bytes are
 accepted. When pending bytes reach `low_watermark` or less, XS clears the
 blocked state before calling `on_drain`, allowing reentrant writes to begin a
@@ -231,6 +239,8 @@ delivered before `transition_to()` returns. Pause state always gates delivery.
 - `close` cancels immediately and may discard queued output.
 - `detach` cancels Stream ownership and returns the still-open filehandle;
   `on_close` does not run because the resource was not closed.
+- An adopted filehandle is made nonblocking and close-on-exec before Stream
+  attaches it to the Loop.
 - `transition_to` changes protocol behavior while preserving ownership and
   connection-local lifecycle state.
 - `transport_name` and `is_transport_ready` expose transport identity and

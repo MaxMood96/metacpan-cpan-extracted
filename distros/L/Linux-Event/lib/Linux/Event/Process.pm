@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.102';
+our $VERSION = '0.103';
 
 use Carp qw(croak);
 use Errno ();
@@ -494,11 +494,13 @@ sub _queue_stdin ($self, $bytes) {
     my $pending = $self->{pending_stdin_bytes} + length($bytes);
     my $limit = $self->{descriptor}{options}{max_pending_stdin};
     if ($limit && $pending > $limit) {
-        $self->_report(Linux::Event::Error->new(
+        my $error = Linux::Event::Error->new(
             type => 'output_limit', operation => 'write_stdin',
             message => "pending stdin would exceed $limit bytes",
             pending_bytes => $pending, limit => $limit,
-        ));
+        );
+        $self->_close_stdin_handle;
+        $self->_report($error);
         return undef;
     }
     push @{ $self->{stdin_queue} }, $bytes;
@@ -866,8 +868,9 @@ Constructor values override these cached defaults for one spawned Process.
 
 Writes immediately when possible and queues the remainder. It returns false
 after accepted output exceeds the high watermark. A configured hard limit
-rejects only the new bytes and reports C<output_limit> through C<on_error>.
-Input must be a byte string.
+closes Process stdin and reports C<output_limit> through C<on_error>. A prefix
+written directly before the unsent remainder exceeds the limit cannot be
+recalled. Input must be a byte string.
 
 =head2 close_stdin
 

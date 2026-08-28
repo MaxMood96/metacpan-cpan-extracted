@@ -1,0 +1,70 @@
+---
+abstract: 'Async WebKitGTK 6.0 (GTK4) browser automation on EV'
+author:
+  - vividsnow
+build_requires:
+  ExtUtils::MakeMaker: '0'
+  Test::More: '0'
+configure_requires:
+  File::ShareDir::Install: '0'
+dynamic_config: 1
+generated_by: 'ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: EV-WebKit
+no_index:
+  directory:
+    - t
+    - inc
+provides:
+  EV::WebKit:
+    file: lib/EV/WebKit.pm
+    version: '0.01'
+  EV::WebKit::Auth:
+    file: lib/EV/WebKit.pm
+  EV::WebKit::Client:
+    file: lib/EV/WebKit/Client.pm
+    version: '0.01'
+  EV::WebKit::Client::Element:
+    file: lib/EV/WebKit/Client/Element.pm
+    version: '0.01'
+  EV::WebKit::Control:
+    file: lib/EV/WebKit/Control.pm
+    version: '0.01'
+  EV::WebKit::Dialog:
+    file: lib/EV/WebKit.pm
+  EV::WebKit::Download:
+    file: lib/EV/WebKit.pm
+  EV::WebKit::Element:
+    file: lib/EV/WebKit/Element.pm
+    version: '0.01'
+  EV::WebKit::FileChooser:
+    file: lib/EV/WebKit.pm
+  EV::WebKit::Fingerprint:
+    file: lib/EV/WebKit/Fingerprint.pm
+    version: '0.01'
+  EV::WebKit::Policy:
+    file: lib/EV/WebKit.pm
+  EV::WebKit::Protocol:
+    file: lib/EV/WebKit/Protocol.pm
+    version: '0.01'
+  EV::WebKit::UserContent:
+    file: lib/EV/WebKit.pm
+recommends:
+  Proxy::Impersonate: '0.01'
+requires:
+  Cpanel::JSON::XS: '0'
+  EV: '0'
+  EV::Glib: '0'
+  File::ShareDir: '0'
+  Glib: '0'
+  Glib::IO: '0'
+  Glib::Object::Introspection: '0'
+  perl: '5.010'
+resources:
+  bugtracker: https://github.com/vividsnow/perl5-ev-webkit/issues
+  repository: https://github.com/vividsnow/perl5-ev-webkit.git
+version: '0.01'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

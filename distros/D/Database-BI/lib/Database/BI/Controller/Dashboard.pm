@@ -1,6 +1,6 @@
 package Database::BI::Controller::Dashboard;
 
-our $VERSION = '0.003.2';
+our $VERSION = '0.004.0';
 
 use Mojo::Base 'Mojolicious::Controller', -strict, -signatures;
 
@@ -1990,6 +1990,69 @@ sub clear_uploads ($self) {
 	});
 
 	$self->render(json => { freed => $freed, count => $count });
+}
+
+# graph_view
+#
+# Purpose: Render a D3.js line chart from the current data pipeline.
+# Entry:   Query params identical to /join (l=, j=, c=, f=, d=) plus:
+#            x=<column>  -- X-axis column name
+#            y=<column>  -- Y-axis column name (values must be numeric)
+#            back=<url>  -- URL for the "Back to table" link (set by JS)
+# Exit:    Emits a complete HTML page (HTML::D3 output post-processed to
+#          inject a toolbar with a back link and SVG/PNG export buttons).
+#          Returns HTTP 400 for missing/invalid column names, 404 if the
+#          data source cannot be opened, 200 with an error message when
+#          no plottable rows exist.
+sub graph_view ($self) {
+	my $x_col = $self->param('x') // '';
+	my $y_col = $self->param('y') // '';
+	my $back  = $self->param('back') // '/';
+
+	return $self->render(text => 'Missing x or y column parameter', status => 400)
+		unless length($x_col) && length($y_col);
+
+	my ($records, $columns) = $self->_run_export_pipeline;
+	return $self->render(text => 'Could not open data source', status => 404)
+		unless $records;
+
+	my %col_set = map { $_ => 1 } @{$columns};
+	return $self->render(text => "Column not found: $x_col", status => 400)
+		unless $col_set{$x_col};
+	return $self->render(text => "Column not found: $y_col", status => 400)
+		unless $col_set{$y_col};
+
+	# Extract [label, value] pairs; skip rows where Y is missing or non-numeric.
+	my @pairs;
+	for my $row (@{$records}) {
+		my $x = $row->{$x_col} // '';
+		my $y = $row->{$y_col} // '';
+		next unless length($x) && length($y);
+		(my $y_num = $y) =~ s/[^\d.\-]//g;
+		next unless $y_num =~ /\A-?\d+(?:\.\d+)?\z/;
+		push @pairs, [$x, $y_num + 0];
+	}
+
+	return $self->render(
+		text   => 'No plottable data: no rows have valid numeric values in the Y column.',
+		status => 200,
+	) unless @pairs;
+
+	require HTML::D3;
+	my $title   = "$y_col vs $x_col";
+	my $snippet = HTML::D3->new(title => $title, width => 1100, height => 580)
+		->render_line_chart_snippet(\@pairs);
+
+	my ($platform, $language) = $self->_resolve_template;
+	$self->render(
+		handler    => 'tt',
+		template   => "$platform/$language/graph",
+		format     => 'html',
+		title      => $title,
+		graph_html => $snippet->{html},
+		back_url   => $back,
+		back_label => 'Back to table',
+	);
 }
 
 1;

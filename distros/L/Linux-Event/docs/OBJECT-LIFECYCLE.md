@@ -163,6 +163,11 @@ handle. It supports readiness-interest changes, accessors, and `cancel()`, but
 it is not a public class hierarchy and must not be subclassed. Use Stream or
 Listener when the resource needs a higher-level ownership policy.
 
+Cancellation, replacement, and Loop destruction make that handle inert.
+Native watcher or fd reuse cannot redirect an obsolete handle to another
+registration. Retained Perl state is released immediately outside dispatch and
+after the active callback returns when cancellation occurs during dispatch.
+
 ## Destruction
 
 Explicit `close()` is recommended because it makes application intent and

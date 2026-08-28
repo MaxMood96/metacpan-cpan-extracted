@@ -112,11 +112,12 @@ Resource exhaustion pauses readiness before typed error delivery.
 
 ## Completed - asynchronous Resolver and Happy Eyeballs
 
-Hostname resolution is mechanically separate from Stream connection policy in
-a private XS extension. Each Loop lazily owns two native resolver workers and
-one eventfd completion queue. Workers never enter Perl. The normal raw Loop
-watch path drains complete candidate collections, cancelled requests discard
-late results, IPv6/IPv4 attempts are staggered by 250 ms, and first-success
+Hostname resolution is mechanically separate from Stream and Datagram socket
+policy in the private `Linux::Event::_Resolver` XS extension. Each Loop lazily
+owns two native resolver workers and one eventfd completion queue. Workers
+never enter Perl. The normal raw Loop watch path drains complete candidate
+collections, cancelled requests discard late results, IPv6/IPv4 attempts are
+staggered by 250 ms, and first-success
 ownership closes all losers. Literal, Unix, and packed addresses bypass the
 resolver. Dedicated integration, cancellation, ordering, and microbenchmark
 coverage protects the boundary.

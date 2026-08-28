@@ -71,7 +71,8 @@ my $client = T::AutomaticClient->connect(
 );
 $CLIENT_ID = refaddr($client);
 is($client->state, 'unattached', 'connecting Stream construction is detached');
-ok(!$client->send('hello'), 'send queues before connection readiness');
+ok($client->send('hello'),
+    'queued pre-connect send below high watermark permits more output');
 is($client->pending_bytes, 6, 'pre-connect queue includes outbound framing');
 is($LOOP->add($client), $client, 'add returns the same Stream');
 is($client->state, 'connecting', 'add starts outbound connection');

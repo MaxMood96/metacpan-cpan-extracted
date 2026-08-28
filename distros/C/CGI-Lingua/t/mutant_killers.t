@@ -874,13 +874,29 @@ subtest 'locale: UA language tag resolves to Locale::Object::Country (1351,1356,
 	# Kill COND_INV_1356: if($candidate =~ /^[a-zA-Z]{2}-([a-zA-Z]{2})$/) → matches 'en-GB'.
 	# Kill COND_INV_1358: if(my $c = $self->_code2country($1)) → resolves 'GB'.
 	# Kill BOOL_NEGATE_1360: return $c → returns the object.
-	local %ENV = (HTTP_USER_AGENT => 'Mozilla/5.0 (en-GB; rv:109.0) test');
-	delete local $ENV{REMOTE_ADDR};
-	my $l = _obj([$LANG_EN]);
-	my $loc = $l->locale();
-	ok(defined($loc),          'locale returns defined object from UA (COND_INV_1351)');
-	ok(blessed($loc),          'locale is a blessed object');
-	is($loc->name(), 'United Kingdom', 'locale resolved to UK (COND_INV_1356,1358,1360)');
+
+	# Skip when Locale::Object's SQLite database is absent (common on Windows CI).
+	# _code2country() returns undef in that case so locale() cannot return a blessed object.
+	my $has_locale_db = eval {
+		require Locale::Object::DB;
+		Locale::Object::DB->new()->lookup(
+			table         => 'country',
+			result_column => 'name',
+			search_column => 'code_alpha2',
+			value         => 'gb'
+		);
+		1;
+	};
+	SKIP: {
+		skip 'Locale::Object database absent', 3 unless $has_locale_db;
+		local %ENV = (HTTP_USER_AGENT => 'Mozilla/5.0 (en-GB; rv:109.0) test');
+		delete local $ENV{REMOTE_ADDR};
+		my $l = _obj([$LANG_EN]);
+		my $loc = $l->locale();
+		ok(defined($loc),          'locale returns defined object from UA (COND_INV_1351)');
+		ok(blessed($loc),          'locale is a blessed object');
+		is($loc->name(), 'United Kingdom', 'locale resolved to UK (COND_INV_1356,1358,1360)');
+	}
 };
 
 subtest 'locale: UA with no matching language tag falls through (COND_INV_1356)' => sub {
@@ -930,13 +946,28 @@ subtest 'locale: GEOIP_COUNTRY_CODE path (COND_INV_1395_2, COND_INV_1397_4, BOOL
 	# Kill COND_INV_1395: if(defined GEOIP_COUNTRY_CODE) → TRUE.
 	# Kill COND_INV_1397: if(my $c = _code2country(lc($1))) → resolves 'GB'.
 	# Kill BOOL_NEGATE_1399: return $c → returns the country object.
-	local %ENV = (GEOIP_COUNTRY_CODE => 'GB');
-	delete local $ENV{REMOTE_ADDR};
-	delete local $ENV{HTTP_USER_AGENT};
-	my $l = _obj([$LANG_EN]);
-	my $loc = $l->locale();
-	ok(defined($loc),          'locale via GEOIP_COUNTRY_CODE (COND_INV_1395)');
-	is($loc->name(), 'United Kingdom', 'GB resolved (COND_INV_1397, BOOL_NEGATE_1399)');
+
+	# Skip when Locale::Object's SQLite database is absent (common on Windows CI).
+	my $has_locale_db = eval {
+		require Locale::Object::DB;
+		Locale::Object::DB->new()->lookup(
+			table         => 'country',
+			result_column => 'name',
+			search_column => 'code_alpha2',
+			value         => 'gb'
+		);
+		1;
+	};
+	SKIP: {
+		skip 'Locale::Object database absent', 2 unless $has_locale_db;
+		local %ENV = (GEOIP_COUNTRY_CODE => 'GB');
+		delete local $ENV{REMOTE_ADDR};
+		delete local $ENV{HTTP_USER_AGENT};
+		my $l = _obj([$LANG_EN]);
+		my $loc = $l->locale();
+		ok(defined($loc),          'locale via GEOIP_COUNTRY_CODE (COND_INV_1395)');
+		is($loc->name(), 'United Kingdom', 'GB resolved (COND_INV_1397, BOOL_NEGATE_1399)');
+	}
 };
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1110,17 +1141,33 @@ subtest '_code2language: debug message varies when _country defined (COND_INV_15
 subtest '_code2country: returns country object regardless of _country state (COND_INV_1546_2)' => sub {
 	# The if($self->{_country}) at 1546 is a debug-trace branch only; the actual
 	# lookup always happens. Kill: verify return value in both states.
-	local %ENV = ();
-	my $l = _obj([$LANG_EN]);
 
-	$l->{_country} = 'gb';
-	my $c1 = $l->_code2country('gb');
-	ok(defined($c1), '_code2country returns object with _country set (COND_INV_1546 true)');
-	ok(blessed($c1), '_code2country is blessed');
+	# Skip when Locale::Object's SQLite database is absent (common on Windows CI);
+	# _code2country() returns undef in that case.
+	my $has_locale_db = eval {
+		require Locale::Object::DB;
+		Locale::Object::DB->new()->lookup(
+			table         => 'country',
+			result_column => 'name',
+			search_column => 'code_alpha2',
+			value         => 'gb'
+		);
+		1;
+	};
+	SKIP: {
+		skip 'Locale::Object database absent', 3 unless $has_locale_db;
+		local %ENV = ();
+		my $l = _obj([$LANG_EN]);
 
-	delete $l->{_country};
-	my $c2 = $l->_code2country('gb');
-	ok(defined($c2), '_code2country returns object without _country set (COND_INV_1546 false)');
+		$l->{_country} = 'gb';
+		my $c1 = $l->_code2country('gb');
+		ok(defined($c1), '_code2country returns object with _country set (COND_INV_1546 true)');
+		ok(blessed($c1), '_code2country is blessed');
+
+		delete $l->{_country};
+		my $c2 = $l->_code2country('gb');
+		ok(defined($c2), '_code2country returns object without _country set (COND_INV_1546 false)');
+	}
 };
 
 # ═══════════════════════════════════════════════════════════════════════════════

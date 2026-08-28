@@ -1,5 +1,42 @@
 Revision history for Database-BI
 
+0.004.0	Thu Aug 27 09:36:22 PM EDT 2026
+    [ Enhancements ]
+    - Date columns now sort chronologically when clicking the column header.
+      The sort routine detects slash-separated dates (M/D/YYYY and D/M/YYYY)
+      and ISO 8601 dates (YYYY-MM-DD) and converts them to a YYYYMMDD integer
+      key before comparing, so 1/5/2017 correctly sorts after 12/27/2016.
+      For slash dates the format is auto-detected by scanning for a component
+      that exceeds 12: if the second component ever exceeds 12 the column is
+      month-first (M/D/YYYY); if the first component exceeds 12 it is
+      day-first (D/M/YYYY); ambiguous columns default to month-first.
+    - Add line graph feature: a "Line graph..." button on any data view opens
+      a column-picker panel where the user selects X and Y axes.  Clicking
+      "Plot" navigates to GET /graph, which opens the same data pipeline as
+      the current view (joins, combines, filters, dedup) and renders an
+      interactive D3.js v7 line chart with hover tooltips via HTML::D3.
+      The graph page includes a toolbar injected into the HTML::D3 output
+      with a "Back to table" link (returning to the exact URL the user was
+      on) and "Export SVG" / "Export PNG" buttons.  SVG is serialized with
+      XMLSerializer; PNG is rasterized via a Canvas element.
+      Non-numeric Y values (currency symbols, commas, etc.) are stripped and
+      the numeric portion is used; rows where Y is still non-numeric after
+      stripping are silently skipped.
+    [ Bug Fixes ]
+    - Drag-and-dropped files whose original filesystem path cannot be
+      determined are no longer added to the "recently opened" list.
+      Previously the temporary .uploads/<tempdir>/ path was recorded as a
+      fallback, producing a useless entry that pointed inside the app's
+      upload cache.  Now, when no file:// URI is available from the
+      DataTransfer text/uri-list data (e.g. Firefox, email attachments),
+      the entry is omitted entirely.  Files whose original path IS
+      recoverable continue to appear in the list under that path.
+    [ Test Improvements ]
+    - Added Transaction 20 subtest covering graph UI polish and date-sort JS:
+      verifies biDateKey helper and monthFirst detection are present, Plot
+      precedes Cancel in the graph panel DOM, chart centering CSS is injected,
+      and the back link carries the correct colour/size/weight.
+
 0.003.2	Wed Aug 26 09:24:45 PM EDT 2026
     [ Bug Fixes ]
     - Large CSV files (> 16 KB) with column names containing spaces — such as

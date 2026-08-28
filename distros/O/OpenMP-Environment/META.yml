@@ -15,12 +15,13 @@ meta-spec:
   version: '1.4'
 name: OpenMP-Environment
 requires:
+  Dispatch::Fu: '1.07'
   Util::H2O: '0.18'
   Validate::Tiny: '0'
 resources:
   homepage: https://github.com/Perl-OpenMP/p5-OpenMP-Environment
   repository: https://github.com/Perl-OpenMP/p5-OpenMP-Environment.git
-version: 1.4.0
+version: 1.5.0
 x_generated_by_perl: v5.40.0
 x_serialization_backend: 'YAML::Tiny version 1.74'
 x_spdx_expression: 'Artistic-1.0-Perl OR GPL-1.0-or-later'

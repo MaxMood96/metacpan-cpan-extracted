@@ -1,5 +1,6 @@
-use strict;
+use v5.20;
 use warnings;
+use experimental 'signatures';
 use Test::More;
 
 use Path::Tiny ();
@@ -7,7 +8,7 @@ use File::ContentStore;
 
 my $CAN_SYMLINK = eval { symlink( "", "" ); 1 };
 
-sub build_work_tree {
+sub build_work_tree ($list) {
 
     # where the data files live
     my $file = Path::Tiny->new( 't', 'files' );
@@ -17,7 +18,7 @@ sub build_work_tree {
     ( $dir{$_} = $dir{tmp}->child($_) )->mkpath for qw( obj src );
 
     # process the mapping
-    for ( split /\n/, shift ) {
+    for ( split /\n/, $list ) {
         my ( $from, $to ) = map Path::Tiny->new($_), split / +/;
         $to ||= $from;
         $dir{src}->child( $to->parent )->mkpath;
@@ -25,6 +26,38 @@ sub build_work_tree {
     }
 
     return %dir;
+}
+
+# should pass when $dir has just been linked in
+sub stats_summary_ok ( $store, $dir ) {
+    my $check = {
+        map +( $_ => 0 ),
+        qw( store_count store_total linked_count linked_total )
+    };
+    $store->path->visit(
+        sub {
+            return unless -f;
+            $check->{store_count}++;
+            $check->{store_total} += -s;
+            1;
+        },
+        { recurse => 1 }
+    );
+    $dir->visit(
+        sub {
+            return unless -f;
+            $check->{linked_count}++;
+            $check->{linked_total} += -s;
+            1;
+        },
+        { recurse => 1 }
+    );
+
+    # invariants for linked files
+    # 1. [store] sum( count * ( nlinks - 1 ) == [dir] count( files )
+    # 2. [store] sum( total * ( nlinks - 1 ) == [dir] sum( size )
+    is_deeply( $store->stats_summary, $check,
+        "stats_summary for $dir: $check->{linked_count} files, $check->{linked_total} bytes" );
 }
 
 # copy some files to src
@@ -44,10 +77,21 @@ TREE
       or diag "Failed to create a hard link in $tmp: $!.";
 }
 
-# create the ContentRepo
+# create the ContentStore
 my $store = File::ContentStore->new( $dir{obj} );
 isa_ok( $store, 'File::ContentStore' );
 is_deeply( $store->inode, {}, 'Empty inode cache' );
+is_deeply( $store->stats, {}, 'Empty store stats' );
+is_deeply(
+    $store->stats_summary,
+    {
+        store_count  => 0,
+        store_total  => 0,
+        linked_count => 0,
+        linked_total => 0,
+    },
+    'Empty store stats summary'
+);
 
 # add all files in src
 $store->link_dir( $dir{src} );
@@ -76,8 +120,53 @@ is(
     'inode added to the cache'
 );
 
+# stats
+is_deeply(
+    $store->stats,
+    {
+        2 => {
+            count => 2,       # unique file, twice
+            total => 53021,   # total size (11560 + 41461)
+        },
+        3 => {
+            count => 1,       # 2 identical files, once
+            total => 51519,
+        }
+    },
+    'stats for ' . $store->path
+);
+stats_summary_ok( $store, $dir{src} );
+
+# add a new file to the source directory
+my $orig = $dir{src}->child( 'git-fusion.png' );
+my $copy = $dir{src}->child( 'git-fustion-copy.png' );
+$orig->copy( $copy );
+
+# the inodes are different
+isnt( $copy->stat->ino, $orig->stat->ino, 'inode of a new copy is different' );
+
+# add the new file to the store
+$store->link_dir( $dir{src} );
+is( $copy->stat->ino, $orig->stat->ino, 'inode of the copy is now identical' );
+
+# stat
+is_deeply(
+    $store->stats,
+    {
+        2 => {
+            count => 1,       # unique file, twice
+            total => 41461,
+        },
+        3 => {
+            count => 2,       # 2 identical files, once
+            total => 63079,
+        }
+    },
+    'stats for ' . $store->path
+);
+
 # fsck
-is_deeply( $store->fsck, {}, 'fsck' );
+is_deeply( $store->fsck, {}, 'fsck: empty' );
 
 # fsck errors
 unlink $dir{src}->child('IMG_0025.JPG');    # orphan file
@@ -113,7 +202,7 @@ is_deeply(
             ),
         ] )x!! $CAN_SYMLINK,
     },
-    'fsck, 1 empty, 1 orphan, 1 corrupted'
+    'fsck: 1 empty, 1 orphan, 1 corrupted'
 );
 
 # collision tests
@@ -167,12 +256,14 @@ is( $dir{src}->child('md5-1')->stat->mode & 00100,
 %dir = build_work_tree( 'img-01.jpg' );
 $store = File::ContentStore->new( $dir{obj} );
 is_deeply( $store->inode, {}, 'Empty inode cache' );
+is_deeply( $store->stats, {}, 'Empty store stats' );
 
 my $ino = $dir{src}->child('img-01.jpg')->stat->ino;
 link( $dir{src}->child('img-01.jpg'), $dir{src}->child('img-02.jpg') );
 is( $dir{src}->child('img-02.jpg')->stat->ino,
     $ino, "Files hard linked to $ino" );
 
+# new content added to the store keeps the original inode number
 $store->link_dir( $dir{src} );
 is( $_->stat->ino, $ino, "$_ linked to inode $ino" )
   for map $dir{src}->child("img-0$_.jpg"), 1 .. 2;
@@ -181,6 +272,7 @@ is_deeply(
     { $ino => '2c/37ddd32a282aba524d0b6b211125f33cf251e7' },
     'inode cache filled as expected'
 );
+stats_summary_ok( $store, $dir{src} );
 
 # a new store on an existing content directory
 $store = File::ContentStore->new( $dir{obj} );

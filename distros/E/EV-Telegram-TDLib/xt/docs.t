@@ -29,6 +29,9 @@ for my $f ($PM, glob 'lib/EV/Telegram/TDLib/*.pm') {
     # file every iteration, resetting pos() and looping forever
     my $src = slurp($f);
     $have{$1} = 1 while $src =~ /^sub ([a-z_]\w*)/mg;
+    # Bots.pm defines three getters through the symbol table, so a ^sub scan
+    # cannot see them and documenting a call to one would look like a typo
+    $have{$1} = 1 while $src =~ /\[\s*(\w+)\s*=>\s*'get\w+'\s*\]/g;
 }
 my %called;
 for my $f ($PM, $BOOK) {

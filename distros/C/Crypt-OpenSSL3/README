@@ -27,21 +27,29 @@ DESCRIPTION
 
 RECENT CHANGES
 
-    Changes for version 0.010 (2026-07-04)
+    Changes for version 0.011 (2026-08-27)
 
-      * Change license to Apache 2.0
+      * Allow an undefined message digest in MD::Context->verify_init
 
-      * Add support for decoding der from/to strings.
+      * Decode UTF8 data coming from ASN1 properly
 
-      * Add ASN1::Value for generic ASN1 values
+      * Add Encoder and Decoder classes for PKey
 
-      * Add get_all_certs to X509::Store
+      * Fix error_string method to actually return a valid value
 
-      * Add PEM helper functions
+      * Add SKey support
 
-      * Add EDIPartyName class
+      * Add algorithm parameter support to X509::Algorithm
 
-      * Fix various memory management issues
+      * Add BasicConstraints class
+
+      * Remove ctrl methods from MD and Cipher contexts
+
+      * Remove typed param methods from PKey
+
+      * Invert return value of set_alpn_protos
+
+      * Always add null byte to buffers
 
     See the Changes file for more details.
 

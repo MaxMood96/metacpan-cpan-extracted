@@ -1,5 +1,30 @@
 ### Unreleased
 
+### 2.20260827
+
+- feat(dmarc_httpd): post_max setting, defaults to 10MB
+- perf: lazy load the reporting stack, 40% faster startup
+- chore(deps): drop Regexp::Common, CGI
+- chore(deps): drop Socket6, Net::IP, LWP, Net::SSLeay, Net::SMTPS, CPAN
+- chore(deps): optional IO::Socket::SSL for imap_fetch
+- fix(Build.PL): smtp_sending, imap_fetch missing requires
+- feat(dmarc_httpd): rebuild the viewer, drop jquery and DataTables
+- feat(dmarc_httpd): add overview, sources and reports views
+- feat(store): aggregate queries for volume, alignment and sources
+- fix(dmarc_httpd): reject path traversal in serve_file
+- perf(store): index report.begin and report_record.source_ip
+- fix(sender): try a smart host on 25, 587, then cleartext
+- fix(sender): try every MX encrypted, then in the clear
+- fix(sender): never offer credentials over opportunistic TLS
+- fix(sender): stop the ladder when the report alarm fires
+- fix(sender): retire reports failing with non-Failure errors
+- fix(sender): keep only the smart host route that worked
+- fix(sender): record send errors from every route tried
+- feat(sender): add smtp.smartport and smtp.smartssl
+- doc(dmarc_send_reports): document smart host routing
+- chore: require Email::Sender::Simple 2.000
+- feat(dmarc_httpd): opt-in reverse DNS hostnames beneath source IPs #309
+
 ### 2.20260724
 
 - add <prefix>/etc/mail to search path

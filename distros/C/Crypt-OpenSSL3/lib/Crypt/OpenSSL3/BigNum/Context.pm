@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::BigNum::Context;
-$Crypt::OpenSSL3::BigNum::Context::VERSION = '0.010';
+$Crypt::OpenSSL3::BigNum::Context::VERSION = '0.011';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::BigNum::Context - A context for complex calculations on Big Num
 
 =head1 VERSION
 
-version 0.010
+version 0.011
 
 =head1 METHODS
 

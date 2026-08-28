@@ -28,6 +28,8 @@
   <button class="btn-export-open" id="btn-export-open" type="button">&#x2193; Export&hellip;</button>
   <button class="btn-refresh" id="btn-refresh" type="button"
           title="Reload the data from disc - use this after the source file has changed">&#x21BB; Refresh</button>
+  <button class="btn-graph" id="btn-graph" type="button"
+          title="Plot the current data as a line chart - choose the X and Y axes">&#x1F4C8; Line graph&hellip;</button>
   [%- END -%]
   <button class="btn-dedup[% IF dedup %] btn-dedup--active[% END %]" id="btn-dedup" type="button"
           title="Remove duplicate rows from the view and from any export">[% IF dedup %]Show duplicates[% ELSE %]Hide duplicates[% END %]</button>
@@ -181,6 +183,57 @@
     </div>
   </form>
 </div>
+
+<div class="graph-panel" id="graph-panel" hidden>
+  <form id="graph-form" method="get" action="/graph">
+    <input type="hidden" name="l" value="[% left_spec | html %]">
+    [%- FOREACH jspec IN current_joins -%]
+    <input type="hidden" name="j" value="[% jspec | html %]">
+    [%- END -%]
+    [%- FOREACH cspec IN combine_specs -%]
+    <input type="hidden" name="c" value="[% cspec | html %]">
+    [%- END -%]
+    [%- FOREACH fs IN filter_specs -%]
+    <input type="hidden" name="f" value="[% fs | html %]">
+    [%- END -%]
+    [%- IF dedup -%]
+    <input type="hidden" name="d" value="1">
+    [%- END -%]
+    <input type="hidden" name="back" id="graph-back-inp" value="">
+
+    <h3 class="graph-panel-title">&#x1F4C8; Line graph</h3>
+
+    <p class="graph-panel-desc">Choose the columns to use as axes, then click Plot to open the chart.</p>
+
+    <div class="graph-fields-row">
+      <div class="join-field">
+        <label for="graph-x-sel">X axis (horizontal)</label>
+        <select id="graph-x-sel" name="x" required>
+          <option value="">&#x2014; select column &#x2014;</option>
+          [%- FOREACH col IN columns -%]
+          <option value="[% col | html %]">[% col | html %]</option>
+          [%- END -%]
+        </select>
+      </div>
+      <div class="join-field">
+        <label for="graph-y-sel">Y axis (vertical, must be numeric)</label>
+        <select id="graph-y-sel" name="y" required>
+          <option value="">&#x2014; select column &#x2014;</option>
+          [%- FOREACH col IN columns -%]
+          <option value="[% col | html %]">[% col | html %]</option>
+          [%- END -%]
+        </select>
+      </div>
+      <div class="graph-btn-col">
+        <span class="graph-btn-spacer"></span>
+        <div class="graph-btn-row">
+          <button type="submit" id="btn-do-graph" class="btn-primary" disabled>Plot</button>
+          <button type="button" id="btn-cancel-graph" class="btn-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
 [%- END -%]
 
 [% IF records.size %]
@@ -255,19 +308,60 @@
 
   // --- Sort ---
 
+  // Returns a YYYYMMDD integer sort key for recognised date strings, else null.
+  // Handles YYYY-MM-DD (ISO) and M/D/YYYY or D/M/YYYY slash formats.
+  // monthFirst: true = M/D/YYYY, false = D/M/YYYY.
+  function biDateKey(s, monthFirst) {
+    var m;
+    m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return +m[1] * 10000 + +m[2] * 100 + +m[3];
+    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m) {
+      var p1 = +m[1], p2 = +m[2], yr = +m[3];
+      return monthFirst ? yr * 10000 + p1 * 100 + p2
+                        : yr * 10000 + p2 * 100 + p1;
+    }
+    return null;
+  }
+
   function sortByCol(idx, asc) {
-    var tbody   = table.tBodies[0];
-    var rows    = Array.from(tbody.rows);
-    var numeric = rows.every(function (r) {
-      var v = r.cells[idx] ? r.cells[idx].textContent.trim() : '';
-      return v === '' || !isNaN(Number(v));
+    var tbody    = table.tBodies[0];
+    var rows     = Array.from(tbody.rows);
+    var nonEmpty = rows.map(function (r) {
+      return r.cells[idx] ? r.cells[idx].textContent.trim() : '';
+    }).filter(function (v) { return v !== ''; });
+
+    // Detect date columns: every non-empty value must match a known date pattern.
+    var isDate = nonEmpty.length > 0 && nonEmpty.every(function (v) {
+      return /^\d{4}-\d{2}-\d{2}$/.test(v) || /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(v);
     });
+    var monthFirst = true;
+    if (isDate) {
+      // Auto-detect M/D/YYYY vs D/M/YYYY: scan for a value that disambiguates.
+      for (var di = 0; di < nonEmpty.length; di++) {
+        var dm = nonEmpty[di].match(/^(\d{1,2})\/(\d{1,2})\/\d{4}$/);
+        if (!dm) continue;
+        if (+dm[1] > 12) { monthFirst = false; break; }
+        if (+dm[2] > 12) { monthFirst = true;  break; }
+      }
+    }
+
+    var numeric = !isDate && nonEmpty.length > 0 && nonEmpty.every(function (v) {
+      return !isNaN(Number(v));
+    });
+
     rows.sort(function (a, b) {
       var av  = a.cells[idx] ? a.cells[idx].textContent.trim() : '';
       var bv  = b.cells[idx] ? b.cells[idx].textContent.trim() : '';
-      var cmp = numeric
-        ? (av === '' ? -Infinity : Number(av)) - (bv === '' ? -Infinity : Number(bv))
-        : av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
+      var cmp;
+      if (isDate) {
+        var ak = biDateKey(av, monthFirst), bk = biDateKey(bv, monthFirst);
+        cmp = (ak === null ? -Infinity : ak) - (bk === null ? -Infinity : bk);
+      } else if (numeric) {
+        cmp = (av === '' ? -Infinity : Number(av)) - (bv === '' ? -Infinity : Number(bv));
+      } else {
+        cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
+      }
       return asc ? cmp : -cmp;
     });
     rows.forEach(function (r) { tbody.appendChild(r); });
@@ -748,6 +842,82 @@
 
 <script>
 // ---------------------------------------------------------------------------
+// Graph panel — line chart of X vs Y using HTML::D3 / D3.js
+// ---------------------------------------------------------------------------
+(function () {
+  var btnOpen   = document.getElementById('btn-graph');
+  var panel     = document.getElementById('graph-panel');
+  if (!btnOpen || !panel) return;
+
+  var btnCancel = document.getElementById('btn-cancel-graph');
+  var btnDo     = document.getElementById('btn-do-graph');
+  var xSel      = document.getElementById('graph-x-sel');
+  var ySel      = document.getElementById('graph-y-sel');
+  var backInp   = document.getElementById('graph-back-inp');
+
+  var otherPanels = ['join-panel', 'combine-panel', 'export-panel'].map(function (id) {
+    return document.getElementById(id);
+  }).filter(Boolean);
+
+  function checkPlot() {
+    btnDo.disabled = !(xSel.value && ySel.value);
+  }
+
+  // Returns true if v looks like a date (excluded from numeric Y axis).
+  function isDateVal(v) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(v) || /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(v);
+  }
+
+  // Returns true if v is plottable as a number (mirrors the server's strip logic).
+  function isNumericVal(v) {
+    if (v === '') return true;
+    var s = v.replace(/[^\d.\-]/g, '');
+    return s !== '' && /^-?\d+(?:\.\d+)?$/.test(s);
+  }
+
+  // Rebuild the Y-axis select to show only columns whose non-empty values are
+  // all numeric (after stripping currency symbols etc.) and not date-shaped.
+  function buildYSelect() {
+    var tbl = document.querySelector('table[data-table]') || document.querySelector('table');
+    if (!tbl || !tbl.tHead || !tbl.tBodies[0]) return;
+    var headers = Array.from(tbl.tHead.rows[0].cells);
+    var rows    = Array.from(tbl.tBodies[0].rows);
+    var prev    = ySel.value;
+    while (ySel.options.length > 1) ySel.remove(1);
+    headers.forEach(function (th, idx) {
+      var name  = th.textContent.trim();
+      var vals  = rows.map(function (r) {
+        return r.cells[idx] ? r.cells[idx].textContent.trim() : '';
+      }).filter(function (v) { return v !== ''; });
+      if (vals.length === 0) return;
+      if (vals.every(isDateVal)) return;
+      if (!vals.every(isNumericVal)) return;
+      var opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      if (name === prev) opt.selected = true;
+      ySel.appendChild(opt);
+    });
+  }
+
+  btnOpen.addEventListener('click', function () {
+    otherPanels.forEach(function (p) { p.hidden = true; });
+    backInp.value = window.location.href;
+    buildYSelect();
+    panel.hidden  = !panel.hidden;
+    checkPlot();
+  });
+
+  btnCancel && btnCancel.addEventListener('click', function () {
+    panel.hidden = true;
+  });
+
+  xSel.addEventListener('change', checkPlot);
+  ySel.addEventListener('change', checkPlot);
+}());
+</script>
+
+<script>
+// ---------------------------------------------------------------------------
 // Export panel — save to a user-chosen directory on the server filesystem
 // ---------------------------------------------------------------------------
 (function () {
@@ -989,19 +1159,20 @@
       var filePath = el.dataset.path;
       var fileHref = '/open?path=' + encodeURIComponent(filePath);
       if (/[/\\]\.uploads[/\\]/.test(filePath)) {
-        // Try to replace the temp .uploads/ path with the original local path
-        // that the drop handler stashed in sessionStorage via text/uri-list.
-        // Not all browsers/file-managers supply this (Firefox, some OSes omit
-        // it), so we fall through to the upload path rather than skip the
-        // entry — an imperfect link is better than no entry at all.
+        // Drag-and-drop uploads land under a random .uploads/ temp path.
+        // Only add to recently opened when the drop handler stashed the
+        // original file:// URI in sessionStorage (from text/uri-list).
+        // If that stash is absent (Firefox, email attachment, etc.) there
+        // is no stable path to record, so skip the entry entirely rather
+        // than adding a useless .uploads/ link.
+        var origPath = null;
         try {
-          var origPath = sessionStorage.getItem('bi:pending-original-path');
+          origPath = sessionStorage.getItem('bi:pending-original-path');
           sessionStorage.removeItem('bi:pending-original-path');
-          if (origPath) {
-            filePath = origPath;
-            fileHref = '/open?path=' + encodeURIComponent(origPath);
-          }
         } catch (ex) {}
+        if (!origPath) { return; }
+        filePath = origPath;
+        fileHref = '/open?path=' + encodeURIComponent(origPath);
       }
       var entry = {
         name:       el.dataset.name,

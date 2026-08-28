@@ -43,7 +43,10 @@ $loop->add($stream);
 
 The Stream accepts `write()` and `send()` before it is ready. Pending output is
 bounded by the Stream class's normal `max_pending_bytes` policy and is flushed
-in order after establishment.
+in order after establishment. Its `write()` result, `pending_bytes`, and
+`is_write_blocked` use the normal high-watermark contract during acquisition;
+if that interval blocks, one `on_drain` follows readiness after output reaches
+the low watermark.
 
 ## Address modes
 

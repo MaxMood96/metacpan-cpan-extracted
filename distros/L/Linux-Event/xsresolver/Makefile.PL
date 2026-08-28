@@ -4,9 +4,9 @@ use Config;
 use ExtUtils::MakeMaker;
 
 WriteMakefile(
-    NAME             => 'Linux::Event::Stream::_Resolver',
-    VERSION_FROM     => '../lib/Linux/Event/Stream.pm',
-    ABSTRACT         => 'Private native asynchronous resolver for Linux::Event::Stream',
+    NAME             => 'Linux::Event::_Resolver',
+    VERSION_FROM     => '../lib/Linux/Event/_Resolver.pm',
+    ABSTRACT         => 'Private asynchronous resolver for Linux::Event sockets',
     AUTHOR           => 'Joshua S. Day <hax@cpan.org>',
     LICENSE          => 'perl_5',
     MIN_PERL_VERSION => '5.036000',

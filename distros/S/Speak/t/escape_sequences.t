@@ -14,13 +14,19 @@ use Speak qw(speak);
 
 our @captured_text;
 
-# Mock the internal function
-no warnings 'redefine';
-*Speak::_fetch_mp3 = sub {
-  my ($ua, $text, $lang) = @_;
-  push @captured_text, $text;
-  return undef;    # Return undef so we don't try to save MP3s
-};
+# Mock the internal functions
+{
+  ## no critic (TestingAndDebugging::ProhibitNoWarnings)
+  no warnings 'redefine';
+  ## use critic
+  *Speak::_fetch_mp3 = sub {
+    my ($ua, $text, $lang) = @_;
+    push @captured_text, $text;
+    return;    # Return nothing so we don't try to save MP3s
+  };
+}
+@Speak::CONFIG_PATHS = ();
+delete $ENV{SPEAK_PERSONA};
 
 sub run_speak_test {
   my ($input, $expected_parts, $name) = @_;
@@ -37,6 +43,8 @@ sub run_speak_test {
   $full_captured =~ s/^\s+|\s+$//g;
 
   is ($full_captured, $expected_parts, $name);
+
+  return;
 } ## end sub run_speak_test
 
 plan tests => 6;

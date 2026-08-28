@@ -1,6 +1,6 @@
 package App::dozo;
 
-our $VERSION = "1.00";
+our $VERSION = "1.01";
 
 1;
 =encoding utf-8
@@ -40,7 +40,7 @@ dozo -I IMAGE [ options ] [ command ... ]
 
 =head1 VERSION
 
-Version 1.00
+Version 1.01
 
 =head1 USAGE
 
@@ -89,7 +89,8 @@ To install the latest version from GitHub:
 Alternatively, you can simply place C<dozo> and C<getoptlong.sh> in
 your PATH.
 
-B<Dôzo> requires Bash 4.3 or later.
+B<Dôzo> requires Bash 4.4 or later, as does the C<getoptlong.sh>
+script it uses.
 
 =head1 DESCRIPTION
 
@@ -118,6 +119,9 @@ for option parsing.
 
 If you are working in a git environment, the git top directory is
 automatically mounted. Otherwise the current directory is mounted.
+When the current directory is under the git top directory, the
+corresponding subdirectory in the container is used as the working
+directory.
 
 =item B<Live Container>
 
@@ -133,19 +137,22 @@ services (DeepL, OpenAI, Anthropic, Perplexity).
 
 =item B<Flexible Mounting>
 
-Various mount options: current directory (C<-W>), home directory
-(C<-H>), additional volumes (C<-V>), read-only mode (C<-R>), or no
-mount (C<-U>).
+The directory is mounted on F</work> in the container, and it is used
+as the working directory. Various mount options are available: current
+directory (C<-W>), home directory (C<-H>), additional volumes (C<-V>),
+read-only mode (C<-R>), or no mount (C<-U>).
 
 =item B<X11 Support>
 
-When C<DISPLAY> is set, the host IP is automatically detected and
-passed to the container, enabling GUI applications.
+When C<DISPLAY> is set, the address of the interface used for the
+default route is detected and passed to the container as C<DISPLAY>,
+enabling GUI applications.
 
 =item B<Configuration File>
 
-Use C<.dozorc> to set default options. Searched in current directory,
-git top directory, and home directory.
+Use C<.dozorc> to set default options. Loaded from the home directory,
+the git top directory, and the current directory, in that order, so
+that a closer file takes precedence.
 
 =item B<Standalone Operation>
 
@@ -158,11 +165,23 @@ C<getoptlong.sh> in your C<PATH> manually.
 
 =head1 OPTIONS
 
+Repeatable options (B<-E>, B<-V>, B<-P> and B<-O>) can be given more
+than once, and a single value is also split into multiple elements at
+spaces, tabs and commas.  Thus C<-P 8000,9000> gives two port mappings,
+and B<-O> with the value C<--memory 2g> gives two docker options.  As a
+consequence, a value containing a space cannot be given as a single
+element: B<-E> with the value C<MSG=hello world> defines two variables,
+C<MSG=hello> and C<world>.
+
 =over 7
 
 =item B<-h>, B<--help>
 
 Show help message.
+
+=item B<--version>
+
+Show version number.
 
 =item B<-d>, B<--debug>
 
@@ -174,7 +193,15 @@ Enable trace mode (set -x).
 
 =item B<-q>, B<--quiet>
 
-Quiet mode.
+Quiet mode. Suppress the informational line printed to standard error
+before the container is started:
+
+    docker run image=alpine env=13 command=echo hi
+
+It summarizes the image name, the number of environment variables to be
+inherited, the container name (with B<-L>) and the command to be
+executed. This line is shown regardless of B<-n>; use B<-d> to see the
+whole docker command line instead.
 
 =item B<-n>, B<--dryrun>
 
@@ -189,13 +216,14 @@ it in F<.dozorc> so you don't have to type it every time.
 =item B<-D>, B<--default>
 
 Use the default Docker image. If C<DOZO_DEFAULT_IMAGE> environment
-variable is set, use that image. Otherwise, use
-C<tecolicom/xlate:VERSION> where VERSION is the current Dôzo version.
-See L</DEFAULT IMAGE> section for details about the default image.
+variable is set, use that image. Otherwise, use C<tecolicom/xlate>,
+that is, its C<latest> tag. See L</DEFAULT IMAGE> section for details
+about the default image.
 
 =item B<-E> I<name>[=I<value>], B<--env>=I<name>[=I<value>]
 
-Specify environment variable to inherit. Repeatable.
+Specify environment variable to pass to the container. If I<value> is
+omitted, the value is inherited from the host environment. Repeatable.
 
 =item B<-W>, B<--mount-cwd>
 
@@ -203,13 +231,8 @@ Mount current working directory.
 
 =item B<-H>, B<--mount-home>
 
-Mount home directory.
-
-=item B<-V> I<path>, B<-V> I<from>:I<to>, B<--volume>=I<from>:I<to>
-
-Specify additional directory to mount. If only I<path> is given
-(without C<:>), it is mounted to the same path in the container.
-Repeatable.
+Mount home directory. The C<HOME> environment variable in the
+container is set to the mount point (F</work>).
 
 =item B<-U>, B<--unmount>
 
@@ -217,16 +240,27 @@ Do not mount any directory.
 
 =item B<--mount-mode>=I<mode>
 
-Set mount mode. I<mode> is either C<rw> (read-write, default) or C<ro>
-(read-only).
+Set mount mode of the automatically mounted directory. I<mode> is
+either C<rw> (read-write, default) or C<ro> (read-only). This does not
+affect volumes given by B<-V>; append C<:ro> to them instead.
 
 =item B<-R>, B<--mount-ro>
 
 Mount directory as read-only. Shortcut for C<--mount-mode=ro>.
 
+=item B<-V> I<path>, B<-V> I<from>:I<to>, B<--volume>=I<from>:I<to>
+
+Specify additional directory to mount. If only I<path> is given
+(without C<:>), it is mounted to the same path in the container; a
+relative path is resolved against the current directory. Repeatable.
+
 =item B<-B>, B<--batch>
 
 Run in batch mode (non-interactive).
+
+=item B<-L>, B<--live>
+
+Use live (persistent) container.
 
 =item B<-N> I<name>, B<--name>=I<name>
 
@@ -236,24 +270,28 @@ Specify container name explicitly.
 
 Kill and remove existing container.
 
-=item B<-L>, B<--live>
-
-Use live (persistent) container.
-
 =item B<-P> I<port>, B<-P> I<host>:I<container>, B<--port>=I<host>:I<container>
 
 Specify port mapping. If only I<port> is given (without C<:>), it is
 mapped to the same port in the container (e.g., C<-P 8000> becomes
-C<8000:8000>). Repeatable.
+C<8000:8000>, and C<-P 8000/udp> becomes C<8000:8000/udp>).
+Repeatable.
 
 =item B<-O> I<option>, B<--other>=I<option>
 
 Specify additional docker options. Repeatable.
 
-Note: Spaces and commas in option values are treated as delimiters and
-will split the value into multiple elements.
-
 =back
+
+=head1 INTERACTIVE MODE
+
+Unless the B<-B> (batch) option is given, the container is started
+with Docker's C<--interactive> option, and C<--tty> is added as well
+when the standard input is a terminal (TTY). The same rule is applied
+to C<docker exec> in live container mode.
+
+This allows seamless interactive use when attaching to containers or
+running interactive commands.
 
 =head1 LIVE CONTAINER
 
@@ -281,9 +319,10 @@ attach to the container using C<docker attach>.
 
 Unpause the container with C<docker unpause>, then proceed as above.
 
-=item 4. B<Container exists but is exited>
+=item 4. B<Container exists but is not started>
 
-Start the container with C<docker start>, then proceed as above.
+If the container is in the C<created> or C<exited> state, start it
+with C<docker start>, then proceed as above.
 
 =back
 
@@ -319,6 +358,9 @@ If no command is given, attaches to the container's main process.
     dozo -I myimage -L ls -la
 
 Runs the command in the existing container using C<docker exec>.
+Environment variables are passed just as for a new container, and when
+the current directory is under the mounted directory, the
+corresponding subdirectory is used as the working directory.
 
 =item B<Kill and recreate container>
 
@@ -334,22 +376,6 @@ a new one. Useful when you need a fresh container state.
 Without C<-L>, the container is removed and the command exits.
 
 =back
-
-=head2 Interactive Mode
-
-In live container mode, interactive mode (C<-i> and C<-t> flags for
-Docker) is automatically enabled when:
-
-=over 4
-
-=item * Standard input is a terminal (TTY)
-
-=item * The C<-B> (batch) option is not specified
-
-=back
-
-This allows seamless interactive use when attaching to containers or
-running interactive commands.
 
 =head1 CONFIGURATION FILE
 
@@ -378,7 +404,28 @@ You can use any command line option in the configuration file:
     -E CUSTOM_VAR=value
     -V /data:/data
 
-Lines starting with C<#> are treated as comments.
+Lines starting with C<#> are treated as comments.  A C<#> in the middle
+of a line does B<not> start a comment, and a trailing comment is not
+supported.
+
+Each line is split into arguments in the same way as the shell does, so
+quotation marks have to be balanced.  A line which cannot be parsed is
+an error, and B<Dôzo> stops after showing the file name, the line
+number and the line itself.
+
+Write nothing but options in the configuration file.  Its contents are
+placed before the command line arguments, and option parsing stops at
+the first argument which is not an option.  Everything after it,
+including options given on the command line, is passed to the container
+as the command to execute.  This is the rule which lets you write
+C<dozo -I alpine ls -la> without C<-la> being taken as an option of
+B<Dôzo>, but it also means that a stray word in F<.dozorc> disables
+option parsing altogether.  With a trailing comment like this:
+
+    -I alpine  # use alpine
+
+C<dozo -n ls> does not show the docker command line but runs
+C<# use alpine -n ls> in the container.
 
 =head1 DOCKER-IN-DOCKER
 
@@ -507,8 +554,8 @@ and PowerPoint (.pptx) files directly with git
 =item C<DOZO_DEFAULT_IMAGE>
 
 Specifies the default Docker image used when C<-D> (C<--default>) option
-is given. If not set, C<tecolicom/xlate:VERSION> is used where VERSION
-is the current Dôzo version.
+is given. If not set, C<tecolicom/xlate> is used, which resolves to its
+C<latest> tag.
 
 =back
 

@@ -7,7 +7,7 @@ use Getopt::Long qw(GetOptions);
 use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 
 use Linux::Event::Loop;
-use Linux::Event::Stream::_Resolver ();
+use Linux::Event::_Resolver ();
 
 my $requests = 1_000;
 my $repeats = 5;
@@ -55,7 +55,7 @@ sub median (@values) {
 my (@rates, @latencies);
 for (1 .. $repeats) {
     my $loop = Linux::Event::Loop->new;
-    my $resolver = Linux::Event::Stream::_Resolver->for_loop($loop);
+    my $resolver = Linux::Event::_Resolver->for_loop($loop);
     my $run = {
         loop => $loop, requests => $requests, completed => 0,
         started => {}, latencies => [],

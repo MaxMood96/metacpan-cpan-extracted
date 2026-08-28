@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.102';
+our $VERSION = '0.103';
 
 use Carp qw(croak);
 use Config ();
@@ -86,6 +86,7 @@ sub _owner_state ($self, $method) {
 }
 
 sub _attach_to_loop ($self, $loop) {
+    croak 'add(): Wakeup is not unattached' if $self->{terminal};
     my $state = $self->_owner_state('add');
     croak 'add(): Wakeup is not unattached'
         if $state->{state} ne 'unattached' || $state->{loop};
@@ -134,6 +135,7 @@ sub cancel ($self) {
     $state->{loop} = undef;
     $state->{data} = undef;
     $state->{state} = 'cancelled';
+    delete $OWNER_STATE{ $self->{id} };
     $self->{terminal} = 1;
     return $self;
 }
@@ -172,7 +174,6 @@ sub CLONE ($class) {
 }
 
 sub DESTROY ($self) {
-    return if !defined($self->{fd});
     my $interpreter = eval { _interpreter_id() };
     my $is_owner = !$self->{cloned_signal_handle}
         && defined($interpreter)
@@ -187,7 +188,7 @@ sub DESTROY ($self) {
         if !$live || refaddr($live) == refaddr($self);
     return if !defined($interpreter)
         || $self->{handle_interpreter} != $interpreter;
-    eval { _close_fd(delete $self->{fd}); 1 };
+    eval { _close_fd(delete $self->{fd}); 1 } if defined $self->{fd};
     return;
 }
 

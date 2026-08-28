@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::KDF::Context;
-$Crypt::OpenSSL3::KDF::Context::VERSION = '0.010';
+$Crypt::OpenSSL3::KDF::Context::VERSION = '0.011';
 use strict;
 use warnings;
 
@@ -21,13 +21,15 @@ Crypt::OpenSSL3::KDF::Context - A KDF instance
 
 =head1 VERSION
 
-version 0.010
+version 0.011
 
 =head1 METHODS
 
 =head2 new
 
 =head2 derive
+
+=head2 derive_SKey
 
 =head2 dup
 
@@ -38,6 +40,8 @@ version 0.010
 =head2 kdf
 
 =head2 reset
+
+=head2 set_SKey
 
 =head2 set_params
 

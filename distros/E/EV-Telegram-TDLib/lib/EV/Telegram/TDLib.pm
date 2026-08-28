@@ -12,10 +12,18 @@ use EV::Telegram::TDLib::Messages;
 use EV::Telegram::TDLib::Files;
 use EV::Telegram::TDLib::Connection;
 use EV::Telegram::TDLib::Bots;
+use EV::Telegram::TDLib::WebApps;
+use EV::Telegram::TDLib::Forum;
+use EV::Telegram::TDLib::Folders;
+use EV::Telegram::TDLib::Payments;
+use EV::Telegram::TDLib::Secret;
+use EV::Telegram::TDLib::Schema;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
-our @ISA = map { "EV::Telegram::TDLib::$_" } qw(Users Chats Messages Files Connection Bots);
+our @ISA = map { "EV::Telegram::TDLib::$_" }
+    qw(Users Chats Messages Files Connection Bots WebApps Forum Folders Payments
+       Secret);
 
 XSLoader::load('EV::Telegram::TDLib', $VERSION);
 
@@ -143,6 +151,11 @@ my %UPDATE_HANDLERS = (
     %EV::Telegram::TDLib::Files::UPDATES,
     %EV::Telegram::TDLib::Connection::UPDATES,
     %EV::Telegram::TDLib::Bots::UPDATES,
+    %EV::Telegram::TDLib::WebApps::UPDATES,
+    %EV::Telegram::TDLib::Forum::UPDATES,
+    %EV::Telegram::TDLib::Folders::UPDATES,
+    %EV::Telegram::TDLib::Payments::UPDATES,
+    %EV::Telegram::TDLib::Secret::UPDATES,
 );
 
 sub _handle_update {
@@ -375,6 +388,8 @@ sub new {
     }, $class;
 
     $self->{$_} = $opt{$_} for grep { /^on_/ } keys %opt;
+    $self->{application_name} = EV::Telegram::TDLib::WebApps::_check_application_name(
+        $opt{application_name} // 'tdesktop');
     $self->{client_id} = _create_client_id();
     $CLIENTS{ $self->{client_id} } = $self;
     _pump_ref();
@@ -495,6 +510,25 @@ sub _abandon {
     }
 }
 
+# a validated sibling of send: an unknown function passes straight through so
+# a newer TDLib keeps working, but a typo in a known one is caught here
+# instead of coming back as an opaque server error
+sub call {
+    my ($self, $function, $args, $cb) = @_;
+    _need('function', $function);
+    $args //= {};
+    croak 'call needs a hashref of arguments' unless ref $args eq 'HASH';
+    if (defined(my $known = $EV::Telegram::TDLib::Schema::FUNCTIONS{$function})) {
+        my %valid = map { $_ => 1 } split ' ', $known;
+        for my $k (sort keys %$args) {
+            next if $k eq '@type' || $valid{$k};
+            croak "unknown argument '$k' for $function; valid arguments are: "
+                . (length $known ? $known : '(none)');
+        }
+    }
+    return $self->send({ %$args, '@type' => "$function" }, $cb);
+}
+
 sub _inject_raw {
     my ($self, $json) = @_;
     _dispatch_raw($self->{client_id}, $json);
@@ -593,7 +627,8 @@ your handlers.
 
 Asynchronous callbacks follow the family idiom: they receive
 C<($result, $err)> where C<$err> is undef on success and a decoded
-TDLib error object on failure. Errors are never thrown.
+TDLib error object on failure. A TDLib error is never thrown; see
+L</CONVENTIONS> for what does croak.
 
 Requires a perl with 64-bit integers: Telegram ids are int64 and
 message ids are shifted left by 20 bits, so they must never round-trip
@@ -652,6 +687,12 @@ this in tests.
 
 TDLib feature switches, all defaulting to true.
 
+=item application_name
+
+The platform identifier sent with every Mini App request, which the app
+receives as C<tgWebAppPlatform>. Defaults to C<tdesktop>. See
+L</MINI APPS> for why the value matters and what it may contain.
+
 =item system_language_code, device_model, system_version, application_version
 
 Client identification sent with setTdlibParameters. Defaults: C<en>,
@@ -678,6 +719,49 @@ Update handlers; see L</UPDATES> and the mixin methods below.
 Authorization credential callbacks; see L</AUTHORIZATION>.
 
 =back
+
+=head1 CONVENTIONS
+
+Three patterns run through the whole interface. Knowing them saves reading
+300 method signatures.
+
+=head2 Cache readers against remote getters
+
+L</chat($chat_id)> and L</user($user_id)> are B<synchronous cache reads>:
+they take no callback, do no I/O, and return undef for something the
+client has not seen. Everything else named after a noun -- C<folder>,
+C<topic>, C<secret_chat>, C<supergroup>, C<basic_group>, C<message>,
+C<file> -- is an B<asynchronous getter> that takes a callback and asks
+TDLib.
+
+The two cache readers predate the rest and are kept as they are because
+renaming a method already published on CPAN would break working code.
+When you want the server's answer for a chat rather than the cached one,
+use L</fetch_chat($chat_id, $cb)>.
+
+=head2 Booleans
+
+A method that turns something on or off takes the flag as its last
+positional argument and B<defaults to true>, so C<pin_topic($chat, $id)>
+pins and C<pin_topic($chat, $id, 0)> unpins. That covers close_topic,
+pin_topic, pin_chat, mark_unread, hide_general_topic, folder_tags,
+pause_download, protect_content, the supergroup switches, and the
+process_join_request pair.
+
+Two older methods invert through an option instead
+(C<< block_user($id, unblock => 1) >>, C<< react(..., remove => 1) >>),
+and a few pairs are separate methods where the two directions differ in
+more than a flag: C<mute>/C<unmute>, C<archive>/C<unarchive>,
+C<enable_proxy>/C<disable_proxy>.
+
+=head2 Identifiers
+
+TL C<int64> values cross the JSON interface as strings, because a number
+would lose precision above 2**53. This module does that for you, and
+hands them back as strings: session ids, callback and inline query ids,
+profile photo ids, custom emoji ids and Web App launch ids are all
+strings you should keep as strings. Chat, message and user ids are
+C<int53> and stay numbers.
 
 =head1 METHODS
 
@@ -756,6 +840,27 @@ stated. Usable as a method or a plain function. See
 L</"Rate limiting: error code 429">; the module still performs no
 retry of its own.
 
+=head3 call($function, \%args, $cb)
+
+Sends a raw request like L</send(\%request, $cb, %opt)>, but checks the
+argument names first against a catalogue of every TDLib function,
+generated from the C<td_api.h> that L<Alien::TDLib> ships. The C<@type>
+is filled in from C<$function>, so it is not repeated.
+
+    $td->call(getChatMember => { chat_id => $c, member_id => $m }, sub {
+        my ($member, $err) = @_;
+        ...
+    });
+
+A typo in a known function's arguments croaks and lists the valid
+names. An unknown function is passed straight through, so a TDLib newer
+than the shipped catalogue keeps working; a missing argument is not an
+error, since TDLib supplies its own defaults. This makes call() a
+usable way to reach the roughly 950 functions this module does not wrap
+by hand, without losing every check.
+
+send() is unaffected and stays entirely unvalidated.
+
 =head2 Users mixin
 
 =head3 me($cb)
@@ -799,6 +904,20 @@ Resolves a public C<@name> to a user, with or without the leading
 at-sign. A name that resolves to a channel or a group is reported as
 an error saying so, since only a private chat has a user behind it.
 Bots are users and resolve normally.
+
+=head3 set_birthdate(%opt, $cb), set_accent_color($color_id, %opt, $cb), profile_photos($user_id, %opt, $cb), delete_profile_photo($photo_id, $cb)
+
+Profile details. set_birthdate takes C<day>, C<month> and an optional
+C<year>; calling it with none clears the birthdate. Profile photo ids
+are TL C<int64> and are sent as strings.
+
+=head3 contacts($cb), add_contact($user_id, %opt, $cb), remove_contacts(\@user_ids, $cb), search_contacts($query, %opt, $cb), import_contacts(\@contacts, $cb)
+
+The address book. add_contact options are C<first_name>, C<last_name>,
+C<phone>, C<note> and C<share_phone>, which offers your own number in
+return. import_contacts takes hashrefs of the same shape and is how you
+find which of a list of phone numbers are on Telegram; Telegram matches
+on the number, so a contact with none is simply not matched.
 
 =head2 Chats mixin
 
@@ -871,11 +990,183 @@ C<upload_video>, C<upload_voice>, C<record_video>, C<record_voice>,
 C<cancel>. An unknown action croaks. The indicator expires on its own
 after a few seconds, so repeat it while the work lasts.
 
+=head3 member($chat_id, $user_id, $cb), admins($chat_id, $cb), search_members($chat_id, $query, %opt, $cb)
+
+Read a chat's membership. search_members options: C<limit> (default 50)
+and C<filter>, one of C<contacts>, C<administrators>, C<members>,
+C<restricted>, C<banned>, C<bots>; an unknown filter croaks.
+
+=head3 set_permissions($chat_id, \%permissions, $cb)
+
+Sets the default permissions for ordinary members. TDLib replaces the
+whole set, so any permission not named is denied, and this method sends
+all of them explicitly rather than leaving the difference implicit.
+Valid keys are the chatPermissions fields: C<can_send_basic_messages>,
+C<can_send_audios>, C<can_send_documents>, C<can_send_photos>,
+C<can_send_videos>, C<can_send_video_notes>, C<can_send_voice_notes>,
+C<can_send_polls>, C<can_send_other_messages>, C<can_add_link_previews>,
+C<can_react_to_messages>, C<can_edit_tag>, C<can_change_info>,
+C<can_invite_users>, C<can_pin_messages>, C<can_create_topics>.
+
+An unrecognised key croaks rather than being ignored: since absence
+means denial, a typo would quietly take a right away.
+
+=head3 set_chat_description($chat_id, $text, $cb)
+
+Sets the description shown on a group or channel's profile.
+
+=head3 invite_link($chat_id, %opt, $cb), edit_invite_link($chat_id, $link, %opt, $cb), invite_links($chat_id, %opt, $cb), revoke_invite_link($chat_id, $link, $cb), replace_primary_invite_link($chat_id, $cb), invite_link_members($chat_id, $link, %opt, $cb)
+
+Manage a chat's invite links. Creating and editing accept C<name>,
+C<expires> (a Unix time), C<limit> (maximum members) and
+C<join_request>, which makes the link produce join requests to approve
+instead of admitting people directly; answer those with
+L</join_requests($chat_id, %opt, $cb), process_join_request($chat_id, $user_id, $approve, $cb), process_join_requests($chat_id, $approve, %opt, $cb), on_join_request($cb)>. TDLib replaces the whole link on
+an edit, so any option not passed reverts to its default: renaming a
+link clears its expiry and member limit. invite_links lists them,
+filtered by C<creator> and C<revoked>; invite_link_members lists who
+joined through one.
+
+=head3 join_requests($chat_id, %opt, $cb), process_join_request($chat_id, $user_id, $approve, $cb), process_join_requests($chat_id, $approve, %opt, $cb), on_join_request($cb)
+
+The other half of a C<join_request> invite link. join_requests lists who is
+waiting, filtered by C<link> and C<query> and bounded by C<limit>;
+process_join_request answers one, and the plural form answers everyone at
+once, optionally only those who used one C<link>. C<$approve> defaults to
+true in both, so declining is explicit.
+
+on_join_request is the handler for updateNewChatJoinRequest, called with a
+flattened hashref carrying C<chat_id>, C<user_id>, C<date>, C<bio>,
+C<invite_link> and C<user_chat_id>.
+
+=head3 check_invite_link($link, $cb), join_by_link($link, $cb)
+
+Inspect or accept an invite link. These take only the link, since the
+chat is whatever it points at, and work for a chat you are not in.
+
+=head3 mute($chat_id, $seconds, $cb), unmute($chat_id, $cb)
+
+Silences a chat for a number of seconds, or indefinitely when no
+duration is given. Notification settings are a single object in TDLib,
+so these send every other field as "use the default" rather than
+replacing them; muting will not quietly reset a chat's sound or preview
+choices.
+
+=head3 archive($chat_id, $cb), unarchive($chat_id, $cb), pin_chat($chat_id, $pinned, %opt, $cb), mark_unread($chat_id, $unread, $cb)
+
+Chat list housekeeping. The C<$pinned> and C<$unread> flags default to
+true, so C<pin_chat($chat)> pins and C<pin_chat($chat, 0)> unpins.
+pin_chat takes a C<list> option, since a chat can be pinned separately
+in each list.
+
+=head3 chats(%opt, $cb), search_all($query, %opt, $cb)
+
+chats lists a chat list; search_all searches messages across one,
+unlike L</search_messages($chat_id, $query, %opt, $cb)>, which searches
+inside a single chat. Both take C<list> and C<limit>; search_all also
+takes C<offset>, C<min_date> and C<max_date>.
+
+Wherever a C<list> option appears it is C<main> (the default),
+C<archive>, or a chat folder id as a number.
+
+=head3 mute_scope($scope, $seconds, %opt, $cb), scope_settings($scope, $cb), reset_notifications($cb)
+
+Notification defaults for a whole class of chat, where C<$scope> is
+C<private>, C<groups> or C<channels>. Every scopeNotificationSettings
+field is sent outright, and the story behaviour is left alone unless
+you say otherwise: C<mute_stories> defaults to off with the default
+story sound, and C<show_story_poster> to on. Options: C<preview>,
+C<no_pinned>, C<no_mentions>, C<sound_id>, C<mute_stories>,
+C<story_sound_id>, C<show_story_poster>. reset_notifications puts
+everything back, including per-chat overrides.
+
+=head3 set_chat_reactions($chat_id, $reactions, %opt, $cb)
+
+Chooses which reactions a chat allows. Pass C<'all'> for everything the
+chat's tier permits, or an arrayref of emoji to restrict it. Option:
+C<max> for how many a single message may carry.
+
+=head3 blocked(%opt, $cb)
+
+Lists blocked senders. Options: C<offset>, C<limit>, and C<stories> to
+read the separate list of senders whose stories are hidden.
+
+=head3 add_members($chat_id, \@user_ids, $cb), ban_member($chat_id, $user_id, %opt, $cb), transfer_ownership($chat_id, $user_id, $password, $cb), set_default_admin_rights(\%rights, %opt, $cb)
+
+Bulk membership and ownership. ban_member differs from
+L</set_member_status($chat_id, $user_id, $status, %opt, $cb)> in taking
+C<revoke>, which also deletes what the banned member already sent, and
+C<until> for a temporary ban. transfer_ownership needs the account
+password, which Telegram requires for an irreversible act.
+set_default_admin_rights sets what a bot asks for when added as an
+administrator; C<< channel => 1 >> targets channels rather than groups.
+
+=head3 create_group($title, %opt, $cb), upgrade_to_supergroup($chat_id, $cb), delete_chat($chat_id, $cb), delete_history($chat_id, %opt, $cb)
+
+create_group makes a supergroup by default; C<channel> makes a channel
+and C<forum> makes a forum. Passing C<members> instead creates a basic
+group, which is a different TDLib call and needs its members up front.
+Also takes C<description> and C<auto_delete>. delete_history options:
+C<remove_from_list> and C<revoke>, which deletes for everyone rather
+than only for you.
+
+=head3 set_slow_mode($chat_id, $seconds, $cb), set_auto_delete($chat_id, $seconds, $cb), set_discussion_group($chat_id, $discussion_chat_id, $cb), protect_content($chat_id, $on, $cb)
+
+Group settings: how often a member may post, how long messages live,
+which group holds a channel's comments, and whether forwarding and
+saving are blocked. Passing 0 clears the first two.
+
+=head3 make_forum($id, $on, %opt, $cb), sign_messages($id, $on, %opt, $cb), join_by_request($id, $on, %opt, $cb), join_to_send($id, $on, $cb), all_history_available($id, $on, $cb), hide_members($id, $on, $cb), set_supergroup_username($id, $username, $cb)
+
+Supergroup and channel switches. make_forum is what turns an ordinary
+supergroup into one that has topics, which
+L</create_topic($chat_id, $name, %opt, $cb)> needs.
+
+These take a B<supergroup id>, which is not the chat id you use
+everywhere else: a supergroup's chat id is -1000000000000 minus its
+supergroup id. Passing either works, because a negative id is converted
+for you. The flag defaults to true in all of them.
+
+=head3 fetch_chat($chat_id, $cb), close_chat($chat_id, $cb), user_full_info($user_id, $cb), supergroup($id, %opt, $cb), basic_group($id, %opt, $cb), supergroup_members($id, %opt, $cb), groups_in_common($user_id, %opt, $cb)
+
+Reading chat and user records. fetch_chat asks TDLib, unlike
+L</chat($chat_id)>, which reads the module's cache; it also loads a chat
+the client has not seen. close_chat releases a chat that
+L</mark_read($chat_id, %opt, $cb)> opened, which nothing else does.
+C<< full => 1 >> asks supergroup and basic_group for the fuller record.
+supergroup_members takes C<filter> (C<recent>, C<contacts>,
+C<administrators>, C<restricted>, C<banned>, C<bots>), C<offset> and
+C<limit>.
+
+=head3 chat_event_log($chat_id, %opt, $cb), chat_statistics($chat_id, %opt, $cb), pinned_message($chat_id, $cb), clear_action_bar($chat_id, $cb), message_senders($chat_id, $cb), set_message_sender($chat_id, $sender_id, $cb)
+
+The administrator log, with C<query>, C<from_event_id>, C<limit> and
+C<users>; channel statistics, with C<dark> for the dark-theme graphs;
+the chat's pinned message; and dismissing the bar Telegram shows above a
+chat it thinks may be spam.
+
+message_senders lists the identities allowed to post in a chat and
+set_message_sender chooses one, which is how an administrator posts as
+the channel rather than as themselves. A negative sender id is a chat, a
+positive one a user.
+
 =head2 Messages mixin
 
 =head3 send_message($chat_id, $text, %opt, $cb)
 
 Sends a text message.
+
+C<topic> posts into a forum topic, and works on every sending method.
+Without it a message goes to the chat's General topic, which is why a
+bot answering in a forum must pass the topic it was addressed in.
+
+C<schedule> takes a Unix time and has the server deliver the message
+then. Because a scheduled message is not sent now, the confirmation
+C<< wait => 'sent' >> waits for would not arrive until its due time, so
+C<wait> defaults to C<accepted> when scheduling and asking for C<sent>
+explicitly croaks. Read pending ones back with
+L</scheduled($chat_id, $cb)>.
+
 
 TDLib will not send to a chat it has not loaded, and answers
 "Chat not found" instead. A chat id taken from an update or from
@@ -969,6 +1260,80 @@ buttons after a tap. Pass an empty hashref to remove them.
 Note that L</edit_message($chat_id, $message_id, $text, %opt, $cb)>
 takes C<reply_markup> as an option, and an edit that omits it drops
 whatever buttons the message had.
+
+=head3 answer_poll($chat_id, $message_id, \@option_ids, $cb), stop_poll($chat_id, $message_id, %opt, $cb)
+
+Vote in a poll and close one. Option ids are zero-based positions in
+the list the poll was created with, and a single-answer poll takes a
+one-element arrayref. stop_poll takes C<reply_markup>.
+
+=head3 message($chat_id, $message_id, $cb), messages($chat_id, \@message_ids, $cb), replied_message($chat_id, $message_id, $cb)
+
+Fetch messages by id. replied_message returns the one a message replies
+to, without needing its id.
+
+=head3 message_link($chat_id, $message_id, %opt, $cb), message_link_info($url, $cb), message_count($chat_id, %opt, $cb)
+
+message_link builds a t.me link to a message, with C<media_timestamp>,
+C<for_album> and C<in_thread>; message_link_info resolves one back.
+message_count counts messages in a chat. C<filter> is required, since
+TDLib cannot count unfiltered: give it C<Photo>, C<Video>, C<Document>,
+C<Url>, C<Pinned> or any other searchMessagesFilter name, with or
+without the prefix. Also takes C<topic> and C<local>, which counts only
+what is already cached.
+
+=head3 available_reactions($chat_id, $message_id, %opt, $cb), message_reactions($chat_id, $message_id, %opt, $cb), set_default_reaction($emoji, $cb)
+
+available_reactions lists what may be added to a message;
+message_reactions lists what already was, optionally filtered to one
+C<emoji>; set_default_reaction picks the one a long press sends. Adding
+and removing a reaction is react().
+
+=head3 set_draft($chat_id, $text, %opt, $cb), clear_drafts(%opt, $cb)
+
+Saves an unsent message against a chat, which other clients on the same
+account will see. An empty or undefined text clears the draft, which is
+how TDLib spells "no draft". Options: C<parse_mode>, C<reply_to>,
+C<topic>. clear_drafts empties every chat, keeping secret chats unless
+C<exclude_secret> is false.
+
+=head3 send_album($chat_id, \@contents, %opt, $cb)
+
+Sends several media as one group. C<\@contents> are InputMessageContent
+hashrefs, such as those L</send_file($chat_id, $path, %opt, $cb)> builds;
+C<reply_to>, C<topic>, C<silent> and C<schedule> work as they do there.
+
+=head3 edit_message_caption($chat_id, $message_id, $caption, %opt, $cb), edit_message_media($chat_id, $message_id, \%content, %opt, $cb), edit_message_location($chat_id, $message_id, \%location, %opt, $cb), reschedule($chat_id, $message_id, $when, $cb)
+
+Editing a sent message beyond its text. The caption honours
+C<parse_mode> and C<caption_above>; the location takes C<live_period>,
+C<heading> and C<proximity_alert_radius>, which it nests in the
+liveLocation object TDLib expects. reschedule moves a scheduled message,
+and sends it now when C<$when> is omitted.
+
+=head3 resend_messages($chat_id, \@message_ids, $cb), delete_messages_by_sender($chat_id, $user_id, $cb), delete_messages_by_date($chat_id, $min_date, $max_date, %opt, $cb), unpin_all($chat_id, $cb), read_all_mentions($chat_id, $cb)
+
+Bulk operations over a chat's messages. Deleting by date revokes for
+everyone unless C<< revoke => 0 >>.
+
+=head3 message_thread($chat_id, $message_id, $cb), thread_history($chat_id, $message_id, %opt, $cb), read_date($chat_id, $message_id, $cb), message_viewers($chat_id, $message_id, $cb), message_properties($chat_id, $message_id, $cb), message_by_date($chat_id, $date, $cb), open_content($chat_id, $message_id, $cb)
+
+Reading around a message: its comment thread and that thread's history,
+when it was read and by whom, what may be done with it, the message
+nearest a timestamp. open_content marks self-destructing media as
+opened, which starts its timer.
+
+=head3 parse_markdown($text, $cb), markdown_text(\%formatted, $cb), text_entities($text, $cb), translate($text, $to_language, %opt, $cb), link_preview($text, $cb), search_hashtags($prefix, %opt, $cb)
+
+Text utilities. parse_markdown turns markdown into a formattedText and
+markdown_text turns one back; text_entities finds links, mentions and
+the like in plain text without any markup. translate takes a string or
+a formattedText and a language code. link_preview asks what Telegram
+would show for the links in a text.
+
+=head3 scheduled($chat_id, $cb)
+
+Lists the messages scheduled in a chat but not yet delivered.
 
 =head3 react($chat_id, $message_id, $emoji, %opt, $cb)
 
@@ -1102,6 +1467,24 @@ On close the watchers are dropped silently.
 Unlike the other on_* methods, on_upload is a per-id registration,
 not a single-handler setter, and it returns nothing.
 
+=head3 file($file_id, $cb), remote_file($remote_id, %opt, $cb), delete_file($file_id, $cb), suggested_file_name($file_id, %opt, $cb)
+
+Local file records. remote_file resolves the persistent id that travels
+inside a message; its C<file_type> must match what the file actually is,
+and may be given with or without the C<fileType> prefix.
+
+=head3 add_to_downloads($file_id, $chat_id, $message_id, %opt, $cb), remove_from_downloads($file_id, %opt, $cb), pause_download($file_id, $paused, $cb)
+
+The download list Telegram clients show. Options: C<priority>, and
+C<delete_cache> to remove the downloaded bytes as well as the entry.
+
+=head3 storage_statistics($cb), optimize_storage(%opt, $cb)
+
+A long-lived client accumulates gigabytes of cached media.
+optimize_storage prunes it, bounded by C<size>, C<ttl>, C<count> and
+C<immunity_delay>, restricted to or excluding C<chats>. An unset limit
+is sent as -1, which TDLib reads as no limit rather than as zero.
+
 =head2 Connection mixin
 
 =head3 connection_state()
@@ -1128,6 +1511,40 @@ right after login. It is undef until then.
 Handler for updateConnectionState, called with the state name string
 after connection_state() is updated.
 
+=head3 sessions($cb), terminate_session($session_id, $cb), terminate_other_sessions($cb), set_session_ttl($days, $cb)
+
+The devices logged into this account. sessions lists them;
+terminate_session logs one out and terminate_other_sessions logs out
+everything except this client. set_session_ttl sets how many days of
+inactivity ends a session automatically. Session ids are TL C<int64> and
+are sent as strings.
+
+=head3 search_chats($query, %opt, $cb), search_public_chats($query, $cb), top_chats($category, %opt, $cb), recommended_chats($cb), recently_opened_chats(%opt, $cb)
+
+Finding chats. search_chats looks through what this account already
+knows; search_public_chats reaches Telegram's public directory.
+top_chats takes a category: C<users>, C<bots>, C<groups>, C<channels>,
+C<inline_bots>, C<calls> or C<forwards>.
+
+=head3 check_chat_username($chat_id, $username, $cb), report_chat($chat_id, %opt, $cb), default_disable_notification($chat_id, $on, $cb)
+
+Whether a public username is free for a chat, reporting a chat with
+C<option_id>, C<messages> and C<text>, and whether messages sent to a
+chat are silent by default.
+
+=head3 search_by_phone($phone_number, %opt, $cb), my_link($cb), toggle_username($username, $active, $cb)
+
+Finding a user by phone number, this account's own t.me link, and
+turning one of your usernames on or off. C<< local => 1 >> restricts the
+phone lookup to what is already cached.
+
+=head3 privacy($setting, $cb), set_privacy($setting, \@rules, $cb)
+
+Read and write one privacy setting, named C<status>, C<profile_photo>,
+C<phone>, C<bio>, C<birthdate>, C<forwards>, C<invites>, C<calls> or
+C<find_by_phone>. Rules are an ordered list of UserPrivacySettingRule
+hashrefs and the first match wins, so their order is the policy.
+
 =head2 Bots mixin
 
 =head3 inline_keyboard(\@rows)
@@ -1136,8 +1553,9 @@ Builds a replyMarkupInlineKeyboard for the C<reply_markup> option of
 L</send_message($chat_id, $text, %opt, $cb)> and
 L</send_file($chat_id, $path, %opt, $cb)>. Each row is an arrayref of
 buttons, and each button is C<< { text => ..., data => ... } >> for a
-callback button or C<< { text => ..., url => ... } >> for a link. A
-button with neither croaks.
+callback button, C<< { text => ..., url => ... } >> for a link, or
+C<< { text => ..., web_app => $url } >> to launch a Mini App. A
+button with none of the three croaks.
 
 Callback data is TL C<bytes>, which the JSON interface carries base64
 encoded; this method encodes it, and L</on_callback_query($cb)>
@@ -1150,6 +1568,21 @@ user's normal one. A button may be a plain string or a hashref;
 C<< { text => ..., request => 'phone' } >> (or C<'location'>) asks the
 user to share that instead of sending text. Options: C<one_time>,
 C<resize> (default on), C<persistent>, C<placeholder>.
+
+Three further button shapes are available.
+C<< { text => ..., web_app => $url } >> launches a Mini App, and the
+data it sends back arrives through
+L</on_web_app_data($cb)>.
+C<< { text => ..., request_chat => \%spec } >> and
+C<< { text => ..., request_users => \%spec } >> ask the user to pick a
+chat or some users. In both, a constraint is applied only for a key you
+actually mention, so C<< { bot => 0 } >> means "not a bot" while
+leaving it out means "either". request_chat takes C<id>, C<channel>,
+C<forum>, C<username>, C<created>, C<bot_is_member>, C<want_title>,
+C<want_username>, C<want_photo>, and C<user_rights> / C<bot_rights> as
+chatAdministratorRights hashrefs. request_users takes C<id>, C<bot>,
+C<premium>, C<max> (default 1), C<want_name>, C<want_username>,
+C<want_photo>.
 
 =head3 remove_keyboard(%opt)
 
@@ -1207,6 +1640,405 @@ is generated if you leave it out. Options: C<cache_time> (default
 Answers a callback query. Options: C<text>, C<show_alert>, C<url>,
 C<cache_time>. The id is sent as a string, since it is a TL C<int64>
 and would lose precision as a number.
+
+=head3 commands(%opt, $cb), delete_commands(%opt, $cb)
+
+Read back or clear the "/" menu set by
+L</set_commands(\@commands, %opt, $cb)>. Both take the same C<scope>
+and C<language_code> options.
+
+=head3 bot_name(%opt, $cb), bot_description(%opt, $cb), bot_short_description(%opt, $cb)
+
+Read back the values set by the corresponding set_bot_* methods, with
+the same C<bot_user_id> and C<language_code> options.
+
+=head3 press($chat_id, $message_id, $data, $cb)
+
+Presses an inline keyboard button on someone else's message, which is
+what a user's client does when you tap one. This is the other side of
+L</on_callback_query($cb)>: use it to drive a bot rather than to be
+one. C<$data> is the plain payload, base64 encoded on the way out for
+you. The callback receives a callbackQueryAnswer carrying C<text> and
+C<url>.
+
+=head3 inline_query($bot_user_id, $query, %opt, $cb), send_inline_result($chat_id, $query_id, $result_id, %opt, $cb)
+
+The user side of inline mode: ask a bot for results as if you had typed
+its username in a message box, then send one of them. inline_query
+options are C<chat_id>, C<offset> and C<location>; send_inline_result
+takes C<hide_via_bot>. The query id is sent as a string, being a TL
+C<int64>.
+
+=head3 start_bot($bot_user_id, $parameter, %opt, $cb)
+
+Sends the C</start> that a deep link produces, passing C<$parameter>
+along. Option: C<chat_id>, which defaults to the bot's own chat.
+
+=head3 attachment_menu_bot($bot_user_id, $cb), toggle_attachment_menu($bot_user_id, $on, %opt, $cb)
+
+Read and change whether a bot sits in the attachment menu. This matters
+for Mini Apps: L</open_web_app($chat_id, $bot_user_id, $url, %opt, $cb)>
+accepts an empty URL only for a bot that is in the menu, and answers
+BOT_INVALID otherwise. Option: C<allow_write_access>.
+
+=head3 edit_inline_text($inline_message_id, $text, %opt, $cb), edit_inline_caption($inline_message_id, $caption, %opt, $cb), edit_inline_media($inline_message_id, \%content, %opt, $cb), edit_inline_markup($inline_message_id, \%markup, $cb), edit_inline_location($inline_message_id, \%location, %opt, $cb)
+
+Edit a message a bot sent through inline mode. These address it by the
+C<inline_message_id> string that
+L</answer_inline_query($id, \@results, %opt, $cb)> results are
+identified by, which is a different thing from the
+C<(chat_id, message_id)> pair the edit_message_* methods take; the two
+are not interchangeable.
+
+edit_inline_text and edit_inline_caption honour C<parse_mode> and hand
+a parse failure to the callback rather than to TDLib. All accept
+C<reply_markup>. edit_inline_location takes C<live_period>, C<heading>
+and C<proximity_alert_radius>, which it nests in the liveLocation
+object where TDLib expects them.
+
+=head3 share_chat_with_bot($chat_id, $message_id, $button_id, $shared_chat_id, %opt, $cb), share_users_with_bot($chat_id, $message_id, $button_id, \@user_ids, %opt, $cb)
+
+The user's answer to a C<request_chat> or C<request_users> keyboard
+button. The chat and message ids identify the message the button was
+on, and C<$button_id> is the C<id> given to that button when the
+keyboard was built, which is how a bot tells two pickers apart. Option:
+C<check_only>, to test whether the share would be allowed without
+performing it.
+
+=head3 allow_bot_messages($bot_user_id, $cb), can_bot_message($bot_user_id, $cb)
+
+Whether a bot you have blocked or never started may message you.
+can_bot_message asks; allow_bot_messages grants.
+
+=head3 callback_query_message($chat_id, $message_id, $callback_query_id, $cb)
+
+Fetches the message a callback query came from, for a bot that did not
+keep it. The query id is TL C<int64> and is sent as a string.
+
+=head3 check_bot_username($username, $cb), toggle_bot_username($bot_user_id, $username, $active, $cb)
+
+Check whether a username is free for a bot, and turn one of a bot's
+usernames on or off. The flag defaults to on.
+
+=head3 create_bot($name, $username, %opt, $cb), owned_bots($cb), bot_token($bot_user_id, %opt, $cb), bot_access_settings($bot_user_id, $cb), set_bot_access_settings($bot_user_id, \%settings, $cb)
+
+Creating and managing bots from an account rather than through
+BotFather. create_bot takes C<manager>, the bot that will own the new
+one, and C<via_link>. bot_token reads a managed bot's token; C<revoke>
+issues a new one and invalidates the old, so anything still using it
+stops working.
+
+=head3 set_updates_status($pending_count, %opt, $cb), recent_inline_bots($cb), similar_bots($bot_user_id, $cb), similar_bot_count($bot_user_id, %opt, $cb), open_similar_bot($bot_user_id, $opened_bot_user_id, $cb)
+
+set_updates_status reports a bot's backlog to Telegram, with an optional
+C<error>. The rest are discovery: recently used inline bots, and bots
+Telegram considers similar to a given one.
+
+=head3 bot_media_previews($bot_user_id, %opt, $cb), add_bot_media_preview($bot_user_id, \%content, %opt, $cb), edit_bot_media_preview($bot_user_id, $file_id, \%content, %opt, $cb), delete_bot_media_previews($bot_user_id, \@file_ids, %opt, $cb), reorder_bot_media_previews($bot_user_id, \@file_ids, %opt, $cb)
+
+The sample media shown on a bot's profile, which are stored per
+language. Passing C<language_code> to bot_media_previews asks for one
+language's set rather than the list of languages. C<\%content> is an
+InputStoryContent hashref, passed through as given.
+
+=head3 set_game_score($chat_id, $message_id, $user_id, $score, %opt, $cb), game_high_scores($chat_id, $message_id, $user_id, $cb), set_inline_game_score($inline_message_id, $user_id, $score, %opt, $cb), inline_game_high_scores($inline_message_id, $user_id, $cb)
+
+Reporting and reading HTML5 game results. C<edit> updates the message to
+show the new score and is on by default; C<force> allows a score lower
+than the player's best, which is otherwise refused.
+
+=head3 set_menu_button($user_id, %opt, $cb), menu_button($user_id, $cb)
+
+The button beside the message box in a chat with a bot. Options C<text>
+and C<url>; a Mini App URL makes it open the app. Passing user id 0 sets
+the default for every user.
+
+=head3 add_proxy(\%proxy, %opt, $cb), proxies($cb), enable_proxy($proxy_id, $cb), disable_proxy($cb), remove_proxy($proxy_id, $cb), ping_proxy(\%proxy, $cb)
+
+Proxy configuration. A proxy hashref takes C<server>, C<port> and
+C<type> (C<socks5>, C<http> or C<mtproto>), plus C<username> and
+C<password> for the first two, C<http_only> for HTTP, and C<secret> for
+MTProto. add_proxy enables the proxy unless C<< enable => 0 >>.
+
+=head3 set_network_type($type, $cb), network_statistics(%opt, $cb)
+
+Telling TDLib the network changed (C<none>, C<mobile>, C<roaming>,
+C<wifi>, C<other>) lets it reconnect promptly rather than waiting for
+its own timers, which matters on a laptop that sleeps or a phone that
+changes network.
+
+=head3 log_out($cb), password_state($cb), set_password($old, $new, %opt, $cb), account_ttl($days, $cb), register_device(\%token, %opt, $cb)
+
+Account-level operations. set_password takes C<hint> and
+C<recovery_email>. account_ttl reads the inactivity period after which
+Telegram deletes the account when called with no C<$days>, and sets it
+when given one. register_device takes a DeviceToken hashref for push
+notifications, plus C<other_users>.
+
+=head2 WebApps mixin
+
+Mini Apps, which Telegram also calls Web Apps. TDLib does not render
+anything: it hands back a URL and a launch id, and hosting the webview
+is the application's job. See L</MINI APPS>.
+
+Every method here builds the webAppOpenParameters object itself from
+the C<application_name> the client was constructed with, so C<%opt>
+carries only C<mode> (C<full_size>, the default, C<compact> or
+C<full_screen>), C<theme>, and a per-call C<application_name> override.
+
+=head3 web_app($bot_user_id, $short_name, $cb)
+
+Looks up one Mini App by the short name it was given in BotFather. The
+callback receives a foundWebApp carrying the C<web_app> itself, plus
+C<request_write_access> and C<skip_confirmation>.
+
+=head3 web_app_link($chat_id, $bot_user_id, $short_name, %opt, $cb), web_app_url($bot_user_id, %opt, $cb), main_web_app($chat_id, $bot_user_id, %opt, $cb)
+
+Three ways to get a launch URL: from a direct link short name, from a
+button URL (C<url> option), and from a bot's main Mini App.
+web_app_link and main_web_app accept C<start_parameter>; web_app_link
+also accepts C<allow_write_access>.
+
+=head3 open_web_app($chat_id, $bot_user_id, $url, %opt, $cb), close_web_app($launch_id, $cb)
+
+Open and close a Mini App session. The callback of open_web_app
+receives a webAppInfo carrying C<launch_id> and C<url>; pass that
+launch id to close_web_app when the webview goes away. C<$url> should
+be the one from a Web App button; an empty string is accepted only for
+a bot in the attachment menu, and otherwise answers BOT_INVALID.
+
+=head3 send_web_app_data($bot_user_id, $button_text, $data, $cb)
+
+Sends data back to a bot as if the Mini App had called
+C<Telegram.WebApp.sendData()>. The bot sees it through
+L</on_web_app_data($cb)>. This is the reply-keyboard flow, so
+C<$button_text> must be the text of the Web App button that was
+pressed.
+
+=head3 on_web_app_data($cb)
+
+Handler for a messageWebAppDataReceived message. Called as
+C<< $cb->($message, $data, $button_text) >> with the payload and button
+text lifted out of the content for convenience. L</on_message($cb)>
+still sees these messages too.
+
+=head3 answer_web_app_query($query_id, \%result, $cb), web_app_request($bot_user_id, $method, $parameters, $cb), web_app_placeholder($bot_user_id, $cb)
+
+answer_web_app_query is the bot side of C<Telegram.WebApp.switchInlineQuery>:
+it answers with one InputInlineQueryResult. web_app_request sends a
+custom method call on the Mini App's behalf, with C<$parameters> as a
+JSON string. web_app_placeholder fetches the outline shown while an app
+loads.
+
+=head2 Forum mixin
+
+Topics in a forum supergroup. A topic id is the id of the message that
+opened the topic, so it is an ordinary int53 and not a separate space.
+
+To post into a topic, pass C<topic> to any sending method rather than
+calling something different; see
+L</send_message($chat_id, $text, %opt, $cb)>.
+
+=head3 create_topic($chat_id, $name, %opt, $cb), edit_topic($chat_id, $topic_id, %opt, $cb), delete_topic($chat_id, $topic_id, $cb)
+
+Create, rename and remove topics. create_topic options: C<color> (an
+RGB integer) and C<custom_emoji_id> for the icon, and C<name_implicit>.
+edit_topic options: C<name> and C<custom_emoji_id>; the icon is only
+touched when C<custom_emoji_id> is given, so renaming leaves it alone.
+
+=head3 topic($chat_id, $topic_id, $cb), topics($chat_id, %opt, $cb), topic_history($chat_id, $topic_id, %opt, $cb), topic_link($chat_id, $topic_id, $cb)
+
+Read topics and their messages. topics options: C<query>, C<limit>
+(default 100) and the C<offset_date>, C<offset_message_id>,
+C<offset_forum_topic_id> triple for paging. topic_history takes
+C<from_message_id>, C<offset> and C<limit>.
+
+=head3 close_topic($chat_id, $topic_id, $closed, $cb), pin_topic($chat_id, $topic_id, $pinned, $cb), unpin_topic_messages($chat_id, $topic_id, $cb), hide_general_topic($chat_id, $hidden, $cb), topic_icons($cb)
+
+State changes. The flag defaults to true, so C<close_topic($chat, $id)>
+closes and C<close_topic($chat, $id, 0)> reopens. hide_general_topic
+takes no topic id, since the General topic is identified by its absence.
+topic_icons lists the icons a client may offer.
+
+=head2 Folders mixin
+
+Chat folders, which Telegram's own clients show as tabs above the chat
+list. The folder list itself arrives through updateChatFolders rather
+than being fetched.
+
+A folder's name is a chatFolderName wrapping a formattedText, not a
+plain string; these methods build that from the C<name> you give, so a
+folder spec is an ordinary hashref.
+
+=head3 folder($id, $cb), create_folder(\%spec, $cb), edit_folder($id, \%spec, $cb), delete_folder($id, %opt, $cb), reorder_folders(\@ids, %opt, $cb)
+
+Telegram truncates a folder name to 12 characters and does not say so,
+which is worth knowing before a longer name comes back shortened.
+
+A folder spec takes C<name> (required), C<icon> (an icon name such as
+C<Work> or C<Party>), C<color_id>, C<shareable>, the chat lists
+C<pinned_chat_ids>, C<included_chat_ids> and C<excluded_chat_ids>, and
+the flags C<exclude_muted>, C<exclude_read>, C<exclude_archived>,
+C<include_contacts>, C<include_non_contacts>, C<include_bots>,
+C<include_groups> and C<include_channels>. TDLib replaces the whole
+folder on an edit, so any key not passed reverts to its default:
+editing only the name empties the membership.
+
+delete_folder takes C<leave_chats>, the chats to leave along with the
+folder rather than merely un-filing. reorder_folders takes
+C<main_position>, where the unfiled main list sits among the tabs.
+
+=head3 recommended_folders($cb), folder_chat_count(\%spec, $cb), folder_tags($on, $cb)
+
+recommended_folders lists the ready-made folders Telegram suggests.
+folder_chat_count reports how many chats a spec would match without
+creating it. folder_tags turns the coloured tags on or off.
+
+=head3 folder_invite_link($id, %opt, $cb), folder_invite_links($id, $cb), edit_folder_invite_link($id, $link, %opt, $cb), delete_folder_invite_link($id, $link, $cb), check_folder_invite_link($link, $cb), add_folder_by_link($link, %opt, $cb)
+
+A shareable folder is handed out as a link that adds its chats to
+someone else's folder list. Creating and editing take C<name> and
+C<chats>, the chats the link includes. TDLib replaces the whole link on
+an edit, so leaving C<chats> out empties what the link includes. The
+last two take only the link, and C<add_folder_by_link> takes C<chats>
+to choose which of the offered chats to actually join.
+
+=head2 Payments mixin
+
+The seller's half of Telegram payments: offering something and answering
+the checkout. Actually paying for something is the buyer's half and is
+not wrapped; reach it through L</call($function, \%args, $cb)>.
+
+Amounts are integers in the currency's smallest unit, so 500 is five
+euros in C<EUR>. The exception is C<XTR>, Telegram Stars, where one unit
+is one Star, and where selling digital goods needs no payment provider
+at all: leave C<provider_token> unset.
+
+=head3 send_invoice($chat_id, \%invoice, %opt, $cb), invoice_link(\%invoice, %opt, $cb)
+
+Sends an invoice as a message, or builds a shareable link to one. The
+invoice hashref takes C<title>, C<description>, C<payload>, C<currency>
+and C<prices> (all required), where each price is
+C<< [ $label => $amount ] >> or C<< { label => ..., amount => ... } >>.
+Optional: C<provider_token> and C<provider_data> for a real payment
+provider, C<photo_url> and its dimensions, C<start_parameter>,
+C<max_tip> and C<tips>, C<test>, and the C<need_name>, C<need_phone>,
+C<need_email>, C<need_shipping> and C<flexible> flags. send_invoice also
+takes the usual sending options, C<topic> and C<silent> included.
+
+C<payload> is your own order identifier and comes back at checkout. It
+is TL C<bytes>, so it is base64 encoded on the way out for you.
+
+=head3 on_pre_checkout_query($cb), answer_pre_checkout_query($id, %opt, $cb)
+
+The last gate before money moves. Telegram gives a bot only seconds to
+answer, and an unanswered query fails the payment, so answer from the
+handler. The handler receives C<id>, C<sender_user_id>, C<currency>,
+C<total_amount>, C<payload>, C<shipping_option_id> and C<order_info>.
+Answering with no C<error> approves; any C<error> string declines and is
+shown to the buyer.
+
+=head3 on_shipping_query($cb), answer_shipping_query($id, %opt, $cb)
+
+Only fires for an invoice with C<< need_shipping => 1 >>. The handler
+receives C<id>, C<sender_user_id>, C<payload> and C<shipping_address>;
+answer with C<options>, an arrayref of
+C<< { id => ..., title => ..., prices => [...] } >>, or with an C<error>
+to refuse delivery there.
+
+The C<payload> in this handler is a plain string, while the one in
+L</on_pre_checkout_query($cb), answer_pre_checkout_query($id, %opt, $cb)>
+is TL C<bytes>. Both arrive already in their correct form; the
+difference is TDLib's, and is noted here only because it looks like an
+inconsistency worth double-checking rather than a bug.
+
+=head3 refund_star_payment($user_id, $charge_id, $cb), star_transactions(%opt, $cb)
+
+Refund a Stars payment by its C<telegram_payment_charge_id>, and read
+the Stars ledger. star_transactions options: C<owner> (defaults to this
+account), C<direction> (C<incoming> or C<outgoing>), C<subscription_id>,
+C<offset>, C<limit>.
+
+=head2 Secret mixin
+
+End-to-end encrypted chats. A secret chat is a separate object from the
+chat that displays it: creating one yields a chat whose type is
+chatTypeSecret, and the methods below take the B<secret chat id> found
+in that type, not the chat id.
+
+Secret chats live only in the local database. They are not on the
+server, cannot be read from another device, and do not survive losing
+the database.
+
+=head3 new_secret_chat($user_id, $cb), open_secret_chat($secret_chat_id, $cb), secret_chat($secret_chat_id, $cb), close_secret_chat($secret_chat_id, $cb)
+
+Start a secret chat with a user, reopen a known one, read its state, and
+close it.
+
+=head3 search_secret_messages($query, %opt, $cb)
+
+Searches the local database, since secret messages exist nowhere else.
+Options: C<chat_id> to scope to one chat, C<filter> (a
+searchMessagesFilter name, with or without the prefix), C<offset>,
+C<limit>.
+
+=head3 set_database_encryption_key($key, $cb), session_accepts_secret_chats($session_id, $on, $cb)
+
+Change the key the local database is encrypted with, and choose whether
+a logged-in session may accept secret chats at all. Losing the key loses
+every secret chat with it, as nothing on the server can restore them.
+
+=head1 MINI APPS
+
+A Mini App (Telegram also calls it a Web App) is a web page a bot
+offers, opened inside a Telegram client. TDLib does not render it. It
+resolves the app, returns a URL and a launch id, and relays the data
+the page sends back; hosting a webview and loading the URL is the
+application's job. Nothing here needs a browser if all you want is the
+data channel.
+
+The usual flow is:
+
+    $td->web_app($bot_id, 'probe', sub {
+        my ($found, $err) = @_;
+        ...
+    });
+    $td->open_web_app($chat_id, $bot_id, $button_url, sub {
+        my ($info, $err) = @_;
+        # hand $info->{url} to a webview, keep $info->{launch_id}
+    });
+    $td->close_web_app($launch_id, sub { });
+
+Data flows back either through
+L</send_web_app_data($bot_user_id, $button_text, $data, $cb)>, which a
+client calls on the page's behalf and the bot receives through
+L</on_web_app_data($cb)>, or through
+L</answer_web_app_query($query_id, \%result, $cb)> for the inline
+variant.
+
+=head2 The platform identifier
+
+C<application_name> is not a free-form label. It is sent to Telegram as
+the platform string and handed to the page as C<tgWebAppPlatform>.
+Telegram accepts 0-64 characters from C<A-Za-z0-9_> and rejects
+anything else with C<PLATFORM_INVALID>, an error that names nothing
+near the real cause; a hyphen is the easy way to trip it. This module
+validates the value when the client is constructed, so the failure
+arrives with an explanation instead.
+
+Any accepted value works, but the value still matters. Real clients
+send a conventional identifier (C<android>, C<ios>, C<macos>,
+C<tdesktop>, C<weba>, C<webk>) and Mini App pages branch on it to pick
+layout, theming and available features. An invented name passes
+validation and then lands in whatever an app does with an unrecognised
+platform. The default is C<tdesktop>.
+
+=head2 Launch URLs carry credentials
+
+The URL returned by open_web_app and the web_app_*_url methods has the
+signed init data in its fragment: the user's name, username, photo URL
+and an authentication hash. It is a credential. Do not log it, paste it
+into a bug report, or store it anywhere the page itself would not go.
 
 =head1 AUTHORIZATION
 
@@ -1395,7 +2227,9 @@ anything but ASCII, so that what you submit is characters.
 
 =head1 ERROR HANDLING
 
-Errors are never thrown. Every asynchronous callback follows the
+A TDLib error is never thrown: invalid arguments croak at the call
+site, but anything the server rejects arrives through the callback.
+Every asynchronous callback follows the
 contract C<< $cb->($result, $err) >>: C<$err> is undef on success and
 a hashref on failure, and C<$result> is undef whenever C<$err> is
 set. Test C<$err>, not C<$result>.
@@ -1555,6 +2389,22 @@ downloads a file id with progress percentage
 
 raw send()/execute() for methods the mixins do not wrap
 
+=item F<eg/07-gtk4-chat.pl>
+
+a two-pane GTK4 chat window driven by EV rather than by gtk_main
+
+=item F<eg/08-tickit-chat.pl>
+
+the same two panes in a terminal, on the same single loop
+
+=item F<eg/09-mcp-server.pl>
+
+exposes Telegram as MCP tools over JSON-RPC on stdio
+
+=item F<eg/10-webapp-bot.pl>
+
+offers a Mini App button and prints the data the page sends back
+
 =back
 
 L<EV::Telegram::TDLib::Cookbook> has task-oriented recipes.
@@ -1586,6 +2436,12 @@ reader thread would keep signalling the freed loop through
 ev_async_send. Close every client first.
 
 =item *
+
+Not safe with Perl ithreads. The pump initialises once per process, so
+on a threaded perl any C<< threads->create >> after this module is
+loaded dies with "the pump cannot serve a second interpreter" -- even
+for a thread that never touches Telegram. Fork instead, subject to the
+fork rules above.
 
 Pinned assumption: TDLib's receive/execute buffer is thread-local. The
 no-lock design -- the reader thread copies every td_receive result
@@ -1661,7 +2517,7 @@ TDLib itself is licensed under the Boost Software License 1.0.
 
 =head1 LIMITATIONS
 
-Deliberately not in 0.01:
+Deliberately out of scope:
 
 =over 4
 
@@ -1679,7 +2535,10 @@ No secret-chat sugar beyond the use_secret_chats switch.
 
 =item *
 
-No per-method wrappers for the roughly one thousand TDLib methods;
+Around 160 of TDLib's roughly one thousand methods have a
+hand-written wrapper. For the rest,
+L<call()|/"call($function, \%args, $cb)"> validates argument names
+against a shipped schema catalogue, and
 L<send()|/"send(\%request, $cb, %opt)"> and L</execute(\%request)>
 are the escape hatch (see L</ESCAPE HATCH>).
 

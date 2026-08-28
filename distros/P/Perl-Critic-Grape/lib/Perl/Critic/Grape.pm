@@ -3,7 +3,7 @@ package Perl::Critic::Grape;
 use strict;
 use warnings;
 
-our $VERSION='0.0.8';
+our $VERSION='0.0.9';
 
 1;
 
@@ -37,11 +37,15 @@ Do not perform manual ref checks.
 
 Use sigils to signal type.  Only use dereferencing arrows for method calls.
 
+=item L<Subroutines::RequireSubOrder|Perl::Critic::Policy::Subroutines::RequireSubOrder>
+
+Place subroutines in dependency order.
+
 =item L<ValuesAndExpressions::RequireSlices|Perl::Critic::Policy::ValuesAndExpressions::RequireSlices>
 
 Use array and hash slices for lookup sequences.
 
-=item L<Perl::Critic::Policy::Variables::ProhibitTopicIterator>
+=item L<Variables::ProhibitTopicIterator|Perl::Critic::Policy::Variables::ProhibitTopicIterator>
 
 Always use named loop control variables.
 

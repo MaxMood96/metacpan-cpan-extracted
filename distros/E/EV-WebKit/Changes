@@ -1,0 +1,13 @@
+Revision history for EV-WebKit
+
+0.01  2026-08-27
+    - initial release: asynchronous WebKitGTK 6.0 (GTK4) browser automation on
+      EV. Navigation, including waiting for one the page itself starts; element
+      and JavaScript APIs, with element lookup by arbitrary JavaScript (XPath,
+      visible text, shadow DOM); frame addressing (by selector for a
+      same-origin frame, by URL for any frame); viewport resize and zoom;
+      downloads and uploads; HTTP authentication; request/response
+      interception; user scripts and styles; cookies and session persistence; a
+      control protocol for driving a running browser from another process; and
+      browser-fingerprint impersonation covering both the JavaScript surface
+      and, with Proxy::Impersonate, the TLS and HTTP/2 connection fingerprint.

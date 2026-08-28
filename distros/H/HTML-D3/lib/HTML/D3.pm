@@ -4,6 +4,8 @@ use strict;
 use warnings;
 
 use JSON::MaybeXS;
+use Object::Configure;
+use Params::Get;
 use Scalar::Util;
 
 # TODO: add animated tooltips to charts with legends
@@ -14,26 +16,26 @@ HTML::D3 - A simple Perl module for generating charts using D3.js.
 
 =head1 VERSION
 
-Version 0.07
+Version 0.09
 
 =cut
 
-our $VERSION = '0.07';
+our $VERSION = '0.09';
 
 =head1 SYNOPSIS
 
     use HTML::D3;
 
     my $chart = HTML::D3->new(
-	width  => 1024,
-	height => 768,
-	title  => 'Sample Bar Chart'
+        width => 1024,
+        height => 768,
+        title => 'Sample Bar Chart'
     );
 
     my $data = [
-	['Category 1', 10],
-	['Category 2', 20],
-	['Category 3', 30]
+        ['Category 1', 10],
+        ['Category 2', 20],
+        ['Category 3', 30]
     ];
 
     my $html = $chart->render_bar_chart($data);
@@ -42,9 +44,9 @@ our $VERSION = '0.07';
     $chart = HTML::D3->new(title => 'Sales Data');
 
     $data = [
-	['Product A', 100],
-	['Product B', 150],
-	['Product C', 200]
+        ['Product A', 100],
+        ['Product B', 150],
+        ['Product C', 200]
     ];
 
     $html = $chart->render_line_chart($data);
@@ -82,18 +84,10 @@ sub new
 	my $class = shift;
 
 	# Handle hash or hashref arguments
-	my %args;
-	if((@_ == 1) && (ref $_[0] eq 'HASH')) {
-		%args = %{$_[0]};
-	} elsif((@_ % 2) == 0) {
-		%args = @_;
-	} else {
-		carp(__PACKAGE__, ': Invalid arguments passed to new()');
-		return;
-	}
+	my $params = Params::Get::get_params(undef, @_) || {};
 
 	if(!defined($class)) {
-		if((scalar keys %args) > 0) {
+		if((scalar keys %{$params}) > 0) {
 			# Using HTML::D3->new(), not HTML::D3::new()
 			carp(__PACKAGE__, ' use ->new() not ::new() to instantiate');
 			return;
@@ -102,14 +96,16 @@ sub new
 		$class = __PACKAGE__;
 	} elsif(Scalar::Util::blessed($class)) {
 		# If $class is an object, clone it with new arguments
-		return bless { %{$class}, %args }, ref($class);
+		return bless { %{$class}, %{$params} }, ref($class);
 	}
+
+	$params = Object::Configure::configure($class, $params);
 
 	# Return the blessed object
 	return bless {
-		width  => $args{width}  || 800,  # Default chart width
-		height => $args{height} || 600,  # Default chart height
-		title  => $args{title}  || 'Chart',  # Default chart title
+		width => $params->{width}  || 800,  # Default chart width
+		height => $params->{height} || 600,  # Default chart height
+		title => $params->{title}  || 'Chart',  # Default chart title
 	}, $class;
 }
 
@@ -132,20 +128,22 @@ Returns a string containing the HTML and JavaScript code for the chart.
 
 # Method to render a bar chart with given data
 sub render_bar_chart {
-    my ($self, $data) = @_;
+	my ($self, $data) = @_;
 
-    # Validate input data to ensure it is an array of arrays
-    die 'Data must be an array of arrays' unless ref($data) eq 'ARRAY';
+	die 'Data is not optional' if(!defined($data));
 
-    # Generate JSON representation of data
-    my $json_data = encode_json([
-	map { { label => $_->[0], value => $_->[1] } } @$data
-    ]);
+	# Validate input data to ensure it is an array of arrays
+	die 'Data must be an array of arrays' unless ref($data) eq 'ARRAY';
 
-    # Generate HTML and D3.js JavaScript for rendering the bar chart
-    my $html = $self->_preamble();
-    $html .= $self->_head();
-    $html .= <<"HTML";
+	# Generate JSON representation of data
+	my $json_data = encode_json([
+		map { { label => $_->[0], value => $_->[1] } } @$data
+	]);
+
+	# Generate HTML and D3.js JavaScript for rendering the bar chart
+	my $html = $self->_preamble();
+	$html .= $self->_head();
+	$html .= <<"HTML";
 <body>
     <h1 style="text-align: center;">$self->{title}</h1>
     <svg id="chart" width="$self->{width}" height="$self->{height}" style="border: 1px solid black;"></svg>
@@ -393,7 +391,7 @@ sub render_line_chart_with_tooltips
 	    .attr("fill", "steelblue")
 	    .on("mouseover", (event, d) => {
 		tooltip.style("opacity", 1)
-		       .html(`Label: <b>\${d.label}</b><br>Value: <b>\${d.value}</b>`)
+		       .html(`Label: <b>\${d.label}<\/b><br>Value: <b>\${d.value}<\/b>`)
 		       .style("left", (event.pageX + 10) + "px")
 		       .style("top", (event.pageY - 30) + "px");
 	    })
@@ -421,6 +419,152 @@ sub render_line_chart_with_tooltips
 HTML
 
     return $html;
+}
+
+=head2 render_line_chart_snippet
+
+    my $fragment = $chart->render_line_chart_snippet($data);
+    # $fragment->{svg_id} - the id attribute of the <svg> element
+    # $fragment->{html}   - embeddable HTML fragment (style + svg + script)
+
+Generates an embeddable HTML fragment for a line chart with mouseover tooltips.
+Unlike C<render_line_chart_with_tooltips>, this method returns a fragment with
+no C<<!DOCTYPE>>, C<<html>>, C<<head>>, or C<<body>> wrapper, suitable for
+splicing directly into a Mojolicious TT (or any other) layout.
+
+The caller is responsible for loading D3 in the page C<<head>>, e.g.:
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+
+Accepts the following arguments:
+
+=over 4
+
+=item * C<$data> - An array reference of data points. Each point is an array
+reference with two required elements - the label (string) and the value
+(numeric) - and an optional third element: a hash reference of extra key/value
+pairs to display in the tooltip after the label and value rows.
+
+    [$x, $y]          # basic point
+    [$x, $y, \%row]   # point with extra tooltip data
+
+=back
+
+Returns a hash reference with:
+
+=over 4
+
+=item * C<svg_id> - The C<id> attribute used on the C<<svg>> element.
+
+=item * C<html> - The embeddable fragment string.
+
+=back
+
+=cut
+
+sub render_line_chart_snippet
+{
+	my ($self, $data) = @_;
+
+	die 'Data must be an array of arrays' unless ref($data) eq 'ARRAY';
+
+	my $json_data = encode_json([
+		map {
+			my $point = { label => $_->[0], value => $_->[1] };
+			$point->{extra} = $_->[2] if ref($_->[2]) eq 'HASH';
+			$point
+		} @$data
+	]);
+
+	my $svg_id = 'chart';
+
+	my $html = <<"HTML";
+<style>
+    .tooltip {
+	position: absolute;
+	background-color: white;
+	border: 1px solid #ccc;
+	padding: 5px;
+	font-size: 12px;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.2s ease-in-out;
+    }
+</style>
+<svg id="$svg_id" width="$self->{width}" height="$self->{height}" style="border: 1px solid black;"></svg>
+<div class="tooltip" id="tooltip"></div>
+<script>
+    const data = $json_data;
+
+    const svg = d3.select("#$svg_id");
+    const tooltip = d3.select("#tooltip");
+    const margin = { top: 20, right: 30, bottom: 40, left: 40 };
+    const width = $self->{width} - margin.left - margin.right;
+    const height = $self->{height} - margin.top - margin.bottom;
+
+    const x = d3.scalePoint()
+	.domain(data.map(d => d.label))
+	.range([0, width]);
+
+    const y = d3.scaleLinear()
+	.domain([0, d3.max(data, d => d.value)])
+	.nice()
+	.range([height, 0]);
+
+    const chart = svg.append("g")
+	.attr("transform", `translate(\${margin.left},\${margin.top})`);
+
+    const line = d3.line()
+	.x(d => x(d.label))
+	.y(d => y(d.value));
+
+    chart.append("path")
+	.datum(data)
+	.attr("fill", "none")
+	.attr("stroke", "steelblue")
+	.attr("stroke-width", 2)
+	.attr("d", line);
+
+    chart.selectAll("circle")
+	.data(data)
+	.join("circle")
+	.attr("cx", d => x(d.label))
+	.attr("cy", d => y(d.value))
+	.attr("r", 4)
+	.attr("fill", "steelblue")
+	.on("mouseover", (event, d) => {
+	    let ttHtml = `Label: <b>\${d.label}<\/b><br>Value: <b>\${d.value}<\/b>`;
+	    if (d.extra) {
+		Object.entries(d.extra).forEach(([k, v]) => {
+		    ttHtml += `<br>\${k}: <b>\${v}<\/b>`;
+		});
+	    }
+	    tooltip.style("opacity", 1)
+		   .html(ttHtml)
+		   .style("left", (event.pageX + 10) + "px")
+		   .style("top", (event.pageY - 30) + "px");
+	})
+	.on("mousemove", (event) => {
+	    tooltip.style("left", (event.pageX + 10) + "px")
+		   .style("top", (event.pageY - 30) + "px");
+	})
+	.on("mouseout", () => {
+	    tooltip.style("opacity", 0);
+	});
+
+    chart.append("g")
+	.call(d3.axisLeft(y));
+
+    chart.append("g")
+	.attr("transform", `translate(0,\${height})`)
+	.call(d3.axisBottom(x))
+	.selectAll("text")
+	.attr("transform", "rotate(-45)")
+	.style("text-anchor", "end");
+</script>
+HTML
+
+	return { svg_id => $svg_id, html => $html };
 }
 
 =head2 render_multi_series_line_chart_with_tooltips
@@ -539,7 +683,7 @@ sub render_multi_series_line_chart_with_tooltips
 		.attr("fill", color(i))
 		.on("mouseover", (event, d) => {
 		    tooltip.style("opacity", 1)
-			   .html(\`Series: <b>\${series.name}</b><br>Label: <b>\${d.label}</b><br>Value: <b>\${d.value}</b>\`)
+			   .html(\`Series: <b>\${series.name}<\/b><br>Label: <b>\${d.label}<\/b><br>Value: <b>\${d.value}<\/b>\`)
 			   .style("left", (event.pageX + 10) + "px")
 			   .style("top", (event.pageY - 30) + "px");
 		})
@@ -678,7 +822,7 @@ sub render_multi_series_line_chart_with_animated_tooltips
 		.on("mouseover", (event, d) => {
 		    tooltip.style("opacity", 1)
 			   .style("transform", "translateY(0)")
-			   .html(\`Series: <b>\${series.name}</b><br>Label: <b>\${d.label}</b><br>Value: <b>\${d.value}</b>\`)
+			   .html(\`Series: <b>\${series.name}<\/b><br>Label: <b>\${d.label}<\/b><br>Value: <b>\${d.value}<\/b>\`)
 			   .style("left", (event.pageX + 10) + "px")
 			   .style("top", (event.pageY - 30) + "px");
 		})
@@ -829,7 +973,7 @@ sub render_multi_series_line_chart_with_legends {
                 .on("mouseover", (event, d) => {
                     tooltip.style("opacity", 1)
                            .style("transform", "translateY(0)")
-                           .html(\`Series: <b>\${series.name}</b><br>Label: <b>\${d.label}</b><br>Value: <b>\${d.value}</b>\`)
+                           .html(\`Series: <b>\${series.name}<\/b><br>Label: <b>\${d.label}<\/b><br>Value: <b>\${d.value}<\/b>\`)
                            .style("left", (event.pageX + 10) + "px")
                            .style("top", (event.pageY - 30) + "px");
                 })
@@ -874,6 +1018,25 @@ HTML
 
     return $html;
 }
+
+=head2 render_multi_series_line_chart_with_interactive_legends
+
+    $html = $chart->render_multi_series_line_chart_with_interactive_legends($data);
+
+Generates HTML and JavaScript code to render a chart of many lines with interactive legends to filter, highlight or modify elements based on legend selections.
+
+Accepts the following arguments:
+
+=over 4
+
+=item * C<$data> - An reference to an array of hashes containing data points.
+Each data point should be an array reference with two elements: the label (string) and the value (numeric).
+
+=back
+
+Returns a string containing the HTML and JavaScript code for the chart.
+
+=cut
 
 sub render_multi_series_line_chart_with_interactive_legends
 {
@@ -987,7 +1150,7 @@ sub render_multi_series_line_chart_with_interactive_legends
                 .on("mouseover", (event, d) => {
                     tooltip.style("opacity", 1)
                            .style("transform", "translateY(0)")
-                           .html(\`Series: <b>\${series.name}</b><br>Label: <b>\${d.label}</b><br>Value: <b>\${d.value}</b>\`)
+                           .html(\`Series: <b>\${series.name}<\/b><br>Label: <b>\${d.label}<\/b><br>Value: <b>\${d.value}<\/b>\`)
                            .style("left", (event.pageX + 10) + "px")
                            .style("top", (event.pageY - 30) + "px");
                 })
@@ -1060,19 +1223,47 @@ HTML
 	return $html;
 }
 
+=head1 SUPPORT
+
+This module is provided as-is without any warranty.
+
+Please report any bugs or feature requests to C<bug-html-d3 at rt.cpan.org>,
+or through the web interface at
+L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=HTML-D3>.
+I will be notified, and then you'll
+automatically be notified of progress on your bug as I make changes.
+
+You can find documentation for this module with the perldoc command.
+
+    perldoc HTML::D3
+
+You can also look for information at:
+
 =head1 BUGS
 
 It would help to have the render routine to return the head and body components separately.
 
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<Configure an Object at Runtime|Object::Configure>
+
+=item * L<Test Dashboard|https://nigelhorne.github.io/HTML-D3/coverage/>
+
+=back
+
 =head1 AUTHOR
 
-Nigel Horne <njh@bandsman.co.uk>
+Nigel Horne <njh@nigelhorne.com>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2025 Nigel Horne.
+Copyright 2025-2026 Nigel Horne.
 
-This program is released under the following licence: GPL2
+Usage is subject to the GPL2 licence terms.
+If you use it,
+please let me know.
 
 =cut
 

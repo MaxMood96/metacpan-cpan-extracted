@@ -31,10 +31,9 @@ objects.
 - `Linux::Event::Error` - shared structured failure value
 - `Linux::Event::Address` - lazy IPv4, IPv6, and Unix address value
 
-`Linux::Event::Listener::_Engine`, `Linux::Event::Stream::_Connection`,
-`Linux::Event::Stream::_Resolver`, and the internal socket configuration and
-deadline packages are private implementation details. Applications must not
-construct, subclass, or depend on them.
+`Linux::Event::Stream::_Connection`, `Linux::Event::_Resolver`, and the
+internal socket configuration and deadline types are private implementation
+details. Applications must not construct, subclass, or depend on them.
 
 ## Current capabilities
 
@@ -115,7 +114,8 @@ construct, subclass, or depend on them.
 - default connection deadline implemented with Linux `timerfd`
 - typed resolve, socket, connect, and timeout errors
 - loop-dispatched immediate outcomes and silent cancellation
-- output may be queued before attachment or readiness
+- output queued before attachment or readiness uses the normal watermark and
+  `on_drain` contract
 - optional numeric local source binding and interface binding
 - class and constructor TCP/buffer policy plus a controlled socket hook
 
@@ -647,7 +647,9 @@ sub stream_options ($class) {
 ```
 
 Watermarks are cooperative: a false `write()` return still means the bytes
-were accepted and the producer should wait for `on_drain`. A nonzero
+were accepted and the producer should wait for `on_drain`. The same return,
+`pending_bytes`, `is_write_blocked`, and eventual drain behavior applies to
+output queued before attachment or connection readiness. A nonzero
 `max_pending_bytes` is the separate hard safety boundary. If an unsent
 remainder would exceed it, Stream does not queue that remainder; it reports an
 `output_limit` error through `on_error` and closes. The default is zero, which

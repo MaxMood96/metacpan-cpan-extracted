@@ -9,6 +9,7 @@ build_requires:
   FindBin: '0'
   IPC::Run3: '0'
   IPC::System::Simple: '0'
+  LWP::Simple::WithCache: '0.04'
   Test::Compile: '0'
   Test::DescribeMe: '0'
   Test::Memory::Cycle: '0'
@@ -34,12 +35,25 @@ no_index:
   directory:
     - t
     - inc
+optional_features:
+  baidu_subnet_detection:
+    description: 'Detect Baidu crawler IPs that misreport as EU (RT-86809); not available on Windows due to Socket6 build dependency'
+    recommends:
+      Net::Subnet: '0'
+  local_time_zone:
+    description: 'Detect local time zone via DateTime::TimeZone::Local for time_zone() when running non-CGI (CLI); not available on all Windows Perl builds'
+    recommends:
+      DateTime::TimeZone: '0'
+  precise_ip_validation:
+    description: 'More rigorous IPv6 private-range detection via Data::Validate::IP; not available on Windows because NetAddr::IP (its dep) fails to build there'
+    recommends:
+      Data::Validate::IP: '0.25'
+      NetAddr::IP: '0'
 requires:
-  CGI::Info: '0.6'
+  CGI::Info: '1.14'
   Class::Autouse: '0'
   Class::Load: '0'
   DBD::SQLite: '0'
-  Data::Validate::IP: '0.25'
   HTTP::BrowserDetect: '0'
   I18N::AcceptLanguage: '0'
   I18N::LangTags::Detect: '1.04'
@@ -48,13 +62,11 @@ requires:
   Locale::Language: '0'
   Locale::Object: '0.8'
   Locale::Object::Country: '0.78'
-  Log::Abstraction: '0'
-  Net::Subnet: '0'
+  Log::Abstraction: '0.33'
   Net::Whois::IANA: '0'
   Net::Whois::IP: '0'
-  NetAddr::IP: '0'
-  Object::Configure: '0.23'
-  Params::Get: '0.15'
+  Object::Configure: '0.24'
+  Params::Get: '0.17'
   Readonly: '0'
   Sys::Syslog: '0'
   autodie: '0'
@@ -62,5 +74,5 @@ requires:
 resources:
   bugtracker: https://rt.cpan.org/Public/Dist/Display.html?Name=CGI-Lingua
   repository: git://github.com/nigelhorne/CGI-Lingua.git
-version: '0.84'
+version: '0.85'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

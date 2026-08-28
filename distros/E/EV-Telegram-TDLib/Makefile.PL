@@ -65,7 +65,8 @@ WriteMakefile(
                     file    => "lib/EV/Telegram/TDLib/$_.pm",
                     version => MM->parse_version('lib/EV/Telegram/TDLib.pm'),
                 })
-            } qw(Users Chats Messages Files Connection Bots),
+            } qw(Users Chats Messages Files Connection Bots
+                 WebApps Forum Folders Payments Secret Schema),
         },
     },
 );

@@ -108,38 +108,49 @@ WriteMakefile(
 	VERSION_FROM        => 'lib/CGI/Lingua.pm',
 	ABSTRACT_FROM       => 'lib/CGI/Lingua.pm',
 	LICENSE          => 'gpl_2',
-	PL_FILES	=> {}, CONFIGURE_REQUIRES => {
+	PL_FILES	=> {},
+	CONFIGURE_REQUIRES => {
 		'ExtUtils::MakeMaker' => 6.64,	# Minimum version for TEST_REQUIRES
-    }, TEST_REQUIRES => $test_requires,
-    PREREQ_PM => {
-	'autodie' => 0,		# used at compile time: use autodie qw(:all)
-	'JSON::PP' => 2.27,	# cache serialisation; in core from 5.13.9, explicit for 5.10/5.12 compat
-	'DBD::SQLite' => 0,	# Locale::Object doesn't declare this prerequisite
-	'Log::Abstraction' => 0,	# used by Object::Configure for logger conversion
-	'Locale::Object::Country' => 0.78,	# Fix for RT#79214
-	'Locale::Object' => 0.80,	# Fix for RT#131347
-	'I18N::AcceptLanguage' => 0,
-	'Locale::Language' => 0,
-	'I18N::LangTags::Detect' => 1.04,
-	'Data::Validate::IP' => 0.25,	# For is_private_ip
-	'Locale::Codes' => 3.59,	# Silence noisy warn messages in perl 5.28
-	'Net::Whois::IANA' => 0,
-	'Net::Whois::IP' => 0,
-	'NetAddr::IP' => 0,
-	'Object::Configure' => 0.23,
-	'Params::Get' => 0.15,	# 0.15 fast-path: unblessed hashref arg returned directly (not stored under default key)
-	'Readonly' => 0,
-	'Class::Load' => 0,
-	'CGI::Info' => 0.60, # For AUTOLOAD
-	'Sys::Syslog' => 0,
-	'HTTP::BrowserDetect' => 0,
-	'Net::Subnet' => 0,
-	'Class::Autouse' => 0
+	}, TEST_REQUIRES => $test_requires,
+	PREREQ_PM => {
+		'autodie' => 0,		# used at compile time: use autodie qw(:all)
+		'JSON::PP' => 2.27,	# cache serialisation; in core from 5.13.9, explicit for 5.10/5.12 compat
+		'DBD::SQLite' => 0,	# Locale::Object doesn't declare this prerequisite
+		'Log::Abstraction' => 0.33,	# used by Object::Configure for logger conversion
+		'Locale::Object::Country' => 0.78,	# Fix for RT#79214
+		'Locale::Object' => 0.80,	# Fix for RT#131347
+		'I18N::AcceptLanguage' => 0,
+		'Locale::Language' => 0,
+		'I18N::LangTags::Detect' => 1.04,
+		'Locale::Codes' => 3.59,	# Silence noisy warn messages in perl 5.28
+		'Net::Whois::IANA' => 0,
+		'Net::Whois::IP' => 0,
+		'Object::Configure' => 0.24,
+		'Params::Get' => 0.17,	# 0.15 fast-path: unblessed hashref arg returned directly (not stored under default key)
+		'Readonly' => 0,
+		'Class::Load' => 0,
+		'CGI::Info' => 1.14, # For AUTOLOAD
+		'Sys::Syslog' => 0,
+		'HTTP::BrowserDetect' => 0,
+		'Class::Autouse' => 0
     }, dist => $dist,
     clean               => { FILES => 'CGI-Lingua-* t/online.enabled' },
     META_MERGE		=> {
     	'meta-spec' => { version => 2 },
-    	resources => {
+    	optional_features => {
+    	    baidu_subnet_detection => {
+    	        description => 'Detect Baidu crawler IPs that misreport as EU (RT-86809); not available on Windows due to Socket6 build dependency',
+    	        prereqs => { runtime => { recommends => { 'Net::Subnet' => 0 } } },
+    	    },
+    	    precise_ip_validation => {
+    	        description => 'More rigorous IPv6 private-range detection via Data::Validate::IP; not available on Windows because NetAddr::IP (its dep) fails to build there',
+    	        prereqs => { runtime => { recommends => { 'Data::Validate::IP' => 0.25, 'NetAddr::IP' => 0 } } },
+    	    },
+    	    local_time_zone => {
+    	        description => 'Detect local time zone via DateTime::TimeZone::Local for time_zone() when running non-CGI (CLI); not available on all Windows Perl builds',
+    	        prereqs => { runtime => { recommends => { 'DateTime::TimeZone' => 0 } } },
+    	    },
+    	}, resources => {
 		repository => {
 			type => 'git',
 			url => 'git://github.com/nigelhorne/CGI-Lingua.git',

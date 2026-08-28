@@ -8,14 +8,14 @@
 ^xsstream/(?:Makefile$|MYMETA\.(?:json|yml)$|Stream\.(?:c|o|bs|xsc)$|blib(?:/|$))
 ^xstls/(?:Makefile$|MYMETA\.(?:json|yml)$|TLS\.(?:c|o|bs|xsc)$|blib(?:/|$)|check_openssl(?:\.o)?$)
 ^xsconnection/(?:Makefile$|MYMETA\.(?:json|yml)$|Connection\.(?:c|o|bs|xsc)$|_Connection\.bs$|blib(?:/|$))
-^xslistener/(?:Makefile$|MYMETA\.(?:json|yml)$|Listener\.(?:c|o|bs|xsc)$|_Engine\.bs$|blib(?:/|$))
+^xslistener/(?:Makefile$|MYMETA\.(?:json|yml)$|Listener\.(?:c|o|bs|xsc)$|blib(?:/|$))
 ^xsresolver/(?:Makefile$|MYMETA\.(?:json|yml)$|Resolver\.(?:c|o|bs|xsc)$|_Resolver\.bs$|blib(?:/|$))
 ^xssignal/(?:Makefile$|MYMETA\.(?:json|yml)$|Signal\.(?:c|o|bs|xsc)$|blib(?:/|$))
 ^xswakeup/(?:Makefile$|MYMETA\.(?:json|yml)$|Wakeup\.(?:c|o|bs|xsc)$|blib(?:/|$))
 ^xsdatagram/(?:Makefile$|MYMETA\.(?:json|yml)$|Datagram\.(?:c|o|bs|xsc)$|blib(?:/|$))
 ^xsprocess/(?:Makefile$|MYMETA\.(?:json|yml)$|Process\.(?:c|o|bs|xsc)$|check_spawn_chdir(?:\.o)?$|blib(?:/|$))
 ^Linux-Event-[^/]+(?:/|\.tar(?:\.gz)?$)
-^bench/results/.*\.json$
+^bench/results/.*\.(?:json|html)$
 ^\.prove$
 ~$
 \.bak$

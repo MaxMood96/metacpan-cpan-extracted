@@ -7,51 +7,9 @@ use v5.10;
 use strict;
 use warnings;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
-use Safe::Isa;
-use Ref::Util qw( is_ref is_blessed_ref is_arrayref is_hashref );
 use MooX::Tag::TO_HASH::Util ':all';
-
-sub _process_value {
-
-    return \$_[0] unless is_ref( $_[0] );
-
-    my $ref   = $_[0];
-    my $value = $ref;
-
-    if ( is_blessed_ref( $ref ) ) {
-        # turtles all the way down...
-        my $mth = $ref->$_can( UC_TO_HASH );
-        $value = $ref->$mth if defined $mth;
-    }
-    elsif ( is_arrayref( $ref ) ) {
-        my %new;
-        for my $idx ( 0 .. @{$ref} - 1 ) {
-            my $_ref = _process_value( $ref->[$idx] );
-            $new{$idx} = $$_ref if defined $ref;
-        }
-        if ( keys %new ) {
-            my @replace = @$ref;
-            $replace[$_] = delete $new{$_} for keys %new;
-            $value = \@replace;
-        }
-    }
-    elsif ( is_hashref( $ref ) ) {
-        my %new;
-        for my $key ( keys %$ref ) {
-            my $_ref = _process_value( $ref->{$key} );
-            $new{$key} = $$_ref if defined $ref;
-        }
-        if ( keys %new ) {
-            my %replace = %$ref;
-            $replace{$_} = delete $new{$_} for keys %new;
-            $value = \%replace;
-        }
-    }
-
-    return \$value;
-}
 
 use Moo::Role;
 use MooX::TaggedAttributes -propagate,
@@ -91,6 +49,10 @@ sub TO_HASH {
 
     my %hash;
     for my $attr ( keys %{$to_hash} ) {
+
+        # if attribute is being overridden, it'll start with a '+'
+        $attr =~ s/^[+]//;
+
         my $opt = $to_hash->{$attr}{$attr};
         # hashes returned by the _tags method are readonly, so need to
         # check if key exists before querying it to avoid an exception
@@ -116,8 +78,7 @@ sub TO_HASH {
         }
         # possibly turtles all the way down...
         else {
-            my $ref_to_value = _process_value( $value );
-            $value = ${$ref_to_value} if defined $ref_to_value;
+            $value = process_value( $value, UC_TO_HASH );
         }
 
         $hash{$name} = $value;
@@ -129,9 +90,6 @@ sub TO_HASH {
 
     return \%hash;
 }
-
-
-
 
 1;
 
@@ -157,7 +115,7 @@ MooX::Tag::TO_HASH - Controlled translation of Moo objects into Hashes
 
 =head1 VERSION
 
-version 0.05
+version 0.06
 
 =head1 SYNOPSIS
 
@@ -187,8 +145,8 @@ version 0.05
 
  $VAR1 = {
            'goose' => 'Frank',
-           'cow' => 'Daisy',
-           'hen' => undef
+           'hen' => undef,
+           'cow' => 'Daisy'
          };
 
 =head1 DESCRIPTION
@@ -208,9 +166,11 @@ and call the L</TO_HASH> method on your instantiated object.
 Fields inherited from superclasses or consumed from roles which use
 C<MooX::Tag::TO_HASH> are automatically handled.
 
-If a field's value is another object, L</TO_HASH> will automatically
-turn that into a hash if it has its own C<TO_HASH> method (you can
-also prevent that).
+If a field's value is a plain scalar, L</TO_HASH> leaves it unchanged.
+If it is a reference, L</TO_HASH> recursively walks plain array and
+hash references, and converts objects via their own C<TO_HASH> method
+when available. You can prevent that processing with the
+C<no_recurse> option.
 
 =head2 Modifying the generated hash
 
@@ -263,8 +223,10 @@ Only output the field if it was set and its value is defined.
 
 =item C<no_recurse>
 
-If a field is an object, don't try and turn it into a hash via its
-C<TO_HASH> method.
+Do not recursively process the field value. Objects are left as-is
+instead of being converted via C<TO_HASH>, and plain array and hash
+references are not walked for nested objects or other nested
+containers.
 
 (Yes, this name is backwards, but eventually a separate C<recurse>
 option may become available which limits the recursion depth).
@@ -317,9 +279,9 @@ This method is added to the consuming class or role.
 
  $VAR1 = {
            'HEN' => 'Ruby',
+           'COW' => 'Daisy',
            'GOOSE' => 'Donald',
-           'HORSE' => 'Ed',
-           'COW' => 'Daisy'
+           'HORSE' => 'Ed'
          };
 
 =head1 DEPRECATED BEHAVIOR
@@ -369,11 +331,11 @@ Please report any bugs or feature requests to bug-moox-tag-to_hash@rt.cpan.org  
 
 Source is available at
 
-  https://gitlab.com/djerius/moox-tag-to_hash
+  https://codeberg.org/djerius/p5-MooX-Tag-TO_HASH
 
 and may be cloned from
 
-  https://gitlab.com/djerius/moox-tag-to_hash.git
+  https://codeberg.org/djerius/p5-MooX-Tag-TO_HASH.git
 
 =head1 SEE ALSO
 
@@ -393,7 +355,7 @@ L<MooX::TO_JSON - this is similar, but doesn't handle fields inherited from supe
 
 =head1 AUTHOR
 
-Diab Jerius <djerius@cpan.org>
+Diab Jerius <djerius@cfa.harvard.edu>
 
 =head1 COPYRIGHT AND LICENSE
 

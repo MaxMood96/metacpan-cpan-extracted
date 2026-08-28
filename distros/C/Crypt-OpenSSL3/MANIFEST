@@ -40,6 +40,8 @@ lib/Crypt/OpenSSL3/PKey.pm
 lib/Crypt/OpenSSL3/PKey/Context.pm
 lib/Crypt/OpenSSL3/Random.pm
 lib/Crypt/OpenSSL3/Random/Context.pm
+lib/Crypt/OpenSSL3/SKey.pm
+lib/Crypt/OpenSSL3/SKey/Management.pm
 lib/Crypt/OpenSSL3/SSL.pm
 lib/Crypt/OpenSSL3/SSL/Cipher.pm
 lib/Crypt/OpenSSL3/SSL/Context.pm
@@ -57,6 +59,7 @@ lib/Crypt/OpenSSL3/Timestamp/Verifier.pm
 lib/Crypt/OpenSSL3/X509.pm
 lib/Crypt/OpenSSL3/X509/Algorithm.pm
 lib/Crypt/OpenSSL3/X509/Attribute.pm
+lib/Crypt/OpenSSL3/X509/BasicConstraints.pm
 lib/Crypt/OpenSSL3/X509/EDIPartyName.pm
 lib/Crypt/OpenSSL3/X509/Extension.pm
 lib/Crypt/OpenSSL3/X509/GeneralName.pm

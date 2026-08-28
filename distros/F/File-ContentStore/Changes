@@ -1,5 +1,13 @@
 Revision history for File-ContentStore
 
+1.006 2026-08-27 BOOK
+    - add a stats() method, to gather some statistics about the store
+    - add a stats_summary() method, to summarize the above statistics
+    - add more tests
+    - add some minor optimisations
+    - move 'use experimental' after 'use Moo' to avoid a warning on older Perls
+    - fix typos in documentation
+
 1.005 2026-07-24 BOOK
     - start using the Type::Params MODERN API (v2),
       and requiring Moo 2.000000 or later

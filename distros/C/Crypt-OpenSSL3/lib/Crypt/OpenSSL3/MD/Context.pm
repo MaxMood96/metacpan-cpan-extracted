@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::MD::Context;
-$Crypt::OpenSSL3::MD::Context::VERSION = '0.010';
+$Crypt::OpenSSL3::MD::Context::VERSION = '0.011';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::MD::Context - message digest instances
 
 =head1 VERSION
 
-version 0.010
+version 0.011
 
 =head1 METHODS
 
@@ -32,8 +32,6 @@ version 0.010
 =head2 clear_flags
 
 =head2 copy
-
-=head2 ctrl
 
 =head2 dup
 

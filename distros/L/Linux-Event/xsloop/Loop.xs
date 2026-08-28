@@ -77,6 +77,7 @@
 
 typedef struct le_loop_s le_loop_t;
 typedef struct le_watcher_s le_watcher_t;
+typedef struct le_registration_s le_registration_t;
 typedef struct le_timer_s le_timer_t;
 typedef struct le_timer_descriptor_s le_timer_descriptor_t;
 
@@ -110,6 +111,16 @@ struct le_timer_s {
 };
 
 /*
+ * Stable indirection for a public registration handle. epoll continues to
+ * point directly at the watcher; only handle method calls cross this boundary.
+ * The watcher and Perl handle each own one reference.
+ */
+struct le_registration_s {
+    le_watcher_t *watcher;
+    unsigned int refs;
+};
+
+/*
  * Native watcher record.
  *
  * Callback SVs live here so readiness dispatch does not need a Perl hash or
@@ -139,6 +150,8 @@ struct le_watcher_s {
     int lean;
     int bench_native_echo;
     int kind;
+    int recycle_after_dispatch;
+    le_registration_t *registration;
 };
 
 /*
@@ -210,6 +223,7 @@ struct le_loop_s {
     unsigned long long watcher_freelist_max_depth;
     int watcher_reclaim_enabled;
     int in_dispatch_batch;
+    int driver_depth;
     le_watcher_t *watcher_freelist;
     le_watcher_t *watcher_pending;
     le_watcher_t *watcher_retired;
@@ -291,9 +305,14 @@ static le_loop_t *le_loop_from_sv(SV *sv) {
     return INT2PTR(le_loop_t *, SvIV((SV*)SvRV(sv)));
 }
 
-static le_watcher_t *le_watcher_from_sv(SV *sv) {
+static le_registration_t *le_registration_from_sv(SV *sv) {
     if (!sv_isobject(sv) || !SvROK(sv)) croak("not a watcher object");
-    return INT2PTR(le_watcher_t *, SvIV((SV*)SvRV(sv)));
+    return INT2PTR(le_registration_t *, SvIV((SV*)SvRV(sv)));
+}
+
+static le_watcher_t *le_watcher_from_sv(SV *sv) {
+    le_registration_t *registration = le_registration_from_sv(sv);
+    return registration ? registration->watcher : NULL;
 }
 
 static le_timer_t *le_timer_from_sv(SV *sv) {
@@ -347,8 +366,23 @@ static SV *le_stored_callback_from_sv(SV *cb, int *direct_cv) {
 
 /* ---- Watcher allocation, ownership and safe deferred reuse ---------- */
 
+static void le_registration_release(le_registration_t *registration) {
+    if (!registration) return;
+    if (--registration->refs == 0) free(registration);
+}
+
+static void le_watcher_invalidate_registration(le_watcher_t *w) {
+    le_registration_t *registration;
+    if (!w || !w->registration) return;
+    registration = w->registration;
+    w->registration = NULL;
+    if (registration->watcher == w) registration->watcher = NULL;
+    le_registration_release(registration);
+}
+
 static void le_watcher_clear_refs(le_watcher_t *w) {
     if (!w) return;
+    le_watcher_invalidate_registration(w);
     if (w->read_cb)  { SvREFCNT_dec(w->read_cb);  w->read_cb = NULL; }
     if (w->write_cb) { SvREFCNT_dec(w->write_cb); w->write_cb = NULL; }
     if (w->error_cb) { SvREFCNT_dec(w->error_cb); w->error_cb = NULL; }
@@ -395,12 +429,16 @@ static void le_watcher_recycle_or_destroy(le_watcher_t *w) {
         return;
     }
     w->active = 0;
-    if (!loop->watcher_reclaim_enabled) {
+    w->recycle_after_dispatch = loop->watcher_reclaim_enabled ? 1 : 0;
+    if (loop->in_dispatch_batch) {
+        le_watcher_push_list(&loop->watcher_pending, w);
+        return;
+    }
+    le_watcher_clear_refs(w);
+    if (!w->recycle_after_dispatch) {
         /*
-         * Perl watcher handles contain the native watcher address. Keep an
-         * inactive record stable until loop destruction so cancel() remains
-         * harmless after replacement. This is also required when a callback
-         * replaces its own watcher while its epoll event is being dispatched.
+         * Retain native storage in compatibility mode, but release every Perl
+         * reference and detach the stable public handle immediately.
          */
         w->next_retired = loop->watcher_retired;
         loop->watcher_retired = w;
@@ -408,15 +446,9 @@ static void le_watcher_recycle_or_destroy(le_watcher_t *w) {
     }
     w->fd = -1;
     loop->watcher_recycle_calls++;
-    if (loop->in_dispatch_batch) {
-        le_watcher_push_list(&loop->watcher_pending, w);
-    }
-    else {
-        le_watcher_clear_refs(w);
-        le_watcher_push_list(&loop->watcher_freelist, w);
-        loop->watcher_freelist_depth++;
-        if (loop->watcher_freelist_depth > loop->watcher_freelist_max_depth) loop->watcher_freelist_max_depth = loop->watcher_freelist_depth;
-    }
+    le_watcher_push_list(&loop->watcher_freelist, w);
+    loop->watcher_freelist_depth++;
+    if (loop->watcher_freelist_depth > loop->watcher_freelist_max_depth) loop->watcher_freelist_max_depth = loop->watcher_freelist_depth;
 }
 
 static void le_watcher_promote_pending(le_loop_t *loop) {
@@ -425,9 +457,17 @@ static void le_watcher_promote_pending(le_loop_t *loop) {
     while ((w = loop->watcher_pending) != NULL) {
         loop->watcher_pending = w->next_free;
         le_watcher_clear_refs(w);
-        le_watcher_push_list(&loop->watcher_freelist, w);
-        loop->watcher_freelist_depth++;
-        if (loop->watcher_freelist_depth > loop->watcher_freelist_max_depth) loop->watcher_freelist_max_depth = loop->watcher_freelist_depth;
+        if (w->recycle_after_dispatch) {
+            w->fd = -1;
+            loop->watcher_recycle_calls++;
+            le_watcher_push_list(&loop->watcher_freelist, w);
+            loop->watcher_freelist_depth++;
+            if (loop->watcher_freelist_depth > loop->watcher_freelist_max_depth) loop->watcher_freelist_max_depth = loop->watcher_freelist_depth;
+        }
+        else {
+            w->next_retired = loop->watcher_retired;
+            loop->watcher_retired = w;
+        }
     }
 }
 
@@ -986,6 +1026,26 @@ static int le_apply_mask(le_watcher_t *w) {
     return le_epoll_ctl_timed(w->loop, EPOLL_CTL_MOD, w->fd, &ev);
 }
 
+static void le_dispatch_batch_leave(pTHX_ void *ptr) {
+    le_loop_t *loop = (le_loop_t *)ptr;
+    PERL_UNUSED_CONTEXT;
+    if (!loop) return;
+    if (loop->in_dispatch_batch) loop->in_dispatch_batch--;
+    if (!loop->in_dispatch_batch) le_watcher_promote_pending(loop);
+}
+
+static void le_loop_driver_leave(pTHX_ void *ptr) {
+    le_loop_t *loop = (le_loop_t *)ptr;
+    PERL_UNUSED_CONTEXT;
+    if (loop && loop->driver_depth) loop->driver_depth--;
+}
+
+static void le_loop_driver_enter(pTHX_ le_loop_t *loop) {
+    if (loop->driver_depth)
+        croak("Loop is already running; reentrant driving is not allowed");
+    loop->driver_depth++;
+}
+
 
 /*
  * Dispatch one epoll batch.
@@ -1003,6 +1063,7 @@ le_dispatch_batch(pTHX_ le_loop_t *loop, int n) {
 
     loop->in_dispatch_batch++;
     ENTER;
+    SAVEDESTRUCTOR_X(le_dispatch_batch_leave, loop);
     SAVETMPS;
     loop->callback_batch_scope_enters++;
 
@@ -1107,8 +1168,6 @@ le_dispatch_batch(pTHX_ le_loop_t *loop, int n) {
     if (scope_callbacks > loop->callback_scope_max_callbacks) loop->callback_scope_max_callbacks = scope_callbacks;
     FREETMPS;
     LEAVE;
-    loop->in_dispatch_batch--;
-    if (!loop->in_dispatch_batch) le_watcher_promote_pending(loop);
 }
 
 
@@ -1162,6 +1221,7 @@ static SV *le_watch_register(SV *loop_obj, le_loop_t *loop, int fd, le_watch_opt
     le_watcher_t *w;
     le_watcher_t *old;
     SV *watcher_sv;
+    le_registration_t *registration;
     struct epoll_event ev;
     int operation;
 
@@ -1186,7 +1246,15 @@ static SV *le_watch_register(SV *loop_obj, le_loop_t *loop, int fd, le_watch_opt
     w->lean = (opt->lean && !w->callback_args) ? 1 : 0;
     if (w->lean) loop->lean_watchers++;
 
-    watcher_sv = sv_setref_pv(newSV(0), "Linux::Event::_Registration", (void*)w);
+    registration = (le_registration_t *)calloc(1, sizeof(*registration));
+    if (!registration) {
+        le_watcher_destroy(w);
+        croak("calloc registration failed");
+    }
+    registration->watcher = w;
+    registration->refs = 2;
+    w->registration = registration;
+    watcher_sv = sv_setref_pv(newSV(0), "Linux::Event::_Registration", (void*)registration);
     if (!w->lean || (w->callback_args && !w->callback_arg_data))
         w->self_sv = newSVsv(watcher_sv);
     if (!w->lean) {
@@ -1207,6 +1275,7 @@ static SV *le_watch_register(SV *loop_obj, le_loop_t *loop, int fd, le_watch_opt
             && le_epoll_ctl_timed(loop, EPOLL_CTL_ADD, fd, &ev) == 0)) {
         int err = errno;
         le_watcher_destroy(w);
+        SvREFCNT_dec(watcher_sv);
         croak("epoll_ctl %s fd %d failed: %s",
             old ? "MOD" : "ADD", fd, strerror(err));
     }
@@ -1397,6 +1466,8 @@ set_event_capacity(loop_obj, capacity)
     struct epoll_event *events;
     if (capacity < 1) croak("event capacity must be >= 1");
     if (capacity > 1048576) croak("event capacity too large");
+    if (loop->driver_depth || loop->in_dispatch_batch)
+        croak("event capacity cannot change while Loop is running or dispatching");
     events = (struct epoll_event *)calloc((size_t)capacity, sizeof(struct epoll_event));
     if (!events) croak("calloc events failed");
     free(loop->events);
@@ -1591,8 +1662,11 @@ run_once(loop_obj, timeout_value = -1)
     timeout_ms = timeout_value < 0 ? -1 : (int)timeout_value;
     loop = le_loop_from_sv(loop_obj);
     loop->run_once_calls++;
-    if (loop->stop_flag) { RETVAL = 0; }
-    else {
+    le_loop_driver_enter(aTHX_ loop);
+    ENTER;
+    SAVEDESTRUCTOR_X(le_loop_driver_leave, loop);
+    loop->stop_flag = 0;
+    {
         t0 = loop->profile_enabled ? le_now_ns() : 0;
         n = epoll_wait(loop->epoll_fd, loop->events, (int)loop->event_cap, timeout_ms);
         if (loop->profile_enabled) loop->epoll_wait_ns += le_now_ns() - t0;
@@ -1605,6 +1679,7 @@ run_once(loop_obj, timeout_value = -1)
             RETVAL = n;
         }
     }
+    LEAVE;
   OUTPUT:
     RETVAL
 
@@ -1619,6 +1694,9 @@ run(loop_obj)
   CODE:
     loop = le_loop_from_sv(loop_obj);
     loop->run_calls++;
+    le_loop_driver_enter(aTHX_ loop);
+    ENTER;
+    SAVEDESTRUCTOR_X(le_loop_driver_leave, loop);
     loop->stop_flag = 0;
     while (!loop->stop_flag) {
         t0 = loop->profile_enabled ? le_now_ns() : 0;
@@ -1630,6 +1708,7 @@ run(loop_obj)
         le_dispatch_batch(aTHX_ loop, n);
         if (loop->profile_enabled) loop->dispatch_ns += le_now_ns() - dispatch_t0;
     }
+    LEAVE;
 
 void
 run_for(loop_obj, seconds)
@@ -1657,6 +1736,9 @@ run_for(loop_obj, seconds)
     deadline_ns = now_ns + duration_ns;
     loop = le_loop_from_sv(loop_obj);
     loop->run_for_calls++;
+    le_loop_driver_enter(aTHX_ loop);
+    ENTER;
+    SAVEDESTRUCTOR_X(le_loop_driver_leave, loop);
     loop->stop_flag = 0;
 
     while (!loop->stop_flag) {
@@ -1675,12 +1757,13 @@ run_for(loop_obj, seconds)
             if (errno == EINTR) continue;
             croak("epoll_wait failed: %s", strerror(errno));
         }
-        if (n == 0) continue;
         le_note_epoll_batch(loop, n);
+        if (n == 0) continue;
         dispatch_t0 = loop->profile_enabled ? le_now_ns() : 0;
         le_dispatch_batch(aTHX_ loop, n);
         if (loop->profile_enabled) loop->dispatch_ns += le_now_ns() - dispatch_t0;
     }
+    LEAVE;
 
 MODULE = Linux::Event::Loop    PACKAGE = Linux::Event::Timer::_Descriptor
 PROTOTYPES: DISABLE
@@ -1914,13 +1997,16 @@ void
 DESTROY(w_obj)
     SV *w_obj
   CODE:
-    /* The loop owns native watcher lifetime; this Perl handle is non-owning. */
+    le_registration_t *registration = le_registration_from_sv(w_obj);
+    sv_setiv(SvRV(w_obj), 0);
+    le_registration_release(registration);
 
 int
 fd(w_obj)
     SV *w_obj
   CODE:
-    RETVAL = le_watcher_from_sv(w_obj)->fd;
+    le_watcher_t *w = le_watcher_from_sv(w_obj);
+    RETVAL = w ? w->fd : -1;
   OUTPUT:
     RETVAL
 
@@ -1929,7 +2015,7 @@ fh(w_obj)
     SV *w_obj
   CODE:
     le_watcher_t *w = le_watcher_from_sv(w_obj);
-    RETVAL = w->fh_sv ? newSVsv(w->fh_sv) : newSV(0);
+    RETVAL = w && w->fh_sv ? newSVsv(w->fh_sv) : newSV(0);
   OUTPUT:
     RETVAL
 
@@ -1938,7 +2024,7 @@ data(w_obj)
     SV *w_obj
   CODE:
     le_watcher_t *w = le_watcher_from_sv(w_obj);
-    RETVAL = w->data_sv ? newSVsv(w->data_sv) : newSV(0);
+    RETVAL = w && w->data_sv ? newSVsv(w->data_sv) : newSV(0);
   OUTPUT:
     RETVAL
 
@@ -1946,7 +2032,8 @@ int
 lean(w_obj)
     SV *w_obj
   CODE:
-    RETVAL = le_watcher_from_sv(w_obj)->lean;
+    le_watcher_t *w = le_watcher_from_sv(w_obj);
+    RETVAL = w ? w->lean : 0;
   OUTPUT:
     RETVAL
 
@@ -1955,7 +2042,7 @@ loop(w_obj)
     SV *w_obj
   CODE:
     le_watcher_t *w = le_watcher_from_sv(w_obj);
-    RETVAL = w->loop_sv ? newSVsv(w->loop_sv) : newSV(0);
+    RETVAL = w && w->loop_sv ? newSVsv(w->loop_sv) : newSV(0);
   OUTPUT:
     RETVAL
 

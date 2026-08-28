@@ -43,6 +43,7 @@ my @files = (
     't/to_json/modify.t',
     't/to_json/modify_deprecated.t',
     't/to_json/no_recurse.t',
+    't/to_json/recurse.t',
     't/to_json/role.t',
     't/to_json/subclass.t',
     't/to_json/subclass_role.t'

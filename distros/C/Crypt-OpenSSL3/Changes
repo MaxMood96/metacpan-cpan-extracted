@@ -1,5 +1,18 @@
 Revision history for Crypt-OpenSSL3
 
+0.011     2026-08-27 14:52:43+02:00 Europe/Brussels
+          - Allow an undefined message digest in MD::Context->verify_init
+          - Decode UTF8 data coming from ASN1 properly
+          - Add Encoder and Decoder classes for PKey
+          - Fix error_string method to actually return a valid value
+          - Add SKey support
+          - Add algorithm parameter support to X509::Algorithm
+          - Add BasicConstraints class
+          - Remove ctrl methods from MD and Cipher contexts
+          - Remove typed param methods from PKey
+          - Invert return value of set_alpn_protos
+          - Always add null byte to buffers
+
 0.010     2026-07-04 16:49:07+02:00 Europe/Brussels
           - Change license to Apache 2.0
           - Add support for decoding der from/to strings.

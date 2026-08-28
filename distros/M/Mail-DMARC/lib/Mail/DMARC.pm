@@ -4,15 +4,15 @@ use warnings;
 use feature 'signatures';
 no warnings 'experimental::args_array_with_signatures';    ## no critic (ProhibitNoWarnings)
 
-our $VERSION = '2.20260724';
+our $VERSION = '2.20260827';
 
 use Carp;
 our $psl_loads = 0;
 
 use parent 'Mail::DMARC::Base';
 require Mail::DMARC::Policy;
-require Mail::DMARC::Report;
 require Mail::DMARC::Result;
+require Mail::DMARC::Report::Aggregate::Record;
 require Mail::DMARC::Report::Aggregate::Record::Auth_Results::SPF;
 require Mail::DMARC::Report::Aggregate::Record::Auth_Results::DKIM;
 
@@ -194,6 +194,7 @@ sub policy( $self, @args ) {
 
 sub report($self) {
     return $self->{report} if ref $self->{report};
+    require Mail::DMARC::Report;
     return $self->{report} = Mail::DMARC::Report->new();
 }
 
@@ -307,7 +308,7 @@ Mail::DMARC - Perl implementation of DMARC
 
 =head1 VERSION
 
-version 2.20260724
+version 2.20260827
 
 =head1 SYNOPSIS
 

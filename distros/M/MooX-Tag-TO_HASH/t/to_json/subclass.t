@@ -28,10 +28,10 @@ subtest 'specify all values' => sub {
                 duck           => 'Donald',
                 horse          => 'Ed',
                 pig            => 'Wilbur',
-                secret_admirer => 'Nemo'
+                secret_admirer => 'Nemo',
             );
         },
-        'obj created'
+        'obj created',
     ) or bail_out $@;
 
     is( $obj, D(), 'obj defined' ) or bail_out;
@@ -39,17 +39,18 @@ subtest 'specify all values' => sub {
     is(
         $obj->TO_JSON,
         hash {
-            field c1_bool => exact_ref JSON::MaybeXS::true;
-            field c1_num  => number 14;
-            field c1_str  => '13';
-            field c2_bool => exact_ref JSON::MaybeXS::true;
-            field c2_num  => number 24;
-            field c2_str  => '23';
-            field cow     => 'Daisy';
-            field hen     => 'Ruby';
-            field pig     => 'Wilbur';
-            field goose   => 'Donald';
-            field horse   => 'Ed';
+            field c1_bool   => exact_ref JSON::MaybeXS::true;
+            field c1_num    => number 14;
+            field c1_str    => '13';
+            field c2_bool   => exact_ref JSON::MaybeXS::true;
+            field c2_num    => number 24;
+            field c2_str    => '23';
+            field cow       => 'Daisy';
+            field hen       => 'Ruby';
+            field pig       => 'Wilbur';
+            field goose     => 'Donald';
+            field horse     => 'Ed';
+            field porcupine => 'Prickly';
             end;
         },
         'value'
@@ -66,7 +67,7 @@ subtest 'omit values' => sub {
         lives {
             $obj = CLASS->new( secret_admirer => 'Nemo' );
         },
-        'obj created'
+        'obj created',
     ) or bail_out $@;
 
     is( $obj, D(), 'obj defined' ) or bail_out;
@@ -74,18 +75,19 @@ subtest 'omit values' => sub {
     is(
         $obj->TO_JSON,
         hash {
-            field c1_bool => exact_ref JSON::MaybeXS::true;
-            field c1_num  => number 14;
-            field c1_str  => '13';
-            field c2_bool => exact_ref JSON::MaybeXS::true;
-            field c2_num  => number 24;
-            field c2_str  => '23';
-            field cow     => U();
-            field hen     => U();
-            field pig     => U();
+            field c1_bool   => exact_ref JSON::MaybeXS::true;
+            field c1_num    => number 14;
+            field c1_str    => '13';
+            field c2_bool   => exact_ref JSON::MaybeXS::true;
+            field c2_num    => number 24;
+            field c2_str    => '23';
+            field cow       => U();
+            field hen       => U();
+            field pig       => U();
+            field porcupine => 'Prickly';
             end;
         },
-        'value'
+        'value',
     );
 };
 

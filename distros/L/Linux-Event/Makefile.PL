@@ -26,16 +26,15 @@ WriteMakefile(
         no_index => {
             package => [qw(
                 Linux::Event::_Registration
+                Linux::Event::_Resolver
+                Linux::Event::_Resolver::_Native
                 Linux::Event::_SocketConfig
                 Linux::Event::Datagram::_ReadyTimer
-                Linux::Event::Listener::_Engine
                 Linux::Event::Signal::_Descriptor
                 Linux::Event::Signal::_Engine
                 Linux::Event::Signal::_Service
                 Linux::Event::Stream::_Connection
                 Linux::Event::Stream::_Deadline
-                Linux::Event::Stream::_Resolver
-                Linux::Event::Stream::_Resolver::_Native
                 Linux::Event::Stream::XSDescriptor
                 Linux::Event::Stream::XSState
                 Linux::Event::Timer::_Descriptor

@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.102';
+our $VERSION = '0.103';
 
 use Carp qw(croak);
 use Errno ();
@@ -19,7 +19,7 @@ use Socket qw(
 use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 
 use Linux::Event::Error;
-use Linux::Event::Stream::_Resolver ();
+use Linux::Event::_Resolver ();
 use Linux::Event::Address;
 use Linux::Event::_SocketConfig ();
 
@@ -312,7 +312,7 @@ sub _now () { clock_gettime(CLOCK_MONOTONIC) }
 
 sub _start_resolution ($self) {
     return if $self->{state} ne 'pending' || $self->{resolver_request};
-    my $resolver = Linux::Event::Stream::_Resolver->for_loop($self->{loop});
+    my $resolver = Linux::Event::_Resolver->for_loop($self->{loop});
     $self->{resolver} = $resolver;
     my $id = eval { $resolver->submit($self, $self->{host}, $self->{port}) };
     if (!$id) {

@@ -2,6 +2,7 @@ Changes
 COPYING
 docs/Architecture.md
 lib/Cavil/Matcher.pm
+lib/Cavil/Matcher/FpIndex.pm
 lib/Cavil/Matcher/Index.pm
 lib/Cavil/Matcher/Manifest.pm
 Makefile.PL
@@ -13,6 +14,8 @@ src/bag.cc
 src/bag.h
 src/bindings.cc
 src/bindings.h
+src/fingerprint.cc
+src/fingerprint.h
 src/matcher.cc
 src/matcher.h
 src/segment.cc
@@ -36,6 +39,7 @@ t/13shared.t
 t/14coverage.t
 t/15segment_header.t
 t/16resolve.t
+t/fingerprint.t
 t/fixtures/licenses/04license.1.pattern
 t/fixtures/licenses/04license.1.txt
 t/fixtures/licenses/04license.10.pattern
@@ -95,6 +99,7 @@ t/fixtures/text/09normalize.1.in
 t/fixtures/text/09normalize.1.out
 t/fixtures/text/09normalize.2.in
 t/fixtures/text/09normalize.2.out
+t/fp_index.t
 typemap
 xt/differential.t
 META.yml                                 Module YAML meta-data (added by MakeMaker)

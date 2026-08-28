@@ -90,7 +90,9 @@ Crossing `stdin_high_watermark` returns false while accepting the bytes.
 `on_stdin_drain` fires when pending bytes reach `stdin_low_watermark`.
 
 A nonzero `max_pending_stdin` is a separate hard safety limit. Overflow rejects
-only the new bytes and reports `output_limit`.
+the unsent bytes, closes Process stdin, and reports `output_limit`. A prefix
+already written directly before a partial write exposed the oversized
+remainder cannot be recalled.
 
 `close_stdin` is graceful: it rejects new writes, drains accepted bytes, then
 closes the pipe to deliver EOF. Pipe writes block SIGPIPE only in the calling

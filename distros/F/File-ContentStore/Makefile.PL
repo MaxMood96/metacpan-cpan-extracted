@@ -23,6 +23,7 @@ my %WriteMakefileArgs = (
     "Carp" => 0,
     "Digest" => 0,
     "Digest::SHA" => 0,
+    "List::Util" => 0,
     "Moo" => "2.000000",
     "Path::Tiny" => "0.069",
     "Type::Params" => 0,
@@ -43,7 +44,7 @@ my %WriteMakefileArgs = (
     "Test::More" => "0.88",
     "strict" => 0
   },
-  "VERSION" => "1.005",
+  "VERSION" => "1.006",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -58,6 +59,7 @@ my %FallbackPrereqs = (
   "File::Spec" => 0,
   "IO::Handle" => 0,
   "IPC::Open3" => 0,
+  "List::Util" => 0,
   "Moo" => "2.000000",
   "Path::Tiny" => "0.069",
   "Test::More" => "0.88",

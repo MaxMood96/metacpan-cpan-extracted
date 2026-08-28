@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.102';
+our $VERSION = '0.103';
 
 use Carp qw(croak);
 use Scalar::Util qw(blessed);
@@ -166,8 +166,10 @@ C<cancel> method when the handle is available.
 
 The opaque result of C<watch> supports C<fd>, C<fh>, C<data>, C<loop>, C<lean>,
 C<cancel>, C<enable_read>, C<disable_read>, C<enable_write>, and
-C<disable_write>. C<cancel> is idempotent. An fd-only registration returns
-undef from C<fh>.
+C<disable_write>. C<cancel> is idempotent and makes an obsolete handle inert,
+including after native watcher storage is reused. Cancellation releases the
+registration's retained Perl state. An fd-only registration returns undef from
+C<fh>.
 
 =head1 DRIVING THE LOOP
 
@@ -179,12 +181,18 @@ Waits and dispatches until C<stop> is called.
 
 Runs one C<epoll_wait>. A negative timeout blocks indefinitely, zero polls, and
 a positive value is a maximum wait in milliseconds. Returns the number of
-events returned by epoll.
+events returned by epoll. A prior C<stop> request does not suppress a later
+C<run_once> call.
 
 =head2 run_for($seconds)
 
 Runs against a monotonic deadline for the supplied non-negative number of
 seconds.
+
+Only one driver method may be active for a given Loop. Calling C<run>,
+C<run_once>, or C<run_for> recursively on that same Loop throws an exception;
+a callback may drive a different Loop. C<set_event_capacity> is likewise
+rejected while its Loop is running or dispatching.
 
 =head2 stop
 

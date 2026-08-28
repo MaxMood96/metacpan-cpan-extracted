@@ -1,0 +1,58 @@
+[%- WRAPPER 'web/en/layouts/default.html.tt' -%]
+
+<p class="back-link"><a href="[% back_url | html %]">&larr; [% back_label | html %]</a></p>
+
+<h2 class="graph-title">[% title | html %]</h2>
+
+<div class="graph-export-bar">
+  <button class="btn-graph-export" onclick="biExportSVG()">Export SVG</button>
+  <button class="btn-graph-export" onclick="biExportPNG()">Export PNG</button>
+</div>
+
+<div class="graph-container">
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  [% graph_html %]
+</div>
+
+<script>
+(function () {
+  function biExportSVG() {
+    var svg = document.getElementById('chart');
+    if (!svg) return;
+    var src = '<?xml version="1.0" encoding="UTF-8"?>\n'
+            + new XMLSerializer().serializeToString(svg);
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([src], { type: 'image/svg+xml;charset=utf-8' }));
+    a.download = 'chart.svg';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+  function biExportPNG() {
+    var svg = document.getElementById('chart');
+    if (!svg) return;
+    var w = parseInt(svg.getAttribute('width'), 10)  || 800;
+    var h = parseInt(svg.getAttribute('height'), 10) || 600;
+    var canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    var ctx = canvas.getContext('2d');
+    var src = new XMLSerializer().serializeToString(svg);
+    var url = URL.createObjectURL(new Blob([src], { type: 'image/svg+xml;charset=utf-8' }));
+    var img = new Image();
+    img.onload = function () {
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      var a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = 'chart.png';
+      a.click();
+    };
+    img.src = url;
+  }
+  window.biExportSVG = biExportSVG;
+  window.biExportPNG = biExportPNG;
+}());
+</script>
+
+[%- END -%]

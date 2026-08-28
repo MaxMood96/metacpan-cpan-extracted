@@ -9,6 +9,15 @@ use Test::Lib;
 use My::Test::TO_JSON::C3;
 use constant CLASS => 'My::Test::TO_JSON::C3';
 
+{
+    package My::Test::TO_JSON::Default_No_Recurse;
+
+    use Moo;
+    with 'MooX::Tag::TO_JSON';
+
+    has child => ( is => 'ro', to_json => 1 );
+}
+
 # cow & hen are always there
 # duck & horse only if not empty
 # duck becomes goose
@@ -50,6 +59,24 @@ subtest 'specify all values' => sub {
                 call hen   => U();
             };
             end;
+        },
+        'value'
+    );
+};
+
+subtest 'default does not recurse' => sub {
+
+    my $child  = CLASS->new( horse => 'Ed' );
+    my $parent = My::Test::TO_JSON::Default_No_Recurse->new( child => $child );
+
+    is(
+        $parent->TO_JSON,
+        hash {
+            field child => object {
+                call horse => 'Ed';
+                call cow   => U();
+                call hen   => U();
+            };
             end;
         },
         'value'

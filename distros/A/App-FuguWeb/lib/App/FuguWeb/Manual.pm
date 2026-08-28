@@ -18,7 +18,7 @@
 use v5.36;
 
 package App::FuguWeb::Manual;
-our $VERSION = '0.1.1';
+our $VERSION = '0.2.0';
 
 use Fugu::File;
 

@@ -37,6 +37,9 @@ sub pair () {
 
 sub new_state () { return { bytes => '', errors => [], closes => 0 } }
 
+# Keep the ordering margins wide enough for loaded CI and distribution builds.
+sub test_seconds ($seconds) { return $seconds * 5 }
+
 sub timeout_case (%option) {
     my ($left, $right) = pair();
     my $loop = Linux::Event::Loop->new;
@@ -49,13 +52,13 @@ sub timeout_case (%option) {
 
 {
     my ($loop, $stream, $peer, $state)
-        = timeout_case(idle_timeout => 0.04);
-    $loop->run_for(0.15);
+        = timeout_case(idle_timeout => test_seconds(0.04));
+    $loop->run_for(test_seconds(0.15));
     ok $stream->is_closed, 'idle timeout closes inactive Stream';
     is scalar(@{ $state->{errors} }), 1, 'idle timeout reports one error';
     is $state->{errors}[0]->type, 'timeout', 'idle error has timeout type';
     is $state->{errors}[0]->operation, 'idle', 'idle operation is identified';
-    cmp_ok $state->{errors}[0]->timeout, '==', 0.04,
+    cmp_ok $state->{errors}[0]->timeout, '==', test_seconds(0.04),
         'idle duration is retained on Error';
     ok defined($state->{errors}[0]->deadline),
         'idle absolute deadline is retained on Error';
@@ -65,13 +68,13 @@ sub timeout_case (%option) {
 
 {
     my ($loop, $stream, $peer, $state)
-        = timeout_case(read_timeout => 0.06);
-    $loop->run_for(0.035);
+        = timeout_case(read_timeout => test_seconds(0.06));
+    $loop->run_for(test_seconds(0.035));
     syswrite($peer, 'x') == 1 or die "syswrite: $!";
-    $loop->run_for(0.035);
+    $loop->run_for(test_seconds(0.035));
     ok !$stream->is_closed, 'successful input resets read inactivity time';
     is $state->{bytes}, 'x', 'read activity was delivered';
-    $loop->run_for(0.08);
+    $loop->run_for(test_seconds(0.08));
     ok $stream->is_closed, 'read timeout expires after reset interval';
     is $state->{errors}[0]->operation, 'read', 'read timeout is identified';
     close $peer;
@@ -79,15 +82,15 @@ sub timeout_case (%option) {
 
 {
     my ($loop, $stream, $peer, $state)
-        = timeout_case(idle_timeout => 0.06);
-    $loop->run_for(0.035);
+        = timeout_case(idle_timeout => test_seconds(0.06));
+    $loop->run_for(test_seconds(0.035));
     syswrite($peer, 'a') == 1 or die "syswrite: $!";
-    $loop->run_for(0.035);
+    $loop->run_for(test_seconds(0.035));
     ok !$stream->is_closed, 'input progress resets idle timeout';
     $stream->write('b');
-    $loop->run_for(0.035);
+    $loop->run_for(test_seconds(0.035));
     ok !$stream->is_closed, 'output progress also resets idle timeout';
-    $loop->run_for(0.08);
+    $loop->run_for(test_seconds(0.08));
     ok $stream->is_closed, 'idle timeout expires after final activity';
     is $state->{errors}[0]->operation, 'idle',
         'reset idle timeout retains idle operation';
@@ -96,12 +99,12 @@ sub timeout_case (%option) {
 
 {
     my ($loop, $stream, $peer, $state)
-        = timeout_case(read_timeout => 0.04);
+        = timeout_case(read_timeout => test_seconds(0.04));
     $stream->pause_read;
-    $loop->run_for(0.08);
+    $loop->run_for(test_seconds(0.08));
     ok !$stream->is_closed, 'pause_read suspends the read timeout';
     $stream->resume_read;
-    $loop->run_for(0.08);
+    $loop->run_for(test_seconds(0.08));
     ok $stream->is_closed, 'resume_read starts a fresh read interval';
     is $state->{errors}[0]->operation, 'read',
         'resumed read timeout reports read operation';
@@ -110,9 +113,9 @@ sub timeout_case (%option) {
 
 {
     my ($loop, $stream, $peer, $state) = timeout_case(
-        deadline => { after => 0.04, operation => 'response' },
+        deadline => { after => test_seconds(0.04), operation => 'response' },
     );
-    $loop->run_for(0.12);
+    $loop->run_for(test_seconds(0.12));
     ok $stream->is_closed, 'constructor operation deadline closes Stream';
     is $state->{errors}[0]->operation, 'response',
         'constructor operation label is retained';
@@ -127,15 +130,17 @@ sub timeout_case (%option) {
     my $stream = T::DeadlineStream->new(
         fh => $left,
         data => $state,
-        deadline => { after => 0.05, operation => 'attached-session' },
+        deadline => {
+            after => test_seconds(0.05), operation => 'attached-session',
+        },
     );
-    select undef, undef, undef, 0.07;
+    select undef, undef, undef, test_seconds(0.07);
     my $loop = Linux::Event::Loop->new;
     $loop->add($stream);
-    $loop->run_for(0.025);
+    $loop->run_for(test_seconds(0.025));
     ok !$stream->is_closed,
         'detached time does not consume a relative established deadline';
-    $loop->run_for(0.06);
+    $loop->run_for(test_seconds(0.06));
     ok $stream->is_closed, 'relative deadline expires after attachment';
     is $state->{errors}[0]->operation, 'attached-session',
         'post-attachment deadline retains operation label';
@@ -144,10 +149,12 @@ sub timeout_case (%option) {
 
 {
     my ($loop, $stream, $peer, $state) = timeout_case();
-    $stream->set_deadline(after => 0.06, operation => 'fixed');
-    $loop->run_for(0.035);
+    $stream->set_deadline(
+        after => test_seconds(0.06), operation => 'fixed',
+    );
+    $loop->run_for(test_seconds(0.035));
     syswrite($peer, 'activity') == 8 or die "syswrite: $!";
-    $loop->run_for(0.06);
+    $loop->run_for(test_seconds(0.06));
     ok $stream->is_closed, 'I/O does not extend an overall operation deadline';
     is $state->{errors}[0]->operation, 'fixed',
         'fixed operation deadline remains distinguishable';
@@ -156,11 +163,11 @@ sub timeout_case (%option) {
 
 {
     my ($loop, $stream, $peer, $state) = timeout_case();
-    my $at = Linux::Event::Timer->now + 0.04;
+    my $at = Linux::Event::Timer->now + test_seconds(0.04);
     $stream->set_deadline(at => $at, operation => 'absolute');
     cmp_ok abs($stream->deadline - $at), '<', 0.000_001,
         'absolute operation deadline is retained';
-    $loop->run_for(0.1);
+    $loop->run_for(test_seconds(0.1));
     ok $stream->is_closed, 'absolute operation deadline expires';
     is $state->{errors}[0]->operation, 'absolute',
         'absolute deadline operation is reported';
@@ -169,12 +176,16 @@ sub timeout_case (%option) {
 
 {
     my ($loop, $stream, $peer, $state) = timeout_case();
-    $stream->set_deadline(after => 0.03, operation => 'cancelled');
+    $stream->set_deadline(
+        after => test_seconds(0.03), operation => 'cancelled',
+    );
     $stream->clear_deadline;
-    $loop->run_for(0.07);
+    $loop->run_for(test_seconds(0.07));
     ok !$stream->is_closed, 'clear_deadline cancels an operation deadline';
-    $stream->set_deadline(after => 0.03, operation => 'replacement');
-    $loop->run_for(0.08);
+    $stream->set_deadline(
+        after => test_seconds(0.03), operation => 'replacement',
+    );
+    $loop->run_for(test_seconds(0.08));
     ok $stream->is_closed, 'replacement operation deadline expires';
     is $state->{errors}[0]->operation, 'replacement',
         'replacement operation label is reported';
@@ -188,12 +199,13 @@ sub timeout_case (%option) {
     my $loop = Linux::Event::Loop->new;
     my $state = new_state();
     my $stream = $loop->add(T::DeadlineStream->new(
-        fh => $left, data => $state, write_timeout => 0.04,
+        fh => $left, data => $state,
+        write_timeout => test_seconds(0.04),
     ));
     $stream->write('x' x (4 * 1024 * 1024));
     cmp_ok $stream->pending_bytes, '>', 0,
         'write timeout case has native queued output';
-    $loop->run_for(0.15);
+    $loop->run_for(test_seconds(0.15));
     ok $stream->is_closed, 'stalled queued output reaches write timeout';
     is $state->{errors}[0]->operation, 'write',
         'write timeout is identified';
@@ -225,10 +237,11 @@ sub timeout_case (%option) {
 
 {
     my ($loop, $stream, $peer, $state) = timeout_case(
-        idle_timeout => 0.04, read_timeout => 0.02,
+        idle_timeout => test_seconds(0.04),
+        read_timeout => test_seconds(0.02),
     );
     $stream->pause_read;
-    $loop->run_for(0.08);
+    $loop->run_for(test_seconds(0.08));
     ok $stream->is_closed,
         'pause_read suspends read timeout but not whole-connection idle timeout';
     is $state->{errors}[0]->operation, 'idle',
@@ -238,9 +251,9 @@ sub timeout_case (%option) {
 
 {
     my ($loop, $stream, $peer, $state)
-        = timeout_case(read_timeout => 0.03);
+        = timeout_case(read_timeout => test_seconds(0.03));
     close $peer;
-    $loop->run_for(0.08);
+    $loop->run_for(test_seconds(0.08));
     ok !$stream->is_closed, 'peer EOF disarms established read timeout';
     ok $stream->is_read_eof, 'peer EOF remains visible after disarming timeout';
     is scalar(@{ $state->{errors} }), 0,
@@ -256,7 +269,7 @@ sub timeout_case (%option) {
     is $stats->{activity_clock_calls}, 0,
         'ordinary Stream performs no activity clock reads';
     syswrite($peer, 'plain') == 5 or die "syswrite: $!";
-    $loop->run_for(0.02);
+    $loop->run_for(test_seconds(0.02));
     is $stream->{xs_state}->stats->{activity_clock_calls}, 0,
         'disabled fast path records no timestamps during input';
     $stream->close;

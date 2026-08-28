@@ -18,7 +18,7 @@
 use v5.36;
 
 package App::FuguWeb;
-our $VERSION = '0.1.1';
+our $VERSION = '0.2.0';
 
 # App::FuguWeb - a static documentation site for a Perl project.
 #

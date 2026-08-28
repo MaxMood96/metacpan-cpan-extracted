@@ -15,7 +15,7 @@ use Archive::Libarchive::EntryLinkResolver;
 use parent qw( Exporter );
 
 # ABSTRACT: Modern Perl bindings to libarchive
-our $VERSION = '0.09'; # VERSION
+our $VERSION = '0.10'; # VERSION
 
 
 my $ffi = Archive::Libarchive::Lib->ffi;
@@ -30,31 +30,45 @@ $ffi->attach( archive_version_number =>  [] => 'int'    );
 $ffi->attach( archive_version_string =>  [] => 'string' );
 $ffi->attach( archive_zlib_version =>    [] => 'string' );
 $ffi->ignore_not_found(1);
+$ffi->attach( archive_cng_version => [] => 'string' );
+$ffi->attach( archive_commoncrypto_version => [] => 'string' );
+$ffi->attach( archive_libacl_version => [] => 'string' );
+$ffi->attach( archive_libattr_version => [] => 'string' );
+$ffi->attach( archive_libbsdxml_version => [] => 'string' );
+$ffi->attach( archive_libexpat_version => [] => 'string' );
+$ffi->attach( archive_libiconv_version => [] => 'string' );
+$ffi->attach( archive_liblzo2_version => [] => 'string' );
+$ffi->attach( archive_libmd_version => [] => 'string' );
+$ffi->attach( archive_libpcre2_version => [] => 'string' );
+$ffi->attach( archive_libpcre_version => [] => 'string' );
+$ffi->attach( archive_librichacl_version => [] => 'string' );
+$ffi->attach( archive_libxml2_version => [] => 'string' );
+$ffi->attach( archive_mbedtls_version => [] => 'string' );
+$ffi->attach( archive_nettle_version => [] => 'string' );
+$ffi->attach( archive_openssl_version => [] => 'string' );
 $ffi->attach( archive_libzstd_version => [] => 'string' );
+$ffi->attach( archive_wincrypt_version => [] => 'string' );
 $ffi->ignore_not_found(0);
 
 
 sub versions ($class)
 {
   my %v = (
-    bzlib      => archive_bzlib_version()   // 'undef',
-    liblz4     => archive_liblz4_version()  // 'undef',
-    liblzma    => archive_liblzma_version() // 'undef',
-    libarchive => archive_version_string()  // 'undef',
-    zlib       => archive_zlib_version()    // 'undef',
-    perl       => $],
+    perl => $],
   );
 
-  if(__PACKAGE__->can('archive_libzstd_version'))
+  foreach my $symbol (keys %Archive::Libarchive::)
   {
-    $v{libzstd} = archive_libzstd_version();
-  }
-  else
-  {
-    $v{libzstd} = 'undef';
+    next if $symbol eq 'archive_version_number';
+    if($symbol =~ /^archive_(.*)_version\z/)
+    {
+      my $name = $1;
+      my $version = __PACKAGE__->$symbol;
+      $v{$name} = $version // 'undef';
+    }
   }
 
-  foreach my $mod (qw( FFI::Platypus Archive::Libarchive FFI::CheckLib Alien::Libarchive3 Foo ))
+  foreach my $mod (qw( FFI::Platypus Archive::Libarchive FFI::CheckLib Alien::Libarchive3 ))
   {
     my $version = $mod->VERSION;
     $v{$mod} = $version if defined $version;
@@ -87,7 +101,7 @@ Archive::Libarchive - Modern Perl bindings to libarchive
 
 =head1 VERSION
 
-version 0.09
+version 0.10
 
 =head1 SYNOPSIS
 
@@ -900,7 +914,7 @@ Graham Ollis <plicease@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2021,2022 by Graham Ollis.
+This software is copyright (c) 2021-2024 by Graham Ollis.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

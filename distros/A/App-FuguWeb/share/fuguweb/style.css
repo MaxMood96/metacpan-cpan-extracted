@@ -16,6 +16,13 @@
 
 /* Page */
 
+/* Without this guard, iOS Safari scales each text block separately */
+
+html {
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+}
+
 body {
 	background: #fff;
 	color: #000;

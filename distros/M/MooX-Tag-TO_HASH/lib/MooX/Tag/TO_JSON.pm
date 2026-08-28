@@ -7,9 +7,8 @@ use v5.10;
 use strict;
 use warnings;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
-use Safe::Isa;
 use JSON::MaybeXS ();
 use MooX::Tag::TO_HASH::Util ':all';
 
@@ -55,6 +54,9 @@ sub TO_JSON {
         # TBH, all of this should have been put into a bespoke
         # generated sub in the tag_handler.
 
+        # if attribute is being overridden, it'll start with a '+'
+        $attr =~ s/^[+]//;
+
         my $opt = $to_json->{$attr}{$attr};
         # hashes returned by the _tags method are readonly, so need to
         # check if key exists before querying it to avoid an exception
@@ -72,6 +74,10 @@ sub TO_JSON {
           : $attr;
 
         my $value = $self->$attr;
+
+        if ( exists $opt->{ +RECURSE } ) {
+            $value = process_value( $value, UC_TO_JSON );
+        }
 
         if ( defined $value ) {
             # force types
@@ -98,9 +104,6 @@ sub TO_JSON {
     return \%json;
 }
 
-
-
-
 1;
 
 #
@@ -125,7 +128,7 @@ MooX::Tag::TO_JSON - Controlled translation of Moo objects into JSON appropriate
 
 =head1 VERSION
 
-version 0.05
+version 0.06
 
 =head1 SYNOPSIS
 
@@ -156,10 +159,10 @@ version 0.05
 # resulting in
 
  $VAR1 = {
-           'hen' => undef,
            'cow' => 'Daisy',
+           'barn_door_closed' => bless( do{\(my $o = 0)}, 'JSON::PP::Boolean' ),
            'goose' => 'Frank',
-           'barn_door_closed' => bless( do{\(my $o = 0)}, 'JSON::PP::Boolean' )
+           'hen' => undef
          };
 
 =head1 DESCRIPTION
@@ -182,9 +185,13 @@ and call the L</TO_JSON> method on your instantiated object.
 Fields inherited from superclasses or consumed from roles which use
 C<MooX::Tag::TO_JSON> are automatically handled.
 
-If a field's value is another object, L</TO_JSON> will automatically
-turn that into a hash if it has its own C<TO_JSON> method (you can
-also prevent that).
+If a field's value is a plain scalar, L</TO_JSON> leaves it unchanged.
+
+If it is a reference, L</TO_JSON> will also leave it unchanged unless
+the field is marked with the C<recurse> option. With C<recurse>,
+objects are converted via their own C<TO_JSON> method when available,
+and plain array and hash references are walked recursively so that any
+nested objects, arrays, and hashes are likewise processed.
 
 =head2 Modifying the generated JSON
 
@@ -252,6 +259,13 @@ L<MooX::TO_JSON>.
 
 Only output the field if it was set and its value is defined.
 
+=item C<recurse>
+
+If the field value is an object, convert it via its C<TO_JSON> method
+when available. If the field value is a plain array or hash reference,
+walk that structure recursively and apply the same processing to nested
+objects, arrays, and hashes.
+
 =back
 
 =head1 METHODS
@@ -302,10 +316,10 @@ This method is added to the consuming class or role.
 
  $VAR1 = {
            'HEN' => 'Ruby',
-           'COW' => 'Daisy',
-           'BARN_DOOR_CLOSED' => bless( do{\(my $o = 1)}, 'JSON::PP::Boolean' ),
+           'HORSE' => 'Ed',
            'GOOSE' => 'Donald',
-           'HORSE' => 'Ed'
+           'BARN_DOOR_CLOSED' => bless( do{\(my $o = 1)}, 'JSON::PP::Boolean' ),
+           'COW' => 'Daisy'
          };
 
 =head1 DEPRECATED BEHAVIOR
@@ -355,11 +369,11 @@ Please report any bugs or feature requests to bug-moox-tag-to_hash@rt.cpan.org  
 
 Source is available at
 
-  https://gitlab.com/djerius/moox-tag-to_hash
+  https://codeberg.org/djerius/p5-MooX-Tag-TO_HASH
 
 and may be cloned from
 
-  https://gitlab.com/djerius/moox-tag-to_hash.git
+  https://codeberg.org/djerius/p5-MooX-Tag-TO_HASH.git
 
 =head1 SEE ALSO
 
@@ -383,7 +397,7 @@ L<MooX::TO_JSON - this is similar, but doesn't handle fields inherited from supe
 
 =head1 AUTHOR
 
-Diab Jerius <djerius@cpan.org>
+Diab Jerius <djerius@cfa.harvard.edu>
 
 =head1 COPYRIGHT AND LICENSE
 

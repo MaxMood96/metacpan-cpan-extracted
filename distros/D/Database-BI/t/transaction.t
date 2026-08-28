@@ -874,7 +874,10 @@ subtest 'Transaction 12: Recently-saved section server-side contract' => sub {
 		ok defined $stat->{mtime},    'Phase 3: stat includes mtime';
 		ok defined $stat->{size},     'Phase 3: stat includes size';
 		ok $stat->{size} > 0,         'Phase 3: file size is non-zero';
-		is $stat->{path}, $saved_path, 'Phase 3: stat echoes the requested path';
+
+		my $returned_path = $stat->{path};
+		$returned_path =~ s{/}{\\}g if $^O eq 'MSWin32';  # Normalize to backslashes on Windows
+		is($returned_path, $saved_path, 'Phase 3: stat echoes the requested path');
 
 		# Phase 4: /open serves the saved CSV as a data table.
 		$t->get_ok('/open?path=' . url_escape($saved_path))
@@ -1243,4 +1246,79 @@ subtest 'Transaction 18: Mixed-case upload filename opens correctly' => sub {
 	}
 };
 
-done_testing;
+subtest 'Transaction 19: Line graph lifecycle' => sub {
+	# Phase 1: "Line graph..." button appears on a data view page.
+	$t->get_ok('/view/sales')
+		->status_is(200, 'Phase 1: /view/sales loads')
+		->content_like(qr/btn-graph/, 'Phase 1: Line graph button present');
+
+	# Phase 2: GET /graph without params returns 400 regardless of HTML::D3.
+	$t->get_ok('/graph')
+		->status_is(400, 'Phase 2: /graph with no params returns 400');
+
+	# Phase 4: column validation happens before HTML::D3 is loaded.
+	$t->get_ok('/graph?l=table:sales&x=product&y=no_such_column')
+		->status_is(400, 'Phase 4: unknown y column returns 400');
+
+	# Phase 5: left-spec resolution happens before HTML::D3 is loaded.
+	$t->get_ok('/graph?l=table:nonexistent_xyzzy&x=product&y=amount')
+		->status_is(404, 'Phase 5: unresolvable left spec returns 404');
+
+	SKIP: {
+		eval { require HTML::D3 } or skip 'HTML::D3 not available', 8;
+
+		# Phase 3: valid params render a D3.js chart page.
+		$t->get_ok('/graph?l=table:sales&x=product&y=amount')
+			->status_is(200, 'Phase 3: /graph with valid params returns 200')
+			->content_like(qr/d3\.js|d3\.v7/, 'Phase 3: D3.js included in output')
+			->content_like(qr/Back to table/, 'Phase 3: back link present')
+			->content_like(qr/Export SVG/,    'Phase 3: SVG export button present')
+			->content_like(qr/Export PNG/,    'Phase 3: PNG export button present');
+
+		# Phase 6: graph pipeline honours filters.
+		$t->get_ok('/graph?l=table:sales&x=product&y=amount&f=region:eq:North')
+			->status_is(200, 'Phase 6: graph with filter param returns 200');
+	}
+};
+
+subtest 'Transaction 20: Graph UI polish, date-sort JS, and numeric Y-axis filter' => sub {
+	# Phase 1: /view/sales response contains the date-sort helper, the
+	# numeric Y-axis filter helpers, and the Plot-before-Cancel DOM order.
+	$t->get_ok('/view/sales')
+		->status_is(200, 'Phase 1: /view/sales loads')
+		->content_like(qr/biDateKey/,
+			'Phase 1: biDateKey date-sort helper present in page JS')
+		->content_like(qr/monthFirst/,
+			'Phase 1: monthFirst auto-detection logic present')
+		->content_like(qr/btn-graph/,
+			'Phase 1: btn-graph class present (button styled like toolbar peers)')
+		->content_like(
+			qr/btn-do-graph[^<]*>Plot<\/button>\s*<button[^>]*btn-cancel-graph/s,
+			'Phase 1: Plot button appears before Cancel in graph panel DOM')
+		->content_like(qr/buildYSelect/,
+			'Phase 1: buildYSelect helper present (numeric Y-axis filter)')
+		->content_like(qr/isNumericVal/,
+			'Phase 1: isNumericVal helper present')
+		->content_like(qr/isDateVal/,
+			'Phase 1: isDateVal exclusion helper present');
+
+	SKIP: {
+		eval { require HTML::D3 } or skip 'HTML::D3 not available', 7;
+
+		# Phase 2: /graph renders via the TT layout with the snippet embedded.
+		$t->get_ok('/graph?l=table:sales&x=product&y=amount')
+			->status_is(200, 'Phase 2: /graph with valid params returns 200')
+			->content_like(qr/class="back-link"/,
+				'Phase 2: back link uses standard back-link CSS class')
+			->content_like(qr/Back to table/,
+				'Phase 2: back link text is "Back to table"')
+			->content_like(qr/graph-container/,
+				'Phase 2: graph-container div present')
+			->content_like(qr/d3\.v7/,
+				'Phase 2: D3.js v7 loaded via CDN script tag')
+			->content_like(qr/biExportSVG|Export SVG/,
+				'Phase 2: SVG export button present');
+	}
+};
+
+done_testing();
