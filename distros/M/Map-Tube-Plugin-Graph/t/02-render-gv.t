@@ -48,11 +48,11 @@ my ($diagram, $fname);
 
 ($diagram, $fname) = $tube->render( format => 'gv' );
 like( $diagram, qr/^digraph\s/, 'GV format (start)' );
-unlike( $diagram, qr/lwidth=/, 'GV format - should not include formatting instructions' );
+unlike( $diagram, qr/pos\s*=/, 'GV format - should not include formatting instructions' );
 
 ($diagram, $fname) = $tube->render( format => 'dot' );
 like( $diagram, qr/^digraph\s/, 'DOT format (start)' );
-like( $diagram, qr/lwidth=/, 'DOT format - should include formatting instructions' );
+like( $diagram, qr/pos\s*=/, 'DOT format - should include formatting instructions' );
 
 unlink('xxxtest.dot');
 ($diagram, $fname) = $tube->render( format => 'dot', output_file => 'xxxtest.dot' );

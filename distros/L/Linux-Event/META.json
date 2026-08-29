@@ -20,6 +20,7 @@
       ],
       "package" : [
          "Linux::Event::_Registration",
+         "Linux::Event::Loop::Introspection",
          "Linux::Event::_Resolver",
          "Linux::Event::_Resolver::_Native",
          "Linux::Event::_SocketConfig",
@@ -29,6 +30,7 @@
          "Linux::Event::Signal::_Service",
          "Linux::Event::Stream::_Connection",
          "Linux::Event::Stream::_Deadline",
+         "Linux::Event::Stream::_Descriptor",
          "Linux::Event::Stream::XSDescriptor",
          "Linux::Event::Stream::XSState",
          "Linux::Event::Timer::_Descriptor",
@@ -59,10 +61,100 @@
          }
       }
    },
+   "provides" : {
+      "Linux::Event" : {
+         "file" : "lib/Linux/Event.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Address" : {
+         "file" : "lib/Linux/Event/Address.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Datagram" : {
+         "file" : "lib/Linux/Event/Datagram.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Error" : {
+         "file" : "lib/Linux/Event/Error.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Framer" : {
+         "file" : "lib/Linux/Event/Framer.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Framer::DecimalLength" : {
+         "file" : "lib/Linux/Event/Framer/DecimalLength.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Framer::Delimiter" : {
+         "file" : "lib/Linux/Event/Framer/Delimiter.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Framer::Fixed" : {
+         "file" : "lib/Linux/Event/Framer/Fixed.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Framer::LengthPrefix" : {
+         "file" : "lib/Linux/Event/Framer/LengthPrefix.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Framer::Netstring" : {
+         "file" : "lib/Linux/Event/Framer/Netstring.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Framer::U32BE" : {
+         "file" : "lib/Linux/Event/Framer/U32BE.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Framer::Varint" : {
+         "file" : "lib/Linux/Event/Framer/Varint.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Listener" : {
+         "file" : "lib/Linux/Event/Listener.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Loop" : {
+         "file" : "lib/Linux/Event/Loop.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Process" : {
+         "file" : "lib/Linux/Event/Process.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Signal" : {
+         "file" : "lib/Linux/Event/Signal.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Stream" : {
+         "file" : "lib/Linux/Event/Stream.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::TLS" : {
+         "file" : "lib/Linux/Event/TLS.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Timer" : {
+         "file" : "lib/Linux/Event/Timer.pm",
+         "version" : "0.105"
+      },
+      "Linux::Event::Wakeup" : {
+         "file" : "lib/Linux/Event/Wakeup.pm",
+         "version" : "0.105"
+      }
+   },
    "release_status" : "stable",
    "resources" : {
-      "homepage" : "https://github.com/haxmeister/perl-linux-event"
+      "bugtracker" : {
+         "web" : "https://github.com/haxmeister/perl-linux-event/issues"
+      },
+      "homepage" : "https://github.com/haxmeister/perl-linux-event",
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/haxmeister/perl-linux-event.git",
+         "web" : "https://github.com/haxmeister/perl-linux-event"
+      }
    },
-   "version" : "0.103",
+   "version" : "0.105",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

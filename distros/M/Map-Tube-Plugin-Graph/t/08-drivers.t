@@ -17,7 +17,15 @@ my @drivers = grep { $_ !~ /^nop/ } $tube->list_drivers( );
 
 for my $driver(@drivers) {
   diag(" $driver");
-  my ($diagram, undef) = $tube->render( driver => $driver );
+  my $diagram;
+  eval { ($diagram, undef) = $tube->render( driver => $driver ); };
+  if ( $@ ne '' ) {
+    diag( "It seems the GraphViz binary (dot) does not fully support\n" .
+          "non-overlapping node placement for driver $driver.\n" .
+          "Use 'overlap => 1' in in your own applications if necessary."
+        );
+    ($diagram, undef) = $tube->render( driver => $driver, overlap => 0 );
+  }
   isnt( $diagram, '', "$driver driver" );
 }
 

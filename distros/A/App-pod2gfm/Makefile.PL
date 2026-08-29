@@ -34,8 +34,9 @@ my %WriteMakefileArgs = (
         'Pod::Usage'               => '0',
     },
     META_MERGE => {
-        'meta-spec' => { version => 2 },
-        no_index    => {
+        'meta-spec'    => { version => 2 },
+        dynamic_config => 0,
+        no_index       => {
             directory => [
                 qw<
                     eg
@@ -81,6 +82,7 @@ my %WriteMakefileArgs = (
             },
         },
         x_contributors => [
+            q{Lukas Mai <lmai at web.de>},
             q{ryoskzypu <ryoskzypu@proton.me>},
         ],
         x_spdx_expression => 'MIT-0',

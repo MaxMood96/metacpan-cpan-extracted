@@ -23,6 +23,7 @@ t/aoh2hoh.t
 t/aov.t
 t/assign.HoH.t
 t/assign.t
+t/avals.t
 t/bedroc.python.py
 t/bedroc.python.t
 t/bedroc.t
@@ -39,6 +40,8 @@ t/col2col.t
 t/colnames_rownames.t
 t/concat.t
 t/cor.t
+t/cor_test.spearman.R.R
+t/cor_test.spearman.R.t
 t/cor_test.tails.t
 t/croak.messages.t
 t/csort.AoA.t
@@ -50,6 +53,9 @@ t/density.R.scipy.R
 t/density.R.scipy.py
 t/density.R.scipy.t
 t/density.t
+t/distributions.R.scipy.R
+t/distributions.R.scipy.t
+t/distributions.mpmath.py
 t/drop_duplicates.t
 t/dropna.t
 t/dunn_test.t
@@ -91,6 +97,7 @@ t/mean.t
 t/median.t
 t/melt.t
 t/merge.t
+t/minmax.nan.R.t
 t/model_pvalue_tails.t
 t/ncol.t
 t/nrow.t
@@ -102,18 +109,23 @@ t/parse_read.t
 t/pivot_table.t
 t/pm.coverage.t
 t/pnorm.t
+t/portability.bugs.t
 t/power_t_test.R.scipy.t
 t/prcomp.t
 t/predict.t
 t/predict2.t
 t/prop_test.t
+t/pt_qt.tails.R.R
+t/pt_qt.tails.R.t
 t/qcut.t
+t/qnorm.crit.R.scipy.t
 t/quantile.R.R
 t/quantile.R.t
 t/rank.t
 t/read_filter.20260706.t
 t/read_table.2.t
 t/read_table.comments.t
+t/read_table.na_strings.t
 t/read_table.t
 t/read_table.xlsx.t
 t/roc.t
@@ -124,6 +136,7 @@ t/shapiro_test.R.scipy.R
 t/shapiro_test.R.scipy.py
 t/shapiro_test.R.scipy.t
 t/skew_kurtosis.t
+t/std_qnorm.mpmath.py
 t/summary.t
 t/survival.t
 t/t_test.t
@@ -138,6 +151,9 @@ t/value_counts.t
 t/value_counts2.t
 t/var_sd_cov.R.R
 t/var_sd_cov.R.t
+t/var_test.ci.R.R
+t/var_test.ci.R.t
+t/var_test.ci.mpmath.py
 t/view.aoa.t
 t/view.t
 t/view2.t

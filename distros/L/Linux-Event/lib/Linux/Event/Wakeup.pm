@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.103';
+our $VERSION = '0.105';
 
 use Carp qw(croak);
 use Config ();
@@ -92,6 +92,7 @@ sub _attach_to_loop ($self, $loop) {
         if $state->{state} ne 'unattached' || $state->{loop};
     my $watcher = $loop->watch(
         fd      => $self->{fd},
+        _internal => 1,
         read    => sub { $self->_dispatch },
         error   => sub { die "Linux::Event Wakeup event source failed\n" },
         no_args => 1,
@@ -156,6 +157,19 @@ sub data ($self, @argument) {
     my $state = $self->_owner_state('data');
     $state->{data} = $argument[0] if @argument;
     return $state->{data};
+}
+
+sub _objects_for_loop ($class, $loop) {
+    my @object;
+    for my $id (keys %LIVE_HANDLE) {
+        my $object = $LIVE_HANDLE{$id} // next;
+        next if $object->{terminal};
+        my $state = $OWNER_STATE{$id} // next;
+        next if !$state->{loop}
+            || refaddr($state->{loop}) != refaddr($loop);
+        push @object, $object;
+    }
+    return \@object;
 }
 
 sub CLONE ($class) {

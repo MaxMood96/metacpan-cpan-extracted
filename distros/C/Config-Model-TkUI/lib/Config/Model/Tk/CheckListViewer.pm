@@ -7,7 +7,7 @@
 #
 #   The GNU Lesser General Public License, Version 2.1, February 1999
 #
-package Config::Model::Tk::CheckListViewer 1.381;
+package Config::Model::Tk::CheckListViewer 1.382;
 
 use strict;
 use warnings;

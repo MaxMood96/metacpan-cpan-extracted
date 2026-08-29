@@ -13,8 +13,35 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <io.h>
+#include <process.h>
+#ifndef STDIN_FILENO
+#define STDIN_FILENO 0
+#endif
+#ifndef STDOUT_FILENO
+#define STDOUT_FILENO 1
+#endif
+#ifndef STDERR_FILENO
+#define STDERR_FILENO 2
+#endif
+#ifndef isatty
+#define isatty _isatty
+#endif
+#ifndef fileno
+#define fileno _fileno
+#endif
+#ifndef usleep
+#define usleep(us) Sleep((DWORD)((us) / 1000 > 0 ? (us) / 1000 : 1))
+#endif
+#else
 #include <unistd.h>
-#include <getopt.h>
+#endif
+
+#include "cli_opt.h"
 
 
 #ifdef __cplusplus
@@ -39,6 +66,7 @@ typedef enum {
     CLI_INPUT_UNKNOWN = 0,
     CLI_INPUT_BINARY_HISTO,
     CLI_INPUT_JSON_HISTO,
+    CLI_INPUT_BPFTRACE_HISTO,
     CLI_INPUT_TEXT_NUMBERS,
     CLI_INPUT_RAW_DOUBLES
 } cli_input_format_t;
@@ -54,6 +82,10 @@ histo_status_t cli_read_histo2d_from_file(const char *path, histo2d_t **out_h);
 
 histo_status_t cli_read_any_histogram_from_stream(FILE *fp, histo_t **out_1d, histo2d_t **out_2d);
 histo_status_t cli_read_any_histogram_from_file(const char *path, histo_t **out_1d, histo2d_t **out_2d);
+
+/* bpftrace stream parsing */
+histo_status_t cli_parse_bpftrace_histogram_str(const char *text, histo_t **out_h);
+histo_status_t cli_parse_bpftrace_histogram(FILE *fp, histo_t **out_h);
 
 /* Time utilities */
 double cli_get_time_sec(void);

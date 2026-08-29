@@ -2,7 +2,7 @@ package Map::Tube::Plugin::Graph;
 
 use version;
 
-our $VERSION   = qv('v1.1.2');
+our $VERSION   = qv('v1.2.0');
 our $AUTHORITY = 'cpan:MANWAR';
 
 =head1 NAME
@@ -11,7 +11,7 @@ Map::Tube::Plugin::Graph - Graph plugin for Map::Tube.
 
 =head1 VERSION
 
-Version v1.1.2
+Version v1.2.0
 
 =cut
 
@@ -203,7 +203,16 @@ files.
 Most of the output formats will produce a binary stream. If the output is meant
 to be embedded in a text file (like a web page source), it is useful to
 transform it into a purely textual representation. This can be achieved by
-passing C<base64 =E<gt> 1>.
+passing C<base64 =E<gt> 1>. The default is 0.
+
+=item * C<overlap =E<gt> 0|1>
+
+Some drivers (notably, C<neato>, C<fdp>, and C<sfdp>) may produce diagrams
+where station nodes overlap, unless told otherwise. The default for L<Map::Tube>
+graphs is indeed to avoid such overlaps, equivalent to C<overlap =E<gt> 0>. You
+can explicitly allow overlaps by passing C<overlap =E<gt> 1>. (This may be
+necessary if your implementation of the external GraphViz binary (C<dot>) does
+not fully support the non-overlapping feature.)
 
 =item * C<line_name =E<gt> ...>
 
@@ -244,7 +253,7 @@ given line map as a PNG bitmap. Otherwise you get the entire map.
 (In fact, this method is almost an alias for the L<render()> method. However, it always
 returns only the graph representation, never an output file name.)
 
-See L</SYNOPSIS> for more details on how it can be used.
+See "SYNOPSIS" for more details on how it can be used.
 
 =cut
 

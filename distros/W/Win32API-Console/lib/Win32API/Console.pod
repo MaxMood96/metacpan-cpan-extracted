@@ -694,10 +694,8 @@ To identify the index of a font, call the C<GetCurrentConsoleFont> function.
  Returns: Number of console fonts on success, undef on failure.
  Use GetLastError() to retrieve extended error information.
 
-B<Notes>: C<GetCurrentConsoleFont> returns the size C<(0,16)> in
-Windows-Terminal. See: L</GetConsoleFontSize> for further information.
-This function is not documented and may not work with current
-Windows versions.
+B<Notes>: This function is not documented in MSDN and may not work with 
+current Windows versions.
 
 
 
@@ -851,7 +849,7 @@ by the C<{EventType}> field.
    0x0008: MENU_EVENT
    0x0010: FOCUS_EVENT
 
- {Event} A I<union> of the following structures, depending on {EventType}:
+ {Event} A union of the following structures, depending on {EventType}:
    KEY_EVENT_RECORD          KeyEvent
    MOUSE_EVENT_RECORD        MouseEvent
    WINDOW_BUFFER_SIZE_RECORD WindowBufferSizeEvent
@@ -1154,7 +1152,7 @@ the next handler function in the list of handlers for this process is used.
 
  Returns: non-zero on success, undef on failure.
 
-B<Note:> We emulate this function using C<SIGINT> and C<SIGBREAK>, since Perl
+B<Note>: We emulate this function using C<SIGINT> and C<SIGBREAK>, since Perl
 itself has installed a handler. Currently, only the C<CTRL_C_EVENT> and
 C<CTRL_BREAK_EVENT> control signals are supported.
 
@@ -2172,25 +2170,27 @@ L<MSDN - Unicode in the Windows API|https://learn.microsoft.com/en-us/windows/wi
 
 =head1 REQUIRES
 
-L<Exporter> 
+L<bytes>
 
-L<Win32API::File> 
+L<Carp>
 
-L<Win32::Console> 
+L<Encode>
 
-L<Win32::API> 
+L<Exporter>
 
-L<Win32> 
+L<Hash::Util>
 
-L<Hash::Util> 
+L<Scalar::Util>
 
-L<Scalar::Util> 
+L<version>
 
-L<Encode> 
+L<Win32>
 
-L<Carp> 
+L<Win32::API>
 
-L<version> 
+L<Win32::Console>
+
+L<Win32API::File>
 
 =head1 AUTHOR
 

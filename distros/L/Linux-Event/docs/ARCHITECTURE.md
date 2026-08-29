@@ -156,9 +156,35 @@ the built-in parser there, and crosses into Perl only for complete
 `on_message` values or semantic errors. Both paths recheck pause and close state
 after callbacks.
 
+The zero/default descriptor values retain those ordinary callback boundaries.
+A raw descriptor may instead set `read_batch_bytes`, in which case native
+storage combines successful reads and flushes at its byte bound or EAGAIN. A
+framed descriptor may set `message_batch_size` and cache `on_messages`; complete
+message SVs are then owned by one bounded AV until count, EAGAIN, EOF, error, or
+the aggregate byte guard flushes it. The AV is detached from native state
+before entering Perl, so callback exceptions cannot leave mortal values owned
+by the connection. Close clears any undispatched native aggregate.
+
 The Stream extension does not include private reactor headers. Loop passes
 watcher data directly to Stream's private readiness entry points, preserving a
 generic readiness core and an independently testable buffered Stream layer.
+
+Stream's native implementation is one XS extension built from focused private
+translation units. `Stream.xs` contains only the Perl/native binding surface;
+`stream_read.c`, `stream_write.c`, `stream_transport.c`, `stream_input.c`,
+`stream_delivery.c`, `stream_transition.c`, and `stream_callbacks.c` own their
+named mechanisms. Each built-in framing family has a matching `framer_*.c`
+parser. `stream_internal.h` is the sole shared native state and helper contract.
+These files link into the same extension and introduce no additional Perl or
+dynamic-loading boundary.
+
+At the Perl layer, `Linux::Event::Stream` remains the public lifecycle object.
+The private `_Descriptor` module owns subclass declarations, option validation,
+callback resolution, and the immutable descriptor cache. The deliberately tiny
+deadline Timer type remains next to Stream's lifecycle methods rather than
+creating another implementation layer. Connection acquisition remains in the
+existing private `_Connection` engine. None of these source boundaries add
+public classes or change Stream identity.
 
 ## Public ownership layer
 
@@ -172,6 +198,17 @@ An application object is one logical activity rather than one fd. A connecting
 Stream can own attempt and deadline registrations until connection completes,
 then retains the same public identity while its established socket is
 registered with the native Stream engine.
+
+The introspection layer enumerates the existing native Timer heap, watcher
+ownership, Signal service, Wakeup owner state, and resolver requests only when
+queried. It does not maintain a duplicate public-object registry. Queries
+validate ownership and lifecycle against each object's authoritative state.
+Native resource queries scan the existing fd registry; they do not mirror it
+in Perl. One private flag
+on a native registration distinguishes direct user `watch()` calls from the
+backing registrations owned by high-level objects, so liveness reports remain
+actionable instead of listing implementation fds twice. None of this work runs
+in readiness dispatch.
 
 ## Timer scheduler layer
 
@@ -198,7 +235,9 @@ operation deadline. Native Stream state records successful I/O timestamps only
 when inactivity tracking is enabled; progress never enters Perl merely to
 reschedule the heap. When an old deadline arrives, the private callback checks
 the latest snapshot and either expires the Stream or moves the same Timer.
-Ordinary Streams perform no activity clock reads.
+Ordinary Streams perform no activity clock reads, and pause, resume, EOF, and
+output drain skip deadline candidate rebuilding unless the corresponding read
+or write timeout is active.
 
 ## Signal delivery layer
 

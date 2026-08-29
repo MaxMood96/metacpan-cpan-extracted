@@ -17,7 +17,7 @@ build_requires:
   HTML::TableExtract: '0'
   IPC::System::Simple: '0'
   JSON::MaybeXS: '0'
-  LWP::UserAgent: '0'
+  LWP::UserAgent::Cached: '0'
   POSIX: '0'
   Readonly: '0'
   Test::Carp: '0'
@@ -30,6 +30,7 @@ build_requires:
   Test::NoWarnings: '0'
   Test::Returns: '0'
   Test::Warn: '0'
+  Test::Which: '0'
   Test::Without::Module: '0'
   Text::xSV::Slurp: '0'
   XML::Simple: '0'
@@ -71,5 +72,5 @@ requires:
 resources:
   bugtracker: https://rt.cpan.org/Public/Dist/Display.html?Name=Database-Abstraction
   repository: git://github.com/nigelhorne/Database-Abstraction.git
-version: '0.39'
+version: '0.40'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

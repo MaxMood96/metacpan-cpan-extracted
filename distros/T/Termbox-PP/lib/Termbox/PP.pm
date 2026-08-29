@@ -14,6 +14,7 @@
 package Termbox::PP;
 use strict; 
 use warnings;
+return 1 if $INC{"Termbox.pm"};
 package    # hide from PAUSE
   Termbox; ## no_index
 
@@ -28,7 +29,7 @@ use warnings;
 # version '...'
 use version;
 our $version = version->declare('v2.7.0_0');
-our $VERSION = version->declare('v0.6.0');
+our $VERSION = version->declare('v0.6.1');
 
 # authority '...'
 our $authority = 'github:adsr';
@@ -2465,11 +2466,11 @@ sub tb_sendf {   # $int ($fmt, @args)
 # Set custom callbacks for escape sequence parsing
 #
 
-sub tb_set_func {    # $int ($fn_type, $fn)
+sub tb_set_func {    # $int ($fn_type, $fn|undef)
   TRACE('%d, %s', @_) if _DEBUG;
   state $sig = compile(
     _Int,
-    _CodeRef,
+    _Maybe[_CodeRef],
   );
   my ($fn_type, $fn) = $sig->(@_);
   my $rv;

@@ -23,7 +23,9 @@ t/critic.t
 t/eof.t
 t/eol.t
 t/fixme.t
+t/function.t
 t/gv.t
+t/integration.t
 t/interactive.t
 t/legends.t
 t/line.t
@@ -42,5 +44,7 @@ t/pod-synopsis.t
 t/pod.t
 t/snippet.t
 t/tooltip.t
+t/unit.t
+t/zoomable.t
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

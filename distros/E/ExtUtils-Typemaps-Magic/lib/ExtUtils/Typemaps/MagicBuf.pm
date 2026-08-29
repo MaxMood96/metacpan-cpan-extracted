@@ -1,5 +1,5 @@
 package ExtUtils::Typemaps::MagicBuf;
-$ExtUtils::Typemaps::MagicBuf::VERSION = '0.009';
+$ExtUtils::Typemaps::MagicBuf::VERSION = '0.010';
 use strict;
 use warnings;
 
@@ -10,21 +10,17 @@ sub new {
 	my $self = $class->SUPER::new(@_);
 
 	$self->add_inputmap(xstype => 'T_MAGICBUF', code =>  <<'END');
-	{
-	SV* arg = $arg;
-	MAGIC* magic = SvROK(arg) && SvRMAGICAL(SvRV(arg)) ? mg_findext(SvRV(arg), PERL_MAGIC_ext, NULL) : NULL;
-	if (magic)
-		$var = ($type)magic->mg_ptr;
+	SV* ${var}_arg = $arg;
+	MAGIC* ${var}_magic = SvROK(${var}_arg) && SvRMAGICAL(SvRV(${var}_arg)) ? mg_findext(SvRV(${var}_arg), PERL_MAGIC_ext, NULL) : NULL;
+	if (${var}_magic)
+		$var = ($type)${var}_magic->mg_ptr;
 	else
 		Perl_croak(aTHX_ \"%s object is lacking magic\", \"$ntype\");
-	}
 END
 
 	$self->add_outputmap(xstype => 'T_MAGICBUF', code => <<'END');
-	{
-	MAGIC* magic = sv_magicext(newSVrv($arg, "$ntype"), NULL, PERL_MAGIC_ext, NULL, (const char*)$var, 0);
-	magic->mg_len = sizeof(*$var);
-	}
+	MAGIC* magic_${var} = sv_magicext(newSVrv($arg, "$ntype"), NULL, PERL_MAGIC_ext, NULL, (const char*)$var, 0);
+	magic_${var}->mg_len = sizeof(*$var);
 END
 
 	return $self;
@@ -46,7 +42,7 @@ ExtUtils::Typemaps::MagicBuf - Typemap for storing objects in magic buffer
 
 =head1 VERSION
 
-version 0.009
+version 0.010
 
 =head1 SYNOPSIS
 

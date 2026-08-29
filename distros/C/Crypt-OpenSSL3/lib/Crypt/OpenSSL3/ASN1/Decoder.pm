@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::ASN1::Decoder;
-$Crypt::OpenSSL3::ASN1::Decoder::VERSION = '0.011';
+$Crypt::OpenSSL3::ASN1::Decoder::VERSION = '0.012';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::ASN1::Decoder - An ASN1 decoding buffer
 
 =head1 VERSION
 
-version 0.011
+version 0.012
 
 =head1 METHODS
 

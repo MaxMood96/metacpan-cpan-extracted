@@ -43,6 +43,45 @@ Use `--quick` only while developing the harness. Release decisions should use
 the default seven repeats and full workload sizes. Do not compare reports from
 different machines, Perl builds, power modes, or competing system load.
 
+## Callback batching microbenchmarks
+
+`run-callback-batching-microbench.pl` sends pipelined payloads from an isolated
+producer over both AF_UNIX socketpairs and TCP loopback. It compares ordinary
+raw/framed callbacks with explicit raw byte aggregates and framed message
+arrays, recording receiver CPU, throughput, native reads, and actual Perl
+callback counts:
+
+```bash
+perl -Mblib bench/run-callback-batching-microbench.pl \
+  --messages=1000000 --bytes=64 --read-size=4096 \
+  --raw-batch-bytes=0,16384,65536,262144 \
+  --message-batch-sizes=0,1,4,16,32,64,256 \
+  --transports=unix,tcp --warmup=1 --repeats=7 \
+  --json=bench/results/callback-batching.json
+```
+
+Zero selects the ordinary callback contract. The framed workload is pipelined
+because a serial request/reply test exposes only one message at a time and
+cannot measure message batching. For raw policy decisions, repeat the sweep
+with the production `read_size`; a batch limit at or below that size cannot
+coalesce complete reads.
+
+`run-callback-batching-fairness.pl` places a timestamped fixed-frame probe next
+to a continuously readable framed Stream. It reports hot-stream throughput and
+probe p50/p99/maximum latency:
+
+```bash
+perl -Mblib bench/run-callback-batching-fairness.pl \
+  --duration=0.5 --ping-interval-us=2000 --bytes=64 --read-size=4096 \
+  --batch-sizes=0,16,32,64 --transports=unix,tcp \
+  --warmup=1 --repeats=5 \
+  --json=bench/results/callback-batching-fairness.json
+```
+
+This is a deliberate saturation diagnostic, not ordinary application latency.
+It makes the existing drain-until-EAGAIN fairness boundary visible while
+checking that explicit callback batching does not introduce a new one.
+
 ## Timer microbenchmark
 
 `run-timer-microbench.pl` isolates the native scheduler at increasing heap
@@ -53,6 +92,7 @@ zero-delay expiration delivery:
 perl -Mblib bench/run-timer-microbench.pl \
   --counts=1000,10000,100000 \
   --repeats=5 \
+  --cpu-clock=auto \
   --json=bench/results/timer-microbench.json
 ```
 
@@ -60,6 +100,14 @@ The lifecycle and reschedule rows count one operation per Timer. The expiration
 row schedules an equal-deadline cohort and runs the Loop until all callbacks
 have completed. Use the standard performance-regression suite for release
 gating; use this benchmark to diagnose Timer-specific scaling.
+
+The default `--cpu-clock=auto` measures process CPU with
+`CLOCK_PROCESS_CPUTIME_ID`, then falls back to Perl's process `times()` when
+that clock does not advance. `--cpu-clock=times` selects the portable fallback
+directly. If neither source advances, wall throughput remains valid and the
+JSON report records `cpu_clock` as `unavailable` with null CPU fields instead
+of treating a host timing limitation as a benchmark or installation failure.
+This nullable CPU-time schema is `benchmark_contract_version` 2.
 
 ## Signal microbenchmark
 
@@ -440,3 +488,41 @@ Transitions are normally rare semantic operations, so this is primarily a
 regression and architecture benchmark rather than a throughput leaderboard.
 Compare CPU microseconds per transition first and keep the contract, cases,
 pool size, Perl, compiler flags, and host identical.
+
+## 7. Stream watcher-state profiling
+
+`run-stream-watcher-state-bench.pl` profiles the mechanical readiness changes
+that remain split between Stream's Perl lifecycle and the native Loop. It is a
+diagnostic decision benchmark, separate from protocol-class transitions and
+the release performance-regression suite. The cases cover:
+
+- direct watcher read-interest toggles and native XSState pause toggles
+- public Stream pause/resume
+- raw registration and Stream attachment lifecycle
+- plain half-close and close on already-attached Streams
+- a forced EAGAIN output queue/drain cycle
+- TLS handshake and close-notify shutdown retry directions
+
+Loop profiling is deliberately enabled, so every row reports process CPU plus
+`EPOLL_CTL_ADD`, `MOD`, and `DEL` calls and native nanoseconds per operation.
+Run the complete contract with:
+
+```bash
+perl -Mblib bench/run-stream-watcher-state-bench.pl \
+  --operations=10000 \
+  --pool=256 \
+  --warmup=1000 \
+  --repeats=7 \
+  --tls-pairs=64 \
+  --json=bench/results/stream-watcher-state.json
+```
+
+Interpret the raw watcher row as the floor for two real `epoll_ctl` interest
+changes. The XSState-only row shows boundary cost without a syscall. Compare
+`stream-pause-resume` with both before proposing combined native coordination.
+The lifecycle rows expose the current initial `ADD` followed by `MOD`; the
+queued-write row prefills the socket send buffer to force EAGAIN, then validates
+exactly one enable/disable pair while delivering every byte. TLS rows retain
+provider `WANT_READ` and `WANT_WRITE` counters.
+Compare reports only under the same contract, configuration, build, kernel,
+Perl, power mode, and host load.

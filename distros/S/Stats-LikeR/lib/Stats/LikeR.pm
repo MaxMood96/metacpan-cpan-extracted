@@ -3,17 +3,16 @@
 require 5.010;
 use strict;
 package Stats::LikeR;
-our $VERSION = 0.302;
+our $VERSION = 0.311;
 require XSLoader;
 use autodie ':default';
 use warnings FATAL => 'all';
 use Exporter 'import';
 use Scalar::Util qw(reftype looks_like_number);
 XSLoader::load('Stats::LikeR', $VERSION);
-our @EXPORT_OK = qw(h add_data age_standardize agg anova aoh2h aoh2hoa aoh2hoh aov assign auc auroc bedroc bfill binom_test cfilter chisq_test chunk col col2col colnames concat cmh_test cor cor_test cov csort density bw_nrd0 bw_nrd bw_ucv bw_bcv bw_sj dnorm cohen_d cramers_v eta_squared drop_cols drop_duplicates dropna epi_2x2 ffill fillna filter fisher_test get_union glm group_by h2aoh hoa2aoh hoa2hoh hoh2hoa hist interpolate intersection is_equivalent kruskal_test ks_test kurtosis Lonly ljoin lm map_cell matrix max mean median melt merge min mode ncol nrow oneway_test p_adjust pivot_table pnorm power_t_test predict prop_test mcnemar_test friedman_test dunn_test prcomp ptukey qcut qtukey quantile rank roc Ronly rbind rbinom read_table rename_cols rnorm rownames runif sample scale sd select_cols seq shapiro_test skew smd sum summary survfit logrank_test coxph table_one t_test transpose TukeyHSD uniq vals value_counts var var_test vif hosmer_lemeshow view wilcox_test write_table);
+our @EXPORT_OK = qw(h add_data age_standardize agg anova aoh2h aoh2hoa aoh2hoh aov assign auc auroc avals bedroc bfill binom_test cfilter chisq_test chunk col col2col colnames concat cmh_test cor cor_test cov csort density bw_nrd0 bw_nrd bw_ucv bw_bcv bw_sj dnorm cohen_d cramers_v eta_squared drop_cols drop_duplicates dropna epi_2x2 ffill fillna filter fisher_test get_union glm group_by h2aoh hoa2aoh hoa2hoh hoh2hoa hist interpolate intersection is_equivalent kruskal_test ks_test kurtosis Lonly ljoin lm map_cell matrix max mean median melt merge min mode ncol nrow oneway_test p_adjust pivot_table pnorm pt qt pchisq qchisq pf qf pbinom qnorm power_t_test predict prop_test mcnemar_test friedman_test dunn_test prcomp ptukey qcut qtukey quantile rank roc Ronly rbind rbinom read_table rename_cols rnorm rownames runif sample scale sd select_cols seq shapiro_test skew smd sum summary survfit logrank_test coxph table_one t_test transpose TukeyHSD uniq vals value_counts var var_test vif hosmer_lemeshow view wilcox_test write_table);
 our @EXPORT = @EXPORT_OK;
 
-# ===========================================================================
 # Help
 #
 # h() is the way in, and it works for every function in the distribution, XS
@@ -35,7 +34,6 @@ our @EXPORT = @EXPORT_OK;
 # md2pod.pl), so the help can never drift out of sync with the shipped
 # documentation.  Functions without a documentation section of their own fall
 # back to listing every topic that does have one.
-# ===========================================================================
 
 # Functions that share another function's section, either because they are the
 # very same subroutine under a second name (rbind/concat) or because they are
@@ -63,6 +61,17 @@ my %HELP_ALIAS = (
 	_render_grid      => 'view',
 	_df_shape         => 'agg',
 	_xtab             => 'cramers_v',
+	# The eight R distribution functions share one section, since what is
+	# worth saying about tails, log.p and accuracy is the same for all of
+	# them; pnorm and dnorm keep their own, older sections.
+	qnorm             => 'Distribution functions',
+	pt                => 'Distribution functions',
+	qt                => 'Distribution functions',
+	pchisq            => 'Distribution functions',
+	qchisq            => 'Distribution functions',
+	pf                => 'Distribution functions',
+	qf                => 'Distribution functions',
+	pbinom            => 'Distribution functions',
 );
 
 # _help_show($name) -- print $name's documentation to STDOUT.  Returns the
@@ -274,9 +283,7 @@ sub _help_general {
 	return $out;
 }
 
-# ---------------------------------------------------------------------------
 # POD extraction
-# ---------------------------------------------------------------------------
 
 our $POD_FILE;             # set only by t/help.t, to read a fixture
 
@@ -330,9 +337,7 @@ sub _pod_section {
 	return @out;
 }
 
-# ---------------------------------------------------------------------------
 # POD -> plain text
-# ---------------------------------------------------------------------------
 
 my %POD_ENTITY = (
 	lt => '<', gt => '>', 'verbar' => '|', sol => '/', amp => '&',
@@ -504,7 +509,7 @@ sub _pod_render {
 			next;
 		}
 
-		# ---- command paragraph ----
+		# command paragraph
 		my @l = @{ $b->{lines} };
 		my $head = shift @l;
 		$head =~ /^=(\w+)[ \t]*(.*)$/s or next;
@@ -562,12 +567,10 @@ sub _pod_render {
 	return $text;
 }
 
-# ---------------------------------------------------------------------------
 # =begin html / =begin text data blocks (and their =for spelling, which is what
 # Pod::Weaver leaves behind in the built distribution).  The generated POD uses
 # these for one thing only: parameter and output tables.  Render them as aligned
 # plain text so the help shows the same information the HTML documentation does.
-# ---------------------------------------------------------------------------
 
 my %HTML_ENTITY = (
 	amp => '&', lt => '<', gt => '>', quot => '"', apos => "'", nbsp => ' ',
@@ -781,14 +784,12 @@ sub rownames {
 	return wantarray ? @rows : scalar @rows;
 }
 
-# =====================================================================
 # The XSUBs _cols_select / _cols_drop / _cols_rename are PRIVATE -- do NOT
 # export them.  (See select_drop_rename_cols.xs for the C side.)
 #
 # NAMING: `select` and `rename` are Perl core builtins, so exporting bare
 # `select`/`rename` would shadow them in the caller.  The `_cols` suffix
 # avoids that and reads as a trio.
-# =====================================================================
 
 
 # select_cols($df, @cols) | select_cols($df, \@cols)
@@ -1025,7 +1026,6 @@ sub aoh2hoh {
 	return \%out;
 }
 
-# ===========================================================================
 # h2aoh / aoh2h  --  the flat hash as a two-column frame
 #
 # A plain hash is a two-column table that has been folded shut: every pair is
@@ -1042,7 +1042,6 @@ sub aoh2hoh {
 # The pair are exact inverses under their defaults, so
 #     is_deeply( aoh2h( h2aoh(\%h) ), \%h )
 # holds for any flat hash whose keys are defined.
-# ===========================================================================
 
 # _kv_names($caller, \%arg) -- var_name / value_name, defaulted and checked.
 # Shared so the two directions cannot drift apart on the names they agree on.
@@ -1146,11 +1145,9 @@ sub aoh2h {
 	}
 	return \%out;
 }
-# =======================================================================
 # agg / concat / rbind  --  additions to lib/Stats/LikeR.pm
 # Splice these in after the dropna sub. Also add  agg concat rbind  to
 # @EXPORT_OK. rbind is a true glob-alias synonym for concat.
-# =======================================================================
 
 sub _df_shape {
 	my ($df, $caller) = @_;
@@ -1179,7 +1176,6 @@ sub _df_shape {
 	return 'HoA';                             # arrays, or empty -> default
 }
 
-# ---------------------------------------------------------------------------
 # agg($df, agg => { col => 'mean' | [ 'mean', 'sd', .. ] | \&code, .. }, %opts)
 #
 # Split-apply-combine over any of the four data-frame shapes.  With `by` it is
@@ -1224,7 +1220,6 @@ sub _df_shape {
 # Numeric aggregators need enough defined cells or the cell is undef: mean /
 # median / sum / min / max need >= 1, sd / var need >= 2.  The original $df is
 # never modified.
-# ---------------------------------------------------------------------------
 {
 	my %AGG_MIN = (          # minimum defined count for the XS numeric reducers
 		mean => 1, median => 1, sum => 1, min => 1, max => 1,
@@ -1286,7 +1281,7 @@ sub _df_shape {
 		die "agg: output.type '$otype' isn't allowed (aoa, aoh, hoa, hoh)\n"
 			unless $ok_otype{$otype};
 
-		# columns actually needed (grouping + aggregated), classified once ---
+		# columns actually needed (grouping + aggregated), classified once
 		my @agg_cols = keys %$spec;
 		{
 			my $all_num = !grep { !looks_like_number($_) } @agg_cols;
@@ -1318,7 +1313,7 @@ sub _df_shape {
 			for my $c (keys %need) { $col{$c} = [ map { $_->{$c} } @h ] }
 		}
 
-		# split row indices into groups, preserving first-seen order --------
+		# split row indices into groups, preserving first-seen order
 		my (%group, @order, %repr);
 		my $one = @by == 1 ? $by[0] : undef;   # single-key fast path
 		for (my $i = 0; $i < $R; $i++) {
@@ -1385,7 +1380,7 @@ sub _df_shape {
 		}
 		my @out_names = ( @by, map { @{ $_->[2] } } @agg_plan );
 
-# combine + materialise straight into the requested shape -----------
+# combine + materialise straight into the requested shape
 		my (@aoa_rows, @aoh_rows, %hoa, %hoh, %seen);
 		if ($otype eq 'hoa') { $hoa{$_} = [] for @out_names }
 
@@ -1442,7 +1437,6 @@ sub _df_shape {
 # per-cell edit of the named column, instead of a CODE ref or ready-made ARRAY.
 #
 
-# ---------------------------------------------------------------------------
 # map_cell { ... }   -- in-place per-cell transform for assign().
 #
 # Wraps a block so assign() runs it once per row with $_ aliased to a copy of
@@ -1462,7 +1456,6 @@ sub _df_shape {
 # An undef cell is left untouched (undef in -> undef out): the block never runs
 # on it, so s/// and friends don't warn on uninitialized values and a missing
 # cell stays missing rather than becoming ''.
-# ---------------------------------------------------------------------------
 sub map_cell (&) {
 	my ($code) = @_;
 	die "map_cell: expects a code block, e.g. map_cell { s/x//g }\n"
@@ -1724,7 +1717,7 @@ sub chunk {
 	return @groups;
 }
 
-# ---- filter DSL: col() builds a predicate via overloading (pure Perl) -------
+# filter DSL: col() builds a predicate via overloading (pure Perl)
 # col('name') returns an overloaded object; comparing it (col('age') >= 18) or
 # combining comparisons with & | ! builds a predicate that carries its per-row
 # test in a {code} closure. filter() (XS) unwraps that closure, so col() and a
@@ -1874,7 +1867,6 @@ sub col { Stats::LikeR::col::_new(@_) }
 	sub nomatch { _match($_[0], $_[1], 0, 'nomatch') }
 }
 
-# ---------------------------------------------------------------------------
 # concat(@frames)   /   rbind(@frames)   -- row-bind data frames (pandas concat
 # axis=0, R rbind).  rbind is a true synonym (same subroutine).
 #
@@ -1898,7 +1890,6 @@ sub col { Stats::LikeR::col::_new(@_) }
 #        Because a Perl hash cannot hold duplicate keys, a repeated row name is
 #        made unique R-style (name, name.1, name.2, ...) and a single warning is
 #        emitted noting that row names collided.
-# ---------------------------------------------------------------------------
 sub concat {
 	my @frames = grep { defined } @_;
 	die "concat: needs at least one data frame\n" unless @frames;
@@ -2035,7 +2026,7 @@ sub dropna {
 
 	my $r = ref $df;
 
-	#----- AoH -----
+	#AoH
 	if ($r eq 'ARRAY') {
 		if ($have_rows) {						# literal index deletion
 			my %drop = map { $_ => 1 } @$sel;
@@ -2064,7 +2055,7 @@ sub dropna {
 		return [ map { $df->[$_] } @keep ];
 	}
 
-	#----- HoA vs HoH -----
+	#HoA vs HoH
 	if ($r eq 'HASH') {
 		my ($saw_arr, $saw_hash) = (0, 0);
 		for my $v (values %$df) {
@@ -2075,7 +2066,7 @@ sub dropna {
 		die "dropna: hashref mixes array and hash values (ambiguous HoA/HoH)\n"
 			if $saw_arr and $saw_hash;
 
-		#----- HoH -----
+		#HoH
 		if ($saw_hash) {
 			if ($have_rows) {					# delete row keys
 				my %drop = map { $_ => 1 } @$sel;
@@ -2095,7 +2086,7 @@ sub dropna {
 			return \%out;
 		}
 
-		#----- HoA (also the empty-hash fallthrough) -----
+		#HoA (also the empty-hash fallthrough)
 		my $n = 0;
 		for my $v (values %$df) {
 			$n = @$v if ref $v eq 'ARRAY' and @$v > $n;
@@ -2467,7 +2458,7 @@ sub summary {
 	die "$current_sub: data must either be a hash or an array, not \"$rt\"\n"
 		unless $rt eq 'ARRAY' or $rt eq 'HASH';
 
-	# --- resolve the data shape into (label, numeric-vector) series ---
+	# resolve the data shape into (label, numeric-vector) series
 	my (@labels, @vecs, $lab_header);
 	if ($rt eq 'ARRAY') {
 		my $first;
@@ -2518,7 +2509,7 @@ sub summary {
 		}
 	}
 
-	# --- compute the statistics grid ---
+	# compute the statistics grid
 	my @colnames = ('# values', 'Min.', '1st Qu.', 'Median', 'Mean', '3rd Qu.', 'Max.');
 	my @raw;
 	for my $vec (@vecs) {
@@ -2554,7 +2545,7 @@ sub summary {
 	);
 }
 
-# --- .xlsx support (pure Perl, no CPAN deps) -------------------------------
+# .xlsx support (pure Perl, no CPAN deps)
 # An .xlsx file is a ZIP archive of XML parts. IO::Uncompress::Unzip is a core
 # module, so we can pull the parts out and parse the (very regular) XML with
 # regexes, then feed rows to read_table's callback exactly like _parse_csv_file
@@ -2777,6 +2768,19 @@ sub read_table {
 			if exists $input_args{sep};
 		$input_args{sep} = delete $input_args{delim};
 	}
+	# One option, three names: 'na.strings' is R's, 'na_values' is pandas', and
+	# 'undef.val' is what write_table calls the same token on the way out, so a
+	# round trip can be written with one spelling on both halves. Only one may
+	# be given, for the same reason 'sep' and 'delim' may not both be. The
+	# names are checked in a fixed order so the message is deterministic.
+	{
+		my @given = grep { exists $input_args{$_} }
+			qw(na.strings na_values undef.val);
+		die "read_table: pass only one of 'na.strings', 'na_values' or "
+		  . "'undef.val'; got " . join(', ', map { "'$_'" } @given) . "\n"
+			if @given > 1;
+		$input_args{'na.strings'} = delete $input_args{ $given[0] } if @given;
+	}
 
 	my $is_xlsx = $file =~ /\.xlsx\z/i;
 	my $default_sep = $file =~ /\.tsv$/i ? "\t" : ',';
@@ -2786,7 +2790,7 @@ sub read_table {
 
 	my %allowed_args = map { $_ => 1 } (
 		'comment', 'output.type', 'filter', 'row.names', 'sep',
-		'auto.row.names', 'sheet',
+		'auto.row.names', 'sheet', 'na.strings',
 		# private, undocumented: the multi-sheet expansion passes an already
 		# parsed worksheet list / shared-string table to each per-sheet recursion
 		# so a big sharedStrings.xml is not re-decompressed once per worksheet.
@@ -2849,6 +2853,37 @@ sub read_table {
 	} elsif (defined $filter && ref($filter) ne 'HASH') {
 		die "'filter' must be a CODE or HASH reference\n";
 	}
+
+# na.strings / na_values / undef.val -- field texts that mean "missing", mapped
+# to undef exactly as an empty field already is. Every spelling has been folded
+# into 'na.strings' above, so only that one is read from here on.
+#
+# Off by default. R's read.table defaults to na.strings = "NA" and pandas
+# recognises a whole list, but this module has always handed a literal "NA"
+# back as real data, and t/read_table.t pins that, so turning it on for
+# everyone is a maintainer's call rather than a bug fix. What was a bug is that
+# there was no way to ask for it at all: write_table renders undef with
+# 'undef.val' (documented under write_table as not round-tripping back to
+# undef), so read_table could not read back what its own sibling had written.
+#
+# The match is on the exact field text, case-sensitively and without trimming
+# whitespace, so " NA" is not "NA"; list both spellings if a file has both.
+	my %na_string;
+	{
+		my $ns = $args{'na.strings'};
+		my @ns = !defined($ns)       ? ()
+		       : ref($ns) eq 'ARRAY' ? @$ns
+		       : ref($ns)            ? die "read_table: 'na.strings' must be a "
+		                                 . 'string or an ARRAY reference, not a '
+		                                 . ref($ns) . " reference\n"
+		       :                       ($ns);
+		for my $s (@ns) {
+			die "read_table: 'na.strings' may not contain an undefined value\n"
+				unless defined $s;
+			$na_string{$s} = 1;
+		}
+	}
+	my $has_na = %na_string ? 1 : 0;   # skip the hash lookup in the common case
 
 	my (@data, %data, @header, @uniq_header,
 	    %mapped_filters, @sorted_filter_flds, %seen_rownames);
@@ -2935,7 +2970,7 @@ sub read_table {
 		my ($line_ref) = @_;
 
 		if (!$header_seen) {
-			# --- HEADER CAPTURE (copy made only here; runs once) ---
+			# HEADER CAPTURE (copy made only here; runs once)
 			my @line = @$line_ref;
 			$line[0] =~ s/^\Q$args{comment}\E\s*//
 				if @line && defined $line[0] && length( $args{comment} // '' );
@@ -2991,9 +3026,11 @@ sub read_table {
 		my %line_hash;
 		for my $i (0 .. $#header) {
 			my $v = $line_ref->[$i];
-			$line_hash{ $header[$i] } = ( !defined($v) || $v eq '' ) ? undef : $v;
+			$line_hash{ $header[$i] }
+				= ( !defined($v) || $v eq ''
+				    || ( $has_na && $na_string{$v} ) ) ? undef : $v;
 		}
-# --- APPLY FILTERS ---
+# APPLY FILTERS
 		if (@sorted_filter_flds) {
 			local *_ = \%line_hash;
 			my $skip = 0;
@@ -3005,8 +3042,11 @@ sub read_table {
 				}
 				if ( $fld > 0 ) {	# write back any mutation made to $_
 					$line_ref->[ $fld - 1 ] = $_;
+					# na.strings applies to a written-back value too, so the
+					# empty-string rule and the NA rule stay the same rule.
 					$line_hash{ $header[ $fld - 1 ] }
-						= ( !defined($_) || $_ eq '' ) ? undef : $_;
+						= ( !defined($_) || $_ eq ''
+						    || ( $has_na && $na_string{$_} ) ) ? undef : $_;
 				}
 			}
 			return if $skip;
@@ -3054,14 +3094,14 @@ sub view {
 		die 'view received undefined data';
 	}
 	my %args = @_;
-	# --- reject unknown arguments (mirrors read_table/write_table) ---
+	# reject unknown arguments (mirrors read_table/write_table)
 	my %allowed = map { $_ => 1 } qw(
 		n rows na max_width ellipsis gap cols columns width
 		to return_only row.names row_names color colors
 	);
 	my @bad = sort grep { !$allowed{$_} } keys %args;
 	die "view: unknown argument(s): @bad\n" if @bad;
-	# --- n / rows (synonyms); reject conflicting or non-integer values ---
+	# n / rows (synonyms); reject conflicting or non-integer values
 	die "view: pass either 'n' or 'rows', not both\n"
 		if exists $args{n} && exists $args{rows};
 	my $n = exists $args{rows} ? $args{rows}
@@ -3253,7 +3293,7 @@ sub _render_grid {
 	my $color  = $s{color};
 	my $colors = $s{colors};
 
-	# ---- display helpers (UTF-8 / wide-char aware) ----
+	# display helpers (UTF-8 / wide-char aware)
 	my $RESET = "\e[0m";
 	my $decode = sub {
 		my $s = shift;
@@ -3303,7 +3343,7 @@ sub _render_grid {
 		return ($bytes, $w);
 	};
 
-	# ---- colour configuration (Data::Printer-style) ----
+	# colour configuration (Data::Printer-style)
 	my %default_colors = (
 		array		=> 'bright_white',	number => 'bright_blue',
 		string		=> 'bright_yellow', class  => 'bright_green',
@@ -3341,7 +3381,7 @@ sub _render_grid {
 		return length $c ? $c . $text . $RESET : $text;
 	};
 
-	# ---- column types (alignment) ----
+	# column types (alignment)
 	my @numeric = (1) x scalar @cols;
 	for my $r (@raw) {
 		for my $j (0 .. $#cols) {
@@ -3359,7 +3399,7 @@ sub _render_grid {
 		return 'string';
 	};
 
-	# ---- prepare every cell once: [bytes, width, colour-type] ----
+	# prepare every cell once: [bytes, width, colour-type]
 	my @lab_cell = map { [ $prep->($_), (!defined $_ ? 'undef' : $lab_numeric ? 'array' : 'hash') ] } @labels;
 	my @row_cell;
 	for my $r (@raw) {
@@ -3368,7 +3408,7 @@ sub _render_grid {
 	my @head_cell = map { [ $prep->($_) ] } @cols;
 	my ($lh_b, $lh_w) = $prep->($lab_header);
 
-	# ---- column widths (display columns) ----
+	# column widths (display columns)
 	my $lab_w = $lh_w;
 	for my $c (@lab_cell) { $lab_w = $c->[1] if $c->[1] > $lab_w; }
 	my @w;
@@ -3378,7 +3418,7 @@ sub _render_grid {
 		$w[$j] = $width;
 	}
 
-	# ---- pad: spaces are never coloured; only the value text is ----
+	# pad: spaces are never coloured; only the value text is
 	my $field = sub {
 		my ($bytes, $bw, $width, $right, $type) = @_;
 		my $gapn = $width - $bw; $gapn = 0 if $gapn < 0;
@@ -3387,7 +3427,7 @@ sub _render_grid {
 		return $right ? $sp . $painted : $painted . $sp;
 	};
 
-	# ---- break columns into chunks that fit within $tw (R-style) ----
+	# break columns into chunks that fit within $tw (R-style)
 	# the label column (width $lab_w) is repeated at the front of every chunk.
 	# $gap is spaces only, so its display width is length($gap).
 	my $gap_w = length $gap;
@@ -3459,7 +3499,7 @@ sub _render_grid {
 #   response    response column name; or give formula => 'y ~ ...'
 #   formula     alternative to response: LHS is parsed for the response
 #   which       factor name or arrayref of names (default: all factors)
-#   conf.level  confidence level, default 0.95 (conf_level also accepted)
+#   conf.level  confidence level, default 0.95 (conf.level also accepted)
 #   ordered     if true, order each factor's levels by increasing mean
 #
 # Returns a hashref: one entry per factor mapping to an arrayref of
@@ -3487,7 +3527,7 @@ sub TukeyHSD {
 	my $data = $opt{data}
 		or die "TukeyHSD: 'data' (the data frame used to fit the model) is required";
 
-	# --- residual mean square (MSE) and residual d.f., per model type ---
+	# residual mean square (MSE) and residual d.f., per model type
 	my ($mse, $df);
 	if (ref($fit->{Residuals}) eq 'HASH') {                 # aov
 		$df  = $fit->{Residuals}{Df};
@@ -3507,7 +3547,7 @@ sub TukeyHSD {
 	die 'TukeyHSD: could not determine a positive residual mean square'
 		unless defined($mse) && $mse > 0;
 
-	# --- WIDE one-way layout ------------------------------------------------
+	# WIDE one-way layout
 	# data = { level => [observations], ... } with no response/formula: each
 	# key is a group and its arrayref holds that group's values -- the same
 	# shape aov() auto-stacks when the formula is omitted. Simpler than R's
@@ -3544,7 +3584,7 @@ sub TukeyHSD {
 	die "TukeyHSD: need the response variable; pass response => 'name' or formula => 'y ~ ...'"
 		unless defined($resp) && length $resp;
 
-	# --- factors present in the model (idx 0 of each xlevels entry = reference) ---
+	# factors present in the model (idx 0 of each xlevels entry = reference)
 	my $xl = $fit->{xlevels};
 	die 'TukeyHSD: no factors in the fitted model (nothing to compare)'
 		unless ref($xl) eq 'HASH' && keys %$xl;
@@ -3635,7 +3675,6 @@ sub _tukey_compare {
 	return \@rows;
 }
 
-# =======================================================================
 # melt / pivot_table / fillna / ffill / bfill
 #   pure-Perl additions to lib/Stats/LikeR.pm
 #
@@ -3650,7 +3689,6 @@ sub _tukey_compare {
 # counts as NA).  Every function returns a NEW top-level frame and never
 # mutates its input.  Shape is classified by _df_shape (the agg()/view()
 # detector); 'output.type' defaults to the input family, like agg().
-# =======================================================================
 
 # _frame_cols($df, $shape, \@need) -> (\%col, $R)
 #
@@ -4447,7 +4485,7 @@ sub _tukey_col {
 	die 'TukeyHSD: unsupported data shape';
 }
 
-# ---- table_one: a stratified descriptive "Table 1" -----------------------
+# table_one: a stratified descriptive "Table 1"
 # Classify a column's non-missing values: 'continuous' if every one looks
 # numeric, else 'categorical'.
 sub _t1_classify {
@@ -4466,13 +4504,13 @@ sub _t1_cont_p {
 	return (undef, undef) if @g < 2;
 	if (@g == 2) {
 		my $r = $nonpar ? wilcox_test($g[0], $g[1]) : t_test($g[0], $g[1]);
-		return ($r->{p_value}, $nonpar ? 'wilcoxon' : 't-test');
+		return ($r->{'p.value'}, $nonpar ? 'wilcoxon' : 't-test');
 	}
 	# >2 groups: Kruskal-Wallis (nonparametric) or one-way ANOVA
 	my (@x, @lab);
 	for my $i (0 .. $#g) { push @x, @{ $g[$i] }; push @lab, ("g$i") x scalar @{ $g[$i] } }
 	if ($nonpar) {
-		return (kruskal_test(\@x, \@lab)->{p_value}, 'kruskal-wallis');
+		return (kruskal_test(\@x, \@lab)->{'p.value'}, 'kruskal-wallis');
 	}
 	my $aov = aov({ value => \@x, grp => \@lab }, 'value ~ grp');
 	return ($aov->{grp}{'Pr(>F)'}, 'anova');
@@ -4497,7 +4535,7 @@ sub _t1_cat_p {
 		chisq_test($table);
 	};
 	return (undef, undef) if $@ || !$r;
-	return ($r->{'p.value'} // $r->{p_value}, 'chi-squared');
+	return ($r->{'p.value'}, 'chi-squared');
 }
 
 sub table_one {
@@ -4551,7 +4589,7 @@ sub table_one {
 				? sprintf('%.*f (%.*f)', $digits, mean(\@allv), $digits, @allv > 1 ? sd(\@allv) : 0)
 				: '';
 			if (defined $by && @groups >= 2) {
-				($row{p_value}, $row{test}) = _t1_cont_p(\@byg, $nonpar);
+				($row{'p.value'}, $row{test}) = _t1_cont_p(\@byg, $nonpar);
 			}
 			push @out, \%row;
 		}
@@ -4568,7 +4606,7 @@ sub table_one {
 						scalar grep { (defined $vals[$_] ? "$vals[$_]" : 'NA') eq $lv } @$rows
 					} @grp_rows ];
 				}
-				($hdr{p_value}, $hdr{test}) = _t1_cat_p(\@table);
+				($hdr{'p.value'}, $hdr{test}) = _t1_cat_p(\@table);
 			}
 			push @out, \%hdr;
 			for my $lv (@levels) {
@@ -4588,10 +4626,8 @@ sub table_one {
 	return \@out;
 }
 
-# ----------------------------------------------------------------------------
 # Effect sizes (Perl level; compose the XS primitives mean/var/aov).  All
 # validated numerically against R.  Added to @EXPORT_OK (== @EXPORT).
-# ----------------------------------------------------------------------------
 
 # _num_pair(\@x, \@y, $who) -> (\@xn, \@yn): defined, numeric values only.
 sub _num_pair {
@@ -4605,7 +4641,7 @@ sub _num_pair {
 	return (\@xn, \@yn);
 }
 
-# cohen_d(\@x, \@y, hedges => 0, conf_level => 0.95)
+# cohen_d(\@x, \@y, hedges => 0, conf.level => 0.95)
 #
 # Cohen's d for two independent samples using the pooled standard deviation,
 # with the Hedges' g small-sample bias correction and a large-sample
@@ -4624,7 +4660,7 @@ sub cohen_d {
 	my $d  = ($m1 - $m2) / $sp;
 	my $J  = 1 - 3 / (4 * ($n1 + $n2) - 9); # Hedges' correction factor
 	my $se = sqrt(($n1 + $n2) / ($n1 * $n2) + $d * $d / (2 * ($n1 + $n2)));
-	my $z  = _qnorm((1 + $cl) / 2);
+	my $z  = qnorm((1 + $cl) / 2);
 	return {
 		estimate     => $d,
 		hedges_g     => $d * $J,
@@ -4763,47 +4799,15 @@ sub eta_squared {
 	};
 }
 
-# _qnorm($p): standard-normal quantile (Acklam's rational approximation,
-# ~1e-9 accuracy) for the Perl-level effect-size CIs.
-sub _qnorm {
-	my $p = shift;
-	return -9**9**9 if $p <= 0;
-	return  9**9**9 if $p >= 1;
-	my @a = (-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
-	          1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00);
-	my @b = (-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
-	          6.680131188771972e+01, -1.328068155288572e+01);
-	my @c = (-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
-	         -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00);
-	my @d = (7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00,
-	         3.754408661907416e+00);
-	my $plow  = 0.02425;
-	my $phigh = 1 - 0.02425;
-	my ($q, $r, $x);
-	if ($p < $plow) {
-		$q = sqrt(-2 * log($p));
-		$x = ((((($c[0]*$q+$c[1])*$q+$c[2])*$q+$c[3])*$q+$c[4])*$q+$c[5]) /
-		     (((($d[0]*$q+$d[1])*$q+$d[2])*$q+$d[3])*$q+1);
-	} elsif ($p <= $phigh) {
-		$q = $p - 0.5; $r = $q * $q;
-		$x = ((((($a[0]*$r+$a[1])*$r+$a[2])*$r+$a[3])*$r+$a[4])*$r+$a[5])*$q /
-		     ((((($b[0]*$r+$b[1])*$r+$b[2])*$r+$b[3])*$r+$b[4])*$r+1);
-	} else {
-		$q = sqrt(-2 * log(1 - $p));
-		$x = -((((($c[0]*$q+$c[1])*$q+$c[2])*$q+$c[3])*$q+$c[4])*$q+$c[5]) /
-		      (((($d[0]*$q+$d[1])*$q+$d[2])*$q+$d[3])*$q+1);
-	}
-	return $x;
-}
-
-# ----------------------------------------------------------------------------
 # Regression diagnostics (Perl level).  Validated numerically against R.
 #
 # _lgamma/_igamc/_pchisq_upper used to be pure-Perl ports of the XS igamc()
 # living here.  They are now XS (see LikeR.xs), so there is one implementation
 # instead of two that could disagree; _lgamma went away entirely because only
-# _igamc ever called it.
-# ----------------------------------------------------------------------------
+# _igamc ever called it.  _qnorm went the same way in 0.303: it was Acklam's
+# rational approximation, good to about 1e-9, and cohen_d's interval is now
+# built from the XS qnorm() that every other confidence limit in the
+# distribution uses.
 
 # _quantile7(\@sorted_ascending, $p): R's default (type 7) sample quantile.
 sub _quantile7 {
@@ -4904,7 +4908,7 @@ sub hosmer_lemeshow {
 	return {
 		statistic => $chi,
 		parameter => $df,
-		p_value   => _pchisq_upper($chi, $df),
+		'p.value'   => _pchisq_upper($chi, $df),
 		groups    => $used,
 		table     => \@groups,
 	};
@@ -5013,7 +5017,7 @@ Stats::LikeR - Get basic statistical functions, like in R, but with Perl using X
 
 =head1 VERSION
 
-version 0.302
+version 0.311
 
 =head1 Synopsis
 
@@ -5685,7 +5689,7 @@ above exactly). The difference is one of role, not arithmetic:
 toward factors and balanced designs, and in this module it adds two
 conveniences C<anova> deliberately leaves out: it can B<auto-stack> a named
 list when you omit the formula (R's C<stack()> + C<Value ~ Group>), and it
-returns a C<group_stats> block of per-group means and counts alongside the
+returns a C<group.stats> block of per-group means and counts alongside the
 table. Reach for C<aov> when your question is "do these treatment groups
 differ, and what do the groups look like?"
 
@@ -6047,7 +6051,7 @@ The function returns a single C<HashRef> containing the evaluated statistical re
   <td><code>{'Df' =&gt; 10, 'Sum Sq' =&gt; 5.5, 'Mean Sq' =&gt; 0.55}</code></td>
 </tr>
 <tr>
-  <td><code>group_stats</code></td>
+  <td><code>group.stats</code></td>
   <td><code>HashRef</code></td>
   <td><code>undef</code></td>
   <td>A nested hash containing descriptive statistics (<code>mean</code> and <code>size</code> / count) for every column evaluated in the original unstacked data structure.</td>
@@ -6247,6 +6251,38 @@ labels for you: C<< cutoff =E<gt> x >> marks values C<< E<gt>= x >> as positive,
 C<< active_frac =E<gt> 0.1 >> with C<< active_side =E<gt> 'low'|'high' >> takes that fraction of
 the extreme tail as positive.
 
+=head2 avals
+
+L<C<vals>|/"vals"> as a list. C<avals> takes the same two arguments, accepts the
+same three data-frame shapes, uses the same shape detection, copies every cell
+the same way and dies with the same messages — it only differs in the return,
+pushing the column's values onto the stack instead of wrapping them in an array
+reference:
+
+ use Stats::LikeR qw(avals vals);
+
+ my @ages =    avals($df, 'age');
+ my @same = @{  vals($df, 'age') };   # identical, one arrayref later
+
+Reach for it wherever the column is going straight into a list — another
+function's arguments, a C<sort>/C<map>/C<grep> chain, a C<push>, an array or hash
+slice:
+
+ my @sorted = sort { $a <=> $b } avals($df, 'ldl');
+ push @pooled, avals($df, 'ldl');
+
+The functions that take a column I<by reference> still want L<C<vals>|/"vals">:
+C<mean(vals($df, 'age'))> is right, and C<mean(avals($df, 'age'))> hands C<mean> a
+bare list instead of the arrayref it expects.
+
+An empty frame — an empty AoH, or an empty hash — yields the empty list. In
+scalar context a list return collapses to its last element, which for a column
+is almost never what was meant; assign to an array, or use L<C<vals>|/"vals">.
+
+See L<C<vals>|/"vals"> for the argument table, the AoH / HoA / HoH detection rules,
+the sorted key order of a HoH, and the missing-column behavior: apart from the
+return, they are the same function.
+
 =head2 bedroc
 
 BEDROC — Boltzmann-Enhanced Discrimination of ROC (Truchon & Bayly, I<J. Chem.
@@ -6320,20 +6356,20 @@ also reports classic enrichment in the top slice of the ranking (see below).
 
 =item * B<< C<bedroc> >> — the BEDROC score in C<[0, 1]>.
 
-=item * B<< C<rie> >>, B<< C<rie_min> >>, B<< C<rie_max> >> — the underlying Robust Initial
+=item * B<< C<rie> >>, B<< C<rie.min> >>, B<< C<rie.max> >> — the underlying Robust Initial
 Enhancement and its bounds for this C<alpha> and active fraction; BEDROC is
 C<rie> rescaled onto C<[0, 1]>.
 
-=item * B<< C<n> >>, B<< C<n_active> >>, B<< C<n_inactive> >> — counts.
+=item * B<< C<n> >>, B<< C<n.active> >>, B<< C<n.inactive> >> — counts.
 
-=item * B<< C<ra> >> — the active fraction C<n_active / n>.
+=item * B<< C<ra> >> — the active fraction C<n.active / n>.
 
 =item * B<< C<alpha> >>, B<< C<direction> >>, B<< C<method> >> — the settings used, echoed back.
 
 =item * B<< C<enrichment> >> — present only when C<top> was given; a hashref with
-C<fraction>, C<n_top> (compounds in the top slice, C<ceil(top * n)>),
-C<active_count> (actives found there), C<expected> (actives expected by chance,
-C<ra * n_top>), and C<enrichment_factor> (C<(active_count / n_top) / ra>).
+C<fraction>, C<n.top> (compounds in the top slice, C<ceil(top * n)>),
+C<active.count> (actives found there), C<expected> (actives expected by chance,
+C<ra * n.top>), and C<enrichment.factor> (C<(active.count / n.top) / ra>).
 
 =back
 
@@ -6345,7 +6381,7 @@ C<ra * n_top>), and C<enrichment_factor> (C<(active_count / n_top) / ra>).
      cutoff => 6.5,
      top    => 0.05);
  print $r->{bedroc};
- print $r->{enrichment}{enrichment_factor};   # e.g. 2.0 => 2x over random
+ print $r->{enrichment}{enrichment.factor};   # e.g. 2.0 => 2x over random
 
  # fraction-defined actives straight from a raw ΔG column: the strongest-
  # binding 10% (lowest ΔG) are the actives, best predictions rank first.
@@ -6424,7 +6460,7 @@ You play 10 rounds and the toddler gets 6 right. Real skill, or just luck?
 
  my $r = binom_test(6, 10, p => 0.5); # 6 wins, 10 rounds, guessing rate 0.5
 
- print $r->{p_value};                 # 0.7539
+ print $r->{p.value};                 # 0.7539
 
 The full result is a hashref:
 
@@ -6432,10 +6468,10 @@ The full result is a hashref:
      statistic   => 6,            # times the toddler was right
      parameter   => 10,           # rounds played
      estimate    => 0.6,          # observed rate, 6/10
-     null_value  => 0.5,          # the "pure guessing" rate we test against
-     p_value     => 0.7539,
-     conf_int    => [0.262, 0.878],
-     conf_level  => 0.95,
+     null.value  => 0.5,          # the "pure guessing" rate we test against
+     p.value     => 0.7539,
+     conf.int    => [0.262, 0.878],
+     conf.level  => 0.95,
      alternative => 'two.sided',
      method      => 'Exact binomial test',
  }
@@ -6453,14 +6489,14 @@ Suppose the toddler had gone 9 for 10 instead:
 
  my $r = binom_test(9, 10, p => 0.5);
 
- print $r->{p_value};                   # 0.0215
+ print $r->{p.value};                   # 0.0215
 
 Now C<p = 0.02>, under C<0.05>. A pure guesser almost never does that well, so
 this B<is> good evidence the toddler can actually tell the cards apart.
 
 =head3 The confidence interval
 
-C<conf_int> is the plausible range for the toddler's true success rate. For
+C<conf.int> is the plausible range for the toddler's true success rate. For
 6/10 it runs from about C<0.26> to C<0.88> — wide, and it comfortably includes
 C<0.5>. That overlap with the guessing rate is another way of seeing that luck
 cannot be ruled out. For 9/10 the interval would sit well above C<0.5>.
@@ -6475,7 +6511,7 @@ cannot be ruled out. For 9/10 the interval would sit well above C<0.5>.
 C<'greater'> when you only care whether the toddler beats guessing, not
 whether they do worse.
 
-=item * C<conf_level> sets the interval width (default C<0.95>).
+=item * C<conf.level> sets the interval width (default C<0.95>).
 
 =back
 
@@ -6905,12 +6941,12 @@ C<mantelhaen.test>.
                     [20,6,8,15],     # stratum 2
                     [ 7,4,9,11] ]);  # stratum 3
 
- print $r->{p_value};    # combined test across strata
+ print $r->{p.value};    # combined test across strata
  print $r->{estimate};   # Mantel–Haenszel common odds ratio
 
 Each 2×2 uses the same layout as L<C<epi_2x2>|/"epi_2x2">. Options: C<correct>
-(continuity correction, default C<1>) and C<conf_level> (default C<0.95>). The
-result also has C<statistic> (chi-squared), C<parameter> (df = 1), C<conf_int> (for
+(continuity correction, default C<1>) and C<conf.level> (default C<0.95>). The
+result also has C<statistic> (chi-squared), C<parameter> (df = 1), C<conf.int> (for
 the common OR), and C<k> (number of strata).
 
 =head2 cohen_d
@@ -6920,7 +6956,7 @@ the pooled standard deviation. It also returns the Hedges' I<g> small-sample
 correction and a large-sample (normal-approximation) confidence interval.
 Validated numerically against R.
 
- my $d = cohen_d(\@treatment, \@control);           # or conf_level => 0.90
+ my $d = cohen_d(\@treatment, \@control);           # or conf.level => 0.90
  printf "d = %.2f (95%% CI %.2f–%.2f), Hedges g = %.2f\n",
      $d->{estimate}, $d->{'conf.int'}[0], $d->{'conf.int'}[1], $d->{hedges_g};
 
@@ -7456,9 +7492,22 @@ I<n> = 60 to 500 and all three alternatives: C<estimate> agrees to C<3e-15>,
 Kendall's C<statistic> to C<2e-15>, and C<p.value> to C<1.7e-12> — the worst of
 those at a p-value of C<2.2e-297>.
 
-Note that C<statistic> is the z of the approximation, whereas R reports
-Spearman's I<S>; the two are different quantities, so compare C<estimate> and
-C<p.value> rather than C<statistic> when checking against R for that method.
+=head3 Spearman: which method, and what C<statistic> holds
+
+C<spearman> follows R's C<cor.test> exactly: C<exact> defaults to true, and an
+exact request is served by permutation enumeration for I<n> ≤ 9, by the AS 89
+Edgeworth series for 10 ≤ I<n> ≤ 1290, and by the asymptotic I<t> above that or
+whenever the ranks contain ties. Passing C<< exact =E<gt> 1 >> never enumerates past
+I<n> = 9, because I<n>! is 6.2 × 10²³ by I<n> = 24.
+
+C<statistic> is Spearman's I<S>, the sum of squared rank differences, on every
+one of those paths — the same quantity R reports, so it can be compared
+directly. Two differences from R are worth knowing, neither of them about the
+mathematics: at a perfect correlation R derives I<S> from ρ and lands a rounding
+step away (C<3.66e-14> for an exact 0 at I<n> = 10), and under ties R keeps using
+that same identity, which only holds without them, so R reports
+C<2.5192319072807861> where the squared rank differences sum to exactly C<2.5>.
+Both are pinned in C<t/cor_test.spearman.R.t>.
 
 =head2 cov
 
@@ -7486,13 +7535,13 @@ Give times, an event flag (1 = event, 0 = censored), and one or more covariates
  my $fit = coxph(\@time, \@status, [\@age, \@sex],
                  names => ['age', 'sex']);
 
- print $fit->{exp_coef}[0];    # hazard ratio for age
- print $fit->{p_value}[0];     # its p-value
+ print $fit->{exp.coef}[0];    # hazard ratio for age
+ print $fit->{p.value}[0];     # its p-value
 
-Options: C<names>, C<ties> (C<'efron'> default, or C<'breslow'>), C<conf_level>
+Options: C<names>, C<ties> (C<'efron'> default, or C<'breslow'>), C<conf.level>
 (default C<0.95>), C<maxit>. The result has parallel per-covariate arrays C<coef>
-(log-HR), C<exp_coef> (HR), C<se>, C<z>, C<p_value>, C<conf_int> (HR scale), plus
-model-level C<loglik>, C<lr_stat>/C<lr_p_value> (likelihood-ratio test), C<n>,
+(log-HR), C<exp.coef> (HR), C<se>, C<z>, C<p.value>, C<conf.int> (HR scale), plus
+model-level C<loglik>, C<lr.stat>/C<lr.p.value> (likelihood-ratio test), C<n>,
 C<nevent>, and C<converged>. See L<C<survfit>|/"survfit"> and
 L<C<logrank_test>|/"logrank_test">.
 
@@ -7844,8 +7893,8 @@ observations still count.
 =item * B<< C<kernel> >> — the kernel that was used, spelled out in full, so an
 abbreviation comes back resolved.
 
-=item * B<< C<old_coords> >>, B<< C<has_na> >> — echoes of the corresponding R fields;
-C<has_na> is always 0.
+=item * B<< C<old.coords> >>, B<< C<has.na> >> — echoes of the corresponding R fields;
+C<has.na> is always 0.
 
 =back
 
@@ -7914,9 +7963,317 @@ same C<eruptions> and C<precip> samples that test file uses. It is an author-onl
 script — it is not installed, and it needs C<Matplotlib::Simple>, C<python3> and
 C<matplotlib> — so re-run it only when a figure needs to change.
 
+=head2 Distribution functions
+
+C<pnorm> and C<dnorm> have never had company: there was no way to ask for a
+quantile, or for any distribution but the normal, so a confidence bound or a
+custom test statistic could not be finished outside the module. These eight
+close that, with R's names, R's argument order and R's semantics:
+
+=for html <table>
+<thead>
+<tr>
+  <th>function</th>
+  <th>R's</th>
+  <th>what it gives</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>qnorm($p, mean =&gt; 0, sd =&gt; 1)</code></td>
+  <td><code>qnorm</code></td>
+  <td>the normal quantile — the inverse of [<code>pnorm</code>](#pnorm)</td>
+</tr>
+<tr>
+  <td><code>pt($q, $df)</code></td>
+  <td><code>pt</code></td>
+  <td>Student <i>t</i> CDF</td>
+</tr>
+<tr>
+  <td><code>qt($p, $df)</code></td>
+  <td><code>qt</code></td>
+  <td>Student <i>t</i> quantile</td>
+</tr>
+<tr>
+  <td><code>pchisq($q, $df)</code></td>
+  <td><code>pchisq</code></td>
+  <td>chi-square CDF</td>
+</tr>
+<tr>
+  <td><code>qchisq($p, $df)</code></td>
+  <td><code>qchisq</code></td>
+  <td>chi-square quantile</td>
+</tr>
+<tr>
+  <td><code>pf($q, $df1, $df2)</code></td>
+  <td><code>pf</code></td>
+  <td><i>F</i> CDF</td>
+</tr>
+<tr>
+  <td><code>qf($p, $df1, $df2)</code></td>
+  <td><code>qf</code></td>
+  <td><i>F</i> quantile</td>
+</tr>
+<tr>
+  <td><code>pbinom($q, $size, $prob)</code></td>
+  <td><code>pbinom</code></td>
+  <td>binomial CDF</td>
+</tr>
+</tbody>
+</table>
+
+Every one takes its distribution parameters B<either positionally or by name>,
+because R is called both ways:
+
+ pt(2.5, 10);              pt(2.5, df => 10);
+ pf(3, 2, 10);             pf(3, df2 => 10, df1 => 2);
+ pbinom(3, 10, 0.25);      pbinom(3, size => 10, prob => 0.25);
+
+and every one takes the same two flags L<C<pnorm>|/"pnorm"> does, under both
+spellings:
+
+=for html <table>
+<thead>
+<tr>
+  <th>option</th>
+  <th>meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>lower</code> / <code>lower.tail</code></td>
+  <td><code>1</code> (default) for the lower tail, <code>0</code> for the upper</td>
+</tr>
+<tr>
+  <td><code>log</code> / <code>log.p</code></td>
+  <td>on a <code>p<i></code> function, return the log of the probability; on a <code>q</i></code> function, the probability <i>argument</i> is a log</td>
+</tr>
+</tbody>
+</table>
+
+The first argument may be a single number or an array reference, and an array
+reference comes back the same length and in the same order — again as C<pnorm>
+does. An C<undef> element becomes C<NaN>.
+
+ my $z  = qnorm(0.975);                 # 1.959963984540054
+ my $zs = qnorm([0.025, 0.5, 0.975]);   # [-1.9599639845, 0, 1.9599639845]
+
+=head3 What each one does, in one picture
+
+The same identity read from two ends: a C<p*> function is given the boundary and
+returns the shaded area; the matching C<q*> function is given the area and
+returns the boundary. Each figure shades the region it integrates and writes the
+integral it evaluates. Regenerate them all with
+C<perl -Iblib/lib -Iblib/arch distribution.plots.pl>.
+
+C<qnorm> — given an area under the normal density, return the cut-point:
+
+=for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/qnorm.what.png" alt="qnorm: the standard normal density with the left 0.90 of its area shaded, the integral from minus infinity to q equals 0.90 written above it, and the boundary q = 1.281552 marked in orange as the answer" width="100%" /></p>
+
+C<pt> — the area of the I<t> density to the left of a I<t> statistic:
+
+=for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/pt.what.png" alt="pt: the t density on 10 degrees of freedom with the area left of t = 2.5 shaded, annotated with the integral from minus infinity to 2.5 of f(t) dt = 0.98428, and a note that the unshaded upper tail is 0.01572" width="100%" /></p>
+
+C<qt> — the I<t> that leaves a given area to its left, which is where the 1.96 of
+a confidence interval comes from:
+
+=for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/qt.what.png" alt="qt: the t density on 10 degrees of freedom with 0.975 of its area shaded, the integral set equal to 0.975 with the upper limit unknown, and the boundary t = 2.228139 marked in orange as the answer" width="100%" /></p>
+
+C<pchisq> — the chi-square tail beyond an observed statistic, which is what every
+chi-square test reports as its p-value:
+
+=for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/pchisq.what.png" alt="pchisq: the chi-square density on 3 degrees of freedom with the tail beyond 7.81 shaded, annotated with the integral from 7.81 to infinity of f(x) dx = 0.05011" width="100%" /></p>
+
+C<qchisq> — the critical value that cuts off a tail of a given size:
+
+=for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/qchisq.what.png" alt="qchisq: the chi-square density on 3 degrees of freedom with an upper tail of area 0.05 shaded, the integral from q to infinity set equal to 0.05, and the boundary q = 7.814728 marked in orange as the answer" width="100%" /></p>
+
+C<pf> — the I<F> tail beyond an observed I<F>, the C<< Pr(E<gt>F) >> column of an ANOVA
+table:
+
+=for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/pf.what.png" alt="pf: the F density on 2 and 10 degrees of freedom with the tail beyond F = 4.1 shaded, annotated with the integral from 4.1 to infinity of f(F) dF = 0.04983" width="100%" /></p>
+
+C<qf> — the I<F> that cuts off a given upper tail, the number an I<F> table used to
+be printed for:
+
+=for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/qf.what.png" alt="qf: the F density on 2 and 10 degrees of freedom with an upper tail of area 0.05 shaded, the integral from q to infinity set equal to 0.05, and the boundary q = 4.102821 marked in orange as the answer" width="100%" /></p>
+
+C<pbinom> — the one that is B<not> an integral. A binomial is discrete, so its
+lower tail is a finite sum of bar heights, and the figure says so rather than
+drawing an integral sign over a histogram:
+
+=for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/pbinom.what.png" alt="pbinom: the binomial probability mass function for size 10 and prob 0.5 drawn as bars, with the bars from 0 to 3 shaded and the rest grey, annotated with the sum from i = 0 to 3 of the binomial terms equalling 0.171875" width="100%" /></p>
+
+=head3 Why you want them
+
+A Wald interval, or any p-value the module does not already package, becomes a
+one-liner instead of a table lookup:
+
+ my $z  = qnorm(1 - (1 - 0.95) / 2);          # 1.959963984540054
+ my ($lo, $hi) = ($est - $z * $se, $est + $z * $se);
+
+ # a likelihood-ratio test between two nested glm fits
+ my $lr = $small->{deviance} - $big->{deviance};
+ my $p  = pchisq($lr, $small->{'df.residual'} - $big->{'df.residual'},
+                 lower => 0);
+
+=head3 The tail you ask for is the tail that gets computed
+
+No tail is ever formed as C<1 -> the other one. That subtraction costs every
+digit below machine epsilon, which is exactly the range a p-value is
+interesting in, so each function is routed to the parameterisation that
+computes the requested side directly:
+
+ pchisq(1e-30, 1);            # 7.978845608028654e-16, not 0
+ pt(-75, 15);                 # 5.4e-21, from the lower tail itself
+
+C<qnorm>, C<qchisq> and C<qf> reflect a probability above C<0.5> onto C<1 - p>
+before inverting, for the same reason in the other direction — that keeps the
+root-finder comparing small numbers instead of numbers that agree to fifteen
+places. The reflection is free rather than a trade: for C<< p E<gt>= 0.5 >> the two
+operands of C<1 - p> lie within a factor of two of each other, so Sterbenz's
+lemma makes that subtraction exact, and nothing is given up in exchange for
+what it removes. Measured against C<mpmath> at 60 digits, at the C<p> that
+C<1 - (1 - conf.level) / 2> actually forms:
+
+=for html <table>
+<thead>
+<tr>
+  <th>conf.level</th>
+  <th>z, unreflected</th>
+  <th>z, reflected</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>0.95</td>
+  <td>0.4 ulp</td>
+  <td>0.1 ulp</td>
+</tr>
+<tr>
+  <td>0.99</td>
+  <td>3.0 ulp</td>
+  <td>0.1 ulp</td>
+</tr>
+<tr>
+  <td>0.999</td>
+  <td>37 ulp</td>
+  <td>0.3 ulp</td>
+</tr>
+<tr>
+  <td>0.9999</td>
+  <td>254 ulp</td>
+  <td>0.4 ulp</td>
+</tr>
+</tbody>
+</table>
+
+The error grows with the confidence level because that is where C<p> and
+C<pnorm(z)> agree to the most places, so it is the intervals a cautious caller
+asks for that were losing the most digits.
+
+=head3 The same critical value every interval in the module is built from
+
+C<qnorm> is not a second opinion about the normal quantile. Since 0.303 it is
+the I<same> call — C<std_qnorm()> in C<LikeR.xs> — that C<glm>, C<cor_test>,
+C<prop_test>, C<epi_2x2>, C<cmh_test>, C<roc>, C<survfit>, C<coxph>, C<wilcox_test>,
+C<cohen_d> and C<shapiro_test> build their own numbers from. So a bound written
+by hand lands on the bound the function reports:
+
+ my $m  = glm(data => \%d, formula => 'y ~ x', family => 'binomial');
+ my $se = $m->{summary}{x}{'Std. Error'};
+ my $z  = qnorm(1 - (1 - 0.95) / 2);
+ $m->{summary}{x}{'Estimate'} - $z * $se;   # is $m->{'conf.int'}{x}[0]
+
+bit for bit on a C<double> build. On the wider NVs the only thing that can
+separate them is the compiler's freedom to contract C<est - z * se> into a
+single FMA where perl rounds twice, which is one ulp.
+
+C<t/qnorm.crit.R.scipy.t> asserts that, and goes the other way as well: it
+recovers the critical value back out of each function's I<reported> interval —
+undoing the C<exp> for C<coxph> and C<epi_2x2>'s odds ratio, the C<tanh> for
+C<cor_test> — and requires it to be the one C<qnorm> returns, at conf.level 0.8
+through 0.9999. C<cmh_test> is the one site not covered, because recovering its
+C<z> would mean reimplementing the Robins-Breslow-Greenland variance it does not
+report, which would test the reimplementation.
+
+Against C<mpmath> at C<mp.dps = 60>, bisecting the defining equation
+C<erfc(-z/sqrt(2)) / 2 = p> rather than calling a library inverse, worst relative
+error over those six confidence levels:
+
+=for html <table>
+<thead>
+<tr>
+  <th></th>
+  <th>worst relative error</th>
+  <th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>R 4.6.1 <code>qnorm</code> (Wichura's AS 241)</td>
+  <td>4.8e-16</td>
+  <td>2.1 ulp</td>
+</tr>
+<tr>
+  <td>SciPy 1.18.0 <code>norm.ppf</code> (Cephes <code>ndtri</code>)</td>
+  <td>1.5e-16</td>
+  <td>0.7 ulp</td>
+</tr>
+<tr>
+  <td>this module</td>
+  <td>8.2e-17</td>
+  <td>0.4 ulp</td>
+</tr>
+</tbody>
+</table>
+
+C<t/std_qnorm.mpmath.py> is the arbiter and prints that table, along with the
+frozen rows of the test it generates. Like the other generators it is committed
+next to its test and nothing in the suite calls it.
+
+=head3 Accuracy, and the one place C<log> is not R's
+
+These are glue over routines the module already had — C<normal_quantile_hp>,
+C<pt_upper>/C<qt_tail>, the incomplete gamma and beta — whose series and
+continued fractions stop at a relative C<1e-15> on every build. So they are
+double-accurate on a long-double or C<__float128> perl too, rather than more
+accurate there, and they agree with R to about C<1e-14> relative.
+
+Two things are deliberately not R:
+
+=over
+
+=item * B<< C<< log =E<gt> 1 >> on a C<p*> function returns C<log()> of the probability already
+computed >>, not a log carried through the series. A tail that underflowed
+to C<0> therefore logs to C<-Inf>, and a tail that rounded to C<1> logs to C<0>
+rather than to the tiny negative number R reports. R's C<pt>/C<pchisq>/C<pf>
+carry C<log_p> through and can do better; C<pnorm> here does too, because R's
+Cody algorithm was ported whole. The C<q*> functions take C<log.p> properly:
+the argument is exponentiated, which is exact, and lets you name quantiles
+the linear scale cannot — C<< qnorm(-800, log.p =E<gt> 1) >> is reachable where
+C<exp(-800)> is just C<0>.
+
+=item * B<< C<qf> disagrees with R in the far tail of I<F>, and is right. >> At
+C<qf(2^-20, 1, 10)> R is 9.9e-4 away from the 60-digit value and this module
+is 1.0e-15 away; R's own C<pf> confirms it, inverting this module's answer to
+1.6e-15 and its own to 4.9e-4. Thirteen such rows are pinned in
+C<t/distributions.R.scipy.t> against mpmath at C<mp.dps = 60>, each asserted
+both to be right I<and> to still disagree with R, so the divergence cannot
+quietly change.
+
+=back
+
+Non-centrality (C<ncp>) is not implemented; nor is C<qbinom>. Everything is
+cross-validated in C<t/distributions.R.scipy.t> (2041 tests) against a frozen
+table of R 4.6.1 values, SciPy 1.18.0's own mpmath reference cases, and R's own
+round-trip identities from C<tests/d-p-q-r-tests.R>.
+
 =head2 dnorm
 
 gives the density of the normal distribution, with the specified mean and standard deviation.
+
+=for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/dnorm.what.png" alt="dnorm: the standard normal density curve with a vertical orange line at x = 1 reaching the curve, a dotted line across to the y axis, and the label dnorm(1) = 0.241971 -- a height, with nothing shaded, because dnorm integrates nothing" width="100%" /></p>
 
 In other words, the predicted height of the value C<x>, given a mean, standard deviation, and whether or not to use a log value.
 
@@ -8115,7 +8472,7 @@ numerically against the canonical formula computed in base R.
  my $res = dunn_test(\@values, \@group, method => 'bh');
  for my $c (@$res) {
      printf "%-9s  Z=%+.3f  p=%.4f  (adj %.4f)\n",
-         $c->{comparison}, $c->{Z}, $c->{p_value}, $c->{p_adjust};
+         $c->{comparison}, $c->{Z}, $c->{p.value}, $c->{p_adjust};
  }
 
 Values and groups are given as two parallel arrays; observations with a missing
@@ -8192,7 +8549,7 @@ group order), each containing:
   <td><code>-2.7602</code></td>
 </tr>
 <tr>
-  <td><code>p_value</code></td>
+  <td><code>p.value</code></td>
   <td><code>Double</code></td>
   <td>Unadjusted two-sided p-value.</td>
   <td><code>0.005777</code></td>
@@ -8221,12 +8578,12 @@ Pass the four counts (or a C<[a,b,c,d]> / C<[[a,b],[c,d]]> array ref):
  use Stats::LikeR 'epi_2x2';
 
  my $r = epi_2x2(30, 70, 20, 80);
- print $r->{odds_ratio};             # 1.714
- print "@{ $r->{odds_ratio_ci} }";   # 0.895 3.285
+ print $r->{odds.ratio};             # 1.714
+ print "@{ $r->{odds.ratio.ci} }";   # 0.895 3.285
 
-Options: C<conf_level> (default C<0.95>) and C<correct> (add 0.5 to every cell,
-done automatically when a cell is 0). Result keys: C<odds_ratio>, C<risk_ratio>,
-C<risk_diff> (each with a matching C<*_ci>), C<risk_exposed>, C<risk_unexposed>, and
+Options: C<conf.level> (default C<0.95>) and C<correct> (add 0.5 to every cell,
+done automatically when a cell is 0). Result keys: C<odds.ratio>, C<risk.ratio>,
+C<risk.diff> (each with a matching C<*_ci>), C<risk.exposed>, C<risk.unexposed>, and
 C<nnt>. For a significance test use L<C<fisher_test>|/"fisher_test"> or
 L<C<chisq_test>|/"chisq_test">; to adjust across strata use L<C<cmh_test>|/"cmh_test">.
 
@@ -8559,16 +8916,16 @@ which returns a hash reference:
 
  {
  alternative   "two.sided",
- conf_int      [
+ conf.int      [
      [0] 2.75343836564204,
      [1] 300.682787419401
  ],
- conf_level    0.95,
+ conf.level    0.95,
  estimate      {
      "odds ratio"   21.3053312750168
  },
  method        "Fisher's Exact Test for Count Data",
- p_value       0.000536724119143435
+ p.value       0.000536724119143435
  }
 
 =head3 hash reference entry
@@ -8596,15 +8953,15 @@ For tables larger than 2x2 the p-value is computed by exact enumeration of
 every contingency table sharing the observed row and column margins (the
 multivariate hypergeometric distribution), and matches R's C<fisher.test> to
 full precision. Only the two-sided test is defined in this case, so
-C<alternative> is ignored and the returned hash reference omits C<conf_int> and
+C<alternative> is ignored and the returned hash reference omits C<conf.int> and
 C<estimate> (the conditional-MLE odds ratio and its confidence interval are
 reported for 2x2 tables only):
 
  {
  alternative   "two.sided",
- conf_level    0.95,
+ conf.level    0.95,
  method        "Fisher's Exact Test for Count Data",
- p_value       0.0540892411303451
+ p.value       0.0540892411303451
  }
 
 As with the 2x2 case, a hash-of-hashes input orders rows by their sorted keys
@@ -8644,7 +9001,7 @@ non-numeric value are dropped, mirroring R's C<complete.cases>.
      [9, 10,  9],   # subject 3
      [8,  8,  6],   # subject 4
  ]);
- printf "chi2=%.3f  df=%d  p=%.4g\n", $r->{statistic}, $r->{parameter}, $r->{p_value};
+ printf "chi2=%.3f  df=%d  p=%.4g\n", $r->{statistic}, $r->{parameter}, $r->{p.value};
 
 A significant result says the conditions differ overall; follow up with pairwise
 comparisons (for example L</"dunn_test"> on the paired differences, or
@@ -8675,7 +9032,7 @@ Wilcoxon signed-rank tests with a multiple-comparison adjustment).
   <td><code>2</code></td>
 </tr>
 <tr>
-  <td><code>p_value</code></td>
+  <td><code>p.value</code></td>
   <td><code>Double</code></td>
   <td>The p-value from the chi-squared approximation.</td>
   <td><code>0.129</code></td>
@@ -9399,7 +9756,7 @@ it was validated numerically.
  my @prob = map { $fit->{'fitted.values'}{$_} } @ids;
 
  my $hl = hosmer_lemeshow(\@obs, \@prob, g => 10);
- printf "HL chi2=%.2f df=%d p=%.3f\n", $hl->{statistic}, $hl->{parameter}, $hl->{p_value};
+ printf "HL chi2=%.2f df=%d p=%.3f\n", $hl->{statistic}, $hl->{parameter}, $hl->{p.value};
 
 =head3 Input Parameters
 
@@ -9463,7 +9820,7 @@ it was validated numerically.
   <td><code>8</code></td>
 </tr>
 <tr>
-  <td><code>p_value</code></td>
+  <td><code>p.value</code></td>
   <td><code>Double</code></td>
   <td>Goodness-of-fit p-value (large = good fit).</td>
   <td><code>0.825</code></td>
@@ -9810,13 +10167,13 @@ the groups that do have data under a C<df> that counts one that does not is not
 a test of anything. (SciPy takes the other side of this and returns C<NaN>.)
 
 A sample with no variation at all gives a tie correction of exactly zero, so
-the statistic is C<0/0>: like R, C<statistic> and C<p_value> come back as C<NaN>.
+the statistic is C<0/0>: like R, C<statistic> and C<p.value> come back as C<NaN>.
 
 =head3 returned fields
 
 C<statistic>, C<parameter> (the degrees of freedom) and C<method> are R's C<htest>
-fields; the p-value is available as both C<p_value> and C<p.value>. On top of
-those, C<group_stats> holds C<size> and C<mean> sub-hashes keyed by your own group
+fields; the p-value is available as both C<p.value> and C<p.value>. On top of
+those, C<group.stats> holds C<size> and C<mean> sub-hashes keyed by your own group
 labels, computed over the same observations the statistic used.
 
 =head2 ks_test
@@ -9885,7 +10242,7 @@ D⁻. It is the maximum distance between the two ECDFs (or, for the one-sample
 test, between the ECDF and the reference CDF), always in the range [0, 1].
 Larger values mean the distributions are further apart.
 
-=item * B<< C<p_value> >> — the probability, under the null hypothesis that the samples
+=item * B<< C<p.value> >> — the probability, under the null hypothesis that the samples
 share a distribution, of observing a statistic at least this large. It is
 clamped to [0, 1]; a small value (e.g. < 0.05) is evidence against the null.
 
@@ -9905,9 +10262,9 @@ self-describing.
 For example:
 
  my $ks = ks_test(\@x, \@y);
- if ($ks->{p_value} < 0.05) {
+ if ($ks->{p.value} < 0.05) {
      printf "reject H0: D=%.4f, p=%.4g (%s)\n",
-         $ks->{statistic}, $ks->{p_value}, $ks->{method};
+         $ks->{statistic}, $ks->{p.value}, $ks->{method};
  }
 
 =head2 kurtosis
@@ -10137,10 +10494,10 @@ Give times, an event flag (1 = event, 0 = censored), and a group label per row:
  use Stats::LikeR 'logrank_test';
 
  my $r = logrank_test(\@time, \@status, \@group);
- print $r->{p_value};
+ print $r->{p.value};
 
 Result keys: C<statistic> (chi-squared), C<parameter> (df = groups − 1),
-C<p_value>, C<observed> and C<expected> events per group, and C<groups>. See
+C<p.value>, C<observed> and C<expected> events per group, and C<groups>. See
 L<C<survfit>|/"survfit"> for the curves and L<C<coxph>|/"coxph"> to adjust for
 covariates.
 
@@ -10201,7 +10558,7 @@ numerically against R.
 
  # counts as a square matrix: [[a, b], [c, d]]
  my $r = mcnemar_test([[794, 86], [150, 570]]);
- printf "chi2=%.2f df=%d p=%.4g\n", $r->{statistic}, $r->{parameter}, $r->{p_value};
+ printf "chi2=%.2f df=%d p=%.4g\n", $r->{statistic}, $r->{parameter}, $r->{p.value};
 
  # small samples: exact binomial test on the discordant pairs
  my $e = mcnemar_test([[794, 86], [150, 570]], exact => 1);
@@ -10282,7 +10639,7 @@ cross-tabulated over their sorted union of levels.
   <td><code>1</code></td>
 </tr>
 <tr>
-  <td><code>p_value</code></td>
+  <td><code>p.value</code></td>
   <td><code>Double</code></td>
   <td>The p-value.</td>
   <td><code>4.1e-05</code></td>
@@ -10660,7 +11017,7 @@ A hash reference with three top-level keys:
   <td>the within-groups row: <code>Df</code>, <code>Sum Sq</code>, <code>Mean Sq</code> (<code>Df</code> is fractional under Welch)</td>
 </tr>
 <tr>
-  <td><code>group_stats</code></td>
+  <td><code>group.stats</code></td>
   <td><code>{ mean =&gt; { group =&gt; mean, … }, size =&gt; { group =&gt; n, … } }</code></td>
 </tr>
 </tbody>
@@ -10688,7 +11045,7 @@ A hash reference with three top-level keys:
          "Sum Sq"  => 3.47333333333333,
          "Mean Sq" => 0.353783749200256,
      },
-     group_stats => {
+     group.stats => {
          mean => { ctrl => 0.5, yield => 5.03333333333333 },
          size => { ctrl => 6,   yield => 6 },
      },
@@ -10701,9 +11058,9 @@ A hash reference with three top-level keys:
      [1,   1,   1,   0,   0,   0  ],
  ]);
 
-Identical to the hash form, except C<group_stats> is keyed by position:
+Identical to the hash form, except C<group.stats> is keyed by position:
 
- group_stats => {
+ group.stats => {
      mean => { "Index 0" => 5.03333333333333, "Index 1" => 0.5 },
      size => { "Index 0" => 6,                "Index 1" => 6   },
  }
@@ -10721,7 +11078,7 @@ the factor's I<name> becomes the top-level key:
      },
      formula => 'len ~ supp',
  );
- # $res->{supp}, $res->{Residuals}, $res->{group_stats} ...
+ # $res->{supp}, $res->{Residuals}, $res->{group.stats} ...
 
 =head3 Classic equal-variance form
 
@@ -10815,7 +11172,7 @@ arrays is an error.
 =item * Group order in the output is not guaranteed for hash inputs (it follows hash
 iteration order); read results by name, not position.
 
-=item * Avoid naming a factor C<Residuals> or C<group_stats> in a formula, since those
+=item * Avoid naming a factor C<Residuals> or C<group.stats> in a formula, since those
 are reserved top-level keys in the result.
 
 =back
@@ -11105,6 +11462,8 @@ not reach.
 
 The normal cumulative distribution function: the probability that a normal random variable is C<< E<lt>= x >>. Ports R's C<pnorm>.
 That is, take the integral from negative infinity to the point that you want.
+
+=for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/pnorm.what.png" alt="pnorm: the standard normal density with the area left of q = 1.28 shaded orange, annotated with the integral from minus infinity to 1.28 of f(x) dx = 0.89973, and a note that lower =&gt; 0 shades the other side and computes it as its own integral rather than by subtracting" width="100%" /></p>
 
  my $p = pnorm(1.96);            # 0.9750021  (standard normal, P(X <= 1.96))
 
@@ -11442,7 +11801,7 @@ Validated numerically against R.
  # one sample vs a target probability (default 0.5)
  my $r = prop_test(83, 100);              # 83 successes in 100 trials
  printf "p-hat=%.2f  95%% CI %.3f–%.3f  p=%.4g\n",
-     $r->{estimate}[0], $r->{'conf.int'}[0], $r->{'conf.int'}[1], $r->{p_value};
+     $r->{estimate}[0], $r->{'conf.int'}[0], $r->{'conf.int'}[1], $r->{p.value};
 
  # two groups: difference in proportions + CI
  my $two = prop_test([83, 90], [100, 100]);
@@ -11539,7 +11898,7 @@ group) or as two scalars for a single sample.
   <td><code>1</code></td>
 </tr>
 <tr>
-  <td><code>p_value</code></td>
+  <td><code>p.value</code></td>
   <td><code>Double</code></td>
   <td>The p-value.</td>
   <td><code>0.2144</code></td>
@@ -11563,7 +11922,7 @@ group) or as two scalars for a single sample.
   <td><code>'two.sided'</code></td>
 </tr>
 <tr>
-  <td><code>conf_level</code></td>
+  <td><code>conf.level</code></td>
   <td><code>Double</code></td>
   <td>The confidence level used.</td>
   <td><code>0.95</code></td>
@@ -12025,6 +12384,21 @@ minimal example:
   <td>which worksheet to read from an <code>.xlsx</code> file: a 1-based index or a sheet name (default: first sheet). Ignored for text files</td>
   <td><code>sheet =&gt; 'Sheet2'</code></td>
 </tr>
+<tr>
+  <td><code>na.strings</code></td>
+  <td>field texts that mean "missing"; a string or an array reference of strings, mapped to <code>undef</code>. Off by default</td>
+  <td><code>'na.strings' =&gt; 'NA'</code></td>
+</tr>
+<tr>
+  <td><code>na_values</code></td>
+  <td>pandas' spelling of <code>na.strings</code></td>
+  <td><code>na_values =&gt; ['NA', 'N/A']</code></td>
+</tr>
+<tr>
+  <td><code>undef.val</code></td>
+  <td><code>write_table</code>'s spelling of <code>na.strings</code>, so a round trip can use one name on both halves</td>
+  <td><code>'undef.val' =&gt; 'NA'</code></td>
+</tr>
 </tbody>
 </table>
 
@@ -12045,6 +12419,92 @@ and, like Text::CSV_XS, filters can be applied in order to save RAM on big files
 
 the default delimiter is C<,>
 Suffixes C<.csv> and C<.tsv> are automatically detected from file names, but if specified, are overridden by C<delim> and/or C<sep>. C<sep> is given priority.
+
+=head3 missing values (C<na.strings> / C<na_values> / C<undef.val>)
+
+An empty field is always read as C<undef>. Any I<other> text that a file uses to
+mean "missing" — C<NA>, C<N/A>, C<NULL>, C<->, C<-999> — has to be named. It is one
+option under three names, so you can spell it whichever way the rest of your
+code already does:
+
+=for html <table>
+<thead>
+<tr>
+  <th>spelling</th>
+  <th>whose</th>
+  <th>use it when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>na.strings</code></td>
+  <td>R's <code>read.table</code></td>
+  <td>porting R, or with no reason to prefer another</td>
+</tr>
+<tr>
+  <td><code>na_values</code></td>
+  <td>pandas' <code>read_csv</code></td>
+  <td>porting Python</td>
+</tr>
+<tr>
+  <td><code>undef.val</code></td>
+  <td>this module's <code>write_table</code></td>
+  <td>reading back a file this module wrote</td>
+</tr>
+</tbody>
+</table>
+
+All three take a string or an array reference of strings, all three mean
+exactly the same thing, and passing more than one is an error, exactly as C<sep>
+and C<delim> together are:
+
+ my $d = read_table('cohort.csv', 'na.strings' => 'NA');
+ my $d = read_table('cohort.csv', na_values    => ['NA', 'N/A', 'NULL', '-']);
+ my $d = read_table('cohort.csv', 'undef.val'  => 'NA');
+
+This matters because the tokens are otherwise ordinary strings, and Perl
+numifies a string to C<0>: an unnamed C<NA> in a numeric column does not stop
+C<mean> or C<sd>, it silently drags the answer toward zero (with a warning, which
+is fatal under C<< warnings FATAL =E<gt> 'all' >> and easy to miss otherwise). It also
+gives L<C<write_table>|/"write_table">'s C<undef.val> an inverse, so a file this
+module wrote can be read back with its missing cells intact — which is what the
+third spelling is for, letting both halves of the round trip name the token the
+same way:
+
+ write_table($rows, 'out.csv', 'undef.val' => 'NA');
+ my $back = read_table('out.csv', 'undef.val' => 'NA');   # undef again
+
+Note that C<write_table>'s C<undef.val> is one token, being what it writes, while
+C<read_table>'s accepts a list, being every token it should recognise.
+
+Details worth knowing:
+
+=over
+
+=item * B<Off by default.> R's C<read.table> defaults to C<na.strings = "NA"> and
+pandas recognises a whole list, but C<read_table> recognises nothing beyond
+the empty field unless you ask, so a literal C<NA> stays a string in code
+that predates this option.
+
+=item * B<Your list replaces the set, it does not extend one> — R's behaviour.
+C<< 'na.strings' =E<gt> 'baz' >> maps C<baz> and leaves C<NA> and C<NaN> alone.
+pandas would map all three.
+
+=item * B<The match is on the exact field text>, case-sensitively and with no
+whitespace stripped, which is also R's rule: C<' NA'> is not C<'NA'>, and
+C<'-999.000'> is not C<'-999.0'> (pandas numifies and would match both).
+List every spelling a file actually uses.
+
+=item * The header is never mapped, so a column may legitimately be named C<NA>.
+
+=item * A C<filter> runs I<after> the mapping, so it sees C<undef> rather than the
+token; select the present rows with C<sub { defined $_ }>.
+
+=item * It applies to C<.xlsx> reads too, and to all three C<output.type> shapes. For
+C<hoh>, a mapped row-name cell is a missing row name and is refused the same
+way an empty one is.
+
+=back
 
 =head3 commented-out headers
 
@@ -12188,13 +12648,13 @@ well a score separates cases from non-cases.
 
  my $r = roc(\@scores, \@labels);
  print $r->{auc};                 # 0.848
- print "@{ $r->{auc_ci} }";       # 0.649 1.000
+ print "@{ $r->{auc.ci} }";       # 0.649 1.000
  my $cut = $r->{youden};          # best operating point
  print "$cut->{threshold}: sens=$cut->{sensitivity} spec=$cut->{specificity}";
 
 Options: C<positive> (positive-class label, default C<1>), C<direction> (C<< 'E<gt>' >>
-default, or C<< 'E<lt>' >>), C<conf_level> (default C<0.95>). Result keys: C<auc>, C<auc_se>,
-C<auc_ci>, C<n_pos>, C<n_neg>, C<youden>, and C<curve> (one point per threshold). For
+default, or C<< 'E<lt>' >>), C<conf.level> (default C<0.95>). Result keys: C<auc>, C<auc.se>,
+C<auc.ci>, C<n.pos>, C<n.neg>, C<youden>, and C<curve> (one point per threshold). For
 just the number, use L<C<auc>|/"auc">.
 
 =head2 rownames
@@ -12362,7 +12822,7 @@ and returns the hash reference:
 
  {
  p.value     0.96717393596804,
- p_value     0.96717393596804,
+ p.value     0.96717393596804,
  statistic   0.986762155447719,
  W           0.986762155447719
  }
@@ -12574,8 +13034,8 @@ curve per group:
  print $s->{median};                 # median survival time
  print "@{ $s->{surv} }";            # S(t) at each time
 
-Option C<conf_level> (default C<0.95>). Each stratum has arrays C<time>, C<n_risk>,
-C<n_event>, C<n_censor>, C<surv>, C<std_err>, C<lower>, C<upper>, plus C<median>, C<n>,
+Option C<conf.level> (default C<0.95>). Each stratum has arrays C<time>, C<n.risk>,
+C<n.event>, C<n.censor>, C<surv>, C<std.err>, C<lower>, C<upper>, plus C<median>, C<n>,
 and C<events>. Compare curves with L<C<logrank_test>|/"logrank_test">; model
 covariate effects with L<C<coxph>|/"coxph">.
 
@@ -12595,7 +13055,7 @@ and the test follows: t-test / ANOVA for continuous (Wilcoxon / Kruskal with
 C<< nonparametric =E<gt> 1 >>), chi-squared for categorical. Options: C<by>, C<vars>
 (which columns), C<types> (override a column's type), C<nonparametric>, C<digits>,
 C<pct_digits>. Each returned row has C<variable>, C<level>, one column per group,
-C<Overall>, and — on a variable's row — C<p_value> and C<test>.
+C<Overall>, and — on a variable's row — C<p.value> and C<test>.
 
 =head2 t_test
 
@@ -12612,12 +13072,12 @@ or 2-sample:
 
 returns a hash reference, which looks like:
 
- conf_int     => [
+ conf.int     => [
      -0.06672889, 0.25672889
  ],
  df        => 5,
  estimate  => 0.095,
- p_value   => 0.19143688433660,
+ p.value   => 0.19143688433660,
  statistic => 1.50996688705414
 
 the two groups compared can be specified, though not necessarily, as C<x> and C<y>, just like in R:
@@ -12638,7 +13098,7 @@ standard errors:
  statistic = (estimate - mu) / SE
 
 C<df> says which t distribution that statistic would follow if the null were
-true, and C<p_value> is the area of that distribution further out than the
+true, and C<p.value> is the area of that distribution further out than the
 statistic — the chance of landing this far from C<mu>, or further, when C<mu> is
 right. Below, R's C<sleep> data as a paired test: ten patients, each measured on
 two drugs, so the ten paired differences are one sample and C<mu = 0> is "the two
@@ -12675,7 +13135,7 @@ one of its two tails, magnified until it can be seen.
   <td><code>mu</code></td>
   <td>Float</td>
   <td>0.0</td>
-  <td>The true value of the mean (or difference in means) for the null hypothesis. Shifts <code>statistic</code> and <code>p_value</code>; <code>conf_int</code> is centred on the estimate and does not move.</td>
+  <td>The true value of the mean (or difference in means) for the null hypothesis. Shifts <code>statistic</code> and <code>p.value</code>; <code>conf.int</code> is centred on the estimate and does not move.</td>
 </tr>
 <tr>
   <td><code>paired</code></td>
@@ -12690,10 +13150,10 @@ one of its two tails, magnified until it can be seen.
   <td>If true, assumes equal variances (standard two-sample). If false, performs Welch's t-test with unequal variances.</td>
 </tr>
 <tr>
-  <td><code>conf_level</code></td>
+  <td><code>conf.level</code></td>
   <td>Float</td>
   <td>0.95</td>
-  <td>Confidence level for the returned confidence interval. Must be strictly between 0 and 1 (R also accepts the degenerate 0 and 1). See [Extreme <code>conf_level</code>](#extreme-conf_level) for the precision limit past about <code>0.9999</code>.</td>
+  <td>Confidence level for the returned confidence interval. Must be strictly between 0 and 1 (R also accepts the degenerate 0 and 1). See [Extreme <code>conf.level</code>](#extreme-conf.level) for the precision limit past about <code>0.9999</code>.</td>
 </tr>
 <tr>
   <td><code>alternative</code></td>
@@ -12704,24 +13164,24 @@ one of its two tails, magnified until it can be seen.
 </tbody>
 </table>
 
-=head3 C<conf_int>
+=head3 C<conf.int>
 
-C<conf_int> is the estimate plus and minus a multiple of the same standard error
-the statistic divides by, and C<conf_level> picks the multiple — the t quantile
+C<conf.int> is the estimate plus and minus a multiple of the same standard error
+the statistic divides by, and C<conf.level> picks the multiple — the t quantile
 at that level and C<df>. Nothing else goes into it. On the left below, the whole
 interval taken apart: for the paired C<sleep> test, C<2.26216 * 0.38896 = 0.87989>
 either side of C<-1.58>. On the right, the same interval at six confidence
-levels. A wider C<conf_level> needs a bigger quantile and so gives a wider
+levels. A wider C<conf.level> needs a bigger quantile and so gives a wider
 interval, and the level at which the interval first reaches C<mu> is exactly
-C<1 - p_value> — the second panel from the bottom, whose upper bound lands on
+C<1 - p.value> — the second panel from the bottom, whose upper bound lands on
 zero.
 
-=for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/t.test.conf.int.png" alt="conf_int is the estimate plus or minus a t quantile times the standard error, and conf_level sets the quantile" width="100%" /></p>
+=for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/t.test.conf.int.png" alt="conf.int is the estimate plus or minus a t quantile times the standard error, and conf.level sets the quantile" width="100%" /></p>
 
 =head3 C<alternative>
 
 C<alternative> decides which part of the null distribution counts against the
-null, and therefore both C<p_value> and C<conf_int>. C<"two.sided"> counts both
+null, and therefore both C<p.value> and C<conf.int>. C<"two.sided"> counts both
 tails beyond C<|statistic|>, C<"less"> counts only what lies below the statistic,
 and C<"greater"> only what lies above; the two one-sided p-values always add to
 1, and each is half the two-sided one when it is the smaller. The interval
@@ -12731,43 +13191,43 @@ twenty numbers as above, but unpaired.
 
 =for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/t.test.alternative.png" alt="the three alternatives, the region of the null distribution each one counts, and the interval that goes with it" width="100%" /></p>
 
-=head3 C<mu>, C<p_value> and C<conf_int> say one thing
+=head3 C<mu>, C<p.value> and C<conf.int> say one thing
 
-C<conf_int> is the set of C<mu> the test would not reject. Sweep C<mu> across the
+C<conf.int> is the set of C<mu> the test would not reject. Sweep C<mu> across the
 line and re-run the test at each value: the p-value peaks at 1 where C<mu> equals
-the estimate, and falls through C<1 - conf_level> at precisely the two bounds of
-C<conf_int>. That is what "the interval excludes zero" and "p is below 0.05" both
+the estimate, and falls through C<1 - conf.level> at precisely the two bounds of
+C<conf.int>. That is what "the interval excludes zero" and "p is below 0.05" both
 mean — they are one statement, not two pieces of evidence.
 
-Which is also why C<mu> never moves C<conf_int>. Changing C<mu> changes which
-hypothesis is being tested, so C<statistic> and C<p_value> move with it; the
+Which is also why C<mu> never moves C<conf.int>. Changing C<mu> changes which
+hypothesis is being tested, so C<statistic> and C<p.value> move with it; the
 interval is built around the estimate and stays where it is.
 
-=for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/t.test.duality.png" alt="p_value as a function of mu, crossing 1 - conf_level exactly at the two bounds of conf_int" width="100%" /></p>
+=for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/t.test.duality.png" alt="p.value as a function of mu, crossing 1 - conf.level exactly at the two bounds of conf.int" width="100%" /></p>
 
 =head3 What a falling p-value looks like
 
 The same thing seen from the data's side: two samples drawn from two different
 distributions, pulled steadily apart. Each column below is one C<t_test> of the
 C<sleep> groups with drug 1 shifted — the top panel is the two distributions, by
-this module's own L<C<density>|/"density">, and the bottom panel is the C<conf_int>
+this module's own L<C<density>|/"density">, and the bottom panel is the C<conf.int>
 that comes back. The columns are four p-values five orders of magnitude apart.
 
-=for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/t.test.p.and.ci.png" alt="two distributions separating, and the conf_int retreating from mu as the p-value falls" width="100%" /></p>
+=for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/t.test.p.and.ci.png" alt="two distributions separating, and the conf.int retreating from mu as the p-value falls" width="100%" /></p>
 
 Only one thing about the interval changes: where it sits. C<df> stays at
 C<17.7765> and its width stays at C<3.5710> down the whole row, because shifting a
 sample changes neither the spread nor C<n>, and those are all the standard error
 is made of. What moves is the distance from C<mu> — and the second column is the
-hinge: at C<p_value = 0.05> the interval's upper bound is C<0.0000>, sitting
+hinge: at C<p.value = 0.05> the interval's upper bound is C<0.0000>, sitting
 exactly on C<mu>, because "p below 0.05" and "the 95% interval clear of C<mu>" are
 the same event.
 
-Reading the two together is the point. C<p_value> reports the distance from C<mu>
+Reading the two together is the point. C<p.value> reports the distance from C<mu>
 in standard errors and nothing else, so it says how surely the difference is not
-zero, never how big it is; C<conf_int> reports the difference itself, in hours of
+zero, never how big it is; C<conf.int> reports the difference itself, in hours of
 sleep. The other route to a small p is a smaller standard error — more
-observations, or less spread — and that one drives C<p_value> down by narrowing
+observations, or less spread — and that one drives C<p.value> down by narrowing
 the interval around an estimate that has not moved at all.
 
 =head3 C<paired> and C<var_equal>
@@ -12790,16 +13250,16 @@ edge.
 
 =for html <p><img src="https://raw.githubusercontent.com/hhg7/stats/main/img/t.test.designs.png" alt="paired, var_equal and Welch on the same data, and the Welch degrees of freedom as the two spreads separate" width="100%" /></p>
 
-=head3 Extreme C<conf_level>
+=head3 Extreme C<conf.level>
 
-C<conf_int> is exact to the last few digits at ordinary confidence levels, and the
+C<conf.int> is exact to the last few digits at ordinary confidence levels, and the
 t quantile behind it neither saturates nor loses accuracy as the data's scale
-grows. Past about C<< conf_level =E<gt> 0.9999 >>, though, the interval's accuracy is
+grows. Past about C<< conf.level =E<gt> 0.9999 >>, though, the interval's accuracy is
 capped by the I<argument>, not by the quantile — and no implementation can do
 better, R's included.
 
-The reason is that C<conf_level> arrives as a float, so the tail has to be
-recovered as C<(1 - conf_level) / 2>, and that subtraction discards most of the
+The reason is that C<conf.level> arrives as a float, so the tail has to be
+recovered as C<(1 - conf.level) / 2>, and that subtraction discards most of the
 tail it is trying to express. The nearest double to C<0.99999999> puts the tail at
 C<5.0000000251e-9> rather than C<5e-9> — a relative error of C<5.0e-9> — and for
 C<0.9999999999> the error is C<8.3e-8>. Since C<qt(p, 1) ~ 1/(pi * p)>, the
@@ -12816,7 +13276,7 @@ so recovers the tail correctly, while an ordinary C<double> build cannot:
  #   qt(5e-9, 1, lower.tail = FALSE) in R  = 63661977.2367581
 
 If you need a tail that small exactly, compute it yourself and work from the
-quantile rather than passing a C<conf_level> that cannot hold it.
+quantile rather than passing a C<conf.level> that cannot hold it.
 
 =head3 Missing values
 
@@ -12831,7 +13291,7 @@ is missing the pair goes whole, keeping the differences aligned.
 Dies if:
 - C<x> is missing or is not an array reference, or C<y> is defined but is not one
 - C<alternative> is not one of the values above
-- C<conf_level> is not strictly between 0 and 1
+- C<conf.level> is not strictly between 0 and 1
 - C<paired> is set without a C<y>, or with an C<x> and C<y> of different lengths
 - fewer than 2 observations survive: 2 in C<x> for a one-sample test, 2 complete
   pairs when C<paired>, and for two samples R's own thresholds — a Welch test
@@ -12862,11 +13322,11 @@ Dies if:
   <td>Degrees of freedom for the test.</td>
 </tr>
 <tr>
-  <td><code>p_value</code></td>
+  <td><code>p.value</code></td>
   <td>The calculated p-value based on the test directionality.</td>
 </tr>
 <tr>
-  <td><code>conf_int</code></td>
+  <td><code>conf.int</code></td>
   <td>An Array Reference containing two elements: <code>[lower_bound, upper_bound]</code>.</td>
 </tr>
 <tr>
@@ -12874,11 +13334,11 @@ Dies if:
   <td>The estimated mean of <code>x</code> (one-sample) OR the mean of the differences (paired).</td>
 </tr>
 <tr>
-  <td><code>estimate_x</code></td>
+  <td><code>estimate.x</code></td>
   <td>The estimated mean of the <code>x</code> vector (only returned in two-sample tests).</td>
 </tr>
 <tr>
-  <td><code>estimate_y</code></td>
+  <td><code>estimate.y</code></td>
   <td>The estimated mean of the <code>y</code> vector (only returned in two-sample tests).</td>
 </tr>
 </tbody>
@@ -13144,7 +13604,7 @@ With a key, like C<a> for above, only values within that hash key are counted:
 
 the column, or second hash key, that you wish to count, is specified at the command line
 
-The two new subsections (Array of hashes, Array of arrays) are the only additions; everything else is unchanged. They're placed after the array-container forms to keep array inputs grouped, mirroring how Hash of array / Hash of hash sit together. If you'd rather I drop this into a C<.md> file or fold it into POD (C<=head3> headers, C<< CE<lt>E<gt> >> for the inline code) for the actual module docs, say the word.
+The two new subsections (Array of hashes, Array of arrays) are the only additions; everything else is unchanged. They're placed after the array-container forms to keep array inputs grouped, mirroring how Hash of array / Hash of hash sit together.
 
 =head2 var
 
@@ -13170,7 +13630,7 @@ As described by R: Performs an F test to compare the variances of two samples fr
 
  my $vt = var_test(\@x, \@y);
 
-also, conf_level can be set:
+also, conf.level can be set:
 
  $vt = var_test(\@x, \@y, conf_level => 0.99);
 
@@ -13395,7 +13855,7 @@ The first one or two array-ref arguments are taken positionally as C<x> and C<y>
  # with a confidence interval and point estimate
  wilcox_test(\@x, \@y, conf_int => 1, conf_level => 0.99);
 
-Arguments that R spells with a dot are accepted with either spelling: C<conf.int> and C<conf_int>, C<conf.level> and C<conf_level>, C<digits.rank> and C<digits_rank>, C<tol.root> and C<tol_root>.
+Arguments that R spells with a dot are accepted with either spelling: C<conf.int> and C<conf.int>, C<conf.level> and C<conf.level>, C<digits.rank> and C<digits_rank>, C<tol.root> and C<tol_root>.
 
 =head3 Input parameters
 
@@ -13467,7 +13927,7 @@ Arguments that R spells with a dot are accepted with either spelling: C<conf.int
   <td><code>conf.level</code></td>
   <td>number in (0,1)</td>
   <td><code>0.95</code></td>
-  <td>Requested confidence level. The level a rank test can actually deliver is discrete, so the level achieved is reported back in <code>conf_level</code> and is generally not the one asked for.</td>
+  <td>Requested confidence level. The level a rank test can actually deliver is discrete, so the level achieved is reported back in <code>conf.level</code> and is generally not the one asked for.</td>
 </tr>
 <tr>
   <td><code>digits.rank</code></td>
@@ -13503,12 +13963,12 @@ Returns a hash ref with the following keys:
   <td>The test statistic. For the two-sample test this is the Mann-Whitney <b>W</b> (the <code>x</code> rank sum minus <code>nx*(nx+1)/2</code>). For the signed-rank test it is <b>V</b>, the sum of the ranks assigned to the positive differences.</td>
 </tr>
 <tr>
-  <td><code>statistic_name</code></td>
+  <td><code>statistic.name</code></td>
   <td>string</td>
   <td><code>"W"</code> or <code>"V"</code>, matching what R prints.</td>
 </tr>
 <tr>
-  <td><code>p_value</code></td>
+  <td><code>p.value</code></td>
   <td>number</td>
   <td>The p-value for the chosen <code>alternative</code>, capped at <code>1.0</code>. Two-sided p-values are <code>2 * min(p_less, p_greater)</code>.</td>
 </tr>
@@ -13523,12 +13983,12 @@ Returns a hash ref with the following keys:
   <td>Echoes the <code>alternative</code> actually used (<code>"two.sided"</code>, <code>"less"</code>, or <code>"greater"</code>).</td>
 </tr>
 <tr>
-  <td><code>null_value</code></td>
+  <td><code>null.value</code></td>
   <td>number</td>
   <td>Echoes <code>mu</code>.</td>
 </tr>
 <tr>
-  <td><code>null_value_name</code></td>
+  <td><code>null.value.name</code></td>
   <td>string</td>
   <td><code>"location shift"</code> for the two-sample and paired tests, <code>"location"</code> for the one-sample test.</td>
 </tr>
@@ -13538,12 +13998,12 @@ Returns a hash ref with the following keys:
   <td><i>(only with <code>conf.int</code>)</i> The Hodges-Lehmann estimator: the median of the Walsh averages <code>(x[i] + x[j]) / 2</code> in the one-sample case, or of the pairwise differences <code>x[i] - y[j]</code> in the two-sample case. On the asymptotic path it is instead the shift at which the standardised statistic is zero, as in R.</td>
 </tr>
 <tr>
-  <td><code>conf_int</code></td>
+  <td><code>conf.int</code></td>
   <td>ARRAY ref</td>
   <td><i>(only with <code>conf.int</code>)</i> Two elements, the lower and upper limits. A one-sided alternative gives an unbounded end (<code>-Inf</code> or <code>Inf</code>).</td>
 </tr>
 <tr>
-  <td><code>conf_level</code></td>
+  <td><code>conf.level</code></td>
   <td>number</td>
   <td><i>(only with <code>conf.int</code>)</i> The confidence level actually achieved, which for the exact interval is a step function of the data and rarely equals <code>conf.level</code>.</td>
 </tr>
@@ -13871,8 +14331,8 @@ itself:
 
 =over
 
-=item * B<F tests> (C<oneway_test>, C<aov>, C<anova> in both its forms, and C<lm>'s
-C<f.pvalue>) use the regularized-incomplete-beta symmetry
+=item * B<F tests> (C<oneway_test>, C<aov>, C<anova> in both its forms, C<lm>'s
+C<f.pvalue>, and C<var_test>) use the regularized-incomplete-beta symmetry
 C<1 - I_x(a, b) = I_{1-x}(b, a)>. With C<x = df1·F / (df1·F + df2)>, the
 complement C<1 - x> is just C<df2 / (df1·F + df2)>, which is formed without any
 subtraction, so the tail keeps full relative precision.
@@ -13912,6 +14372,795 @@ C<f.sf> / C<norm.sf> and statsmodels' C<anova_oneway>; see
 C<t/model_pvalue_tails.t> and C<t/oneway_test.R.scipy.t>.
 
 =head1 Changes
+
+=head2 0.311 2026-08-28 CDT
+
+=head3 80-bit x87 arithmetic broke four test files on 32-bit x86
+
+A CPAN smoker on C<i686-linux-64int> (perl 5.32.1) failed 73 subtests across
+C<t/bedroc.python.t>, C<t/quantile.R.t>, C<t/var_sd_cov.R.t> and
+C<t/wilcox_test.R.scipy.t>. None of it reproduced here: the local matrix varies
+how wide an NV is I<stored> — double, long double, C<__float128> — but every perl
+in it is x86-64, so all five agree on doing the arithmetic in SSE at exactly
+that width.
+
+32-bit x86 does not. It computes doubles in the x87 register file at 80 bits and
+rounds only when a value is spilled to memory, so C<FLT_EVAL_METHOD> is 2 where
+an SSE build reports 0. C99 says a cast or an assignment rounds to the declared
+type, but gcc implements that only under C<-fexcess-precision=standard>, and
+C<-std=gnu99> — which the C99 probe in C<Makefile.PL> tries first — selects
+C<-fexcess-precision=fast>, which keeps the extra bits. A product therefore
+carried more precision than a double has, and every place that split one into an
+integer part and a remainder picked a different integer:
+
+=for html <table>
+<thead>
+<tr>
+  <th>expression</th>
+  <th>SSE</th>
+  <th>x87</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>ceil(0.1 * 100)</code></td>
+  <td><code>10</code></td>
+  <td><code>11</code></td>
+</tr>
+<tr>
+  <td><code>ceil(0.05 * 60)</code></td>
+  <td><code>3</code></td>
+  <td><code>4</code></td>
+</tr>
+<tr>
+  <td><code>1000 * 0.007</code></td>
+  <td>exactly <code>7</code></td>
+  <td><code>7.000000000000000146</code></td>
+</tr>
+</tbody>
+</table>
+
+One cause, four faces. C<bedroc> and C<auroc> size a bucket with
+C<ceil(frac * N)>, so every count came back one too high — each wrong enrichment
+factor in the smoker's report has an eleven under it where a ten belongs, and
+C<n.active> was 4 where 3 was wanted, 21 where 20 was. C<quantile> forms
+C<h = (n - 1) * p> and interpolates whenever C<h> is not an integer, so at
+I<n> = 1001 and I<p> = 7/1000 it interpolated between two order statistics where R
+returns one of them exactly. C<var> and C<sd> disagreed with themselves in the
+last digit between the tied-array and plain-array paths. And C<wilcox_test> found
+its pseudomedian by a root search over a step function, where a perturbed
+iterate does not move the answer by an ulp but lands on a different flat step:
+
+=for html <table>
+<thead>
+<tr>
+  <th>case</th>
+  <th>before</th>
+  <th>R 4.6.1</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>b12</code>/<code>c12</code> paired, <code>mu = -1</code></td>
+  <td><code>-0.64836734615018388</code></td>
+  <td><code>-0.70304928468751926</code></td>
+</tr>
+<tr>
+  <td><code>a4</code>/<code>a9</code>, <code>mu = 0.5</code></td>
+  <td><code>0.43960806666603025</code></td>
+  <td><code>0.4690926266724697</code></td>
+</tr>
+</tbody>
+</table>
+
+The fix is in two layers. C<Makefile.PL> and C<dist.ini> now trial-compile
+C<-fexcess-precision=standard> and add it when the compiler takes it, alongside
+the existing per-vendor C99 probe; gcc and clang both exit non-zero on an C<-f>
+switch they do not implement, and MSVC is skipped as before, needing nothing —
+it has defaulted to SSE2 on x86 since VS2012, and C</fp:precise> rounds to the
+declared type. That flag on its own fixes all 73. It is still not the whole
+answer, because it is not everywhere: an older clang, a vendor cc, or any
+compiler whose only C99 mode is a wide-register one will not take it, and this
+module is expected to build on all of them.
+
+So C<LikeR.xs> also gains C<nv_narrow()>, which forces the store through a
+C<volatile NV> by hand at the seven places where a product is split into an
+integer part and a remainder: both passes of C<quantile> — which must agree, or
+the partial sort places the wrong order statistics — plus C<dens_quantile7>,
+C<_qcut_core>, and the bucket counts in C<bedroc> twice and C<auroc> once. Those
+are the sites where the extra bits change I<an answer> rather than its last
+digit, and by itself it fixes 63 of the 73. The other 10 are last-digit work —
+C<var> agreeing with itself between the tied-array and plain-array paths, and the
+root search landing on the same step — which is what the flag is for and what no
+reasonable amount of hand-placed rounding would buy.
+
+Rounding to the NV's own width is the right answer at every width, not a
+concession to double: 7/1000 times 1000 rounds to exactly 7 in a double and in a
+long double alike. So both layers are inert on the long-double and quadmath
+builds, which is what the matrix confirms.
+
+No new tests were written, because the four cross-validation files that caught
+this are already the regression test — they are pinned to R and SciPy and they
+fail without the fix. What was missing was a build that could run them the way
+the smoker did, so C<./test.all.perls.pl> gains a first-class C<< E<lt>perlE<gt>+x87 >> row
+that rebuilds the newest plain perl with C<-mfpmath=387>. It reproduced 63 of the
+73 subtests by test number. One row is enough and it is skipped where there is
+nothing to catch — an x87 register is exactly as wide as a long-double NV, and
+C<__float128> never touches the x87 stack — and C<--no-x87> turns it off.
+
+That row cannot see the other half of 32-bit x86, and it is worth naming so the
+gap is not mistaken for coverage: i386 returns a double in C<st(0)>, so a callee
+hands its caller all 80 bits, where the x86-64 ABI returns in C<xmm0> and narrows
+for free. That is the half that moved C<wilcox_test>, which is why it was the one
+failure that could not be reproduced here at all; the assembly shows plain
+C<-std=gnu99> emitting C<fdivl> and C<ret> with no rounding between them, and the
+flag inserting the C<fstpl>/C<fldl> round-trip that narrows the result. Only a
+real 32-bit perl will exercise it.
+
+=head2 0.31 2026-08
+
+=head3 avals
+
+new function to make code cleaner.  C<avals> is the same as C<vals> but returns an array instead of an array reference, so instead of C<@{ vals($df, 'colname') }> it will just be C<avals($df, 'colname')> to prevent the need for bracketing
+
+=head3 Correctness and portability fixes
+
+Nine defects found by cross-validating against R 4.6.1 and mpmath, by running
+the suite under UBSan and AddressSanitizer, and by reading for the conventions
+in C<CLAUDE.md>. Each is pinned by a test that fails without the fix:
+C<t/cor_test.spearman.R.t>, C<t/pt_qt.tails.R.t>, C<t/minmax.nan.R.t>,
+C<t/var_test.ci.R.t> and C<t/portability.bugs.t>.
+
+=head4 C<< cor_test(method =E<gt> 'spearman') >> could not return
+
+C<< exact =E<gt> 1 >> ran an unbounded permutation walk. R has never enumerated past
+I<n> = 9 — C<n_small> in C<src/library/stats/src/prho.c> — whatever C<exact> says,
+but here the caller's flag was taken literally, and I<n>! is 6.2 × 10²³ by
+I<n> = 24:
+
+=for html <table>
+<thead>
+<tr>
+  <th><i>n</i></th>
+  <th>before</th>
+  <th>now</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>12</td>
+  <td>5 s</td>
+  <td>0.0 s</td>
+</tr>
+<tr>
+  <td>13</td>
+  <td>&gt; 1 min</td>
+  <td>0.0 s</td>
+</tr>
+<tr>
+  <td>24</td>
+  <td>never returned</td>
+  <td>0.0 s</td>
+</tr>
+</tbody>
+</table>
+
+The enumeration is now capped at I<n> ≤ 9 and 10 ≤ I<n> ≤ 1290 goes to the AS 89
+Edgeworth series, which is what R's C<prho()> does. Past 1290 — R's own bound,
+where C<n^3 - n> overflows an C<int> — it falls back to the asymptotic I<t>, as
+before.
+
+=head4 Spearman p-values were R's C<exact = FALSE> for every I<n> ≥ 10
+
+C<exact> defaulted to C<< (n E<lt> 10) >>. R's default is C<TRUE>, and R serves it from
+C<prho()> for every I<n> up to 1290, so the old default silently took R's
+approximation branch:
+
+=for html <table>
+<thead>
+<tr>
+  <th><i>n</i></th>
+  <th>before</th>
+  <th>R 4.6.1</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>32</td>
+  <td><code>1.7639963277557958e-07</code></td>
+  <td><code>1.1513643381176551e-06</code></td>
+</tr>
+<tr>
+  <td>16</td>
+  <td><code>5.0655870675677e-17</code></td>
+  <td><code>5.7949654941386787e-06</code></td>
+</tr>
+</tbody>
+</table>
+
+Across 45 randomly generated pairs the p-value now agrees with R to C<3.5e-14>.
+
+=head4 Spearman's C<statistic> changed meaning at I<n> = 10
+
+It was I<S> from the exact branch and the I<t> statistic from the other. It is
+now I<S> on every path, as R reports it. This is a change to a documented
+field — the note saying to compare C<estimate> and C<p.value> rather than
+C<statistic> described the old behaviour and is gone.
+
+=head4 C<qt> saturated, and C<pt> collapsed to zero, in the far tail
+
+C<pt_upper()> computed the tail as C<I_z(df/2, 1/2)> with C<z = df/(df + t²)> and
+nothing else. C<z> underflows well before C<t²> overflows, so the tail became a
+flat C<0>; and because C<qt_tail()> bisects against it, and its bracket stopped
+at C<sqrt(DBL_MAX)>, the quantile converged onto the ceiling and returned it —
+a plausible number, not an error:
+
+=for html <table>
+<thead>
+<tr>
+  <th>call</th>
+  <th>before</th>
+  <th>R 4.6.1</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>pt(-1e160, 1)</code></td>
+  <td><code>0</code></td>
+  <td><code>3.1830988618378451e-161</code></td>
+</tr>
+<tr>
+  <td><code>pt(-1e300, 1)</code></td>
+  <td><code>0</code></td>
+  <td><code>3.1830988618377598e-301</code></td>
+</tr>
+<tr>
+  <td><code>qt(1e-160, 1)</code></td>
+  <td><code>-1.3407807929942597e154</code></td>
+  <td><code>-3.1830988618379068e159</code></td>
+</tr>
+<tr>
+  <td><code>qt(1e-300, 1)</code></td>
+  <td><code>-1.3407807929942597e154</code></td>
+  <td><code>-3.183098861837907e299</code></td>
+</tr>
+<tr>
+  <td><code>qt(1e-16, 0.1)</code></td>
+  <td><code>-1.3407807929942597e154</code></td>
+  <td><code>-1.6044257056664863e156</code></td>
+</tr>
+</tbody>
+</table>
+
+C<pt_upper()> now carries the Abramowitz & Stegun 26.5.4 branch from R's
+C<nmath/pt.c>, which evaluates the tail in logs once C<1 + (t/df)·t> passes
+C<1e100> and so has nothing left to underflow, and the bracket runs to
+C<NV_MAX/2> and reports C<Inf> when the quantile genuinely exceeds what an C<NV>
+can name. C<pt> now matches R exactly from C<-1e150> to C<-1e300>.
+
+=head4 C<min> and C<max> skipped a C<NaN> unless it came first
+
+Every comparison against a C<NaN> is false, so C<< if (v E<lt> mn) >> passed over one and
+kept a real number — but a C<NaN> in the first position stayed. The answer
+depended on where in the array it sat:
+
+ min([NaN, 1, 2])   was NaN      min([1, 2, NaN])   was 1
+ min([1, NaN, 2])   was 1        max([1, 2, NaN])   was 2
+
+R gives C<NaN> for all of them, and C<sum>, C<mean>, C<var>, C<sd> and C<median> here
+already did. Both now propagate C<NaN> from any position, in the flat argument
+list and the array-reference forms alike.
+
+=head4 C<var_test>'s confidence interval lost up to C<2.5e-11>
+
+It divided by a private C<qf_bisection()> that stopped on an B<absolute>
+C<< high - low E<lt> 1e-12 >>. The F quantile it divides by is not of order 1 — at
+C<conf.level = 1 - 2^-20> on nine and nine degrees of freedom it is about
+C<0.016> — so an absolute stop is a relative error that grows as the quantile
+shrinks:
+
+=for html <table>
+<thead>
+<tr>
+  <th><code>conf.level</code></th>
+  <th>before</th>
+  <th>R 4.6.1</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>1 - 2^-20</code></td>
+  <td><code>[16085387951.278957, 62168223924585.172]</code></td>
+  <td><code>[16085387950.871651, 62168223923448.094]</code></td>
+</tr>
+</tbody>
+</table>
+
+It now uses the same C<d_qf()> that the exported C<qf> does, which has a relative
+stop and agrees with mpmath at C<mp.dps = 60> to about C<1e-16>. Over 864
+generated cases the interval agrees with R to C<2.1e-14>. C<qf_bisection> had no
+other caller and is gone; carrying two F quantiles of different accuracy in one
+file was the underlying defect.
+
+=head4 C<var_test>'s p-value was formed by subtraction
+
+It computed the upper tail as C<1 - pf(F)>, which is what
+L</"F and z tail p-values"> says every F test here stopped
+doing — C<var_test> was listed neither among those converted nor among the three
+known to remain subtractive. It now uses C<pf_upper()>, which builds its own
+complement as C<df2 / (df1·F + df2)> without subtracting. R writes the
+subtraction too, so in the far tail this is now B<more accurate than R>;
+measured against mpmath over the same 864 cases:
+
+=for html <table>
+<thead>
+<tr>
+  <th></th>
+  <th>worst relative error</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>Stats::LikeR</code></td>
+  <td><code>1.854e-14</code></td>
+</tr>
+<tr>
+  <td>R 4.6.1</td>
+  <td><code>1.0</code></td>
+</tr>
+</tbody>
+</table>
+
+R's worst is C<1.0> because C<1 - pf(F)> reaches a flat C<0> once the lower tail is
+within an ulp of C<1>. On C<c(3,1,4,1,5,9,2,6,5,3,5)> against
+C<c(1,2,4,8,16,32,64)/1024>, two-sided: mpmath C<1.08732387158297135e-11>,
+C<Stats::LikeR> C<1.0873238715829779e-11>, R C<1.0873080213968933e-11>.
+
+=head4 C<%zu> would have failed on MSVC, in two places silently
+
+Nine plain C<snprintf> calls used the C99 C<%zu> length modifier, which MSVC's
+older CRT does not implement — it prints the literal text. Two of the nine
+build B<hash keys>, not messages: C<csort>'s AoA → AoH and AoA → HoA
+conversions name their columns C<"0" .. "ncols-1">, so on such a build every
+column would have been stored under the key C<"zu"> and all but one lost. A
+third is the C<Index N> group label that C<oneway_test> returns to the caller;
+the rest are counts inside C<croak> text. All 9 now use C<my_snprintf> with
+C<UVuf>, the modifier Configure picks for the build's own C<UV>.
+
+=head4 C<ssize_t> does not exist outside POSIX
+
+Seven declarations used the lowercase POSIX spelling. Perl never defines it —
+there is no C<typedef> or C<#define> for it anywhere in the perl source, and
+C<win32/win32.h> and C<config_H.vc> do not supply one either — so the file
+compiled only because glibc's C<< E<lt>sys/types.hE<gt> >> happens to. An MSVC build failed
+at the first one. They are C<SSize_t> now, or C<size_t> where the value is a
+length that cannot be negative, matching the 430 declarations that already
+spelled it that way.
+
+=head4 Two zero-length calls on null pointers
+
+C<qsort> and C<memcmp> are both declared to take non-null pointers whatever the
+element count, so passing C<NULL> is undefined even for zero elements: UBSan
+reports it, and a compiler may infer non-nullness and delete a later check.
+C<p_adjust> reached C<qsort(NULL, 0, …)> whenever no row hash had any keys, and
+C<drop_duplicates> reached C<memcmp(NULL, NULL, 0)> when every key seen so far had
+been zero-length. Both were reachable from one line of Perl —
+C<p_adjust([{}, {}])> and C<drop_duplicates([{}, {}])>. The suite is now clean
+under both UBSan and AddressSanitizer.
+
+=head4 C<malloc>/C<free> in the C<write_table> announcement
+
+The confirmation line allocated with libc's C<malloc> when the path pushed it
+past a 512-byte stack buffer — the only two such calls in the file, where
+everything else uses C<Newx>/C<Safefree> so that the module uses whatever
+allocator its perl was built with, which on a C<-Dusemymalloc> perl is not
+libc's. C<Newx> is not the substitute here, since it croaks on failure and dying
+inside the confirmation line after the table has been written is worse than
+splitting the line; the long-path case now takes the same three-write path that
+the old out-of-memory branch did.
+
+=head3 read_table
+
+=head4 C<na.strings> / C<na_values>
+
+C<read_table> can now be told which field texts mean "missing". It is one option
+under three names — R's C<na.strings>, pandas' C<na_values>, and C<write_table>'s
+own C<undef.val> — so it can be spelled whichever way the surrounding code
+already does. Each takes a string or an array reference, each means the same
+thing, and passing more than one is an error the way C<sep> and C<delim> together
+are:
+
+ read_table('cohort.csv', 'na.strings' => 'NA');
+ read_table('cohort.csv', na_values    => ['NA', 'N/A', 'NULL', '-']);
+ read_table('cohort.csv', 'undef.val'  => 'NA');
+
+An empty field has always read as C<undef>. Nothing else did, and there was no
+way to ask for it, so a file could not be read back the way it had been
+written: C<write_table> renders an C<undef> cell with C<undef.val>, which 0.302
+listed as a known limitation whose closing sentence proposed exactly this
+option. The round trip now closes, and C<undef.val> is accepted as the third
+name so that both halves of it can use one spelling:
+
+ write_table($rows, 'out.csv', 'undef.val' => 'NA');
+ my $back = read_table('out.csv', 'undef.val' => 'NA');   # undef again
+
+C<write_table>'s C<undef.val> is a single token, being what it writes;
+C<read_table>'s takes a list, being every token it should recognise.
+
+The consequence had been quiet rather than loud. An unmapped C<NA> is an
+ordinary string, and Perl numifies a string to C<0>, so it did not stop C<mean>
+or C<sd> — it pulled them toward zero, warning once per cell on C<STDERR> and
+dying only under C<< warnings FATAL =E<gt> 'all' >>. On the C<titanic.csv> in the
+repository root, whose 2207 rows carry 3690 literal C<NA> cells across six
+columns:
+
+=for html <table>
+<thead>
+<tr>
+  <th>column</th>
+  <th><code>NA</code> cells</th>
+  <th>mean, unmapped</th>
+  <th>mean, mapped</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>age</code></td>
+  <td>2</td>
+  <td>30.416855</td>
+  <td>30.444444</td>
+</tr>
+<tr>
+  <td><code>fare</code></td>
+  <td>916</td>
+  <td>19.540347</td>
+  <td>33.404760</td>
+</tr>
+<tr>
+  <td><code>sibsp</code></td>
+  <td>900</td>
+  <td>0.295877</td>
+  <td>0.499617</td>
+</tr>
+<tr>
+  <td><code>parch</code></td>
+  <td>900</td>
+  <td>0.228364</td>
+  <td>0.385616</td>
+</tr>
+</tbody>
+</table>
+
+The mapped column is C<mean(d[[col]], na.rm=TRUE)> in R 4.6.1 to every digit
+shown, for all four.
+
+Three choices are worth stating, because each follows R where pandas differs,
+and each is asserted in the test rather than left to be discovered:
+
+=over
+
+=item * B<It is off by default.> R's C<read.table> defaults to C<na.strings = "NA">
+and pandas recognises a 19-token set, but C<read_table> recognises nothing
+beyond the empty field unless asked. A literal C<NA> is real data in every
+script written against an earlier release, and C<t/read_table.t> pins that;
+changing the default is a separate decision from adding the option.
+
+=item * B<The list replaces the set rather than extending one.>
+C<< 'na.strings' =E<gt> 'baz' >> maps C<baz> and leaves C<NA> and C<NaN> alone. pandas
+adds C<baz> to its defaults and maps all three.
+
+=item * B<The match is on the exact field text>, case-sensitively and with no
+whitespace stripped. C<' NA'> is not C<'NA'>, and C<'-999.000'> is not
+C<'-999.0'> — pandas numifies both sides and matches them; R compares the
+string and does not, and neither does this.
+
+=back
+
+The mapping happens where the empty-field rule already did, so it reaches every
+C<output.type>, the C<.xlsx> reader, and a value a C<filter> writes back. The
+header is never mapped, so a column may still be named C<NA>. A C<filter> runs
+after the mapping and so sees C<undef> rather than the token, which makes
+C<sub { defined $_ }> the way to keep the rows that have a value. For C<hoh>, a
+mapped row-name cell is a missing row name and is refused exactly as an empty
+one is.
+
+Everything above is checked in the new C<t/read_table.na_strings.t> (95 tests),
+whose cases are taken from the reference suites rather than invented here: R's
+C<tests/reg-tests-1a.R> — the C<read.table(na.strings="foo")> case at 1911-1918
+and PR#6781 at 2899-2901 — and C<src/library/utils/man/read.table.Rd>, plus
+pandas 2.2.3's C<pandas/tests/io/parser/test_na_values.py> (C<test_string_nas>,
+C<test_detect_string_na>, C<test_non_string_na_values> for gh-3611,
+C<test_default_na_values>, C<test_custom_na_values>, C<test_na_trailing_columns>,
+C<test_na_values_scalar> for gh-12224, and C<test_na_values_dict_aliasing>). The
+expected values are frozen literals with their provenance in the file header,
+so the test needs no R and no Python to run. Three divergences from pandas are
+asserted deliberately, the three above; a fourth is that a row short of the
+header is still an alignment error naming the row rather than the NA padding
+pandas does.
+
+The full suite is 130 files and 26,444 tests, and C<./test.all.perls.pl> passes
+on all five local perls — C<5.10.1>, C<5.12.5> (long double), C<5.42.3>, C<5.44.0>
+and C<5.44.0-quadmath> — with no warnings on any of them.
+
+=head3 Distribution functions
+
+Eight new functions — C<qnorm>, C<pt>, C<qt>, C<pchisq>, C<qchisq>, C<pf>, C<qf> and
+C<pbinom> — with R's names, R's positional-or-named parameters and R's
+C<lower.tail> / C<log.p> flags. Before this, C<pnorm> and C<dnorm> were the whole
+family, so a Wald bound or a likelihood-ratio test could not be finished from
+outside the module: the critical value simply was not expressible. See
+L</"Distribution functions"> for the details; two are
+worth pulling out here.
+
+B<< No tail is formed as C<1 -> the other one. >> That subtraction discards
+everything below machine epsilon, which is the range a p-value is interesting
+in, so each function is routed to the parameterisation that computes the
+requested side directly — C<pt(q)> is C<pt_upper(-q)> by symmetry, and C<pchisq>
+lower goes through a new C<igam()> (the lower incomplete gamma that C<igamc()>
+had always formed internally and thrown away):
+
+ pchisq(1e-30, 1);     # 7.978845608028654e-16, where 1 - igamc gives 0
+
+B<< C<qf> disagrees with R in the far tail of I<F>, and is right. >> Arbitrated by
+C<t/distributions.mpmath.py> at C<mp.dps = 60>, bisecting the defining equation
+rather than calling a library inverse:
+
+=for html <table>
+<thead>
+<tr>
+  <th></th>
+  <th>R 4.6.1</th>
+  <th>this module</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>qf(2^-20, 1, 10)</code></td>
+  <td>9.9e-4 out</td>
+  <td>1.0e-15 out</td>
+</tr>
+<tr>
+  <td><code>qf(2^-20, 1, 1)</code></td>
+  <td>5.2e-5 out</td>
+  <td>4.1e-15 out</td>
+</tr>
+<tr>
+  <td><code>qf(2^-16, 1, 10)</code></td>
+  <td>2.7e-6 out</td>
+  <td>6.9e-16 out</td>
+</tr>
+</tbody>
+</table>
+
+R's own C<pf> settles it: C<pf> of this module's answer returns the target
+probability to 1.6e-15, and C<pf> of R's own C<qf> answer returns it to 4.9e-4.
+It is R's inverse in that tail, not its CDF. Thirteen such rows are asserted
+twice in C<t/distributions.R.scipy.t> — right against the 60-digit value, and
+still disagreeing with R — so if a future R fixes C<qf>, or this module
+regresses onto R's answer, the row fails rather than quietly agreeing. Three
+rows go the other way and are recorded the same way rather than tolerated.
+
+C<< log =E<gt> 1 >> on a C<p*> function is C<log()> of the probability already computed,
+not a log carried through the series, so a tail that rounded to C<1> logs to C<0>
+where R reports a tiny negative number. Four of SciPy's six C<chi2> log
+references land in that case and are pinned as exactly C<0> with the true value
+named. C<ncp> and C<qbinom> are not implemented.
+
+C<t/distributions.R.scipy.t> is 2041 tests: a frozen table of R 4.6.1 values at
+dyadic inputs (generated by the committed C<t/distributions.R.scipy.R>), SciPy
+1.18.0's own mpmath cases from C<TestChi2> and C<TestStudentT>, and R's own
+round-trip identities from C<tests/d-p-q-r-tests.R>. Every tolerance is the
+worst error actually measured, printed by the test's own diagnostic.
+
+Ten figures now sit with the documentation — one per function, C<dnorm> and
+C<pnorm> in their own sections and the eight new ones under
+L</"What each one does, in one picture">. Each
+shades the region its function integrates and writes the integral it evaluates,
+so the C<p*>/C<q*> pair reads as one identity answered from opposite ends: given
+the boundary, return the area; given the area, return the boundary. C<pbinom> is
+drawn as bars with a summation sign rather than an integral, because a binomial
+is discrete and drawing an integral over a histogram would misstate what it
+computes. C<distribution.plots.pl> regenerates all ten; like the other plot
+scripts it is author-only and C<[PruneFiles]> keeps it out of a release.
+
+Two portability problems surfaced while pinning this and are worth recording,
+because neither is about the C code. Perl 5.10.1's string-to-number conversion
+does not parse a 17-digit literal exactly — it reads C<0.9999847412109375> one
+ulp out, and reflecting a probability onto C<1 - p> turns that ulp into 7.3e-12
+relative — and it reads C<9.332636185032188789901e-302> as
+C<8.999999999999996e-302>, a 3.7% error. So every argument and every
+exactly-representable expected value in C<t/distributions.R.scipy.t> is written
+as a dyadic ratio, C<M/2^K>, which rebuilds by integer division on any perl. And
+where R's frozen value is C<0> because a double underflowed, a long-double or
+C<__float128> build computes the real number instead — C<pbinom(0, 1000, 0.75)>
+really is C<0.25^1000> = 8.7e-603 — so the test accepts that as agreement with a
+reference that could not go lower, rather than failing the wider build for being
+right. The same applies to C<< log =E<gt> 1 >> near a probability of 1, where the
+resolvable accuracy is C<NV_EPSILON / |log p|> and the tolerance is scaled off
+measured machine epsilon accordingly.
+
+=head3 Every confidence limit now comes from the same critical value
+
+Adding C<qnorm> made a discrepancy visible that had always been there. Nine
+places in C<LikeR.xs> built their own C<z> by calling C<inverse_normal_cdf()> —
+Moro's rational approximation, of which the file's own comment said:
+I<"good to about 1e-9, which is fine for a confidence limit"> — while C<qnorm>
+went through the Newton-polished C<normal_quantile_hp()>. Which function you asked
+therefore decided how many digits you got, and a Wald bound written by hand
+from C<qnorm> differed from the one C<glm> reported in the tenth digit.
+
+It is one function now. C<std_qnorm()> seeds with Moro, polishes with Newton
+against the C<erfc>-based normal CDF, and reflects a probability above C<0.5> onto
+C<1 - p> before inverting; C<glm>, C<cor_test>, C<prop_test>, C<epi_2x2>,
+C<cmh_test>, C<roc>, C<survfit>, C<coxph> and C<wilcox_test> all call it, C<qnorm>
+I<is> it, and two near-duplicates are gone: C<wilcox_qnorm()> in the XS, which was
+the same Newton loop without the reflection, and the pure-Perl C<_qnorm()>
+(Acklam's approximation, also C<~1e-9>) that C<cohen_d> used for its interval.
+
+Measured against C<mpmath> at C<mp.dps = 60>, bisecting C<erfc(-z/sqrt(2))/2 = p>
+rather than calling a library inverse, worst relative error over conf.level
+0.8 to 0.9999:
+
+=for html <table>
+<thead>
+<tr>
+  <th></th>
+  <th>worst relative error</th>
+  <th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>0.302 and earlier, at these nine sites</td>
+  <td>1.8e-9</td>
+  <td>8.0e6 ulp</td>
+</tr>
+<tr>
+  <td>R 4.6.1 <code>qnorm</code></td>
+  <td>4.8e-16</td>
+  <td>2.1 ulp</td>
+</tr>
+<tr>
+  <td>SciPy 1.18.0 <code>norm.ppf</code></td>
+  <td>1.5e-16</td>
+  <td>0.7 ulp</td>
+</tr>
+<tr>
+  <td>0.303</td>
+  <td>8.2e-17</td>
+  <td>0.4 ulp</td>
+</tr>
+</tbody>
+</table>
+
+Seven orders of magnitude, and the result is closer to the truth than either
+reference. Nothing in the existing suite failed: every one of these functions is
+cross-validated against R at tolerances that had room for C<1e-9> in them,
+because they had to. What changed is that they no longer need it —
+C<t/distributions.R.scipy.t>'s C<glm> agreement check went from C<5e-9>, with its
+comment explaining that the gap was the design, to bit-identical.
+
+=head4 The bug this exposed: C<0.95> is a C<double>
+
+With the critical value down to 0.4 ulp, the next-largest error in a confidence
+limit turned out to be the confidence level. Eleven functions declared their
+default as
+
+ NV conf_level = 0.95;
+
+and C<0.95> in C is a literal of type C<double>, so on a long-double or
+C<__float128> perl what lands in the C<NV> is C<0.95> rounded to 53 bits — 2.2e-17
+from the C<NV> nearest C<0.95>. C<p = 1 - (1 - conf_level)/2> inherits all of it,
+the normal density at the 95% point is C<0.0584>, and the critical value comes
+out 3.8e-16 wrong: about 1700 ulp of a long double, and the single largest error
+in a 95% interval on those builds. C<fisher_test> and C<binom_test> had dodged
+this for releases by parsing the literal through perl's own number parser; that
+idiom is now the C<NV_CONF_95> macro and all thirteen sites use it.
+
+This was invisible while the critical value itself was only good to C<1e-9>.
+It is the reason C<t/qnorm.crit.R.scipy.t> freezes C<p> as well as C<conf.level>:
+C<1 - (1 - 0.999)/2> has to round, and it rounds differently at each NV width, so
+a shared expected value is only meaningful if every build is asked the same
+question.
+
+C<t/qnorm.crit.R.scipy.t> is 166 tests — the value itself against R 4.6.1,
+SciPy 1.18.0 and the 60-digit arbiter, and then the same value recovered out of
+seven functions' reported intervals at six confidence levels each. It also pins
+what C<inverse_normal_cdf()> alone returns and asserts it is nowhere near the
+tolerance, so the file cannot pass by accident if the routing is ever undone.
+
+=head3 Result keys are dotted everywhere
+
+Every key of every returned hash now uses R's dotted spelling. Previously the
+module answered to both conventions and it was impossible to guess which:
+C<p_value> from nine functions but C<p.value> from two, C<conf_int> from four but
+C<conf.int> from three, C<prop_test> returning C<conf.int> and C<p_value> in the
+same hash, and C<shapiro_test> returning both spellings of its own p-value.
+
+=for html <table>
+<thead>
+<tr>
+  <th>was</th>
+  <th>is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>p_value</code></td>
+  <td><code>p.value</code></td>
+</tr>
+<tr>
+  <td><code>conf_int</code>, <code>conf_level</code></td>
+  <td><code>conf.int</code>, <code>conf.level</code></td>
+</tr>
+<tr>
+  <td><code>null_value</code>, <code>null_value_name</code>, <code>statistic_name</code></td>
+  <td><code>null.value</code>, <code>null.value.name</code>, <code>statistic.name</code></td>
+</tr>
+<tr>
+  <td><code>estimate_x</code>, <code>estimate_y</code></td>
+  <td><code>estimate.x</code>, <code>estimate.y</code></td>
+</tr>
+<tr>
+  <td><code>group_stats</code>, <code>std_err</code></td>
+  <td><code>group.stats</code>, <code>std.err</code></td>
+</tr>
+<tr>
+  <td><code>odds_ratio</code>, <code>risk_ratio</code>, <code>risk_diff</code> (+ <code>_ci</code>)</td>
+  <td><code>odds.ratio</code>, <code>risk.ratio</code>, <code>risk.diff</code> (+ <code>.ci</code>)</td>
+</tr>
+<tr>
+  <td><code>risk_exposed</code>, <code>risk_unexposed</code></td>
+  <td><code>risk.exposed</code>, <code>risk.unexposed</code></td>
+</tr>
+<tr>
+  <td><code>n_pos</code>, <code>n_neg</code>, <code>auc_se</code>, <code>auc_ci</code></td>
+  <td><code>n.pos</code>, <code>n.neg</code>, <code>auc.se</code>, <code>auc.ci</code></td>
+</tr>
+<tr>
+  <td><code>n_active</code>, <code>n_inactive</code>, <code>n_top</code>, <code>active_count</code>, <code>enrichment_factor</code>, <code>rie_min</code>, <code>rie_max</code></td>
+  <td>the same with dots</td>
+</tr>
+<tr>
+  <td><code>n_risk</code>, <code>n_event</code>, <code>n_censor</code></td>
+  <td><code>n.risk</code>, <code>n.event</code>, <code>n.censor</code></td>
+</tr>
+<tr>
+  <td><code>exp_coef</code>, <code>lr_stat</code>, <code>lr_p_value</code>, <code>lr_df</code>, <code>loglik_null</code></td>
+  <td><code>exp.coef</code>, <code>lr.stat</code>, <code>lr.p.value</code>, <code>lr.df</code>, <code>loglik.null</code></td>
+</tr>
+<tr>
+  <td><code>has_na</code>, <code>old_coords</code></td>
+  <td><code>has.na</code>, <code>old.coords</code></td>
+</tr>
+<tr>
+  <td><code>p_adjust</code> (<code>dunn_test</code>'s column)</td>
+  <td><code>p.adjust</code></td>
+</tr>
+</tbody>
+</table>
+
+B<This breaks code that reads the old names, and it is the only change here
+that does.> C<< $r-E<gt>{p_value} >> is now C<< $r-E<gt>{'p.value'} >> — note the quotes, which a
+dotted key requires. C<table_one>'s output column is renamed with everything
+else.
+
+B<Argument names are untouched.> They are a different surface, where the
+underscore spelling exists on purpose as a synonym for the dotted one, so
+C<< conf_level =E<gt> 0.99 >> and C<< 'conf.level' =E<gt> 0.99 >> both still work everywhere they
+did, and C<< wilcox_test(..., conf_int =E<gt> 1) >> still asks for an interval. The
+duplicate stores are gone: C<shapiro_test> and C<kruskal_test> each wrote their
+p-value twice under the two spellings and now write it once.
+
+=head3 Decorative comment rules removed
+
+1,495 lines that were nothing but a comment marker and a run of dashes, and 380
+comments whose text trailed off into one, are gone from C<LikeR.xs>,
+C<lib/Stats/LikeR.pm> and C<t/>. C</* ===== WILCOXON EXACT NULL DISTRIBUTIONS =====>
+is now C</* WILCOXON EXACT NULL DISTRIBUTIONS>, which is what the house style in
+C<CLAUDE.md> asks for anyway. Nothing after C<__DATA__> was touched, no POD
+region, and no line holding a C</*> or C<*/> was deleted, so no comment can have
+been left unterminated. The suite is unchanged at 28,485 tests either side of it.
 
 =head2 0.302 2026-08-22 CDT
 
@@ -14703,7 +15952,7 @@ was empty or whose every element had been dropped. On
 C<< {a =E<gt> [1,1,1], b =E<gt> [2,2,2], c =E<gt> []} >> that gave C<df = 2> and
 C<p = 0.0820849986238988> for what is a two-group problem with
 C<df = 1, p = 0.025347318677468304>. Such a group was already skipped when
-forming the statistic and when building C<group_stats>; only C<df> still counted
+forming the statistic and when building C<group.stats>; only C<df> still counted
 it.
 
 R refuses this case outright — C<all groups must contain data> — and so does
@@ -14723,7 +15972,7 @@ Perl strings are counted, not NUL-terminated, so C<"a\0X"> and C<"a\0Y">
 collapsed into one group: C<kruskal_test([1..6], ["a\0X","a\0X","a\0Y","a\0Y","b","b"])>
 came back as two groups with C<df = 1, H = 2.4> instead of three with
 C<df = 2, H = 4.571428571428573>. Both paths also copied the label's bytes while
-dropping perl's UTF-8 flag when storing it into C<group_stats>, so a label
+dropping perl's UTF-8 flag when storing it into C<group.stats>, so a label
 outside latin-1 came back as mojibake and the two input paths disagreed with
 each other about labels inside it. The length now travels with the string and
 carries the flag in its sign, which is C<hv_store>'s own convention, so a label
@@ -14839,8 +16088,8 @@ call forms, and stays so across 60 runs under C<PERL_PERTURB_KEYS=1>.
 C<kruskal_test> gains two sections: what happens to non-numeric, undefined,
 C<NaN> and infinite elements and to a group left with no data, and what the
 returned fields are — C<statistic>, C<parameter>, C<method> and the p-value under
-both C<p_value> and C<p.value> from R's C<htest>, plus the C<size> and C<mean>
-sub-hashes of C<group_stats>, which are computed over the same observations the
+both C<p.value> and C<p.value> from R's C<htest>, plus the C<size> and C<mean>
+sub-hashes of C<group.stats>, which are computed over the same observations the
 statistic used.
 
 =head2 0.3 2026-08-16 CDT
@@ -15137,11 +16386,11 @@ C<skew.kurtosis.plots.pl>, both committed:
 =over
 
 =item * B<< C<t_test> >> gains six: what the estimate, the standard error and the null
-distribution are and which area of it the p-value is; how C<conf_int> is the
-estimate plus or minus a t quantile and how C<conf_level> sets that quantile;
+distribution are and which area of it the p-value is; how C<conf.int> is the
+estimate plus or minus a t quantile and how C<conf.level> sets that quantile;
 the three C<alternative>s side by side with the region each counts and the
-interval that goes with it; C<p_value> as a function of C<mu>, crossing
-C<1 - conf_level> exactly at the two bounds of C<conf_int>; paired,
+interval that goes with it; C<p.value> as a function of C<mu>, crossing
+C<1 - conf.level> exactly at the two bounds of C<conf.int>; paired,
 C<var_equal> and Welch on the same data, with the Welch degrees of freedom as
 the two spreads separate; and two distributions separating with the interval
 retreating from C<mu> as the p-value falls.
@@ -15393,9 +16642,9 @@ my $r = wilcox_test(\@y, \@x, paired => 1, conf_int => 1);
 
 =head1 $r->{estimate}   == -0.46
 
-=head1 $r->{conf_int}   == [-0.786, -0.010]
+=head1 $r->{conf.int}   == [-0.786, -0.010]
 
-=head1 $r->{conf_level} == 0.9609375
+=head1 $r->{conf.level} == 0.9609375
 
 ```
 
@@ -15404,7 +16653,7 @@ the two-sample values from pp. 111 and 126: estimate C<-0.305>, interval
 C<(-0.76, 0.15)>.
 
 The level a rank test can actually deliver is a step function of the data, so
-C<conf_level> reports what was achieved rather than echoing what was asked for —
+C<conf.level> reports what was achieved rather than echoing what was asked for —
 C<0.9609375> above, not C<0.95>. C<conf.level>, C<tol.root> and R's alpha-doubling
 search for a level the data can support (with its I<requested conf.level not
 achievable> warning) all behave as R's do.
@@ -15424,8 +16673,8 @@ is ignored on the exact path, and — as in R — ignored when there are ties, o
 when the signed-rank test dropped a zero, because the series is derived for
 untied ranks.
 
-The result hash gains C<statistic_name> (C<"W"> or C<"V">, as R prints), plus
-C<null_value> and C<null_value_name>, and C<estimate> / C<conf_int> / C<conf_level>
+The result hash gains C<statistic.name> (C<"W"> or C<"V">, as R prints), plus
+C<null.value> and C<null.value.name>, and C<estimate> / C<conf.int> / C<conf.level>
 when an interval was asked for.
 
 =head4 Three deliberate differences from R
@@ -15927,7 +17176,7 @@ form C<dbinom> already used here. Agreement with R over these cases went from
 =item * The Clopper-Pearson bounds are found by bisection, which stopped at an
 absolute width of 1e-15, so a bound far below 1 came back with only four
 correct digits: C<< binom\_test(1, 1000000000, alternative =E<gt> 'greater',
-conf\_level =E<gt> 0.999) >> gave 1.00053299e-12 against R's 1.00050033e-12. The
+conf.level =E<gt> 0.999) >> gave 1.00053299e-12 against R's 1.00050033e-12. The
 stopping rule is now relative to where the bracket sits, and such bounds now
 hold about 1e-15.
 
@@ -16230,7 +17479,7 @@ case, including the cases their own suites pin: R's regression tests
 (C<reg-tests-1a.R>, "t.test with one group of size one") and scipy's
 C<TestTTest_1samp>, C<TestTTest_ind.test_special_cases>, C<test_ttest_rel_ci_1d>,
 C<test_1samp_ci_1d> and C<test_pvalue_ci>. On 2000 randomised comparisons against
-R — all four modes, all three alternatives, random C<mu> and C<conf_level>, sample
+R — all four modes, all three alternatives, random C<mu> and C<conf.level>, sample
 sizes 2 to 40 and data scales spanning 1e-4 to 1e4 — the statistic and the
 degrees of freedom agree to 2e-11 and the p-value to 3e-9, holding to eight
 digits even where the p-value is subnormal (5e-310). What the comparison did
@@ -16266,7 +17515,7 @@ different test than the caller asked for and reported nothing. It is now
 checked the way R's C<match.arg> checks it. C<scipy>'s C<"two-sided"> spelling is
 unambiguous, so it is accepted rather than rejected.
 
-=item * B<< A one-sided interval was wrong when C<< conf_level E<lt> 0.5 >>. >> That case needs a
+=item * B<< A one-sided interval was wrong when C<< conf.level E<lt> 0.5 >>. >> That case needs a
 negative t quantile, and C<qt_tail> searched upward from zero only, so it
 returned roughly zero and collapsed the bound onto C<mu>: R puts the upper bound
 of C<t.test(1:10, mu=5, conf.level=0.3, alternative="less")> at 4.9797 where
@@ -16274,16 +17523,16 @@ C<t_test> reported 5.0000000036. C<qt_tail> now reduces by symmetry first, so th
 root it brackets is always positive.
 
 =item * B<< C<qt_tail> silently saturated at 1e6. >> Past that its doubling loop gave up
-and returned the ceiling, so C<conf_level> of 0.99999999 and 0.9999999999 came
+and returned the ceiling, so C<conf.level> of 0.99999999 and 0.9999999999 came
 back with the I<identical> interval, ±1048576, against R's ±6.4e7 and ±6.4e9.
 The ceiling is gone; the loop now runs until C<t * t> would overflow.
 
 =item * B<Interval accuracy no longer depends on the data's scale.> C<qt_tail>
-bisected to an absolute 1e-8 on the quantile, which is 1e-8 × C<std_err> on the
+bisected to an absolute 1e-8 on the quantile, which is 1e-8 × C<std.err> on the
 interval — fine for data around 1, an error of 2 units for data around 1e9. It
 now bisects to adjacent doubles. Worst interval error across the 2000
 randomised cases went from 2.1e-4 to 5.3e-11 relative. At extreme
-C<conf_level> this makes C<t_test> the more accurate of the two: C<t.test> asks
+C<conf.level> this makes C<t_test> the more accurate of the two: C<t.test> asks
 for C<qt(1 - alpha/2, df)>, and representing a 5e-9 tail as the double
 C<1 - 5e-9> costs eight significant figures of it, so R's own interval for
 C<conf.level=0.99999999> is off by 0.7 in the eighth digit. Working in the upper
@@ -16966,7 +18215,7 @@ addition of C<aoh2hoh> transforming array of hash into hash of hashes, C<interse
 =item * B<< C<size_t> underflow on empty arrays. >> Three loops were bounded by C<av_len(...)>
 compared against an unsigned counter; C<av_len> returns C<-1> for an empty array,
 which turned C<< k E<lt>= len >> into a C<SIZE_MAX> loop. The C<stack()> value loop, the C<.>
-column-expansion loop, and the C<group_stats> column loop now use a signed
+column-expansion loop, and the C<group.stats> column loop now use a signed
 C<SSize_t> bound.
 
 =item * B<HoH row count.> Row count for hash-of-hashes input was taken from the return
@@ -17036,7 +18285,7 @@ whole RHS and can still mangle C<I(x-1)>-style transforms; treat C<I()> with
 arithmetic constants carefully.
 
 =item * Top-level keys C<coefficients> / C<fitted.values> / C<xlevels> / C<family> /
-C<group_stats> share the return hash with the ANOVA rows; a predictor literally
+C<group.stats> share the return hash with the ANOVA rows; a predictor literally
 named one of those would collide.
 
 =back
@@ -17334,7 +18583,7 @@ C<strlen>-based copies silently truncated.
 
 =over
 
-=item * A factor column named C<Residuals> or C<group_stats> in a formula call will
+=item * A factor column named C<Residuals> or C<group.stats> in a formula call will
 collide with reserved top-level keys in the result hash.
 
 =item * Group names containing an embedded NUL are stored correctly but are still
@@ -17854,7 +19103,7 @@ added var_test
 
 mean, min, sum, median, var, and max die with undefined values, and print the offending indices
 
-"group_stats" added to aov, for TukeyHSD in the future
+"group.stats" added to aov, for TukeyHSD in the future
 
 "cor" dies when given data with standard deviation of 0
 

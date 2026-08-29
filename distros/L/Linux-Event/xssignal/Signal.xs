@@ -566,6 +566,23 @@ fd(service_obj)
   OUTPUT:
     RETVAL
 
+SV *
+objects(service_obj)
+    SV *service_obj
+  PREINIT:
+    les_service *service;
+    les_signal *signal;
+    AV *objects;
+  CODE:
+    service = les_service_from_sv(service_obj);
+    les_service_verify(service, "objects");
+    objects = newAV();
+    for (signal = service->active_head; signal; signal = signal->service_next)
+        if (signal->self_sv) av_push(objects, newSVsv(signal->self_sv));
+    RETVAL = newRV_noinc((SV *)objects);
+  OUTPUT:
+    RETVAL
+
 void
 dispatch(service_obj)
     SV *service_obj

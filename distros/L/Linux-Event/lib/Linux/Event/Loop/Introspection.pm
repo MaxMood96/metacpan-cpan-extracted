@@ -1,0 +1,205 @@
+package Linux::Event::Loop::Introspection;
+use v5.36;
+use strict;
+use warnings;
+
+use Scalar::Util qw(blessed refaddr);
+my @CENSUS_TYPES = qw(stream listener datagram timer signal wakeup process);
+
+sub _type_of ($object) {
+    return 'unknown'
+        if $object->isa('Linux::Event::Stream::_Deadline')
+        || $object->isa('Linux::Event::Datagram::_ReadyTimer');
+    return 'stream'   if $object->isa('Linux::Event::Stream');
+    return 'listener' if $object->isa('Linux::Event::Listener');
+    return 'datagram' if $object->isa('Linux::Event::Datagram');
+    return 'timer'    if $object->isa('Linux::Event::Timer');
+    return 'signal'   if $object->isa('Linux::Event::Signal');
+    return 'wakeup'   if $object->isa('Linux::Event::Wakeup');
+    return 'process'  if $object->isa('Linux::Event::Process');
+    return 'unknown';
+}
+
+sub _is_current ($self, $object) {
+    return 0 if !blessed($object) || _type_of($object) eq 'unknown';
+    my $loop = eval { $object->loop };
+    return 0 if !$loop || refaddr($loop) != refaddr($self);
+    return 0 if $object->can('is_terminal')
+        && eval { $object->is_terminal };
+    return 1;
+}
+
+sub _object_snapshot ($self) {
+    my @candidate = @{ $self->_object_candidates_native };
+    push @candidate, @{ Linux::Event::Signal->_objects_for_loop($self) }
+        if Linux::Event::Signal->can('_objects_for_loop');
+    push @candidate, @{ Linux::Event::Wakeup->_objects_for_loop($self) }
+        if Linux::Event::Wakeup->can('_objects_for_loop');
+    push @candidate, @{ Linux::Event::_Resolver->_objects_for_loop($self) }
+        if Linux::Event::_Resolver->can('_objects_for_loop');
+
+    my %seen;
+    my @result;
+    for my $candidate (@candidate) {
+        my $object = _owner_of($candidate) // next;
+        next if $seen{ refaddr($object) }++;
+        next if !$self->_is_current($object);
+        push @result, $object;
+    }
+    return \@result;
+}
+
+sub count ($self) { scalar @{ $self->_object_snapshot } }
+
+sub has ($self, $object) {
+    return 0 if !blessed($object);
+    return 0 if !$self->_is_current($object);
+    my $id = refaddr($object);
+    return !!grep { refaddr($_) == $id } @{ $self->_object_snapshot };
+}
+
+sub objects ($self) { [ @{ $self->_object_snapshot } ] }
+
+sub census ($self) {
+    my %count = map { $_ => 0 } @CENSUS_TYPES;
+    $count{ _type_of($_) }++ for @{ $self->_object_snapshot };
+    return \%count;
+}
+
+sub _value ($object, $method) {
+    return undef if !$object->can($method);
+    return eval { $object->$method() };
+}
+
+sub _owner_of ($candidate) {
+    return undef if !ref($candidate);
+    if (blessed($candidate)) {
+        return $candidate if _type_of($candidate) ne 'unknown';
+        return _owner_of(eval { $candidate->stream })
+            if $candidate->isa('Linux::Event::Stream::XSState');
+        return _owner_of(eval { $candidate->_introspection_owner })
+            if $candidate->can('_introspection_owner');
+        return undef;
+    }
+    if (ref($candidate) eq 'HASH') {
+        for my $key (qw(stream recipient owner object request)) {
+            my $owner = _owner_of($candidate->{$key});
+            return $owner if $owner;
+        }
+    }
+    return undef;
+}
+
+sub _fd ($object) {
+    return _value($object, 'fd') if $object->can('fd');
+    my $fh = _value($object, 'fh');
+    return defined($fh) ? fileno($fh) : undef;
+}
+
+sub inspect ($self, $object) {
+    return $self->_inspect_object($object, $self->has($object));
+}
+
+sub _inspect_object ($self, $object, $registered) {
+    my $type = blessed($object) ? _type_of($object) : 'unknown';
+    my $result = {
+        type       => $type,
+        class      => blessed($object) || undef,
+        registered => $registered ? 1 : 0,
+    };
+    return $result if !$registered;
+
+    $result->{state} = _value($object, 'state');
+    if ($type eq 'stream') {
+        @$result{qw(fd local peer transport pending_bytes read_paused
+            read_eof write_ended write_blocked)} = (
+            _fd($object), _value($object, 'local'),
+            _value($object, 'peer'), _value($object, 'transport_name'),
+            _value($object, 'pending_bytes'),
+            _value($object, 'is_read_paused') ? 1 : 0,
+            _value($object, 'is_read_eof') ? 1 : 0,
+            _value($object, 'is_write_ended') ? 1 : 0,
+            _value($object, 'is_write_blocked') ? 1 : 0,
+        );
+    }
+    elsif ($type eq 'listener') {
+        @$result{qw(fd host port path family paused accepted)} = (
+            _fd($object), _value($object, 'host'), _value($object, 'port'),
+            _value($object, 'path'), _value($object, 'family'),
+            _value($object, 'is_paused') ? 1 : 0,
+            _value($object, 'accepted'),
+        );
+    }
+    elsif ($type eq 'datagram') {
+        @$result{qw(fd local peer connected pending_bytes pending_datagrams
+            read_paused)} = (
+            _fd($object), _value($object, 'local'),
+            _value($object, 'peer'),
+            _value($object, 'is_connected') ? 1 : 0,
+            _value($object, 'pending_bytes'),
+            _value($object, 'pending_datagrams'),
+            _value($object, 'is_read_paused') ? 1 : 0,
+        );
+    }
+    elsif ($type eq 'timer') {
+        @$result{qw(deadline interval expirations)} = (
+            _value($object, 'deadline'), _value($object, 'interval'),
+            _value($object, 'expirations'),
+        );
+    }
+    elsif ($type eq 'signal') {
+        $result->{signals} = _value($object, 'signals');
+    }
+    elsif ($type eq 'process') {
+        @$result{qw(pid pending_stdin_bytes)} = (
+            _value($object, 'pid'), _value($object, 'pending_stdin_bytes'),
+        );
+    }
+    return $result;
+}
+
+sub resources ($self) { $self->_resources_native }
+
+sub why_alive ($self) {
+    my @reason = map {
+        my $snapshot = $self->_inspect_object($_, 1);
+        $snapshot->{object} = $_;
+        $snapshot;
+    } @{ $self->_object_snapshot };
+    my $resources = $self->_resources_native;
+    push @reason, map {
+        +{ type => 'registration', registered => 1, fd => $_ }
+    } @{ $resources->{public_registration_fds} };
+    return \@reason;
+}
+
+sub pressure ($self) {
+    my $resource = $self->_resources_native;
+    my $stats = $self->stats;
+    my $registry_capacity = $resource->{registry_capacity};
+    my $timer_capacity = $resource->{timer_heap_capacity};
+    my $event_capacity = $resource->{event_capacity};
+    return {
+        registrations => {
+            active      => $resource->{registered_fds},
+            capacity    => $registry_capacity,
+            utilization => $registry_capacity
+                ? $resource->{registered_fds} / $registry_capacity : 0,
+        },
+        timers => {
+            active      => $resource->{active_timers},
+            capacity    => $timer_capacity,
+            utilization => $timer_capacity
+                ? $resource->{active_timers} / $timer_capacity : 0,
+        },
+        event_batch => {
+            capacity    => $event_capacity,
+            maximum     => $stats->{epoll_wait_calls}
+                ? $stats->{epoll_wait_max_batch} : undef,
+            utilization => $stats->{epoll_wait_calls} && $event_capacity
+                ? $stats->{epoll_wait_max_batch} / $event_capacity : undef,
+        },
+    };
+}
+
+1;

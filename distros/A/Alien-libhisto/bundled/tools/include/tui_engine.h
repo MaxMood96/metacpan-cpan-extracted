@@ -6,6 +6,7 @@
 #define HISTO_TUI_ENGINE_H
 
 #include "tui_thread.h"
+#include "tui_shm.h"
 #include "histo/histo.h"
 #include "histo/histo2d.h"
 #include <stdio.h>
@@ -42,11 +43,17 @@ typedef struct {
     bool has_weights;
     uint32_t flags;
 
+    /* Shared memory ring buffer ingestion */
+    bool is_shm;
+    histo_shm_t shm;
+    double scale_input;
+
     /* Live accumulators */
     histo_t *live_1d;
     histo2d_t *live_2d;
     histo_mutex_t mutex;
     histo_thread_t thread;
+    bool thread_started;
 
     /* State flags */
     volatile bool running;
@@ -71,10 +78,16 @@ typedef struct {
     size_t window_size;     /* 0 = all reservoir */
     double decay_lambda;    /* 0.0 = no decay, > 0.0 = rate of decay per sec */
     double last_decay_time;
+
+    /* Binary streaming mode */
+    bool is_binary;
 } tui_engine_t;
 
 /* Lifecycle */
 bool tui_engine_init(tui_engine_t *eng, FILE *in_stream, bool is_2d, uint32_t nbins, double rmin, double rmax, uint32_t flags, bool has_weights);
+bool tui_engine_init_shm(tui_engine_t *eng, const char *shm_path, bool is_2d, uint32_t nbins, double rmin, double rmax, uint32_t flags);
+void tui_engine_set_scale_input(tui_engine_t *eng, double scale_input);
+void tui_engine_set_binary(tui_engine_t *eng, bool is_binary);
 bool tui_engine_start(tui_engine_t *eng);
 void tui_engine_stop(tui_engine_t *eng);
 void tui_engine_free(tui_engine_t *eng);

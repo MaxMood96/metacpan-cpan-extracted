@@ -2,6 +2,7 @@ find_package(Threads REQUIRED)
 
 add_library(histocli
     src/cli_common.c
+    src/cli_opt.c
     src/cli_main.c
     src/cli_palette.c
     src/cmd_fill.c
@@ -26,6 +27,12 @@ target_include_directories(histocli PUBLIC
 )
 
 target_link_libraries(histocli PUBLIC histo Threads::Threads)
+if(UNIX AND NOT APPLE AND NOT ANDROID)
+    find_library(RT_LIB rt)
+    if(RT_LIB)
+        target_link_libraries(histocli PUBLIC ${RT_LIB})
+    endif()
+endif()
 
 # Alias for backwards compatibility with tests
 add_library(histo_tools_lib ALIAS histocli)

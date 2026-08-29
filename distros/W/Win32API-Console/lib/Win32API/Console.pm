@@ -20,7 +20,7 @@ use version;
 
 # version '...'
 our $version = '0.10';
-our $VERSION = 'v0.3.1';
+our $VERSION = 'v0.3.3';
 $VERSION = eval $VERSION;
 
 # authority '...'
@@ -34,8 +34,8 @@ our $AUTHORITY = 'cpan:BRICKPOOL';
 require bytes;
 use Carp qw( croak );
 use Encode ();
-use Scalar::Util qw( readonly );
 use Hash::Util qw( lock_ref_keys );
+use Scalar::Util qw( readonly );
 use Win32;
 use Win32::API;
 use Win32::Console ();
@@ -884,7 +884,7 @@ use constant {
 
 # GetStdHandle
 use constant {
-  INVALID_HANDLE_VALUE => Win32API::File::INVALID_HANDLE_VALUE,
+  INVALID_HANDLE_VALUE => Win32::Console::_GetStdHandle(-1),
 };
 
 # MultiByteToWideChar/WideCharToMultiByte
@@ -2027,10 +2027,8 @@ sub GetLargestConsoleWindowSize {    # \%coord|undef ($handle)
 #  Returns: Number of console fonts on success, undef on failure.
 #  Use GetLastError() to retrieve extended error information.
 #
-# B<Notes>: C<GetCurrentConsoleFont> returns the size C<(0,16)> in 
-# Windows-Terminal. See: L</GetConsoleFontSize> for further information.
-# This function is not documented and may not work with current 
-# Windows versions.
+# B<Notes>: This function is not documented in MSDN and may not work with 
+# current Windows versions.
 #
 sub GetNumberOfConsoleFonts {    # $num|undef ()
   croak(_usage("$^E", __FILE__, __FUNCTION__)) if 
@@ -2395,7 +2393,7 @@ sub ReadConsoleW {    # $|undef ($handle, \$buffer, $length, \$read, |\%control|
 #    0x0008: MENU_EVENT
 #    0x0010: FOCUS_EVENT
 #
-#  {Event} A I<union> of the following structures, depending on {EventType}:
+#  {Event} A union of the following structures, depending on {EventType}:
 #    KEY_EVENT_RECORD          KeyEvent
 #    MOUSE_EVENT_RECORD        MouseEvent
 #    WINDOW_BUFFER_SIZE_RECORD WindowBufferSizeEvent
@@ -2971,7 +2969,7 @@ sub SetConsoleCP {    # $|undef ($codepage)
 #
 #  Returns: non-zero on success, undef on failure.
 #
-# B<Note:> We emulate this function using C<SIGINT> and C<SIGBREAK>, since Perl 
+# B<Note>: We emulate this function using C<SIGINT> and C<SIGBREAK>, since Perl 
 # itself has installed a handler. Currently, only the C<CTRL_C_EVENT> and 
 # C<CTRL_BREAK_EVENT> control signals are supported. 
 #
@@ -4412,7 +4410,7 @@ sub _GetEditionName {    # $|undef ()
       die unless $r;
 
       # Clean up and return string
-      $data =~ s/\0+$//;
+      $data =~ s/\0+\z//;
       $productName = $data;
     };
     CATCH: if ($@) {

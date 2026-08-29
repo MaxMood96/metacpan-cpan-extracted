@@ -1,5 +1,15 @@
 Revision history for App-File-Grepper
 
+1.04	2026-08-28
+
+	Fix github links.
+
+1.03	2026-08-28
+
+	Fix problem with unintended exclude of "./foo" and "../foo".
+
+	Allow --filter and --exclude to be passed multiple times.
+
 1.02	2022-10-03
 
 	Fix problem with case insensitivity and regexp.

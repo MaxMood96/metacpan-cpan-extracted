@@ -1,5 +1,9 @@
 Revision history for Crypt-Passphrase-Linux
 
+0.004     2026-08-28 13:03:36+02:00 Europe/Brussels
+          - Use crypt64 instead of base64
+          - Add DES support
+
 0.003     2023-03-15 01:43:50+01:00 Europe/Amsterdam
           - Correct Crypt::Passphrase dependency
 

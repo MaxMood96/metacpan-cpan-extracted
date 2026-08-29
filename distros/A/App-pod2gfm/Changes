@@ -1,5 +1,15 @@
 Revision history for App::pod2gfm
 
+v1.1.1    2026-08-29T00:18:37Z
+          - Fix '-' (STDIN) arg with --auto creating a file named '-.md', which
+            should go to STDOUT
+          - Add proper error handling in _convert_md():
+            - Catch exceptions + errors from Pod::Markdown or Pod::Simple and
+              return exit status 1 (multiple args also containing POD files
+              correctly parsed don't matter)
+            - Errors go to STDERR instead of appending to STDOUT/OUTFILE
+          - Fix bugtracker link in documentation (mauke++)
+
 v1.1.0    2026-05-12T18:25:33Z
           - Add bash completion as optional (Getopt::Long::More)
           - Replace wrong shebangs in scripts, otherwise EU::MM will not rewrite

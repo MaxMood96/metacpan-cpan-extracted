@@ -3,17 +3,17 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.103';
+our $VERSION = '0.105';
 
 use Carp qw(croak);
 use Fcntl qw(F_GETFD F_GETFL F_SETFD F_SETFL FD_CLOEXEC O_NONBLOCK);
-use mro ();
 use POSIX qw(isfinite);
 use Scalar::Util qw(looks_like_number weaken);
 use Socket qw(SOL_SOCKET SO_ERROR);
 use utf8 ();
 
 use Linux::Event::Stream::_Connection ();
+use Linux::Event::Stream::_Descriptor ();
 use Linux::Event::Error;
 use Linux::Event::Address;
 use Linux::Event::_SocketConfig ();
@@ -21,102 +21,16 @@ use Linux::Event::_SocketConfig ();
 require XSLoader;
 XSLoader::load(__PACKAGE__, $VERSION);
 
-my %FRAMER_DEFINITION;
-my %TLS_DEFINITION;
-my %CLASS_DESCRIPTOR;
-
 sub _declare_framer ($base, $target, $definition) {
-    croak 'a framer may be declared only for a Linux::Event::Stream subclass'
-        if $target eq $base || !$target->isa($base);
-    croak "$target already has a Stream descriptor"
-        if exists $CLASS_DESCRIPTOR{$target};
-    croak "$target already declares a framer"
-        if exists $FRAMER_DEFINITION{$target};
-    $FRAMER_DEFINITION{$target} = $definition;
-    return;
-}
-
-sub _framer_for ($class) {
-    for my $package (@{ mro::get_linear_isa($class) }) {
-        return $FRAMER_DEFINITION{$package}
-            if exists $FRAMER_DEFINITION{$package};
-    }
-    return undef;
+    return Linux::Event::Stream::_Descriptor::declare_framer(
+        $base, $target, $definition,
+    );
 }
 
 sub _declare_tls ($base, $target, $definition) {
-    croak 'TLS may be declared only for a Linux::Event::Stream subclass'
-        if $target eq $base || !$target->isa($base);
-    croak "$target already has a Stream descriptor"
-        if exists $CLASS_DESCRIPTOR{$target};
-    croak "$target already declares TLS"
-        if exists $TLS_DEFINITION{$target};
-    croak 'TLS declaration must be a hash reference'
-        if ref($definition) ne 'HASH';
-    $TLS_DEFINITION{$target} = $definition;
-    return;
-}
-
-sub _tls_for ($class) {
-    for my $package (@{ mro::get_linear_isa($class) }) {
-        return $TLS_DEFINITION{$package}
-            if exists $TLS_DEFINITION{$package};
-    }
-    return undef;
-}
-
-sub _stream_options_for ($class) {
-    my %option = (
-        high_watermark   => 1_048_576,
-        low_watermark    =>   262_144,
-        max_pending_bytes =>         0,
-        read_size        =>    65_536,
-        max_buffer       => 8_388_608,
-        idle_timeout     =>         0,
-        read_timeout     =>         0,
-        write_timeout    =>         0,
-        map { $_ => undef } Linux::Event::_SocketConfig::names(),
+    return Linux::Event::Stream::_Descriptor::declare_tls(
+        $base, $target, $definition,
     );
-
-    if (my $configure = $class->can('stream_options')) {
-        my @configured = $configure->($class);
-        my %configured;
-        if (@configured == 1 && ref($configured[0]) eq 'HASH') {
-            %configured = %{ $configured[0] };
-        } else {
-            croak "$class stream_options() returned an odd option list"
-                if @configured % 2;
-            %configured = @configured;
-        }
-        my @unknown = grep { !exists $option{$_} } keys %configured;
-        croak "$class stream_options() returned unknown options: "
-            . join(', ', sort @unknown) if @unknown;
-        @option{keys %configured} = values %configured;
-    }
-
-    croak "$class high_watermark must be a non-negative integer"
-        if $option{high_watermark} !~ /\A\d+\z/;
-    croak "$class low_watermark must be a non-negative integer"
-        if $option{low_watermark} !~ /\A\d+\z/;
-    croak "$class low_watermark must be <= high_watermark"
-        if $option{low_watermark} > $option{high_watermark};
-    croak "$class max_pending_bytes must be a non-negative integer"
-        if $option{max_pending_bytes} !~ /\A\d+\z/;
-    croak "$class read_size must be a positive integer"
-        if $option{read_size} !~ /\A\d+\z/ || $option{read_size} <= 0;
-    croak "$class max_buffer must be a positive integer"
-        if $option{max_buffer} !~ /\A\d+\z/ || $option{max_buffer} <= 0;
-    for my $name (qw(idle_timeout read_timeout write_timeout)) {
-        $option{$name} = _timeout_value($class, $name, $option{$name});
-    }
-    for my $name (Linux::Event::_SocketConfig::names()) {
-        $option{$name} = Linux::Event::_SocketConfig::normalize(
-            $class, $name, $option{$name},
-        ) if defined $option{$name};
-        delete $option{$name} if !defined $option{$name};
-    }
-
-    return \%option;
 }
 
 sub _timeout_value ($target, $name, $value) {
@@ -150,72 +64,6 @@ sub _deadline_spec ($method, $value) {
         seconds   => $seconds,
         operation => "$operation",
     };
-}
-
-sub _descriptor_for ($class) {
-    return $CLASS_DESCRIPTOR{$class} if exists $CLASS_DESCRIPTOR{$class};
-    croak 'Linux::Event::Stream is a base class; construct a Stream subclass'
-        if $class eq __PACKAGE__;
-    croak "$class is not a Linux::Event::Stream subclass"
-        if !$class->isa(__PACKAGE__);
-
-    my $framer = _framer_for($class);
-    my $tls = _tls_for($class);
-    my %callback = map { $_ => scalar $class->can($_) }
-        qw(on_data on_message on_drain on_eof on_error on_close
-           on_ready on_transport_ready configure_socket);
-
-    if ($framer) {
-        croak "$class declares a framer but does not define on_message()"
-            if !$callback{on_message};
-        croak "$class cannot define on_data() when it declares a framer"
-            if $callback{on_data};
-    } else {
-        croak "$class has no framer and must define on_data()"
-            if !$callback{on_data};
-        croak "$class defines on_message() but does not declare a framer"
-            if $callback{on_message};
-    }
-
-    my $option = _stream_options_for($class);
-    my $native = $framer ? { %{ $framer->{native} } } : { read_mode => 0 };
-
-    my $xs = Linux::Event::Stream::XSDescriptor->new(
-        $option->{read_size},
-        $option->{high_watermark},
-        $option->{low_watermark},
-        $option->{max_pending_bytes},
-        $option->{max_buffer},
-        $native->{read_mode},
-        $callback{on_data},
-        $callback{on_message},
-        $callback{on_drain} ? \&_xs_drain : undef,
-        \&_xs_read_eof,
-        \&_xs_read_error,
-        \&_xs_write_error,
-        \&_xs_output_limit,
-        \&_xs_write_empty,
-        \&_xs_framing_error,
-        $native->{delimiter},
-        $native->{include_delimiter} // 0,
-        $native->{max_frame},
-        $native->{fixed_size} // 0,
-        $native->{prefix_bytes} // 0,
-        $native->{prefix_little} // 0,
-        $native->{include_prefix} // 0,
-    );
-
-    my $descriptor = {
-        class     => $class,
-        xs        => $xs,
-        options   => $option,
-        native    => $native,
-        framer    => $framer,
-        tls       => $tls,
-        callbacks => \%callback,
-    };
-    $CLASS_DESCRIPTOR{$class} = $descriptor;
-    return $descriptor;
 }
 
 sub _xs_framing_error ($self, $message) {
@@ -255,7 +103,8 @@ sub _xs_output_limit ($self, $pending_bytes, $limit) {
 sub _xs_write_empty ($self) {
     return if $self->{closed};
     $self->{deadline_write_started} = undef;
-    $self->_rearm_stream_deadline if $self->{deadline_started};
+    $self->_rearm_stream_deadline
+        if $self->{deadline_started} && $self->{timeout}{write_timeout} > 0;
     $self->{watcher}->disable_write if $self->{watcher};
     $self->_finish_write_side if $self->{write_ending} && !$self->{write_ended};
     return;
@@ -370,7 +219,7 @@ sub new ($class, %opt) {
         if defined($transport)
         && (!ref($transport) || !$transport->can('_stream_transport_bind'));
 
-    my $descriptor = _descriptor_for($class);
+    my $descriptor = Linux::Event::Stream::_Descriptor::for_class($class);
     my %socket_policy = map {
         $_ => exists($socket_override->{$_})
             ? $socket_override->{$_} : $descriptor->{options}{$_}
@@ -484,14 +333,14 @@ sub connect ($class, %opt) {
 }
 
 sub CLONE ($class) {
-    %CLASS_DESCRIPTOR = ();
+    Linux::Event::Stream::_Descriptor::clear_cache();
     return;
 }
 
 sub CLONE_SKIP ($class) { 1 }
 
 sub _validate_accepted_configuration ($class) {
-    my $descriptor = _descriptor_for($class);
+    my $descriptor = Linux::Event::Stream::_Descriptor::for_class($class);
     if (my $tls = $descriptor->{tls}) {
         require Linux::Event::TLS;
         Linux::Event::TLS->_server_from_declaration($tls);
@@ -569,6 +418,7 @@ sub _attach_to_loop ($self, $loop) {
     my $watcher = eval {
         $loop->watch_fd(
             fileno($self->{fh}),
+            _internal => 1,
             fh    => $self->{fh},
             data  => $self->{xs_state},
             read  => \&Linux::Event::Stream::XSState::_read_ready,
@@ -621,6 +471,7 @@ sub _connect_succeeded ($self, $fh) {
     my $watcher = eval {
         $self->{loop}->watch_fd(
             fileno($self->{fh}),
+            _internal => 1,
             fh    => $self->{fh},
             data  => $self->{xs_state},
             read  => \&Linux::Event::Stream::XSState::_read_ready,
@@ -1087,7 +938,8 @@ sub pause_read ($self) {
     $self->{read_paused} = 1;
     $self->{xs_state}->_pause if $self->{xs_state};
     $self->{watcher}->disable_read if $self->{watcher};
-    $self->_rearm_stream_deadline if $self->{deadline_started};
+    $self->_rearm_stream_deadline
+        if $self->{deadline_started} && $self->{timeout}{read_timeout} > 0;
     return $self;
 }
 
@@ -1095,10 +947,11 @@ sub resume_read ($self) {
     return $self if $self->{closed} || $self->{read_eof} || !$self->{read_paused};
     $self->{read_paused} = 0;
     $self->{deadline_read_started} = _deadline_now()
-        if $self->{deadline_started};
+        if $self->{deadline_started} && $self->{timeout}{read_timeout} > 0;
     $self->{xs_state}->_resume if $self->{xs_state};
     $self->{watcher}->enable_read if $self->{watcher};
-    $self->_rearm_stream_deadline if $self->{deadline_started};
+    $self->_rearm_stream_deadline
+        if $self->{deadline_started} && $self->{timeout}{read_timeout} > 0;
     return $self;
 }
 
@@ -1120,7 +973,7 @@ sub transition_to ($self, $class, %opt) {
     croak 'transition_to(): unknown options: ' . join(', ', sort keys %opt)
         if %opt;
 
-    my $descriptor = _descriptor_for($class);
+    my $descriptor = Linux::Event::Stream::_Descriptor::for_class($class);
     my $xs_state = $self->{xs_state}
         // croak 'transition_to(): stream has no native state';
 
@@ -1271,7 +1124,8 @@ sub _mark_eof ($self) {
     return if $self->{read_eof} || $self->{closed};
     $self->{read_eof} = 1;
     $self->{watcher}->disable_read if $self->{watcher};
-    $self->_rearm_stream_deadline if $self->{deadline_started};
+    $self->_rearm_stream_deadline
+        if $self->{deadline_started} && $self->{timeout}{read_timeout} > 0;
 
     if (my $callback = $self->{descriptor}{callbacks}{on_eof}) {
         $callback->($self);
@@ -1448,9 +1302,31 @@ A framed subclass imports one native built-in and defines C<on_message>:
       $stream->send($message);
   }
 
+High-throughput framed protocols may explicitly replace one-message delivery
+with bounded array delivery:
+
+  package PipelinedStream;
+  use parent 'Linux::Event::Stream';
+  use Linux::Event::Framer 'Delimiter', "\n";
+
+  sub stream_options ($class) {
+      return message_batch_size => 32;
+  }
+
+  sub on_messages ($stream, $messages) {
+      for my $message (@$messages) {
+          process_message($stream, $message);
+      }
+  }
+
+C<on_message> and C<on_messages> are mutually exclusive. Merely defining
+C<on_messages> does not enable batching; the positive class option makes the
+different callback boundary explicit.
+
 Framed and raw modes are mutually exclusive. A subclass with no framer must
-define C<on_data>; a framed subclass must define C<on_message>. The base class
-cannot be instantiated directly.
+define C<on_data>; a framed subclass must define C<on_message>, or explicitly
+enable C<message_batch_size> and define C<on_messages>. The base class cannot
+be instantiated directly.
 
 =head1 CONSTRUCTOR
 
@@ -1565,13 +1441,30 @@ per connection:
       );
   }
 
-The defaults are 65,536 bytes per read, a 1 MiB high watermark, a 256 KiB low
-watermark, no hard pending-output limit, and an 8 MiB maximum framed input
-buffer. Set C<max_pending_bytes> to a positive byte count to impose a hard
-limit; zero keeps the default unlimited policy. Established timeout defaults
-are zero, which disables them. Constructor values take precedence for one
-Stream and survive protocol transitions; non-overridden values change to the
-target subclass's defaults.
+The defaults are 65,536 bytes per read, no raw read batching, ordinary
+one-message framed delivery, a 1 MiB high watermark, a 256 KiB low watermark,
+no hard pending-output limit, and an 8 MiB maximum framed input buffer. Set
+C<max_pending_bytes> to a positive byte count to impose a hard limit; zero
+keeps the default unlimited policy. Established timeout defaults are zero,
+which disables them. Constructor values take precedence for one Stream and
+survive protocol transitions; non-overridden values change to the target
+subclass's defaults.
+
+The batching settings are alternatives for different subclass modes, so they
+are not combined in the general example above.
+
+C<read_batch_bytes> is available only to a raw Stream. A positive value makes
+XS combine successful reads up to that many bytes before calling C<on_data>.
+It flushes a partial batch at C<EAGAIN>, EOF, or an error, without waiting for
+future input. The limit is also the native retained-memory bound for this
+aggregation. Values at or below C<read_size> do not coalesce full reads.
+
+C<message_batch_size> is available only to a framed Stream. A positive value
+requires C<on_messages> instead of C<on_message>. XS flushes when the message
+limit is reached or the current native read drain is exhausted. It never waits
+to fill a batch. C<max_buffer> also forces a flush when the accumulated
+message payload reaches that byte budget, keeping one batch below twice that
+bound even when the final frame crosses the remaining budget.
 
 =head1 SOCKET CONFIGURATION
 
@@ -1640,8 +1533,12 @@ Subclasses may define these ordinary named methods:
       $stream->write($bytes);
   }
 
-  sub on_message ($stream, $message) {        # required for framed Stream
+  sub on_message ($stream, $message) {        # ordinary framed mode
       $stream->send($message);
+  }
+
+  sub on_messages ($stream, $messages) {      # framed batch mode only
+      $stream->send($_) for @$messages;
   }
 
   sub on_drain ($stream) {                    # optional
@@ -1674,6 +1571,13 @@ for an asynchronous non-plain transport. Most applications need only
 C<on_ready>.
 
 Application callback exceptions are not swallowed.
+
+For ordinary framed delivery, pause, close, and protocol transition take effect
+after each C<on_message>. In batch mode they take effect after the complete
+array passed to C<on_messages>; every element in that array has already been
+parsed under the current Stream type. Complete pending messages are delivered
+before EOF or a later framing error. Protocol-negotiation boundaries that must
+transition after one particular message should retain C<on_message>.
 
 =head1 METHODS
 
@@ -1730,9 +1634,9 @@ its current chunk with C<< input => $bytes >>:
 
 Existing native input is ordered before the explicit C<input> suffix. Complete
 target frames may be delivered before C<transition_to> returns when the method
-is called outside input dispatch. During C<on_data> or C<on_message>, target
-dispatch begins after the old callback returns. Code should normally return
-immediately after requesting a transition.
+is called outside input dispatch. During C<on_data>, C<on_message>, or
+C<on_messages>, target dispatch begins after the old callback returns. Code
+should normally return immediately after requesting a transition.
 
 Read pause is retained and continues to gate preserved input. Queued output
 keeps its original byte ordering; only later C<send> calls use the new outbound
@@ -1855,7 +1759,12 @@ families should be implemented as native Linux::Event built-ins.
 Native code drains reads, detects built-in frame boundaries, performs immediate
 writes, drains segmented queues with C<writev>, and accounts for backpressure.
 The class descriptor moves immutable callbacks and parser configuration out of
-each connection. Perl is entered for semantic C<on_data> or C<on_message>
-delivery and lifecycle policy.
+each connection. Perl is entered for semantic C<on_data>, C<on_message>, or
+C<on_messages> delivery and lifecycle policy. The zero batching defaults keep
+the ordinary callback path free of batch allocation or array construction.
+
+Use C<bench/run-callback-batching-microbench.pl> for pipelined throughput and
+callback-count sweeps. Use C<bench/run-callback-batching-fairness.pl> to observe
+a latency-sensitive descriptor beside a continuously readable Stream.
 
 =cut

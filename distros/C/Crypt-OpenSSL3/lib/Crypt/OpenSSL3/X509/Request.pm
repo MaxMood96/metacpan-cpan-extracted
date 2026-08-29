@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::X509::Request;
-$Crypt::OpenSSL3::X509::Request::VERSION = '0.011';
+$Crypt::OpenSSL3::X509::Request::VERSION = '0.012';
 use strict;
 use warnings;
 
@@ -19,7 +19,7 @@ Crypt::OpenSSL3::X509::Request - A X509 / PKCS10 certificate signing request
 
 =head1 VERSION
 
-version 0.011
+version 0.012
 
 =head1 METHODS
 

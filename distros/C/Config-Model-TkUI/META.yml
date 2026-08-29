@@ -61,7 +61,7 @@ resources:
   bugtracker: https://github.com/dod38fr/config-model-tk-ui/issues
   homepage: https://github.com/dod38fr/config-model/wiki
   repository: git://github.com/dod38fr/config-model-tk-ui.git
-version: '1.381'
-x_generated_by_perl: v5.40.1
+version: '1.382'
+x_generated_by_perl: v5.42.3
 x_serialization_backend: 'YAML::Tiny version 1.76'
 x_spdx_expression: LGPL-2.1

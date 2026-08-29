@@ -17,7 +17,7 @@ BEGIN {
     #    if 1;
 
     plan(skip_all => "needs Perl 5.6 or better - you have Perl $]" )
-        if $] < 5.006 ;
+        if $] < 5.008 ;
 }
 use bytes;
 use warnings;

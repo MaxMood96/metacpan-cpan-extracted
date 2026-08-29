@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.103';
+our $VERSION = '0.105';
 
 use Carp qw(croak);
 use Config ();
@@ -898,7 +898,7 @@ sub _finish_activation ($self, $fh, $family) {
 sub _register ($self) {
     return if !$self->{loop} || !$self->{fh};
     $self->{watcher} = $self->{loop}->watch(
-        fh => $self->{fh}, data => $self,
+        fh => $self->{fh}, _internal => 1, data => $self,
         read => \&_read_ready, write => \&_write_ready,
         error => \&_error_ready,
         edge_triggered => $self->{options}{edge_triggered},

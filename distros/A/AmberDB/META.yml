@@ -1,10 +1,12 @@
 ---
-abstract: 'High-performance Berkeley DB (DB_File) flat-file database engine'
+abstract: 'High-performance, schema-driven NoSQL engine with ACID transactions and precomputed inverted indexing for Perl'
 author:
   - 'Maruf Cetin <marufcetin@gmail.com>'
 build_requires:
+  Archive::Tar: '0'
   File::Temp: '0'
   FindBin: '0'
+  JSON::PP: '0'
   Test::More: '0.98'
 configure_requires:
   ExtUtils::MakeMaker: '0'
@@ -20,13 +22,17 @@ no_index:
     - t
     - inc
 requires:
+  Archive::Tar: '0'
   Carp: '0'
   DB_File: '0'
+  Digest::SHA: '0'
   Encode: '0'
   Fcntl: '0'
   File::Path: '0'
   File::Spec: '0'
   Getopt::Long: '0'
+  Hash::Util: '0'
+  JSON::PP: '0'
   List::Util: '0'
   Time::HiRes: '0'
   Time::Local: '0'
@@ -35,5 +41,5 @@ requires:
 resources:
   bugtracker: https://github.com/marufcetin/amberdb/issues
   repository: https://github.com/marufcetin/amberdb.git
-version: '5.02'
+version: v5.21.0
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

@@ -9,7 +9,7 @@ build_requires:
 configure_requires:
   ExtUtils::MakeMaker: '6.56'
 dynamic_config: 1
-generated_by: 'ExtUtils::MakeMaker version 7.1, CPAN::Meta::Converter version 2.150010'
+generated_by: 'ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010'
 license: mit
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -26,17 +26,12 @@ recommends:
   Win32::GuiTest: '0'
   Win32API::Registry: '0.21'
 requires:
-  Encode: '0'
-  Exporter: '0'
-  Hash::Util: '0'
   Win32: '0.44'
   Win32::API: '0.77'
   Win32::Console: '0.10'
-  Win32API::File: '0.08'
   perl: '5.014'
-  version: '0.77'
 resources:
   bugtracker: https://github.com/brickpool/Win32API-Console/issues
   repository: https://github.com/brickpool/Win32API-Console.git
-version: v0.3.1
-x_serialization_backend: 'CPAN::Meta::YAML version 0.018'
+version: v0.3.3
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

@@ -1,8 +1,13 @@
 Revision history for module Map::Tube::Plugin::Graph
 
-1.1.2   2026-08-16
-        Patch produced by @GWS.
-        - No functional hanges
+1.2.0   2026-08-27
+        - Add Boolean option overlap, making overlap avoidance configurable.
+        - At install time try to warn users if external GraphViz binary
+          seems to be missing or incomplete, but try to avoid tripping up
+          tests.
+
+1.1.2   2026-08-09
+        - No functional changes
         - Another attempt at preventing spurious test failures.
 
 1.1.1   2026-07-26

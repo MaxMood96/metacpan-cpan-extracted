@@ -3,7 +3,7 @@ our $AUTHORITY = 'cpan:GENE';
 
 # ABSTRACT: Combinatorial algorithms to generate rhythms
 
-our $VERSION = '0.0806';
+our $VERSION = '0.0808';
 
 use strictures 2;
 use Algorithm::Combinatorics qw(permutations);
@@ -609,7 +609,7 @@ Music::CreatingRhythms - Combinatorial algorithms to generate rhythms
 
 =head1 VERSION
 
-version 0.0806
+version 0.0808
 
 =head1 SYNOPSIS
 
@@ -1080,11 +1080,11 @@ L<Music::AtonalUtil>
 
 =head1 AUTHOR
 
-Gene Boggs <gene@cpan.org>
+Gene Boggs <gene.boggs@gmail.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2023 by Gene Boggs.
+This software is Copyright (c) 2023-2024 by Gene Boggs.
 
 This is free software, licensed under:
 

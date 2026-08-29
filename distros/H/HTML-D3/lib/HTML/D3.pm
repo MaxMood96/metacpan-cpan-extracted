@@ -3,6 +3,7 @@ package HTML::D3;
 use strict;
 use warnings;
 
+use Carp qw(carp);
 use JSON::MaybeXS;
 use Object::Configure;
 use Params::Get;
@@ -16,11 +17,11 @@ HTML::D3 - A simple Perl module for generating charts using D3.js.
 
 =head1 VERSION
 
-Version 0.09
+Version 0.10
 
 =cut
 
-our $VERSION = '0.09';
+our $VERSION = '0.10';
 
 =head1 SYNOPSIS
 
@@ -124,6 +125,32 @@ be an array reference with two elements: the label (string) and the value (numer
 
 Returns a string containing the HTML and JavaScript code for the chart.
 
+=head3 Errors
+
+=over 4
+
+=item * Throws C<Data is not optional> when C<$data> is C<undef>.
+
+=item * Throws C<Data must be an array of arrays> when C<$data> is not an ARRAY reference.
+
+=back
+
+=head3 Side Effects
+
+None.
+
+=head3 API SPECIFICATION
+
+=head4 Input
+
+    $self : HTML::D3                         -- required
+    $data : ArrayRef[ ArrayRef[Str, Num] ]   -- required; undef dies
+
+=head4 Output
+
+    Str -- complete HTML5 document starting with C<< <!DOCTYPE html> >>;
+           D3.js loaded from CDN; bar chart rendered with C<d3.scaleBand>.
+
 =cut
 
 # Method to render a bar chart with given data
@@ -213,6 +240,29 @@ be an array reference with two elements: the label (string) and the value (numer
 =back
 
 Returns a string containing the HTML and JavaScript code for the chart.
+
+=head3 Errors
+
+=over 4
+
+=item * Throws C<Data must be an array of arrays> when C<$data> is not an ARRAY reference.
+
+=back
+
+=head3 Side Effects
+
+None.
+
+=head3 API SPECIFICATION
+
+=head4 Input
+
+    $self : HTML::D3                         -- required
+    $data : ArrayRef[ ArrayRef[Str, Num] ]   -- required (undef dies)
+
+=head4 Output
+
+    Str -- complete HTML5 document; line chart with C<d3.scalePoint> and C<d3.line()>.
 
 =cut
 
@@ -308,6 +358,33 @@ be an array reference with two elements: the label (string) and the value (numer
 =back
 
 Returns a string containing the HTML and JavaScript code for the chart.
+The JavaScript tooltip strings use C<< <\/b> >> (with a backslash) rather than
+C<< </b> >> to satisfy html-tidy's requirement that C<< </ >> followed by a
+letter not appear literally inside C<< <script> >> blocks.
+
+=head3 Errors
+
+=over 4
+
+=item * Throws C<Data must be an array of arrays> when C<$data> is not an ARRAY reference.
+
+=back
+
+=head3 Side Effects
+
+None.
+
+=head3 API SPECIFICATION
+
+=head4 Input
+
+    $self : HTML::D3                         -- required
+    $data : ArrayRef[ ArrayRef[Str, Num] ]   -- required
+
+=head4 Output
+
+    Str -- complete HTML5 document; mouseover tooltip reveals label and value.
+           Tooltip strings use C<< <\/b> >> not C<< </b> >>.
 
 =cut
 
@@ -391,7 +468,7 @@ sub render_line_chart_with_tooltips
 	    .attr("fill", "steelblue")
 	    .on("mouseover", (event, d) => {
 		tooltip.style("opacity", 1)
-		       .html(`Label: <b>\${d.label}<\/b><br>Value: <b>\${d.value}<\/b>`)
+		       .html(`Label: <b>\${d.label}<\\/b><br>Value: <b>\${d.value}<\\/b>`)
 		       .style("left", (event.pageX + 10) + "px")
 		       .style("top", (event.pageY - 30) + "px");
 	    })
@@ -533,10 +610,10 @@ sub render_line_chart_snippet
 	.attr("r", 4)
 	.attr("fill", "steelblue")
 	.on("mouseover", (event, d) => {
-	    let ttHtml = `Label: <b>\${d.label}<\/b><br>Value: <b>\${d.value}<\/b>`;
+	    let ttHtml = `Label: <b>\${d.label}<\\/b><br>Value: <b>\${d.value}<\\/b>`;
 	    if (d.extra) {
 		Object.entries(d.extra).forEach(([k, v]) => {
-		    ttHtml += `<br>\${k}: <b>\${v}<\/b>`;
+		    ttHtml += `<br>\${k}: <b>\${v}<\\/b>`;
 		});
 	    }
 	    tooltip.style("opacity", 1)
@@ -567,6 +644,183 @@ HTML
 	return { svg_id => $svg_id, html => $html };
 }
 
+=head2 render_zoomable_line_chart_snippet
+
+    my $fragment = $chart->render_zoomable_line_chart_snippet($data);
+    # $fragment->{svg_id} - the id attribute of the <svg> element
+    # $fragment->{html}   - embeddable HTML fragment (style + button + svg + script)
+
+Like C<render_line_chart_snippet>, but adds brush-to-zoom: the user can drag
+across a range of the x-axis to zoom into that region. A I<Reset zoom> button
+(hidden until a zoom is active) returns the chart to its original extent.
+Subsequent brushes on the zoomed view zoom in further; Reset always returns to
+the full dataset.
+
+The caller is responsible for loading D3 in the page C<<head>>.
+
+Accepts the same arguments as C<render_line_chart_snippet>: an array reference
+of data points, each C<[$x, $y]> or C<[$x, $y, \%extra]>.
+
+=cut
+
+sub render_zoomable_line_chart_snippet
+{
+	my ($self, $data) = @_;
+
+	die 'Data must be an array of arrays' unless ref($data) eq 'ARRAY';
+
+	my $json_data = encode_json([
+		map {
+			my $point = { label => $_->[0], value => $_->[1] };
+			$point->{extra} = $_->[2] if ref($_->[2]) eq 'HASH';
+			$point
+		} @$data
+	]);
+
+	my $svg_id = 'chart';
+	my $tip_id = 'tooltip';
+	my $rst_id = 'reset-btn';
+
+	my $html = <<"HTML";
+<style>
+    .tooltip {
+	position: absolute;
+	background-color: white;
+	border: 1px solid #ccc;
+	padding: 5px;
+	font-size: 12px;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.2s ease-in-out;
+    }
+    #$rst_id {
+	display: none;
+	margin-bottom: 4px;
+	cursor: pointer;
+    }
+    .brush .selection {
+	fill: steelblue;
+	fill-opacity: 0.15;
+	stroke: steelblue;
+	stroke-width: 1;
+    }
+</style>
+<button id="$rst_id">Reset zoom</button>
+<svg id="$svg_id" width="$self->{width}" height="$self->{height}" style="border: 1px solid black;"></svg>
+<div class="tooltip" id="$tip_id"></div>
+<script>
+    const allData     = $json_data;
+    let   currentData = allData.slice();
+
+    const svg      = d3.select("#$svg_id");
+    const tooltip  = d3.select("#$tip_id");
+    const resetBtn = d3.select("#$rst_id");
+    const margin   = { top: 20, right: 30, bottom: 40, left: 40 };
+    const width    = $self->{width}  - margin.left - margin.right;
+    const height   = $self->{height} - margin.top  - margin.bottom;
+
+    const chart = svg.append("g")
+	.attr("transform", `translate(\${margin.left},\${margin.top})`);
+
+    // Scales (domain set in redraw)
+    const x = d3.scalePoint().range([0, width]);
+    const y = d3.scaleLinear().range([height, 0]);
+
+    const lineFn = d3.line()
+	.x(d => x(d.label))
+	.y(d => y(d.value));
+
+    // Brush appended first so circles sit above it and receive mouse events
+    const brush = d3.brushX()
+	.extent([[0, 0], [width, height]])
+	.on("end", brushed);
+    const brushGroup = chart.append("g").attr("class", "brush").call(brush);
+
+    const linePath = chart.append("path")
+	.attr("fill", "none")
+	.attr("stroke", "steelblue")
+	.attr("stroke-width", 2);
+
+    const yAxisG = chart.append("g");
+    const xAxisG = chart.append("g").attr("transform", `translate(0,\${height})`);
+
+    function redraw(newData, ms) {
+	x.domain(newData.map(d => d.label));
+	y.domain([0, d3.max(newData, d => d.value)]).nice();
+
+	const t = svg.transition().duration(ms);
+
+	xAxisG.transition(t)
+	    .call(d3.axisBottom(x))
+	    .selectAll("text")
+	    .attr("transform", "rotate(-45)")
+	    .style("text-anchor", "end");
+
+	yAxisG.transition(t).call(d3.axisLeft(y));
+
+	linePath.datum(newData).transition(t).attr("d", lineFn);
+
+	chart.selectAll("circle.pt")
+	    .data(newData, d => d.label)
+	    .join(
+		enter => enter.append("circle")
+		    .attr("class", "pt")
+		    .attr("r", 4)
+		    .attr("fill", "steelblue")
+		    .attr("cx", d => x(d.label))
+		    .attr("cy", d => y(d.value))
+	    )
+	    .on("mouseover", (event, d) => {
+		let ttHtml = `Label: <b>\${d.label}<\\/b><br>Value: <b>\${d.value}<\\/b>`;
+		if (d.extra) {
+		    Object.entries(d.extra).forEach(([k, v]) => {
+			ttHtml += `<br>\${k}: <b>\${v}<\\/b>`;
+		    });
+		}
+		tooltip.style("opacity", 1)
+		       .html(ttHtml)
+		       .style("left", (event.pageX + 10) + "px")
+		       .style("top",  (event.pageY - 30) + "px");
+	    })
+	    .on("mousemove", (event) => {
+		tooltip.style("left", (event.pageX + 10) + "px")
+		       .style("top",  (event.pageY - 30) + "px");
+	    })
+	    .on("mouseout", () => {
+		tooltip.style("opacity", 0);
+	    })
+	    .transition(t)
+	    .attr("cx", d => x(d.label))
+	    .attr("cy", d => y(d.value));
+    }
+
+    redraw(currentData, 0);
+
+    function brushed(event) {
+	if (!event.selection) return;
+	const [x0, x1] = event.selection;
+	const zoomed = currentData.filter(d => {
+	    const px = x(d.label);
+	    return px >= x0 - 1 && px <= x1 + 1;
+	});
+	brushGroup.call(brush.move, null);   // clear brush rectangle
+	if (zoomed.length < 2) return;
+	currentData = zoomed;
+	redraw(currentData, 500);
+	resetBtn.style("display", "inline-block");
+    }
+
+    resetBtn.on("click", () => {
+	currentData = allData.slice();
+	redraw(currentData, 500);
+	resetBtn.style("display", "none");
+    });
+</script>
+HTML
+
+	return { svg_id => $svg_id, html => $html };
+}
+
 =head2 render_multi_series_line_chart_with_tooltips
 
     $html = $chart->render_multi_series_line_chart_with_tooltips($data);
@@ -577,12 +831,42 @@ Accepts the following arguments:
 
 =over 4
 
-=item * C<$data> - An reference to an array of hashes containing data points.
-Each data point should be an array reference with two elements: the label (string) and the value (numeric).
+=item * C<$data> - An array reference of series hashes. Each element is a hashref
+with a C<name> key (string) and a C<data> key (array reference of C<< {label, value} >>
+hashrefs).
+
+    [
+        { name => 'Series A', data => [{ label => 'Jan', value => 100 }, ...] },
+        ...
+    ]
 
 =back
 
 Returns a string containing the HTML and JavaScript code for the chart.
+Tooltip strings use C<< <\/b> >> rather than C<< </b> >> for html-tidy compliance.
+
+=head3 Errors
+
+=over 4
+
+=item * Throws C<Data must be an array of hashes> when C<$data> is not an ARRAY reference.
+
+=back
+
+=head3 Side Effects
+
+None.
+
+=head3 API SPECIFICATION
+
+=head4 Input
+
+    $self : HTML::D3                                                   -- required
+    $data : ArrayRef[ HashRef{ name: Str, data: ArrayRef[HashRef] } ] -- required
+
+=head4 Output
+
+    Str -- complete HTML5 document; one coloured line per series with mouseover tooltips.
 
 =cut
 
@@ -683,7 +967,7 @@ sub render_multi_series_line_chart_with_tooltips
 		.attr("fill", color(i))
 		.on("mouseover", (event, d) => {
 		    tooltip.style("opacity", 1)
-			   .html(\`Series: <b>\${series.name}<\/b><br>Label: <b>\${d.label}<\/b><br>Value: <b>\${d.value}<\/b>\`)
+			   .html(\`Series: <b>\${series.name}<\\/b><br>Label: <b>\${d.label}<\\/b><br>Value: <b>\${d.value}<\\/b>\`)
 			   .style("left", (event.pageX + 10) + "px")
 			   .style("top", (event.pageY - 30) + "px");
 		})
@@ -713,12 +997,37 @@ Accepts the following arguments:
 
 =over 4
 
-=item * C<$data> - An reference to an array of hashes containing data points.
-Each data point should be an array reference with two elements: the label (string) and the value (numeric).
+=item * C<$data> - Same format as C<render_multi_series_line_chart_with_tooltips>:
+an array reference of C<< { name, data } >> series hashes.
 
 =back
 
-Returns a string containing the HTML and JavaScript code for the chart.
+Returns a string containing the complete HTML5 document.
+The tooltip appears with a CSS C<translateY> slide-in animation.
+Tooltip strings use C<< <\/b> >> for html-tidy compliance.
+
+=head3 Errors
+
+=over 4
+
+=item * Throws C<Data must be an array of hashes> when C<$data> is not an ARRAY reference.
+
+=back
+
+=head3 Side Effects
+
+None.
+
+=head3 API SPECIFICATION
+
+=head4 Input
+
+    $self : HTML::D3                                                   -- required
+    $data : ArrayRef[ HashRef{ name: Str, data: ArrayRef[HashRef] } ] -- required
+
+=head4 Output
+
+    Str -- complete HTML5 document; animated tooltip uses CSS translateY transition.
 
 =cut
 
@@ -822,7 +1131,7 @@ sub render_multi_series_line_chart_with_animated_tooltips
 		.on("mouseover", (event, d) => {
 		    tooltip.style("opacity", 1)
 			   .style("transform", "translateY(0)")
-			   .html(\`Series: <b>\${series.name}<\/b><br>Label: <b>\${d.label}<\/b><br>Value: <b>\${d.value}<\/b>\`)
+			   .html(\`Series: <b>\${series.name}<\\/b><br>Label: <b>\${d.label}<\\/b><br>Value: <b>\${d.value}<\\/b>\`)
 			   .style("left", (event.pageX + 10) + "px")
 			   .style("top", (event.pageY - 30) + "px");
 		})
@@ -847,18 +1156,44 @@ HTML
 
     $html = $chart->render_multi_series_line_chart_with_legends($data);
 
-Generates HTML and JavaScript code to render a chart of many lines with animated mouseover tooltips.
+Generates HTML and JavaScript code to render a chart of many lines with a static
+colour legend. Each series gets a labelled colour swatch in the legend area.
 
 Accepts the following arguments:
 
 =over 4
 
-=item * C<$data> - An reference to an array of hashes containing data points.
-Each data point should be an array reference with two elements: the label (string) and the value (numeric).
+=item * C<$data> - Same format as C<render_multi_series_line_chart_with_tooltips>:
+an array reference of C<< { name, data } >> series hashes.
 
 =back
 
-Returns a string containing the HTML and JavaScript code for the chart.
+Returns a string containing the complete HTML5 document. The stylesheet defines
+a C<.legend> CSS class used by the D3-generated legend elements.
+
+=head3 Errors
+
+=over 4
+
+=item * Throws C<Data must be an array of hashes> when C<$data> is not an ARRAY reference.
+
+=back
+
+=head3 Side Effects
+
+None.
+
+=head3 API SPECIFICATION
+
+=head4 Input
+
+    $self : HTML::D3                                                   -- required
+    $data : ArrayRef[ HashRef{ name: Str, data: ArrayRef[HashRef] } ] -- required
+
+=head4 Output
+
+    Str -- complete HTML5 document; static colour legend rendered as SVG C<g> elements
+           with the C<.legend> CSS class applied via D3 C<.attr("class", "legend")>.
 
 =cut
 
@@ -973,7 +1308,7 @@ sub render_multi_series_line_chart_with_legends {
                 .on("mouseover", (event, d) => {
                     tooltip.style("opacity", 1)
                            .style("transform", "translateY(0)")
-                           .html(\`Series: <b>\${series.name}<\/b><br>Label: <b>\${d.label}<\/b><br>Value: <b>\${d.value}<\/b>\`)
+                           .html(\`Series: <b>\${series.name}<\\/b><br>Label: <b>\${d.label}<\\/b><br>Value: <b>\${d.value}<\\/b>\`)
                            .style("left", (event.pageX + 10) + "px")
                            .style("top", (event.pageY - 30) + "px");
                 })
@@ -1029,12 +1364,39 @@ Accepts the following arguments:
 
 =over 4
 
-=item * C<$data> - An reference to an array of hashes containing data points.
-Each data point should be an array reference with two elements: the label (string) and the value (numeric).
+=item * C<$data> - Same format as C<render_multi_series_line_chart_with_tooltips>:
+an array reference of C<< { name, data } >> series hashes.
 
 =back
 
-Returns a string containing the HTML and JavaScript code for the chart.
+Returns a string containing the complete HTML5 document. Clicking a legend entry
+toggles that series' opacity using an C<isVisible> boolean flag in the D3 click
+handler (opacity is set to C<isVisible ? 0 : 1> on each click).
+
+=head3 Errors
+
+=over 4
+
+=item * Throws C<Data must be an array of hashes> when C<$data> is not an ARRAY reference.
+
+=back
+
+=head3 Side Effects
+
+None.
+
+=head3 API SPECIFICATION
+
+=head4 Input
+
+    $self : HTML::D3                                                   -- required
+    $data : ArrayRef[ HashRef{ name: Str, data: ArrayRef[HashRef] } ] -- required
+
+=head4 Output
+
+    Str -- complete HTML5 document; legend clicks toggle series visibility.
+           The C<isVisible> JS variable tracks current visibility state.
+           Opacity toggled by C<isVisible ? 0 : 1>.
 
 =cut
 
@@ -1150,7 +1512,7 @@ sub render_multi_series_line_chart_with_interactive_legends
                 .on("mouseover", (event, d) => {
                     tooltip.style("opacity", 1)
                            .style("transform", "translateY(0)")
-                           .html(\`Series: <b>\${series.name}<\/b><br>Label: <b>\${d.label}<\/b><br>Value: <b>\${d.value}<\/b>\`)
+                           .html(\`Series: <b>\${series.name}<\\/b><br>Label: <b>\${d.label}<\\/b><br>Value: <b>\${d.value}<\\/b>\`)
                            .style("left", (event.pageX + 10) + "px")
                            .style("top", (event.pageY - 30) + "px");
                 })
@@ -1256,6 +1618,78 @@ It would help to have the render routine to return the head and body components 
 =head1 AUTHOR
 
 Nigel Horne <njh@nigelhorne.com>
+
+=encoding UTF-8
+
+=head1 FORMAL SPECIFICATION
+
+=head2 render_bar_chart
+
+    render_bar_chart : HTML::D3 × (ArrayRef | undef) → Str ∪ ⊥
+
+    pre  data = undef              ⇒ die "Data is not optional"
+    pre  ref(data) ≠ 'ARRAY'      ⇒ die "Data must be an array of arrays"
+    post result ∈ Str
+    post "<!DOCTYPE" ⊆ result
+    post ∀ d ∈ data . d[0] ⊆ result
+
+=head2 render_line_chart
+
+    render_line_chart : HTML::D3 × (ArrayRef | undef) → Str ∪ ⊥
+
+    pre  ref(data) ≠ 'ARRAY'  ⇒ die "Data must be an array of arrays"
+    post result ∈ Str
+    post "<!DOCTYPE" ⊆ result
+    post "d3.scalePoint" ⊆ result ∧ "d3.line()" ⊆ result
+
+=head2 render_lint_chart_with_tooltips
+
+    render_line_chart_with_tooltips : HTML::D3 × (ArrayRef | undef) → Str ∪ ⊥
+
+    pre  ref(data) ≠ 'ARRAY'  ⇒ die "Data must be an array of arrays"
+    post result ∈ Str
+    post "<!DOCTYPE" ⊆ result
+    post "mouseover" ⊆ result
+    post "</b>" ∉ result ∧ "<\/b>" ∈ result
+
+=head2 render_multi_series_line_chart_with_tooltips
+
+    render_multi_series_line_chart_with_tooltips : HTML::D3 × (ArrayRef | undef) → Str ∪ ⊥
+
+    pre  ref(data) ≠ 'ARRAY'  ⇒ die "Data must be an array of hashes"
+    post result ∈ Str
+    post "<!DOCTYPE" ⊆ result
+    post "</b>" ∉ result ∧ "<\/b>" ∈ result
+
+=head2 render_multi_series_line_chart_with_animated_tooltips
+
+    render_multi_series_line_chart_with_animated_tooltips : HTML::D3 × (ArrayRef | undef) → Str ∪ ⊥
+
+    pre  ref(data) ≠ 'ARRAY'   ⇒ die "Data must be an array of hashes"
+    post result ∈ Str
+    post "<!DOCTYPE" ⊆ result
+    post "translateY" ⊆ result
+    post "</b>" ∉ result ∧ "<\/b>" ∈ result
+
+=head2 render_multi_series_line_chart_with_legends
+
+    render_multi_series_line_chart_with_legends : HTML::D3 × (ArrayRef | undef) → Str ∪ ⊥
+
+    pre  ref(data) ≠ 'ARRAY'  ⇒ die "Data must be an array of hashes"
+    post result ∈ Str
+    post "<!DOCTYPE" ⊆ result
+    post ".legend" ⊆ result
+
+=head2 render_multi_series_line_chart_with_interactive_legends
+
+    render_multi_series_line_chart_with_interactive_legends : HTML::D3 × (ArrayRef | undef) → Str ∪ ⊥
+
+    pre  ref(data) ≠ 'ARRAY'            ⇒ die "Data must be an array of hashes"
+    post result ∈ Str
+    post "<!DOCTYPE" ⊆ result
+    post "isVisible" ⊆ result
+    post "isVisible ? 0 : 1" ⊆ result
+    post ".legend" ⊆ result
 
 =head1 LICENSE AND COPYRIGHT
 

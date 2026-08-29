@@ -1,5 +1,12 @@
 Revision history for Win32API::Console
 
+0.3.3  2025-08-27
+    - Change INVALID_HANDLE_VALUE const (no longer based on Win32API::File)
+    - Fix some mistakes in the POD document
+
+0.3.2  2025-02-24
+    - Update dependencies
+
 0.3.1  2025-12-02
     - Add limitations to POD
     - Change PeekConsoleInput returns "0 but true" if read is 0

@@ -110,6 +110,7 @@ t/57-date-consistency.t
 t/58-h1-connection-header-ownership.t
 t/59-ws-disconnect-exactly-once.t
 t/60-multi-server-coexistence.t
+t/61-pending-io-at-disconnect.t
 t/certs/ca.crt
 t/certs/ca.key
 t/certs/ca.srl
@@ -162,6 +163,7 @@ t/http2/36-ws-transport.t
 t/http2/37-ws-frame-validation.t
 t/http2/38-ws-queue-overflow.t
 t/http2/39-oversized-headers.t
+t/http2/40-pending-io-at-disconnect.t
 t/integration/app-file.t
 t/integration/app-static-files.t
 t/integration/connection-complete.t

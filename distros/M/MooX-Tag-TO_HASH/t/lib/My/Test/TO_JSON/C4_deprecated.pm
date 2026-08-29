@@ -1,6 +1,7 @@
 package My::Test::TO_JSON::C4_deprecated;
 
 use Moo;
+use Ref::Util 'is_ref';
 with 'MooX::Tag::TO_JSON';
 
 has c4_bool => ( is => 'ro', to_json => ',bool', default => 42 );
@@ -17,7 +18,7 @@ has secret_admirer => ( is => 'ro', );
 around TO_JSON => sub {
     my ( $orig, $obj ) = @_;
     my $hash = $obj->$orig;
-    $hash->{$_} = uc $hash->{$_} for grep defined $hash->{$_}, keys %$hash;
+    $_ = uc for grep { defined and !is_ref( $_ ) } values %$hash;
     return $hash;
 };
 

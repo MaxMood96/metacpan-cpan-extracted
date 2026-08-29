@@ -60,11 +60,11 @@ Database::Abstraction - Read-only Database Abstraction Layer (ORM)
 
 =head1 VERSION
 
-Version 0.39
+Version 0.40
 
 =cut
 
-our $VERSION = '0.39';
+our $VERSION = '0.40';
 
 =head1 DESCRIPTION
 
@@ -390,7 +390,9 @@ sub import
 {
 	my $pkg = shift;
 
-	if((scalar(@_) % 2) == 0) {
+	if((scalar(@_) == 0) && (ref($pkg) eq 'HASH')) {
+		init(Object::Configure::configure(__PACKAGE__, $pkg));
+	} elsif((scalar(@_) % 2) == 0) {
 		my %h = @_;
 		init(Object::Configure::configure($pkg, \%h));
 	} elsif((scalar(@_) == 1) && (ref($_[0]) eq 'HASH')) {
@@ -719,10 +721,11 @@ sub _open :Protected
 	# URL-based HTML table backend — lazy-loads LWP::UserAgent and HTML::TableExtract.
 	# Both modules are optional; they are not required for file-based backends.
 	if(my $url = $self->{'url'} || $defaults{'url'}) {
-		require LWP::UserAgent;
+		require LWP::UserAgent::Cached;
 		require HTML::TableExtract;
 
-		my $ua = LWP::UserAgent->new(timeout => 30, agent => 'Database::Abstraction/' . $VERSION);
+		my $ua = $self->{ua} // LWP::UserAgent::Cached->new(timeout => 30, agent => __PACKAGE__ . '/' . $VERSION);
+		$ua->env_proxy(1);
 		my $response = $ua->get($url);
 		Carp::croak(ref($self), ": cannot fetch '$url': ", $response->status_line)
 			unless $response->is_success;

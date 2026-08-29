@@ -15,24 +15,39 @@ my $script = File::Spec->catfile(
 my $temporary = tempdir(CLEANUP => 1);
 my $json = File::Spec->catfile($temporary, 'timer.json');
 
-is(system(
+my $status = system(
     $^X, $script,
-    '--counts=10',
+    '--counts=1',
     '--repeats=1',
+    '--cpu-clock=times',
     "--json=$json",
-), 0, 'Timer microbenchmark smoke run succeeds');
-ok(-s $json, 'Timer benchmark writes JSON');
+);
+is($status, 0, 'Timer microbenchmark smoke run succeeds');
+my $has_json = ok(-s $json, 'Timer benchmark writes JSON');
 
-open my $fh, '<', $json or die "open $json: $!";
-local $/;
-my $report = decode_json(<$fh>);
-close $fh;
+SKIP: {
+    skip 'benchmark did not produce a report', 6 if !$has_json;
 
-is($report->{benchmark}, 'linux-event-timer-microbench',
-    'report identifies Timer benchmark');
-is($report->{benchmark_contract_version}, 1,
-    'report records benchmark contract');
-is(scalar @{ $report->{summary} }, 3,
-    'report contains every Timer mode');
+    open my $fh, '<', $json or die "open $json: $!";
+    local $/;
+    my $report = decode_json(<$fh>);
+    close $fh;
+
+    is($report->{benchmark}, 'linux-event-timer-microbench',
+        'report identifies Timer benchmark');
+    is($report->{benchmark_contract_version}, 2,
+        'report records benchmark contract');
+    is($report->{configuration}{cpu_clock}, 'times',
+        'report records requested CPU clock policy');
+    is(scalar @{ $report->{summary} }, 3,
+        'report contains every Timer mode');
+    ok(!(grep {
+        $_->{cpu_clock} ne 'times' && $_->{cpu_clock} ne 'unavailable'
+    } @{ $report->{records} }), 'records identify the effective CPU clock');
+    ok(!(grep {
+        ($_->{cpu_clock} eq 'unavailable') != !defined($_->{cpu_seconds})
+    } @{ $report->{records} }),
+        'unavailable CPU clocks produce explicit null measurements');
+}
 
 done_testing;

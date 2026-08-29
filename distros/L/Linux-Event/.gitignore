@@ -28,6 +28,7 @@
 /xsstream/XSStream.o
 /xsstream/Stream.c
 /xsstream/Stream.o
+/xsstream/*.o
 /xsstream/pm_to_blib
 /xstls/Makefile
 /xstls/Makefile.old

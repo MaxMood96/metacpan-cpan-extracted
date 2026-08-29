@@ -42,16 +42,21 @@
       "test" : {
          "requires" : {
             "IPC::System::Simple" : "0",
+            "Readonly" : "0",
             "Test::DescribeMe" : "0",
             "Test::HTML::T5" : "0",
+            "Test::Memory::Cycle" : "0",
+            "Test::Mockingbird" : "0.13",
             "Test::Most" : "0",
             "Test::Needs" : "0",
-            "Test::Warnings" : "0"
+            "Test::Returns" : "0",
+            "Test::Warnings" : "0",
+            "Test::Without::Module" : "0"
          }
       }
    },
    "release_status" : "stable",
    "resources" : {},
-   "version" : "0.09",
+   "version" : "0.10",
    "x_serialization_backend" : "JSON::PP version 4.18"
 }

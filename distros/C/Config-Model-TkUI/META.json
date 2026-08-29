@@ -10,7 +10,7 @@
    ],
    "meta-spec" : {
       "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
-      "version" : "2"
+      "version" : 2
    },
    "name" : "Config-Model-TkUI",
    "prereqs" : {
@@ -94,9 +94,9 @@
          "web" : "https://github.com/dod38fr/config-model-tk-ui"
       }
    },
-   "version" : "1.381",
-   "x_generated_by_perl" : "v5.40.1",
-   "x_serialization_backend" : "JSON::XS version 4.04",
+   "version" : "1.382",
+   "x_generated_by_perl" : "v5.42.3",
+   "x_serialization_backend" : "Cpanel::JSON::XS version 4.42",
    "x_spdx_expression" : "LGPL-2.1"
 }
 

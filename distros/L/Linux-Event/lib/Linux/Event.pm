@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.103';
+our $VERSION = '0.105';
 
 1;
 
@@ -48,12 +48,14 @@ Loop, starts the object's activity, and returns the same object.
 
 =item * L<Linux::Event::Loop>
 
-XS-first epoll reactor and native watcher registry.
+XS-first epoll reactor, native watcher registry, query-driven introspection,
+and optional profiling.
 
 =item * L<Linux::Event::Stream>
 
 Subclass-defined buffered byte streams with connection, framing, backpressure,
-half-close, established deadlines, protocol-transition, and transport lifecycle.
+explicit callback batching, half-close, established deadlines,
+protocol-transition, and transport lifecycle.
 
 =item * L<Linux::Event::Listener>
 
@@ -126,7 +128,9 @@ public class or a subclassing contract.
 Linux only. Building the complete distribution requires Linux headers with
 pidfd syscall definitions, a Linux 5.4 or newer runtime for pidfd status,
 a libc providing C<posix_spawn_file_actions_addchdir_np>, and OpenSSL 1.1.1 or
-newer development files. Perl ithreads are not required.
+newer development files. Perl ithreads are not required. Configuration on an
+unsupported operating system exits with an C<OS unsupported> result so
+automated smoke systems can classify the distribution as not applicable.
 
 =head1 LICENSE
 

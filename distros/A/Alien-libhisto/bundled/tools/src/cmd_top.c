@@ -15,12 +15,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if !defined(_WIN32)
 #include <strings.h>
+#include <unistd.h>
+#include <fcntl.h>
+#endif
 #include <stdbool.h>
 #include <ctype.h>
 #include <math.h>
-#include <unistd.h>
-#include <fcntl.h>
 
 typedef enum {
     VIEW_1D_BARS = 0,
@@ -733,144 +735,126 @@ static void handle_command(tui_state_t *st, tui_engine_t *eng, const char *cmd) 
     }
 }
 
-static void print_top_usage(FILE *out) {
-    if (!out) out = stdout;
-    fprintf(out, "Usage: histo-top [OPTIONS] [FILE]\n");
-    fprintf(out, "       histo top [OPTIONS] [FILE]\n\n");
-    fprintf(out, "Real-time interactive terminal monitor for streaming 1D/2D distributions.\n\n");
-    fprintf(out, "1D Geometry Options:\n");
-    fprintf(out, "  -n, --bins=<N>           Initial number of bins (default: 50)\n");
-    fprintf(out, "      --min=<X>            Initial lower boundary (default: 0.0)\n");
-    fprintf(out, "      --max=<X>            Initial upper boundary (default: 100.0)\n");
-    fprintf(out, "  -a, --auto-range         Enable dynamic quantile auto-ranging (default: ON)\n");
-    fprintf(out, "      --no-auto-range      Disable dynamic auto-ranging\n\n");
-    fprintf(out, "2D Geometry Options:\n");
-    fprintf(out, "      --2d                 Enable 2D bivariate heatmap mode\n");
-    fprintf(out, "      --xbins=<N>          Number of bins along X axis (default: 50)\n");
-    fprintf(out, "      --xmin=<X>, --xmax=<X> Initial X axis bounds (default: [0, 100])\n");
-    fprintf(out, "      --ybins=<N>          Number of bins along Y axis (default: 50)\n");
-    fprintf(out, "      --ymin=<Y>, --ymax=<Y> Initial Y axis bounds (default: [0, 100])\n\n");
-    fprintf(out, "Input Parsing & Columns:\n");
-    fprintf(out, "  -w, --weights            Input stream contains weights: 'x weight' or 'x y weight'\n");
-    fprintf(out, "      --value-col=<COL>    1-based column for sample coordinate in 1D mode (default: 1)\n");
-    fprintf(out, "      --xcol=<COL>         1-based column for X coordinate in 2D mode (default: 1)\n");
-    fprintf(out, "      --ycol=<COL>         1-based column for Y coordinate in 2D mode (default: 2)\n");
-    fprintf(out, "      --weights-col=<COL>  1-based column for sample weight (default: 2 for 1D, 3 for 2D)\n");
-    fprintf(out, "  -d, --delimiter=<CHAR>   Field delimiter character (default: whitespace/auto)\n\n");
-    fprintf(out, "Display & Styling:\n");
-    fprintf(out, "  -p, --palette=<NAME>     Color palette: viridis (default), plasma, inferno, magma,\n");
-    fprintf(out, "                           turbo, cividis, grayscale, rainbow (alias: --colormap)\n");
-    fprintf(out, "  -M, --mono               Monochrome mode (disable ANSI colors)\n");
-    fprintf(out, "  -h, --help               Show this help message\n\n");
-    fprintf(out, "Interactive Keyboard Controls:\n");
-    fprintf(out, "  [Space]  Freeze / resume live ingestion snapshot\n");
-    fprintf(out, "  [a]      Toggle dynamic auto-ranging\n");
-    fprintf(out, "  [l]      Cycle count scale (Linear -> Log-Y -> Log-X -> Log-Log in 1D; Log-Z in 2D)\n");
-    fprintf(out, "  [p]      Cycle color palette preset\n");
-    fprintf(out, "  [k]      Toggle real-time Gaussian Kernel Density Estimation (KDE) overlay (1D)\n");
-    fprintf(out, "  [f]      Toggle online Gaussian parametric curve fit overlay (1D)\n");
-    fprintf(out, "  [e]      Toggle error bars (1D)\n");
-    fprintf(out, "  [y]      Toggle vertical count axis scale ruler (1D)\n");
-    fprintf(out, "  [g]      Toggle color reference legend bar (2D)\n");
-    fprintf(out, "  [r / R]  Increase / decrease bin resolution\n");
-    fprintf(out, "  [c]      Clear / reset accumulated histogram data\n");
-    fprintf(out, "  [:]      Open interactive command prompt (:help, :autorange, :rebin, :save, :quit)\n");
-    fprintf(out, "  [?]      Show full in-app help modal\n");
-    fprintf(out, "  [q]      Quit monitor\n");
-}
+
+
+#include "cli_opt.h"
 
 int cmd_top_main(int argc, char **argv) {
     bool is_2d = false;
     uint32_t nbins = 50;
-    uint32_t xbins = 50, ybins = 50;
+    uint32_t xbins = 0, ybins = 0;
     double rmin = 0.0, rmax = 100.0;
-    double xmin = 0.0, xmax = 100.0;
-    double ymin = 0.0, ymax = 100.0;
+    double xmin = NAN, xmax = NAN;
+    double ymin = NAN, ymax = NAN;
     bool auto_range = true;
+    bool no_autorange = false;
+    double auto_range_threshold = 0.05;
+    uint64_t window_size = 0;
+    double decay_lambda = 0.0;
+    bool compact_header = false;
     bool monochrome = false;
     bool has_weights = false;
+    bool binary_input = false;
     char delim = ' ';
     int val_col = 1, x_col = 1, y_col = 2, w_col = 2;
+    const char *palette_name = NULL;
     histo_palette_t palette = HISTO_PALETTE_VIRIDIS;
     uint32_t flags = HISTO_FLAG_TRACK_SUMW2 | HISTO_FLAG_EXACT_MOMENTS;
+    double scale_input = 1.0;
+    const char *shm_path = NULL;
     const char *file_arg = NULL;
 
-    for (int i = 1; i < argc; ++i) {
-        const char *arg = argv[i];
-        if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0) {
-            print_top_usage(stdout);
-            return 0;
-        } else if (strncmp(arg, "--bins=", 7) == 0) {
-            nbins = (uint32_t)atoi(arg + 7);
-            xbins = ybins = nbins;
-        } else if (strncmp(arg, "-n=", 3) == 0) {
-            nbins = (uint32_t)atoi(arg + 3);
-            xbins = ybins = nbins;
-        } else if (strcmp(arg, "-n") == 0 && i + 1 < argc) {
-            nbins = (uint32_t)atoi(argv[++i]);
-            xbins = ybins = nbins;
-        } else if (strncmp(arg, "--min=", 6) == 0) {
-            rmin = atof(arg + 6);
-            xmin = ymin = rmin;
-        } else if (strcmp(arg, "--min") == 0 && i + 1 < argc) {
-            rmin = atof(argv[++i]);
-            xmin = ymin = rmin;
-        } else if (strncmp(arg, "--max=", 6) == 0) {
-            rmax = atof(arg + 6);
-            xmax = ymax = rmax;
-        } else if (strcmp(arg, "--max") == 0 && i + 1 < argc) {
-            rmax = atof(argv[++i]);
-            xmax = ymax = rmax;
-        } else if (strcmp(arg, "-a") == 0 || strcmp(arg, "--autorange") == 0 || strcmp(arg, "--auto-range") == 0) {
-            auto_range = true;
-        } else if (strcmp(arg, "--no-autorange") == 0 || strcmp(arg, "--no-auto-range") == 0) {
-            auto_range = false;
-        } else if (strcmp(arg, "--2d") == 0) {
-            is_2d = true;
-        } else if (strncmp(arg, "--xbins=", 8) == 0) {
-            xbins = (uint32_t)atoi(arg + 8);
-        } else if (strncmp(arg, "--ybins=", 8) == 0) {
-            ybins = (uint32_t)atoi(arg + 8);
-        } else if (strncmp(arg, "--xmin=", 7) == 0) {
-            xmin = atof(arg + 7);
-        } else if (strncmp(arg, "--xmax=", 7) == 0) {
-            xmax = atof(arg + 7);
-        } else if (strncmp(arg, "--ymin=", 7) == 0) {
-            ymin = atof(arg + 7);
-        } else if (strncmp(arg, "--ymax=", 7) == 0) {
-            ymax = atof(arg + 7);
-        } else if (strcmp(arg, "-w") == 0 || strcmp(arg, "--weights") == 0) {
-            has_weights = true;
-        } else if (strncmp(arg, "-d=", 3) == 0) {
-            delim = arg[3];
-        } else if (strcmp(arg, "-d") == 0 && i + 1 < argc) {
-            delim = argv[++i][0];
-        } else if (strncmp(arg, "--delimiter=", 12) == 0) {
-            delim = arg[12];
-        } else if (strncmp(arg, "--value-col=", 12) == 0) {
-            val_col = atoi(arg + 12);
-        } else if (strncmp(arg, "--val-col=", 10) == 0) {
-            val_col = atoi(arg + 10);
-        } else if (strncmp(arg, "--xcol=", 7) == 0) {
-            x_col = atoi(arg + 7);
-        } else if (strncmp(arg, "--ycol=", 7) == 0) {
-            y_col = atoi(arg + 7);
-        } else if (strncmp(arg, "--weights-col=", 14) == 0) {
-            w_col = atoi(arg + 14);
-        } else if (strncmp(arg, "-p=", 3) == 0) {
-            palette = histo_palette_from_name(arg + 3);
-        } else if (strcmp(arg, "-p") == 0 && i + 1 < argc) {
-            palette = histo_palette_from_name(argv[++i]);
-        } else if (strncmp(arg, "--palette=", 10) == 0) {
-            palette = histo_palette_from_name(arg + 10);
-        } else if (strncmp(arg, "--colormap=", 11) == 0) {
-            palette = histo_palette_from_name(arg + 11);
-        } else if (strcmp(arg, "-M") == 0 || strcmp(arg, "--mono") == 0) {
-            monochrome = true;
-        } else if (arg[0] != '-') {
-            file_arg = arg;
-        }
+    const cli_opt_spec_t specs[] = {
+        {'n', "bins", NULL, CLI_OPT_TYPE_UINT32, &nbins, NULL, 0, "N",
+         "Number of uniform bins (default: 50)", "50"},
+        {0, "binary-f64", "binary", CLI_OPT_TYPE_BOOL, &binary_input, NULL, CLI_OPT_FLAG_SET_TRUE, NULL,
+         "Read raw Little-Endian double binary stream (stdin/file)", NULL},
+        {'S', "scale-input", NULL, CLI_OPT_TYPE_DOUBLE, &scale_input, NULL, 0, "FACTOR",
+         "Multiply incoming measurements by scale factor (e.g. 1e-3 for ns->us)", "1.0"},
+        {0, "shm", NULL, CLI_OPT_TYPE_STRING, &shm_path, NULL, 0, "PATH",
+         "Attach to memory-mapped shared memory ring buffer (e.g. /histo_shm)", NULL},
+        {0, "window", "reservoir", CLI_OPT_TYPE_UINT64, &window_size, NULL, 0, "N",
+         "Rolling window size (last N samples in reservoir cache, default: all)", NULL},
+        {0, "decay", NULL, CLI_OPT_TYPE_DOUBLE, &decay_lambda, NULL, 0, "LAMBDA",
+         "Exponential decay rate per second (default: 0.0, no decay)", "0.0"},
+        {0, "min", NULL, CLI_OPT_TYPE_DOUBLE, &rmin, NULL, 0, "X",
+         "Lower boundary", "0.0"},
+        {0, "max", NULL, CLI_OPT_TYPE_DOUBLE, &rmax, NULL, 0, "X",
+         "Upper boundary", "100.0"},
+        {'a', "autorange", "auto-range", CLI_OPT_TYPE_BOOL, &auto_range, NULL, CLI_OPT_FLAG_SET_TRUE, NULL,
+         "Automatically adjust bin ranges to live data bounds", NULL},
+        {0, "no-autorange", "no-auto-range", CLI_OPT_TYPE_BOOL, &no_autorange, NULL, CLI_OPT_FLAG_SET_TRUE, NULL,
+         "Disable automatic dynamic range scaling", NULL},
+        {0, "autorange-threshold", "threshold", CLI_OPT_TYPE_DOUBLE, &auto_range_threshold, NULL, 0, "FRAC",
+         "Quantile margin threshold for dynamic auto-ranging (default: 0.05)", "0.05"},
+        {0, "2d", NULL, CLI_OPT_TYPE_BOOL, &is_2d, NULL, 0, NULL,
+         "Enable 2D bivariate live monitor mode", NULL},
+        {0, "xbins", NULL, CLI_OPT_TYPE_UINT32, &xbins, NULL, 0, "N",
+         "Number of bins along X axis in 2D mode", NULL},
+        {0, "ybins", NULL, CLI_OPT_TYPE_UINT32, &ybins, NULL, 0, "N",
+         "Number of bins along Y axis in 2D mode", NULL},
+        {0, "xmin", NULL, CLI_OPT_TYPE_DOUBLE, &xmin, NULL, 0, "X",
+         "X axis lower bound in 2D mode", NULL},
+        {0, "xmax", NULL, CLI_OPT_TYPE_DOUBLE, &xmax, NULL, 0, "X",
+         "X axis upper bound in 2D mode", NULL},
+        {0, "ymin", NULL, CLI_OPT_TYPE_DOUBLE, &ymin, NULL, 0, "Y",
+         "Y axis lower bound in 2D mode", NULL},
+        {0, "ymax", NULL, CLI_OPT_TYPE_DOUBLE, &ymax, NULL, 0, "Y",
+         "Y axis upper bound in 2D mode", NULL},
+        {'w', "weights", NULL, CLI_OPT_TYPE_BOOL, &has_weights, NULL, 0, NULL,
+         "Input stream contains sample weights", NULL},
+        {'d', "delimiter", NULL, CLI_OPT_TYPE_CHAR, &delim, NULL, 0, "CHAR",
+         "Field delimiter character", "space"},
+        {0, "value-col", "val-col", CLI_OPT_TYPE_INT, &val_col, NULL, 0, "COL",
+         "1-based column for sample value (1D mode)", "1"},
+        {0, "xcol", NULL, CLI_OPT_TYPE_INT, &x_col, NULL, 0, "COL",
+         "1-based column for X coordinate in 2D mode", "1"},
+        {0, "ycol", NULL, CLI_OPT_TYPE_INT, &y_col, NULL, 0, "COL",
+         "1-based column for Y coordinate in 2D mode", "2"},
+        {0, "weights-col", NULL, CLI_OPT_TYPE_INT, &w_col, NULL, 0, "COL",
+         "1-based column for sample weight", "2"},
+        {'p', "palette", "colormap", CLI_OPT_TYPE_STRING, &palette_name, NULL, 0, "NAME",
+         "Color palette for terminal rendering", "viridis"},
+        {'H', "compact", NULL, CLI_OPT_TYPE_BOOL, &compact_header, NULL, CLI_OPT_FLAG_SET_TRUE, NULL,
+         "Start in compact single-line header mode", NULL},
+        {'M', "mono", NULL, CLI_OPT_TYPE_BOOL, &monochrome, NULL, 0, NULL,
+         "Monochrome mode without ANSI color escapes", NULL}
+    };
+
+    cli_opt_parser_t parser;
+    cli_opt_init(&parser, specs, sizeof(specs) / sizeof(specs[0]),
+                 "histo-top", "[OPTIONS] [FILE]",
+                 "Interactive terminal monitor for live 1D/2D data streams.");
+
+    int rc = cli_opt_parse(&parser, argc, argv, 1);
+    if (rc < 0) {
+        cli_opt_print_help(&parser, stdout);
+        cli_opt_free(&parser);
+        return 0;
     }
+    if (rc > 0) {
+        fprintf(stderr, "%s\n", cli_opt_error(&parser));
+        cli_opt_free(&parser);
+        return 1;
+    }
+
+    if (no_autorange) auto_range = false;
+
+    if (xbins == 0) xbins = nbins;
+    if (ybins == 0) ybins = nbins;
+    if (isnan(xmin)) xmin = rmin;
+    if (isnan(xmax)) xmax = rmax;
+    if (isnan(ymin)) ymin = rmin;
+    if (isnan(ymax)) ymax = rmax;
+
+    if (palette_name) {
+        palette = histo_palette_from_name(palette_name);
+    }
+
+    if (parser.num_positionals > 0) {
+        file_arg = parser.positionals[0];
+    }
+    cli_opt_free(&parser);
 
     FILE *in_fp = stdin;
     if (file_arg && strcmp(file_arg, "-") != 0) {
@@ -882,7 +866,21 @@ int cmd_top_main(int argc, char **argv) {
     }
 
     tui_engine_t eng;
-    if (is_2d) {
+    if (shm_path) {
+        if (is_2d) {
+            if (!tui_engine_init_shm(&eng, shm_path, true, xbins, xmin, xmax, flags)) {
+                fprintf(stderr, "Error: Failed to attach to shared memory ring buffer '%s'\n", shm_path);
+                if (in_fp != stdin) fclose(in_fp);
+                return 1;
+            }
+        } else {
+            if (!tui_engine_init_shm(&eng, shm_path, false, nbins, rmin, rmax, flags)) {
+                fprintf(stderr, "Error: Failed to attach to shared memory ring buffer '%s'\n", shm_path);
+                if (in_fp != stdin) fclose(in_fp);
+                return 1;
+            }
+        }
+    } else if (is_2d) {
         if (!tui_engine_init(&eng, in_fp, true, xbins, xmin, xmax, flags, has_weights)) {
             fprintf(stderr, "Error: Failed to initialize 2D TUI engine.\n");
             if (in_fp != stdin) fclose(in_fp);
@@ -900,7 +898,17 @@ int cmd_top_main(int argc, char **argv) {
         }
     }
 
+    tui_engine_set_scale_input(&eng, scale_input);
+    tui_engine_set_binary(&eng, binary_input);
+
     eng.auto_range = auto_range;
+    eng.auto_range_threshold = auto_range_threshold;
+    if (window_size > 0) {
+        tui_engine_set_window(&eng, (size_t)window_size, NULL, NULL);
+    }
+    if (decay_lambda > 0.0) {
+        tui_engine_set_decay(&eng, decay_lambda);
+    }
     eng.delim = delim;
     eng.val_col = val_col;
     eng.x_col = x_col;
@@ -918,6 +926,7 @@ int cmd_top_main(int argc, char **argv) {
     memset(&st, 0, sizeof(st));
     st.monochrome = monochrome;
     st.palette = palette;
+    st.compact_header = compact_header;
     st.view_mode = is_2d ? VIEW_2D_HEATMAP : VIEW_1D_BARS;
 
     tui_engine_start(&eng);

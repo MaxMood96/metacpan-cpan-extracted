@@ -2,7 +2,7 @@ NAME
     MooX::Tag::TO_HASH - Controlled translation of Moo objects into Hashes
 
 VERSION
-    version 0.06
+    version 0.07
 
 SYNOPSIS
      package My::Farm;
@@ -30,9 +30,9 @@ SYNOPSIS
     # resulting in
 
      $VAR1 = {
-               'goose' => 'Frank',
+               'cow' => 'Daisy',
                'hen' => undef,
-               'cow' => 'Daisy'
+               'goose' => 'Frank'
              };
 
 DESCRIPTION
@@ -148,10 +148,10 @@ EXAMPLES
     # resulting in
 
      $VAR1 = {
-               'HEN' => 'Ruby',
                'COW' => 'Daisy',
-               'GOOSE' => 'Donald',
-               'HORSE' => 'Ed'
+               'HEN' => 'Ruby',
+               'HORSE' => 'Ed',
+               'GOOSE' => 'Donald'
              };
 
 DEPRECATED BEHAVIOR

@@ -51,6 +51,46 @@ sub timeout_case (%option) {
 }
 
 {
+    my $clock_calls = 0;
+    my $rearm_calls = 0;
+    my $real_rearm = \&Linux::Event::Stream::_rearm_stream_deadline;
+    no warnings 'redefine';
+    local *Linux::Event::Stream::_deadline_now = sub {
+        $clock_calls++;
+        return Linux::Event::Timer->now;
+    };
+    local *Linux::Event::Stream::_rearm_stream_deadline = sub {
+        $rearm_calls++;
+        return $real_rearm->(@_);
+    };
+
+    my ($loop, $stream, $peer) = timeout_case();
+    $clock_calls = 0;
+    $rearm_calls = 0;
+    $stream->pause_read;
+    $stream->resume_read;
+    $stream->_xs_write_empty;
+    is $clock_calls, 0,
+        'ordinary Stream transitions perform no deadline clock reads';
+    is $rearm_calls, 0,
+        'ordinary Stream transitions skip deadline candidate rebuilding';
+    $stream->close;
+    close $peer;
+
+    ($loop, $stream, $peer) = timeout_case(read_timeout => 10);
+    $clock_calls = 0;
+    $rearm_calls = 0;
+    $stream->pause_read;
+    $stream->resume_read;
+    is $clock_calls, 1,
+        'read-timeout resume starts a fresh interval from the clock';
+    is $rearm_calls, 2,
+        'read-timeout pause and resume both update scheduler state';
+    $stream->close;
+    close $peer;
+}
+
+{
     my ($loop, $stream, $peer, $state)
         = timeout_case(idle_timeout => test_seconds(0.04));
     $loop->run_for(test_seconds(0.15));

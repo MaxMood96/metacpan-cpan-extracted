@@ -50,4 +50,5 @@ t/filter-test.yml
 t/filter.t
 t/lib/Config/Model/models/Master.pl
 t/pod.t
+t/utilities.t
 weaver.ini

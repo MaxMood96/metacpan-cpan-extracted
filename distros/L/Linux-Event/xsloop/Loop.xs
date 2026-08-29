@@ -150,6 +150,7 @@ struct le_watcher_s {
     int lean;
     int bench_native_echo;
     int kind;
+    int internal;
     int recycle_after_dispatch;
     le_registration_t *registration;
 };
@@ -243,13 +244,13 @@ struct le_loop_s {
     unsigned long long timer_coalesced_expirations;
     unsigned long long timer_heap_max_size;
     int in_timer_dispatch;
+    le_timer_t *current_timer;
     int profile_enabled;
     unsigned long long epoll_wait_ns;
     unsigned long long epoll_ctl_add_ns;
     unsigned long long epoll_ctl_mod_ns;
     unsigned long long epoll_ctl_del_ns;
     unsigned long long watcher_lookup_ns;
-    unsigned long long callback_ns;
     unsigned long long dispatch_ns;
 };
 
@@ -621,6 +622,7 @@ static void le_timer_source_ensure(le_loop_t *loop) {
     source->active = 1;
     source->mask = EPOLLIN | EPOLLERR | EPOLLHUP;
     source->kind = LE_WATCHER_TIMER;
+    source->internal = 1;
     memset(&event, 0, sizeof(event));
     event.events = source->mask;
     event.data.ptr = (void *)source;
@@ -764,12 +766,10 @@ static void le_timer_reschedule_native(le_timer_t *timer, int absolute,
 
 static SV *le_timer_call(pTHX_ le_timer_t *timer) {
     SV *error = NULL;
-    unsigned long long started = 0;
     le_loop_t *loop = timer->loop;
     le_timer_descriptor_t *descriptor = timer->descriptor;
     if (!descriptor || !descriptor->callback_cv)
         croak("Timer callback descriptor is unavailable");
-    if (loop && loop->profile_enabled) started = le_now_ns();
     ENTER;
     SAVETMPS;
     {
@@ -793,7 +793,6 @@ static SV *le_timer_call(pTHX_ le_timer_t *timer) {
         loop->callback_onearg_calls++;
         loop->callback_direct_cv_calls++;
         loop->timer_callback_calls++;
-        if (loop->profile_enabled) loop->callback_ns += le_now_ns() - started;
     }
     return error;
 }
@@ -848,7 +847,9 @@ static void le_timer_source_ready(pTHX_ le_loop_t *loop) {
         }
 
         timer->in_callback = 1;
+        loop->current_timer = timer;
         callback_error = le_timer_call(aTHX_ timer);
+        loop->current_timer = NULL;
         timer->in_callback = 0;
         callbacks++;
 
@@ -902,14 +903,13 @@ static void le_loop_destroy(le_loop_t *loop) {
 
 /* ---- Perl callback dispatch ----------------------------------------- */
 
-static void le_count_callback(le_watcher_t *w, int one_arg, int direct_cv, unsigned long long t0) {
+static void le_count_callback(le_watcher_t *w, int one_arg, int direct_cv) {
     if (!w || !w->loop) return;
     w->loop->callback_calls++;
     if (one_arg) w->loop->callback_onearg_calls++;
     else w->loop->callback_noarg_calls++;
     if (direct_cv) w->loop->callback_direct_cv_calls++;
     else w->loop->callback_sv_calls++;
-    if (w->loop->profile_enabled) w->loop->callback_ns += le_now_ns() - t0;
 }
 
 /*
@@ -922,23 +922,17 @@ static void le_count_callback(le_watcher_t *w, int one_arg, int direct_cv, unsig
  */
 static void le_call_watcher_cb_noarg(pTHX_ le_watcher_t *w, SV *cb, int direct_cv) {
     if (!cb || (!direct_cv && !SvOK(cb)) || !w || !w->active) return;
-    unsigned long long t0 = 0;
-    if (w->loop && w->loop->profile_enabled) t0 = le_now_ns();
-
     dSP;
     PUSHMARK(SP);
     PUTBACK;
     call_sv(cb, G_DISCARD | G_VOID);
     FREETMPS;
 
-    le_count_callback(w, 0, direct_cv, t0);
+    le_count_callback(w, 0, direct_cv);
 }
 
 static void le_call_watcher_cb_onearg(pTHX_ le_watcher_t *w, SV *cb, int direct_cv) {
     if (!cb || (!direct_cv && !SvOK(cb)) || !w || !w->active) return;
-    unsigned long long t0 = 0;
-    if (w->loop && w->loop->profile_enabled) t0 = le_now_ns();
-
     dSP;
     PUSHMARK(SP);
     EXTEND(SP, 1);
@@ -947,7 +941,7 @@ static void le_call_watcher_cb_onearg(pTHX_ le_watcher_t *w, SV *cb, int direct_
     call_sv(cb, G_DISCARD | G_VOID);
     FREETMPS;
 
-    le_count_callback(w, 1, direct_cv, t0);
+    le_count_callback(w, 1, direct_cv);
 }
 
 static void le_call_watcher_cb(pTHX_ le_watcher_t *w, SV *cb, int direct_cv) {
@@ -1184,6 +1178,7 @@ typedef struct {
     int callback_arg_data;
     int lean;
     int bench_native_echo;
+    int internal;
 } le_watch_opts_t;
 
 static void le_watch_opts_init(le_watch_opts_t *opt) {
@@ -1204,6 +1199,9 @@ static int le_watch_parse_common_option(const char *key, SV *val, le_watch_opts_
     else if (strEQ(key, "_callback_data_arg")) {
         opt->callback_arg_data = SvTRUE(val) ? 1 : 0;
         if (opt->callback_arg_data) opt->callback_args = 1;
+    }
+    else if (strEQ(key, "_internal")) {
+        opt->internal = SvTRUE(val) ? 1 : 0;
     }
     else if (strEQ(key, "lean")) {
         opt->lean = SvTRUE(val) ? 1 : 0;
@@ -1241,6 +1239,7 @@ static SV *le_watch_register(SV *loop_obj, le_loop_t *loop, int fd, le_watch_opt
     w->flags = (opt->oneshot ? EPOLLONESHOT : 0) | (opt->edge_triggered ? EPOLLET : 0);
     w->callback_args = opt->callback_args ? 1 : 0;
     w->callback_arg_data = opt->callback_arg_data ? 1 : 0;
+    w->internal = opt->internal ? 1 : 0;
     w->bench_native_echo = opt->bench_native_echo;
     if (w->bench_native_echo) w->mask |= EPOLLIN;
     w->lean = (opt->lean && !w->callback_args) ? 1 : 0;
@@ -1351,6 +1350,83 @@ stop(loop_obj)
   CODE:
     le_loop_from_sv(loop_obj)->stop_flag = 1;
 
+int
+running(loop_obj)
+    SV *loop_obj
+  CODE:
+    RETVAL = le_loop_from_sv(loop_obj)->driver_depth > 0 ? 1 : 0;
+  OUTPUT:
+    RETVAL
+
+SV *
+_object_candidates_native(loop_obj)
+    SV *loop_obj
+  PREINIT:
+    le_loop_t *loop;
+    AV *objects;
+    size_t index;
+  CODE:
+    loop = le_loop_from_sv(loop_obj);
+    objects = newAV();
+    for (index = 0; index < loop->reg_cap; index++) {
+        le_watcher_t *watcher = loop->registry[index];
+        if (watcher && watcher->active && watcher->data_sv)
+            av_push(objects, newSVsv(watcher->data_sv));
+    }
+    for (index = 0; index < loop->timer_heap_size; index++) {
+        le_timer_t *timer = loop->timer_heap[index];
+        if (timer && timer->self_sv)
+            av_push(objects, newSVsv(timer->self_sv));
+    }
+    if (loop->current_timer && loop->current_timer->self_sv)
+        av_push(objects, newSVsv(loop->current_timer->self_sv));
+    RETVAL = newRV_noinc((SV *)objects);
+  OUTPUT:
+    RETVAL
+
+SV *
+_resources_native(loop_obj)
+    SV *loop_obj
+  PREINIT:
+    le_loop_t *loop;
+    HV *result;
+    AV *public_fds;
+    unsigned long long registered = 0;
+    unsigned long long public_count = 0;
+    unsigned long long internal_count = 0;
+    size_t index;
+  CODE:
+    loop = le_loop_from_sv(loop_obj);
+    result = newHV();
+    public_fds = newAV();
+    for (index = 0; index < loop->reg_cap; index++) {
+        le_watcher_t *watcher = loop->registry[index];
+        if (!watcher || !watcher->active) continue;
+        registered++;
+        if (watcher->internal || watcher->kind != LE_WATCHER_USER) {
+            internal_count++;
+        }
+        else {
+            public_count++;
+            av_push(public_fds, newSViv(watcher->fd));
+        }
+    }
+    hv_stores(result, "epoll_fd", newSViv(loop->epoll_fd));
+    hv_stores(result, "timer_fd", loop->timer_fd >= 0
+        ? newSViv(loop->timer_fd) : newSV(0));
+    hv_stores(result, "registered_fds", newSVuv(registered));
+    hv_stores(result, "public_registrations", newSVuv(public_count));
+    hv_stores(result, "internal_registrations", newSVuv(internal_count));
+    hv_stores(result, "public_registration_fds",
+        newRV_noinc((SV *)public_fds));
+    hv_stores(result, "active_timers", newSVuv(loop->timer_heap_size));
+    hv_stores(result, "registry_capacity", newSVuv(loop->reg_cap));
+    hv_stores(result, "timer_heap_capacity", newSVuv(loop->timer_heap_cap));
+    hv_stores(result, "event_capacity", newSVuv(loop->event_cap));
+    RETVAL = newRV_noinc((SV *)result);
+  OUTPUT:
+    RETVAL
+
 SV *
 stats(loop_obj)
     SV *loop_obj
@@ -1428,18 +1504,20 @@ stats(loop_obj)
     hv_stores(hv, "epoll_ctl_mod_ns", newSVuv(loop->epoll_ctl_mod_ns));
     hv_stores(hv, "epoll_ctl_del_ns", newSVuv(loop->epoll_ctl_del_ns));
     hv_stores(hv, "watcher_lookup_ns", newSVuv(loop->watcher_lookup_ns));
-    hv_stores(hv, "callback_ns", newSVuv(loop->callback_ns));
     hv_stores(hv, "dispatch_ns", newSVuv(loop->dispatch_ns));
     RETVAL = newRV_noinc((SV *)hv);
   OUTPUT:
     RETVAL
 
-void
-enable_profile(loop_obj, enabled = 1)
+SV *
+profile(loop_obj, enabled)
     SV *loop_obj
     int enabled
   CODE:
     le_loop_from_sv(loop_obj)->profile_enabled = enabled ? 1 : 0;
+    RETVAL = newSVsv(loop_obj);
+  OUTPUT:
+    RETVAL
 
 void
 enable_watcher_reclaim(loop_obj, enabled = 1)
@@ -1560,7 +1638,6 @@ reset_stats(loop_obj)
     loop->epoll_ctl_mod_ns = 0;
     loop->epoll_ctl_del_ns = 0;
     loop->watcher_lookup_ns = 0;
-    loop->callback_ns = 0;
     loop->dispatch_ns = 0;
 
 SV *

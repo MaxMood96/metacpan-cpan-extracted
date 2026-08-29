@@ -1,12 +1,13 @@
 #!/usr/bin/perl
+
 use 5.014;
 use strict;
 use warnings;
 use Test::More tests => 2;
 
-BEGIN {
-    use_ok('Map::Tube::Plugin::Graph')        || print "Bail out!\n";
-    use_ok('Map::Tube::Plugin::Graph::Utils') || print "Bail out!\n";
-}
+use_ok($_) for qw(
+    Map::Tube::Plugin::Graph
+    Map::Tube::Plugin::Graph::Utils
+);
 
 diag( "Testing Map::Tube::Plugin::Graph $Map::Tube::Plugin::Graph::VERSION, Perl $], $^X" );

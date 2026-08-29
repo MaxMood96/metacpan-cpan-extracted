@@ -12,6 +12,7 @@ sub run {
 is(run("abc"), "<p>abc</p>\n", 'line1');
 is(run("abc\n"), "<p>abc</p>\n", 'line2');
 is(run(" abc "), "<p>abc</p>\n", 'line3');
+is(run("0"), "<p>0</p>\n", 'line4');
 
 is(run("abc\ndef\n"), "<p>abc\ndef</p>\n", 'soft_break');
 is(run("abc  \ndef\n", two_spaces_hard_line_breaks => 1), "<p>abc<br />\ndef</p>\n", 'hard_break1');
@@ -25,6 +26,8 @@ is(run("abc`def`ghi"), "<p>abc<code>def</code>ghi</p>\n", 'code2');
 is(run("abc``def`ghi``"), "<p>abc<code>def`ghi</code></p>\n", 'code3');
 is(run("`` ` ``"), "<p><code>`</code></p>\n", 'code4');
 is(run("``  ``"), "<p><code>  </code></p>\n", 'code5');
+is(run("0`x`"), "<p>0<code>x</code></p>\n", 'code6');
+is(run("`x`0"), "<p><code>x</code>0</p>\n", 'code7');
 
 is(run("`abc`def`"), "<p><code>abc</code>def`</p>\n", 'escaped_code1');
 is(run("\\`abc`def`"), "<p>`abc<code>def</code></p>\n", 'escaped_code2');
@@ -48,6 +51,11 @@ is(run('[foo]()'), "<p><a href=\"\">foo</a></p>\n", 'link3');
 is(run('[foo](/bar "title")'), "<p><a href=\"/bar\" title=\"title\">foo</a></p>\n", 'link4');
 is(run('[foo](</bar/baz>)'), "<p><a href=\"/bar/baz\">foo</a></p>\n", 'link5');
 is(run('[foo](</bar/baz> "title")'), "<p><a href=\"/bar/baz\" title=\"title\">foo</a></p>\n", 'link6');
+is(run('[foo](/bar "0")'), "<p><a href=\"/bar\" title=\"0\">foo</a></p>\n", 'link7');
+is(run("[foo](/bar '0')"), "<p><a href=\"/bar\" title=\"0\">foo</a></p>\n", 'link8');
+is(run('[foo](/bar (0))'), "<p><a href=\"/bar\" title=\"0\">foo</a></p>\n", 'link9');
+is(run('[foo](/bar "")'), "<p><a href=\"/bar\" title=\"\">foo</a></p>\n", 'link10');
+is(run('![foo](/bar "0")'), "<p><img src=\"/bar\" alt=\"foo\" title=\"0\" /></p>\n", 'image1');
 
 is(run('*foo*'), "<p><em>foo</em></p>\n", 'em1');
 is(run('_foo_'), "<p><em>foo</em></p>\n", 'em2');

@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::X509::Extension;
-$Crypt::OpenSSL3::X509::Extension::VERSION = '0.011';
+$Crypt::OpenSSL3::X509::Extension::VERSION = '0.012';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::X509::Extension - A X509 extension.
 
 =head1 VERSION
 
-version 0.011
+version 0.012
 
 =head1 METHODS
 

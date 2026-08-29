@@ -17,9 +17,6 @@ use IO::Compress::Gzip 'gzip' ;
 
 BEGIN
 {
-    plan(skip_all => "Examples needs Perl 5.005 or better - you have Perl $]" )
-        if $] < 5.005 ;
-
     # use Test::NoWarnings, if available
     my $extra = 0 ;
     $extra = 1
@@ -34,7 +31,7 @@ $Inc = '"-MExtUtils::testlib"'
     if ! $ENV{PERL_CORE} && eval " require ExtUtils::testlib; " ;
 
 my $Perl = ($ENV{'FULLPERL'} or $^X or 'perl') ;
-$Perl = qq["$Perl"] if $^O eq 'MSWin32' ;
+$Perl = qq["$Perl"] ;
 
 $Perl = "$Perl $Inc -w" ;
 #$Perl .= " -Mblib " ;

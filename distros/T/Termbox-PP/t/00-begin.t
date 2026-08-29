@@ -47,7 +47,8 @@ sub diag_version {
     return diag sprintf('  %-40s    undef', $module);
   }
 
-  my ($major, $rest) = split /\./, $version;
+  my ($major, @rest) = split /\./, $version;
+  my $rest = join('.', @rest);
   $major =~ s/^v//;
   return "$major\.$rest" if $return;
   return diag sprintf('  %-40s % 4d.%s', $module, $major, $rest);

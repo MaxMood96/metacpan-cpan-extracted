@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::SKey::Management;
-$Crypt::OpenSSL3::SKey::Management::VERSION = '0.011';
+$Crypt::OpenSSL3::SKey::Management::VERSION = '0.012';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::SKey::Management - An internal symmetric key management
 
 =head1 VERSION
 
-version 0.011
+version 0.012
 
 =head1 METHODS
 

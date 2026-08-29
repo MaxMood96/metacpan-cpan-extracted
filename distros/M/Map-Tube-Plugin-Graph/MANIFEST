@@ -21,8 +21,6 @@ t/unusual-station-name.xml
 t/lib/Sample.pm
 xt/changes.t
 xt/manifest.t
-xt/meta-json.t
-xt/meta-yml.t
 xt/pod.t
 xt/version.t
 META.yml                                 Module YAML meta-data (added by MakeMaker)

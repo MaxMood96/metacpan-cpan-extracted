@@ -3,11 +3,75 @@ use 5.014;
 use strict;
 use warnings;
 use ExtUtils::MakeMaker;
-
+use File::Temp qw(tempfile);
 use File::Which;
-use IPC::Run3;
 
 my ($dot_bin, $issue_stretch, $issue_prism);
+
+sub run3simple {
+    # A specialized re-implementation of IPC::Run3, but without non-Perl-core dependencies.
+    # Uses temporary files for portability.
+    # Should run under any OS.
+    # Arguments: see IPC::Run3, but:
+    #   * Command MUST be an array ref
+    #   * The $stdin argument MUST be undef or a reference to a scalar containing the input.
+    #   * The $stdout and $stderr arguments MUST be references to scalars.
+    #   * \%options is not supported.
+    my ($cmd, $stdin, $stdout, $stderr ) = @_;
+
+    my ( $out_fh, $out_fn ) = tempfile( UNLINK => 1 );
+    my ( $err_fh, $err_fn ) = tempfile( UNLINK => 1 );
+    my ( $in_fh,  $in_fn, $saved_stdin );
+    binmode($out_fh);
+    binmode($err_fh);
+
+    # Save the real STDOUT/STDERR so we can restore them afterwards.
+    open( my $saved_stdout, '>&', \*STDOUT ) or die "Can't save STDOUT: $!";
+    open( my $saved_stderr, '>&', \*STDERR ) or die "Can't save STDERR: $!";
+
+    # Point STDOUT/STDERR at the temp files. system()'s child inherits
+    # these file descriptors directly, so it writes into the files itself
+    # -- no pipes, no deadlock risk, no reading loop needed.
+    open( STDOUT, '>&', $out_fh ) or die "Can't redirect STDOUT: $!";
+    open( STDERR, '>&', $err_fh ) or die "Can't redirect STDERR: $!";
+
+    if ( defined($stdin) ) {
+        open( $saved_stdin, '<&', \*STDIN ) or die "Can't save STDIN: $!";
+        ( $in_fh, $in_fn ) = tempfile( UNLINK => 0 );
+        binmode($in_fh);
+        print $in_fh $$stdin;
+        close($in_fh);
+        open( STDIN, '<', $in_fn ) or die "Can't redirect STDIN: $!";
+    }
+
+    # List form of system( ) to eliminate need for quoting.
+    my $raw_status = system(@$cmd);
+    my $system_errno = $!;    # save errno from system( ) itself, if any
+    if ( defined($stdin) ) {
+        unlink($in_fn) if defined $stdin;
+        open( STDIN, '<&', $saved_stdin ) or die "Can't restore STDIN: $!";
+        close($saved_stdin);
+    }
+
+    # Restore immediately, before doing anything else.
+    open( STDOUT, '>&', $saved_stdout ) or die "Can't restore STDOUT: $!";
+    open( STDERR, '>&', $saved_stderr ) or die "Can't restore STDERR: $!";
+    close($saved_stdout);
+    close($saved_stderr);
+
+    die "Failed to execute '$cmd': $system_errno" if $raw_status == -1;
+    my $exit_code = $raw_status >> 8;
+
+    seek( $out_fh, 0, 0 );
+    seek( $err_fh, 0, 0 );
+    local $/;                           # slurp mode
+    $$stdout = <$out_fh>;
+    $$stderr = <$err_fh>;
+    close($out_fh);
+    close($err_fh);
+
+    return $exit_code;
+}
 
 sub is_dot_available {
     $dot_bin = which('dot');
@@ -17,7 +81,7 @@ sub is_dot_available {
         return;
     }
     my ($dot_out, $dot_err);
-    run3( [ $dot_bin, '-h' ], \undef, \$dot_out, \$dot_err );
+    run3simple( [ $dot_bin, '-h' ], undef, \$dot_out, \$dot_err );
     if ( $dot_err !~ /.*Usage:/s ) {
         warn "Your external dot binary seems not to run properly. Expect tests to fail.\n";
         return;
@@ -28,7 +92,7 @@ sub is_dot_available {
 sub dot_no_overlap_mode_ok {
     my ($dot_out, $dot_err);
     my $dot_in = make_test_gv(', overlap=0');
-    run3( [ $dot_bin, '-Tdot' ], \$dot_in, \$dot_out, \$dot_err );
+    run3simple( [ $dot_bin, '-Tdot' ], \$dot_in, \$dot_out, \$dot_err );
     if ( $dot_out !~ /^digraph/ || $dot_out !~ /bb="(.*?)"/s ) {
         warn "Your external dot binary does not seem to produce proper output. Expect tests to fail.\n";
         return;
@@ -37,12 +101,14 @@ sub dot_no_overlap_mode_ok {
     if ( scalar(@bb) != 4 || ($bb[3]+0) > 10*($bb[2]+0) ) {
         warn "Your external dot binary produces improbably stretched graphs (non-overlap mode).\n" .
              "Not all output formats may support this.\n" .
-             "Please, check whether an updated version is available.\n";
+             "Please, check whether an updated version of the dot binary is available.\n";
         # not ok: bmp, gd, gd2, jpe, jpeg, jpg, png, ps2, tif, tiff, vt, vt-24bit, vt-4up, vt-6up, vt-8up, vt-8up2, wbmp, webp
         $issue_stretch = 1;
     }
     if ( $dot_err =~ /triangulation/s ) {
-        warn "Your external dot binary may have trouble producing non-overlapping station markers.\n";
+        warn "Your external dot binary may have trouble producing non-overlapping station\n" .
+             "markers with some drivers. You may have to use 'overlap=1' when producing\n" .
+             "graphs (default is 0).";
         $issue_prism = 1;
     }
 }
@@ -50,7 +116,7 @@ sub dot_no_overlap_mode_ok {
 sub dot_overlap_mode_ok {
     my ($dot_out, $dot_err);
     my $dot_in = make_test_gv('');
-    run3( [ $dot_bin, '-Tdot' ], \$dot_in, \$dot_out, \$dot_err );
+    my $res = run3simple( [ $dot_bin, '-Tdot' ], \$dot_in, \$dot_out, \$dot_err );
     if ( $dot_out !~ /^digraph/ || $dot_out !~ /bb="(.*?)"/s ) {
         warn "Your external dot binary does not seem to produce proper output. Expect tests to fail.\n";
         return;
@@ -59,7 +125,7 @@ sub dot_overlap_mode_ok {
     if ( scalar(@bb) != 4 || ($bb[3]+0) > 10*($bb[2]+0) ) {
         warn "Your external dot binary produces improbably stretched graphs (overlap mode).\n" .
              "Not all output formats may support this.\n" .
-             "Please, check whether an updated version is available.\n";
+             "Please, check whether an updated version of the dot binary is available.\n";
         # not ok: bmp, gd, gd2, jpe, jpeg, jpg, png, ps2, tif, tiff, vt, vt-24bit, vt-4up, vt-6up, vt-8up, vt-8up2, wbmp, webp
         $issue_stretch = 1;
     }
@@ -84,8 +150,6 @@ EOF
 if ( is_dot_available( ) ) {
     dot_overlap_mode_ok( );
     dot_no_overlap_mode_ok( );
-    # if $issue_stretch: consider writing config and not testing bitmap output formats
-    # if $issue_prism: consider writing config and disabling by default no-overlap; or ask for different algorithm?
 }
 
 WriteMakefile(
@@ -113,7 +177,7 @@ WriteMakefile(
         'Map::Tube::Exception' => '3.18',
         'Graph'                => '0.9732',
     },
-    dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
+    dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', TARFLAGS => '--owner=0 --group=0 -cvf', },
     test  => { TESTS => 't/*.t xt/*.t' },
     clean => { FILES => 'Map-Tube-Plugin-Graph-*' },
     META_MERGE => {

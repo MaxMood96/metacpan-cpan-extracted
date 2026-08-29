@@ -16,16 +16,17 @@ my $temporary = tempdir(CLEANUP => 1);
 my $baseline = File::Spec->catfile($temporary, 'baseline.json');
 my $candidate = File::Spec->catfile($temporary, 'candidate.json');
 
+# Keep every measured workload above coarse process-CPU clock resolution.
 my @common = (
     '--repeats=1',
-    '--iterations=20',
-    '--pool=2',
-    '--clients=2',
-    '--messages=2',
-    '--connections=4',
-    '--warmup-iterations=2',
-    '--warmup-messages=1',
-    '--warmup-connections=1',
+    '--iterations=25000',
+    '--pool=64',
+    '--clients=16',
+    '--messages=500',
+    '--connections=500',
+    '--warmup-iterations=100',
+    '--warmup-messages=10',
+    '--warmup-connections=10',
 );
 
 is(system($^X, $script, @common, "--json=$baseline"), 0,

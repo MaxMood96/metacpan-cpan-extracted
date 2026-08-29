@@ -2,7 +2,7 @@ package PAGI::Server;
 use strict;
 use warnings;
 
-our $VERSION = '0.002009';
+our $VERSION = '0.002010';
 
 # Future::XS support - opt-in via PAGI_FUTURE_XS=1 environment variable
 # Must be loaded before Future to take effect, so we check env var in BEGIN
@@ -4182,7 +4182,7 @@ async sub _run_lifespan_startup {
     my $scope = {
         type => 'lifespan',
         pagi => {
-            version      => '0.4',
+            version      => '0.5',
             spec_version => '0.3',
             is_worker    => $self->{is_worker} // 0,
             worker_num   => $self->{worker_num},  # undef for single-worker, 1-N for multi-worker

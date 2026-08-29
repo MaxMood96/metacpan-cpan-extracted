@@ -1,0 +1,48 @@
+---
+abstract: 'The spec MCP tools, as an MCP::Server::KnowledgeStore::Tools plugin'
+author:
+  - 'Wesley Schwengle <waterkip@cpan.org>'
+build_requires:
+  File::Spec: '0'
+  IO::Handle: '0'
+  IPC::Open3: '0'
+  Import::Into: '1.002003'
+  MCP::Client: '0'
+  MCP::Server: '0'
+  MCP::Server::KnowledgeStore::Store: '0'
+  Mojolicious::Lite: '0'
+  Sub::Override: '0'
+  Test::Mojo: '0'
+  Test::More: '0.96'
+  Test::Most: '0'
+  perl: v5.38.0
+configure_requires:
+  ExtUtils::MakeMaker: '0'
+  perl: v5.38.0
+dynamic_config: 0
+generated_by: 'Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150010'
+license: bsd
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: MCP-Server-KnowledgeStore-Tools-Spec
+provides:
+  MCP::Server::KnowledgeStore::Tools::Spec:
+    file: lib/MCP/Server/KnowledgeStore/Tools/Spec.pm
+    version: '0.001'
+requires:
+  MCP: '0.15'
+  MCP::Server::KnowledgeStore: '0.001'
+  MCP::Server::KnowledgeStore::Tools::Support: '0'
+  Mojo::Base: '0'
+  Mojo::JSON: '0'
+  Mojolicious: '9.36'
+  perl: v5.38.0
+resources:
+  repository: git://gitlab.com/opndev/projects/mcp/tools-spec.git
+version: '0.001'
+x_contributors:
+  - 'Wesley Schwengle <wesleys@opperschaap.net>'
+x_generated_by_perl: v5.42.3
+x_serialization_backend: 'YAML::Tiny version 1.76'
+x_spdx_expression: BSD-3-Clause

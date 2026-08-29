@@ -5,7 +5,6 @@ use warnings;
 
 use Test::More;
 
-use Crypt::Passwd::XS 'crypt';
 use Crypt::Passphrase;
 
 my $passphrase = Crypt::Passphrase->new(
@@ -38,6 +37,17 @@ ok($passphrase->needs_rehash($hash4));
 my $hash5 = 'tesvSclXGCVNk';
 ok($passphrase->verify_password('test1234', $hash5));
 ok($passphrase->needs_rehash($hash5));
+
+my $passphrase2 = Crypt::Passphrase->new(
+	encoder => {
+		module => 'Linux',
+		type   => 'des',
+	},
+);
+
+my $hash6 = $passphrase2->hash_password($password);
+ok($passphrase2->verify_password($password, $hash6), 'Self-generated password validates');
+ok(!$passphrase2->needs_rehash($hash6), 'Self-generated password doesn\'t need to be regenerated');
 
 done_testing;
 

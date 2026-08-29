@@ -1,0 +1,91 @@
+---
+abstract: 'MCP server for shared memories, skills, specs, and agents'
+author:
+  - 'Wesley Schwengle <waterkip@cpan.org>'
+build_requires:
+  Cwd: '0'
+  File::Spec: '0'
+  File::Temp: '0'
+  IO::Handle: '0'
+  IPC::Open3: '0'
+  Import::Into: '1.002003'
+  MCP::Client: '0'
+  MCP::Server::Context: '0'
+  Sub::Override: '0'
+  Test::Mojo: '0'
+  Test::More: '0.96'
+  Test::Most: '0'
+  perl: v5.38.0
+configure_requires:
+  ExtUtils::MakeMaker: '0'
+  perl: v5.38.0
+dynamic_config: 0
+generated_by: 'Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150010'
+license: bsd
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: MCP-Server-KnowledgeStore
+provides:
+  MCP::Server::KnowledgeStore:
+    file: lib/MCP/Server/KnowledgeStore.pm
+    version: '0.001'
+  MCP::Server::KnowledgeStore::Command::agent:
+    file: lib/MCP/Server/KnowledgeStore/Command/agent.pm
+    version: '0.001'
+  MCP::Server::KnowledgeStore::Command::rebuild_vectors:
+    file: lib/MCP/Server/KnowledgeStore/Command/rebuild_vectors.pm
+    version: '0.001'
+  MCP::Server::KnowledgeStore::Command::token:
+    file: lib/MCP/Server/KnowledgeStore/Command/token.pm
+    version: '0.001'
+  MCP::Server::KnowledgeStore::ResourceTemplates:
+    file: lib/MCP/Server/KnowledgeStore/ResourceTemplates.pm
+    version: '0.001'
+  MCP::Server::KnowledgeStore::Store:
+    file: lib/MCP/Server/KnowledgeStore/Store.pm
+    version: '0.001'
+  MCP::Server::KnowledgeStore::TermWeight:
+    file: lib/MCP/Server/KnowledgeStore/TermWeight.pm
+    version: '0.001'
+  MCP::Server::KnowledgeStore::Tools:
+    file: lib/MCP/Server/KnowledgeStore/Tools.pm
+    version: '0.001'
+  MCP::Server::KnowledgeStore::Tools::Revisioned:
+    file: lib/MCP/Server/KnowledgeStore/Tools/Revisioned.pm
+    version: '0.001'
+  MCP::Server::KnowledgeStore::Tools::Support:
+    file: lib/MCP/Server/KnowledgeStore/Tools/Support.pm
+    version: '0.001'
+requires:
+  Carp: '0'
+  Crypt::PRNG: '0'
+  Digest::SHA: '0'
+  Getopt::Long: '0'
+  Lingua::TermWeight: '0'
+  Lingua::TermWeight::WordSegmenter::SplitBySpace: '0'
+  List::Util: '0'
+  MCP: '0.15'
+  MCP::Server: '0'
+  Module::Pluggable: '0'
+  Module::Pluggable::Object: '0'
+  Mojo::Base: '0'
+  Mojo::File: '0'
+  Mojo::JSON: '0'
+  Mojo::Pg: '4.27'
+  Mojo::Util: '0'
+  Mojolicious: '9.36'
+  Mojolicious::Commands: '0'
+  Object::Pad: '0'
+  Scalar::Util: '0'
+  YAML::XS: '0'
+  lib: '0'
+  perl: v5.38.0
+resources:
+  repository: git://gitlab.com/opndev/projects/mcp/server.git
+version: '0.001'
+x_contributors:
+  - 'Wesley Schwengle <wesleys@opperschaap.net>'
+x_generated_by_perl: v5.42.3
+x_serialization_backend: 'YAML::Tiny version 1.76'
+x_spdx_expression: BSD-3-Clause

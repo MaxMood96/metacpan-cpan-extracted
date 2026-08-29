@@ -1,7 +1,33 @@
 CHANGES
 -------
 
-  2.217 1 February 2027
+  2.224 28 August 2026
+
+    * Update to version 2.224
+      Fri Aug 28 15:34:21 2026 +0100
+      c7c27bdc4247392950e0ee5d7ded7443c35ec585
+
+    * remove 5.6-specific code and make 5.8 the min versionsupported
+      Wed Aug 26 16:06:58 2026 +0100
+      6f0fb0385e48b51d350985b0d0462230f5a0e19c
+
+    * Merge pull request #9 from pmqs/dependabot/github_actions/actions/checkout-7
+      Fri Jul 3 12:44:32 2026 +0100
+      de51864e14d9db0b536c17fcdd1f40e9eacd4507
+
+    * Bump actions/checkout from 6 to 7
+      Wed Jul 1 21:35:53 2026 +0000
+      caae053949f66798dafd3b15455ac8453965519e
+
+    * fix spelling typo
+      Tue Feb 24 19:46:31 2026 +0000
+      b16ae901c355d867ebac40502bb8c215f9ef10fb
+
+    * Update Changes for 2.217
+      Sun Feb 1 11:32:35 2026 +0000
+      8714f89321b5efbab21f6e5da2c718b34aeefa9c
+
+  2.217 1 February 2026
 
     * Update release date in README
       Sun Feb 1 11:18:58 2026 +0000

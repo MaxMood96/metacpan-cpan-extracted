@@ -20,8 +20,9 @@ WriteMakefile1(
   },
 
   PREREQ_PM => {
-    'Win32::API'         => 0.77,
-    'Win32::Console'     => '0.10',
+    'Win32'          => 0.44,
+    'Win32::API'     => 0.77,
+    'Win32::Console' => '0.10',
   },
 
   TEST_REQUIRES => {
@@ -45,14 +46,16 @@ WriteMakefile1(
     },
     prereqs => {
       runtime => {
-        requires => {
-          'Encode'         => 0,
-          'Exporter'       => 0,
-          'Hash::Util'     => 0,
-          'Win32'          => 0.44,
-          'Win32API::File' => 0.08,
-          'version'        => 0.77,
-        },
+        # requires => {
+        #   'bytes'          => 0,
+        #   'Carp'           => 0,
+        #   'Encode'         => 0,
+        #   'Exporter'       => 0,
+        #   'Hash::Util'     => 0,
+        #   'Scalar::Util'   => 0,
+        #   'Win32API::File' => 0.08,
+        #   'version'        => 0,
+        # },
         recommends => {
           'Pod::Autopod'       => 0,
           'Pod::Usage'         => 0,

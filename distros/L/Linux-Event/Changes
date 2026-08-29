@@ -1,5 +1,47 @@
 Revision history for Linux-Event
 
+0.105  2026-08-29
+    - Add query-driven Loop introspection through running, count, has, objects,
+      inspect, census, resources, why_alive, and pressure. Optional profile,
+      stats, and reset_stats expose native timing and counters without adding
+      permanent managed-object bookkeeping to the dispatch hot path.
+    - Add explicit Stream callback batching. Raw subclasses may coalesce reads
+      with read_batch_bytes, while framed subclasses may select bounded
+      on_messages arrays with message_batch_size. Partial batches flush at the
+      current read-drain boundary and never wait for future input.
+    - Avoid inactive Stream deadline bookkeeping during read-interest and
+      write-queue transitions. Focused watcher-state benchmarks retain Loop as
+      the sole epoll owner and document why no cross-extension watcher ABI was
+      introduced.
+    - Split the Stream XS implementation into separately compiled state,
+      transport, callback, input, delivery, read, write, transition, and
+      per-framer C units behind one private header and one unchanged extension.
+    - Move Stream subclass declarations, option validation, callback
+      resolution, and immutable descriptor caching into the private
+      Linux::Event::Stream::_Descriptor module while retaining Stream.pm as the
+      public connection-lifecycle implementation.
+    - Keep the deliberately tiny deadline Timer type beside Stream lifecycle
+      policy, avoiding a new public module or unnecessary implementation layer.
+    - Make the Timer microbenchmark fall back from the high-resolution process
+      CPU clock to Perl process times, and report CPU timing as unavailable
+      instead of failing installation when neither clock advances. Record the
+      selected clock source in benchmark JSON and cover the fallback path.
+    - Report non-Linux platforms as OS unsupported during configuration so
+      CPAN Testers classifies the intentionally Linux-only distribution as NA
+      rather than UNKNOWN. Add regression coverage for the configuration guard.
+    - Add GitHub Actions coverage for supported Perl versions, distribution
+      construction, metadata, POD, and native source packaging; publish CI,
+      license, Perl, CPAN, and Kwalitee badges and complete the async extension
+      boundary documentation. Exclude MakeMaker backup files from generated
+      source archives.
+
+0.104  2026-08-28
+    - Make the performance-regression and Timer benchmark smoke tests portable
+      to systems whose process CPU clock does not advance for extremely small
+      workloads. The benchmarks still reject non-positive timing samples.
+    - Publish complete META spec 2 repository, bugtracker, and public-module
+      provider metadata, plus security and contribution policies.
+
 0.103  2026-08-27
     - Make raw Loop registration handles stable lifecycle tokens. Cancelled,
       replaced, and Loop-destroyed handles are now inert even after native

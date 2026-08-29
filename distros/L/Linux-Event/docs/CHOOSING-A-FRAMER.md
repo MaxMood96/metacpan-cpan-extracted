@@ -149,5 +149,11 @@ Set `max_frame` for untrusted framed input. Stream also has a class-level
 as `Linux::Event::Error` objects with type `framing`, invokes
 `on_error` when defined, and closes the Stream.
 
+Every built-in framer can use explicit `message_batch_size` policy with
+`on_messages` when a pipelined workload benefits from fewer Perl callback
+crossings. Batching changes delivery shape, not wire framing, and never waits
+for future input to fill an array. See [`FRAMING.md`](FRAMING.md) for the exact
+flush and transition boundaries.
+
 See [`FRAMING.md`](FRAMING.md) for the complete declaration and extension
 contract.

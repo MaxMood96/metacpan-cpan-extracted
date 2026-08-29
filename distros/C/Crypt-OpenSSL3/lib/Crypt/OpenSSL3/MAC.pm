@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::MAC;
-$Crypt::OpenSSL3::MAC::VERSION = '0.011';
+$Crypt::OpenSSL3::MAC::VERSION = '0.012';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::MAC - Message authentication code algorithms
 
 =head1 VERSION
 
-version 0.011
+version 0.012
 
 =head1 SYNOPSIS
 

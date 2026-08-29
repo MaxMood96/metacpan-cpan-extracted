@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.103';
+our $VERSION = '0.105';
 
 use Carp qw(croak);
 use Errno ();
@@ -386,20 +386,20 @@ sub _attach_to_loop ($self, $loop) {
 sub _register_watchers ($self) {
     my $loop = $self->{loop};
     $self->{pid_watcher} = $loop->watch(
-        fd => $self->{pidfd}, data => $self,
+        fd => $self->{pidfd}, _internal => 1, data => $self,
         read => \&_pid_ready, error => \&_pid_ready,
         _callback_data_arg => 1,
     );
     if ($self->{stdout_fh}) {
         $self->{stdout_watcher} = $loop->watch(
-            fh => $self->{stdout_fh}, data => $self,
+            fh => $self->{stdout_fh}, _internal => 1, data => $self,
             read => \&_stdout_ready, error => \&_stdout_ready,
             _callback_data_arg => 1,
         );
     }
     if ($self->{stderr_fh}) {
         $self->{stderr_watcher} = $loop->watch(
-            fh => $self->{stderr_fh}, data => $self,
+            fh => $self->{stderr_fh}, _internal => 1, data => $self,
             read => \&_stderr_ready, error => \&_stderr_ready,
             _callback_data_arg => 1,
         );
@@ -409,7 +409,7 @@ sub _register_watchers ($self) {
             close delete $self->{stdin_fh};
         } else {
             $self->{stdin_watcher} = $loop->watch(
-                fh => $self->{stdin_fh}, data => $self,
+                fh => $self->{stdin_fh}, _internal => 1, data => $self,
                 write => \&_stdin_ready, error => \&_stdin_error,
                 _callback_data_arg => 1,
             );

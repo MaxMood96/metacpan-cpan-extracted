@@ -8,14 +8,237 @@
 
 #include "tui_engine.h"
 #include "cli_common.h"
+#include "tui_shm.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
 #include <ctype.h>
 #include <math.h>
-#include <unistd.h>
 #include <time.h>
+
+#if defined(_WIN32) || defined(_WIN64)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <unistd.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
+#endif
+
+/* ========================================================================= */
+/* Shared Memory Binary Ring Buffer Implementation                           */
+/* ========================================================================= */
+
+bool histo_shm_create(histo_shm_t *shm, const char *path, size_t capacity, uint32_t entry_size, uint64_t flags) {
+    if (!shm || !path || capacity == 0 || entry_size == 0) return false;
+    memset(shm, 0, sizeof(*shm));
+    shm->fd = -1;
+    strncpy(shm->path, path, sizeof(shm->path) - 1);
+    shm->is_creator = true;
+
+    /* Ensure capacity is a power of two */
+    size_t cap = 1;
+    while (cap < capacity) cap <<= 1;
+
+    size_t total_size = sizeof(histo_shm_ring_t) + (cap * entry_size);
+    shm->size = total_size;
+
+#if defined(_WIN32) || defined(_WIN64)
+    HANDLE hMap = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
+                                     (DWORD)(total_size >> 32), (DWORD)(total_size & 0xFFFFFFFF), path);
+    if (!hMap) return false;
+    shm->os_handle = (void *)hMap;
+    shm->ring = (histo_shm_ring_t *)MapViewOfFile(hMap, FILE_MAP_ALL_ACCESS, 0, 0, total_size);
+    if (!shm->ring) {
+        CloseHandle(hMap);
+        shm->os_handle = NULL;
+        return false;
+    }
+#else
+    int fd = -1;
+    if (path[0] == '/') {
+        fd = shm_open(path, O_CREAT | O_RDWR | O_TRUNC, 0666);
+    }
+    if (fd < 0) {
+        fd = open(path, O_CREAT | O_RDWR | O_TRUNC, 0666);
+    }
+    if (fd < 0) return false;
+
+    if (ftruncate(fd, (off_t)total_size) != 0) {
+        close(fd);
+        if (path[0] == '/') shm_unlink(path);
+        return false;
+    }
+
+    void *ptr = mmap(NULL, total_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (ptr == MAP_FAILED) {
+        close(fd);
+        if (path[0] == '/') shm_unlink(path);
+        return false;
+    }
+
+    shm->fd = fd;
+    shm->ring = (histo_shm_ring_t *)ptr;
+#endif
+
+    memset(shm->ring, 0, sizeof(histo_shm_ring_t));
+    shm->ring->magic = HISTO_SHM_MAGIC;
+    shm->ring->version = HISTO_SHM_VERSION;
+    shm->ring->entry_size = entry_size;
+    shm->ring->mask = (uint64_t)(cap - 1);
+    shm->ring->head = 0;
+    shm->ring->tail = 0;
+    shm->ring->dropped = 0;
+    shm->ring->flags = flags;
+
+    return true;
+}
+
+bool histo_shm_open(histo_shm_t *shm, const char *path) {
+    if (!shm || !path) return false;
+    memset(shm, 0, sizeof(*shm));
+    shm->fd = -1;
+    strncpy(shm->path, path, sizeof(shm->path) - 1);
+    shm->is_creator = false;
+
+#if defined(_WIN32) || defined(_WIN64)
+    HANDLE hMap = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, path);
+    if (!hMap) return false;
+    shm->os_handle = (void *)hMap;
+    histo_shm_ring_t *hdr = (histo_shm_ring_t *)MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, sizeof(histo_shm_ring_t));
+    if (!hdr) {
+        CloseHandle(hMap);
+        shm->os_handle = NULL;
+        return false;
+    }
+    if (hdr->magic != HISTO_SHM_MAGIC) {
+        UnmapViewOfFile(hdr);
+        CloseHandle(hMap);
+        shm->os_handle = NULL;
+        return false;
+    }
+    size_t total_size = sizeof(histo_shm_ring_t) + ((hdr->mask + 1) * hdr->entry_size);
+    UnmapViewOfFile(hdr);
+
+    shm->size = total_size;
+    shm->ring = (histo_shm_ring_t *)MapViewOfFile(hMap, FILE_MAP_ALL_ACCESS, 0, 0, total_size);
+    if (!shm->ring) {
+        CloseHandle(hMap);
+        shm->os_handle = NULL;
+        return false;
+    }
+#else
+    int fd = -1;
+    if (path[0] == '/') {
+        fd = shm_open(path, O_RDWR, 0666);
+    }
+    if (fd < 0) {
+        fd = open(path, O_RDWR, 0666);
+    }
+    if (fd < 0) return false;
+
+    struct stat st;
+    if (fstat(fd, &st) != 0 || st.st_size < (off_t)sizeof(histo_shm_ring_t)) {
+        close(fd);
+        return false;
+    }
+
+    size_t total_size = (size_t)st.st_size;
+    void *ptr = mmap(NULL, total_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (ptr == MAP_FAILED) {
+        close(fd);
+        return false;
+    }
+
+    histo_shm_ring_t *ring = (histo_shm_ring_t *)ptr;
+    if (ring->magic != HISTO_SHM_MAGIC) {
+        munmap(ptr, total_size);
+        close(fd);
+        return false;
+    }
+
+    shm->fd = fd;
+    shm->size = total_size;
+    shm->ring = ring;
+#endif
+
+    return true;
+}
+
+void histo_shm_close(histo_shm_t *shm) {
+    if (!shm || !shm->ring) return;
+
+#if defined(_WIN32) || defined(_WIN64)
+    if (shm->ring) UnmapViewOfFile(shm->ring);
+    if (shm->os_handle) CloseHandle((HANDLE)shm->os_handle);
+#else
+    if (shm->ring && shm->size > 0) {
+        munmap(shm->ring, shm->size);
+    }
+    if (shm->fd >= 0) {
+        close(shm->fd);
+    }
+    if (shm->is_creator && shm->path[0] != '\0') {
+        if (shm->path[0] == '/') shm_unlink(shm->path);
+        else unlink(shm->path);
+    }
+#endif
+    shm->ring = NULL;
+    shm->fd = -1;
+    shm->os_handle = NULL;
+    shm->size = 0;
+}
+
+bool histo_shm_push(histo_shm_ring_t *ring, const void *entry) {
+    if (!ring || !entry) return false;
+    uint64_t head = ring->head;
+    uint64_t tail = ring->tail;
+    uint64_t cap = ring->mask + 1;
+
+    if (head - tail >= cap) {
+        ring->dropped++;
+        ring->tail = head - cap + 1;
+    }
+
+    uint64_t idx = head & ring->mask;
+    memcpy(ring->data + (idx * ring->entry_size), entry, ring->entry_size);
+    ring->head = head + 1;
+    return true;
+}
+
+size_t histo_shm_pop_batch(histo_shm_ring_t *ring, void *out_entries, size_t max_entries) {
+    if (!ring || !out_entries || max_entries == 0) return 0;
+    uint64_t head = ring->head;
+    uint64_t tail = ring->tail;
+
+    if (tail >= head) return 0;
+
+    uint64_t available = head - tail;
+    uint64_t cap = ring->mask + 1;
+    if (available > cap) {
+        tail = head - cap;
+        ring->tail = tail;
+        available = cap;
+    }
+
+    size_t count = (available < (uint64_t)max_entries) ? (size_t)available : max_entries;
+    uint8_t *dest = (uint8_t *)out_entries;
+
+    for (size_t i = 0; i < count; ++i) {
+        uint64_t idx = (tail + i) & ring->mask;
+        memcpy(dest + (i * ring->entry_size), ring->data + (idx * ring->entry_size), ring->entry_size);
+    }
+
+    ring->tail = tail + count;
+    return count;
+}
+
+/* ========================================================================= */
+/* TUI Engine Internal Helpers                                               */
+/* ========================================================================= */
 
 static double get_time_now_sec(void) {
     struct timespec ts;
@@ -43,18 +266,48 @@ static void reservoir_push(tui_reservoir_t *r, const double *cols, size_t num_co
     if (num_cols > TUI_MAX_COLS) num_cols = TUI_MAX_COLS;
     if (num_cols > r->num_cols) r->num_cols = num_cols;
 
+    size_t idx;
     if (r->count < r->cap) {
-        for (size_t c = 0; c < TUI_MAX_COLS; ++c) {
-            r->col_data[c][r->count] = (c < num_cols) ? cols[c] : 0.0;
-        }
-        if (r->weights) r->weights[r->count] = w;
-        r->count++;
+        idx = r->count++;
     } else {
-        for (size_t c = 0; c < TUI_MAX_COLS; ++c) {
-            r->col_data[c][r->head] = (c < num_cols) ? cols[c] : 0.0;
+        idx = r->head;
+        r->head = (r->head + 1 < r->cap) ? r->head + 1 : 0;
+    }
+
+    for (size_t c = 0; c < num_cols; ++c) {
+        r->col_data[c][idx] = cols[c];
+    }
+    for (size_t c = num_cols; c < r->num_cols; ++c) {
+        r->col_data[c][idx] = 0.0;
+    }
+    if (r->weights) r->weights[idx] = w;
+}
+
+static void reservoir_push_batch(tui_reservoir_t *r, const double bcols[][TUI_MAX_COLS], const size_t *ncols, const double *weights, size_t n) {
+    if (!r || !r->col_data[0] || n == 0) return;
+
+    for (size_t i = 0; i < n; ++i) {
+        size_t nc = ncols ? ncols[i] : 1;
+        if (nc > TUI_MAX_COLS) nc = TUI_MAX_COLS;
+        if (nc > r->num_cols) r->num_cols = nc;
+
+        size_t idx;
+        if (r->count < r->cap) {
+            idx = r->count++;
+        } else {
+            idx = r->head;
+            r->head = (r->head + 1 < r->cap) ? r->head + 1 : 0;
         }
-        if (r->weights) r->weights[r->head] = w;
-        r->head = (r->head + 1) % r->cap;
+
+        for (size_t c = 0; c < nc; ++c) {
+            r->col_data[c][idx] = bcols[i][c];
+        }
+        for (size_t c = nc; c < r->num_cols; ++c) {
+            r->col_data[c][idx] = 0.0;
+        }
+        if (r->weights) {
+            r->weights[idx] = weights ? weights[i] : 1.0;
+        }
     }
 }
 
@@ -85,8 +338,8 @@ static size_t get_reservoir_window(tui_engine_t *eng, double *out_x, double *out
     size_t win = (eng->window_size > 0 && eng->window_size < total) ? eng->window_size : total;
     size_t start_offset = total - win;
 
-    int cx = (col_x >= 1 && col_x <= TUI_MAX_COLS) ? col_x - 1 : 0;
-    int cy = (col_y >= 1 && col_y <= TUI_MAX_COLS) ? col_y - 1 : 1;
+    int cx = (col_x >= 1 && col_x <= (int)eng->reservoir.num_cols) ? col_x - 1 : 0;
+    int cy = (col_y >= 1 && col_y <= (int)eng->reservoir.num_cols) ? col_y - 1 : (eng->reservoir.num_cols > 1 ? 1 : 0);
 
     for (size_t i = 0; i < win; ++i) {
         size_t idx = (eng->reservoir.count < eng->reservoir.cap) ?
@@ -101,98 +354,279 @@ static size_t get_reservoir_window(tui_engine_t *eng, double *out_x, double *out
 
 static void *ingest_worker_thread(void *arg) {
     tui_engine_t *eng = (tui_engine_t *)arg;
-    if (!eng || !eng->in_stream) return NULL;
+    if (!eng) return NULL;
+
+    /* Shared Memory Ingestion Mode */
+    if (eng->is_shm) {
+        if (!eng->shm.ring) return NULL;
+        const size_t max_b = 256;
+        uint8_t raw_batch[256 * 32];
+        double bx[256], by[256], bw[256];
+        double bcols[256][TUI_MAX_COLS];
+        size_t entry_sz = eng->shm.ring->entry_size;
+        if (entry_sz == 0 || entry_sz > 32) entry_sz = sizeof(double);
+
+        double last_calc_time = get_time_now_sec();
+        uint64_t last_calc_samples = 0;
+
+        while (is_engine_running(eng)) {
+            size_t n = histo_shm_pop_batch(eng->shm.ring, raw_batch, max_b);
+            if (n == 0) {
+                usleep(500);
+                double now = get_time_now_sec();
+                if (now - last_calc_time >= 0.25) {
+                    histo_mutex_lock(&eng->mutex);
+                    uint64_t diff = eng->total_samples - last_calc_samples;
+                    eng->current_rate_ops = (double)diff / (now - last_calc_time);
+                    last_calc_time = now;
+                    last_calc_samples = eng->total_samples;
+                    histo_mutex_unlock(&eng->mutex);
+                }
+                continue;
+            }
+
+            double scale = (eng->scale_input > 0.0) ? eng->scale_input : 1.0;
+            bool is_2d = eng->is_2d;
+            size_t nvals = entry_sz / sizeof(double);
+            if (nvals == 0) nvals = 1;
+
+            for (size_t i = 0; i < n; ++i) {
+                const double *vals = (const double *)(raw_batch + (i * entry_sz));
+                for (size_t c = 0; c < nvals && c < TUI_MAX_COLS; ++c) {
+                    bcols[i][c] = vals[c] * scale;
+                }
+                for (size_t c = nvals; c < TUI_MAX_COLS; ++c) {
+                    bcols[i][c] = 0.0;
+                }
+                bx[i] = bcols[i][0];
+                by[i] = (nvals > 1) ? bcols[i][1] : 0.0;
+                bw[i] = (nvals > 2) ? vals[2] : 1.0;
+            }
+
+            double now = get_time_now_sec();
+            histo_mutex_lock(&eng->mutex);
+
+            if (eng->decay_lambda > 0.0 && eng->last_decay_time > 0.0) {
+                double dt = now - eng->last_decay_time;
+                if (dt >= 0.1) {
+                    double factor = exp(-eng->decay_lambda * dt);
+                    if (eng->live_1d) histo_scale(eng->live_1d, factor);
+                    if (eng->live_2d) histo2d_scale(eng->live_2d, factor);
+                    eng->last_decay_time = now;
+                }
+            }
+
+            if (is_2d && eng->live_2d) {
+                for (size_t i = 0; i < n; ++i) {
+                    histo2d_fill_w(eng->live_2d, bx[i], by[i], bw[i]);
+                }
+            } else if (eng->live_1d) {
+                histo_fill_n(eng->live_1d, n, bx, NULL);
+            }
+            for (size_t i = 0; i < n; ++i) {
+                reservoir_push(&eng->reservoir, bcols[i], nvals, bw[i]);
+            }
+            eng->total_samples += n;
+            histo_mutex_unlock(&eng->mutex);
+
+            if (now - last_calc_time >= 0.25) {
+                histo_mutex_lock(&eng->mutex);
+                uint64_t diff = eng->total_samples - last_calc_samples;
+                eng->current_rate_ops = (double)diff / (now - last_calc_time);
+                last_calc_time = now;
+                last_calc_samples = eng->total_samples;
+                histo_mutex_unlock(&eng->mutex);
+            }
+        }
+        return NULL;
+    }
+
+    if (!eng->in_stream) return NULL;
 
     char line[4096];
-    const size_t batch_max = 64;
-    double batch_x[64];
-    double batch_y[64];
-    double batch_w[64];
-    double batch_cols[64][TUI_MAX_COLS];
-    size_t batch_ncols[64];
+    const size_t batch_max = 4096;
+    double *batch_x = (double *)malloc(batch_max * sizeof(double));
+    double *batch_y = (double *)malloc(batch_max * sizeof(double));
+    double *batch_w = (double *)malloc(batch_max * sizeof(double));
+    double (*batch_cols)[TUI_MAX_COLS] = (double (*)[TUI_MAX_COLS])malloc(batch_max * sizeof(*batch_cols));
+    size_t *batch_ncols = (size_t *)malloc(batch_max * sizeof(size_t));
+    double *raw_buf = (double *)malloc(batch_max * 3 * sizeof(double));
     size_t batch_len = 0;
+
+    if (!batch_x || !batch_y || !batch_w || !batch_cols || !batch_ncols || !raw_buf) {
+        if (batch_x) free(batch_x);
+        if (batch_y) free(batch_y);
+        if (batch_w) free(batch_w);
+        if (batch_cols) free(batch_cols);
+        if (batch_ncols) free(batch_ncols);
+        if (raw_buf) free(raw_buf);
+        return NULL;
+    }
 
     double last_calc_time = get_time_now_sec();
     double last_flush_time = last_calc_time;
     uint64_t last_calc_samples = 0;
 
     while (is_engine_running(eng)) {
-        if (!fgets(line, sizeof(line), eng->in_stream)) {
-            histo_mutex_lock(&eng->mutex);
-            if (batch_len > 0) {
-                int val_col = eng->val_col;
-                int x_col = eng->x_col;
-                int y_col = eng->y_col;
-                int w_col = eng->w_col;
-                bool is_2d = eng->is_2d;
-                bool has_w = eng->has_weights;
+        if (eng->is_binary) {
+            size_t n_vals_per_sample = eng->is_2d ? (eng->has_weights ? 3 : 2) : (eng->has_weights ? 2 : 1);
+            size_t n_req = batch_max - batch_len;
+            if (n_req == 0) n_req = batch_max;
 
-                for (size_t i = 0; i < batch_len; ++i) {
-                    size_t nc = batch_ncols[i];
-                    int v_idx = (val_col >= 1 && val_col <= (int)nc) ? val_col - 1 : 0;
-                    int x_idx = (x_col >= 1 && x_col <= (int)nc) ? x_col - 1 : 0;
-                    int y_idx = (y_col >= 1 && y_col <= (int)nc) ? y_col - 1 : (nc > 1 ? 1 : 0);
-                    int w_idx = (w_col >= 1 && w_col <= (int)nc) ? w_col - 1 : -1;
+            size_t n_read = fread(raw_buf, sizeof(double) * n_vals_per_sample, n_req, eng->in_stream);
+            if (n_read == 0) {
+                if (feof(eng->in_stream)) {
+                    histo_mutex_lock(&eng->mutex);
+                    if (batch_len > 0) {
+                        int val_col = eng->val_col;
+                        int x_col = eng->x_col;
+                        int y_col = eng->y_col;
+                        int w_col = eng->w_col;
+                        bool is_2d = eng->is_2d;
+                        bool has_w = eng->has_weights;
 
-                    batch_w[i] = (w_idx >= 0) ? batch_cols[i][w_idx] : 1.0;
-                    if (is_2d) {
-                        batch_x[i] = batch_cols[i][x_idx];
-                        batch_y[i] = batch_cols[i][y_idx];
+                        for (size_t i = 0; i < batch_len; ++i) {
+                            size_t nc = batch_ncols[i];
+                            int v_idx = (val_col >= 1 && val_col <= (int)nc) ? val_col - 1 : 0;
+                            int x_idx = (x_col >= 1 && x_col <= (int)nc) ? x_col - 1 : 0;
+                            int y_idx = (y_col >= 1 && y_col <= (int)nc) ? y_col - 1 : (nc > 1 ? 1 : 0);
+                            int w_idx = (w_col >= 1 && w_col <= (int)nc) ? w_col - 1 : -1;
+
+                            batch_w[i] = (w_idx >= 0) ? batch_cols[i][w_idx] : 1.0;
+                            if (is_2d) {
+                                batch_x[i] = batch_cols[i][x_idx];
+                                batch_y[i] = batch_cols[i][y_idx];
+                            } else {
+                                batch_x[i] = batch_cols[i][v_idx];
+                                batch_y[i] = 0.0;
+                            }
+                        }
+
+                        if (is_2d && eng->live_2d) {
+                            for (size_t i = 0; i < batch_len; ++i) {
+                                histo2d_fill_w(eng->live_2d, batch_x[i], batch_y[i], batch_w[i]);
+                            }
+                        } else if (eng->live_1d) {
+                            if (has_w) {
+                                histo_fill_n(eng->live_1d, batch_len, batch_x, batch_w);
+                            } else {
+                                histo_fill_n(eng->live_1d, batch_len, batch_x, NULL);
+                            }
+                        }
+                        reservoir_push_batch(&eng->reservoir, (const double (*)[TUI_MAX_COLS])batch_cols, batch_ncols, batch_w, batch_len);
+                        eng->total_samples += batch_len;
+                        batch_len = 0;
+                    }
+                    eng->finished_reading = true;
+                    histo_mutex_unlock(&eng->mutex);
+                    usleep(20000);
+                    continue;
+                }
+                usleep(500);
+            } else {
+                double scale = (eng->scale_input > 0.0) ? eng->scale_input : 1.0;
+                for (size_t i = 0; i < n_read; ++i) {
+                    size_t offset = i * n_vals_per_sample;
+                    if (eng->is_2d) {
+                        batch_cols[batch_len][0] = raw_buf[offset] * scale;
+                        batch_cols[batch_len][1] = raw_buf[offset + 1] * scale;
+                        if (eng->has_weights) {
+                            batch_cols[batch_len][2] = raw_buf[offset + 2];
+                            batch_ncols[batch_len] = 3;
+                        } else {
+                            batch_ncols[batch_len] = 2;
+                        }
                     } else {
-                        batch_x[i] = batch_cols[i][v_idx];
-                        batch_y[i] = 0.0;
+                        batch_cols[batch_len][0] = raw_buf[offset] * scale;
+                        if (eng->has_weights) {
+                            batch_cols[batch_len][1] = raw_buf[offset + 1];
+                            batch_ncols[batch_len] = 2;
+                        } else {
+                            batch_ncols[batch_len] = 1;
+                        }
                     }
-                }
-
-                if (is_2d && eng->live_2d) {
-                    for (size_t i = 0; i < batch_len; ++i) {
-                        histo2d_fill_w(eng->live_2d, batch_x[i], batch_y[i], batch_w[i]);
+                    for (size_t c = batch_ncols[batch_len]; c < TUI_MAX_COLS; ++c) {
+                        batch_cols[batch_len][c] = 0.0;
                     }
-                } else if (eng->live_1d) {
-                    if (has_w) {
-                        histo_fill_n(eng->live_1d, batch_len, batch_x, batch_w);
-                    } else {
-                        histo_fill_n(eng->live_1d, batch_len, batch_x, NULL);
-                    }
+                    batch_len++;
                 }
-                for (size_t i = 0; i < batch_len; ++i) {
-                    reservoir_push(&eng->reservoir, batch_cols[i], batch_ncols[i], batch_w[i]);
-                }
-                eng->total_samples += batch_len;
-                batch_len = 0;
             }
-            eng->finished_reading = true;
-            histo_mutex_unlock(&eng->mutex);
-            /* End of file / stream closed, idle sleep until app quits */
-            usleep(20000);
-            continue;
+        } else {
+            if (!fgets(line, sizeof(line), eng->in_stream)) {
+                histo_mutex_lock(&eng->mutex);
+                if (batch_len > 0) {
+                    int val_col = eng->val_col;
+                    int x_col = eng->x_col;
+                    int y_col = eng->y_col;
+                    int w_col = eng->w_col;
+                    bool is_2d = eng->is_2d;
+                    bool has_w = eng->has_weights;
+
+                    for (size_t i = 0; i < batch_len; ++i) {
+                        size_t nc = batch_ncols[i];
+                        int v_idx = (val_col >= 1 && val_col <= (int)nc) ? val_col - 1 : 0;
+                        int x_idx = (x_col >= 1 && x_col <= (int)nc) ? x_col - 1 : 0;
+                        int y_idx = (y_col >= 1 && y_col <= (int)nc) ? y_col - 1 : (nc > 1 ? 1 : 0);
+                        int w_idx = (w_col >= 1 && w_col <= (int)nc) ? w_col - 1 : -1;
+
+                        batch_w[i] = (w_idx >= 0) ? batch_cols[i][w_idx] : 1.0;
+                        if (is_2d) {
+                            batch_x[i] = batch_cols[i][x_idx];
+                            batch_y[i] = batch_cols[i][y_idx];
+                        } else {
+                            batch_x[i] = batch_cols[i][v_idx];
+                            batch_y[i] = 0.0;
+                        }
+                    }
+
+                    if (is_2d && eng->live_2d) {
+                        for (size_t i = 0; i < batch_len; ++i) {
+                            histo2d_fill_w(eng->live_2d, batch_x[i], batch_y[i], batch_w[i]);
+                        }
+                    } else if (eng->live_1d) {
+                        if (has_w) {
+                            histo_fill_n(eng->live_1d, batch_len, batch_x, batch_w);
+                        } else {
+                            histo_fill_n(eng->live_1d, batch_len, batch_x, NULL);
+                        }
+                    }
+                    reservoir_push_batch(&eng->reservoir, (const double (*)[TUI_MAX_COLS])batch_cols, batch_ncols, batch_w, batch_len);
+                    eng->total_samples += batch_len;
+                    batch_len = 0;
+                }
+                eng->finished_reading = true;
+                histo_mutex_unlock(&eng->mutex);
+                usleep(20000);
+                continue;
+            }
+
+            char *p = line;
+            while (*p && isspace((unsigned char)*p)) p++;
+            if (*p == '\0' || *p == '#') continue;
+
+            double parsed_cols[TUI_MAX_COLS];
+            size_t n_cols = 0;
+            char *cur = p;
+            double scale = (eng->scale_input > 0.0) ? eng->scale_input : 1.0;
+
+            while (*cur && n_cols < TUI_MAX_COLS) {
+                while (*cur && (isspace((unsigned char)*cur) || *cur == ',' || *cur == '\t' || *cur == ';')) cur++;
+                if (*cur == '\0' || *cur == '#') break;
+                char *endp = NULL;
+                double v = strtod(cur, &endp);
+                if (endp == cur) break;
+                parsed_cols[n_cols++] = v * scale;
+                cur = endp;
+            }
+
+            if (n_cols == 0) continue;
+
+            for (size_t c = 0; c < TUI_MAX_COLS; ++c) {
+                batch_cols[batch_len][c] = (c < n_cols) ? parsed_cols[c] : (n_cols > 0 ? parsed_cols[0] : 0.0);
+            }
+            batch_ncols[batch_len] = n_cols;
+            batch_len++;
         }
-
-        char *p = line;
-        while (*p && isspace((unsigned char)*p)) p++;
-        if (*p == '\0' || *p == '#') continue;
-
-        double parsed_cols[TUI_MAX_COLS];
-        size_t n_cols = 0;
-        char *cur = p;
-
-        while (*cur && n_cols < TUI_MAX_COLS) {
-            while (*cur && (isspace((unsigned char)*cur) || *cur == ',' || *cur == '\t' || *cur == ';')) cur++;
-            if (*cur == '\0' || *cur == '#') break;
-            char *endp = NULL;
-            double v = strtod(cur, &endp);
-            if (endp == cur) break;
-            parsed_cols[n_cols++] = v;
-            cur = endp;
-        }
-
-        if (n_cols == 0) continue;
-
-        for (size_t c = 0; c < TUI_MAX_COLS; ++c) {
-            batch_cols[batch_len][c] = (c < n_cols) ? parsed_cols[c] : 0.0;
-        }
-        batch_ncols[batch_len] = n_cols;
-        batch_len++;
 
         double now = get_time_now_sec();
         if (batch_len >= batch_max || (batch_len > 0 && now - last_flush_time >= 0.05)) {
@@ -222,7 +656,6 @@ static void *ingest_worker_thread(void *arg) {
                 }
             }
 
-            /* Apply exponential decay if active */
             if (eng->decay_lambda > 0.0 && eng->last_decay_time > 0.0) {
                 double dt = now - eng->last_decay_time;
                 if (dt >= 0.1) {
@@ -244,16 +677,13 @@ static void *ingest_worker_thread(void *arg) {
                     histo_fill_n(eng->live_1d, batch_len, batch_x, NULL);
                 }
             }
-            for (size_t i = 0; i < batch_len; ++i) {
-                reservoir_push(&eng->reservoir, batch_cols[i], batch_ncols[i], batch_w[i]);
-            }
+            reservoir_push_batch(&eng->reservoir, (const double (*)[TUI_MAX_COLS])batch_cols, batch_ncols, batch_w, batch_len);
             eng->total_samples += batch_len;
             histo_mutex_unlock(&eng->mutex);
             batch_len = 0;
             last_flush_time = now;
         }
 
-        /* Update rate calculation every 250ms */
         if (now - last_calc_time >= 0.25) {
             histo_mutex_lock(&eng->mutex);
             uint64_t diff = eng->total_samples - last_calc_samples;
@@ -301,14 +731,18 @@ static void *ingest_worker_thread(void *arg) {
                 histo_fill_n(eng->live_1d, batch_len, batch_x, NULL);
             }
         }
-        for (size_t i = 0; i < batch_len; ++i) {
-            reservoir_push(&eng->reservoir, batch_cols[i], batch_ncols[i], batch_w[i]);
-        }
+        reservoir_push_batch(&eng->reservoir, (const double (*)[TUI_MAX_COLS])batch_cols, batch_ncols, batch_w, batch_len);
         eng->total_samples += batch_len;
         histo_mutex_unlock(&eng->mutex);
         batch_len = 0;
     }
 
+    free(batch_x);
+    free(batch_y);
+    free(batch_w);
+    free(batch_cols);
+    free(batch_ncols);
+    free(raw_buf);
     return NULL;
 }
 
@@ -324,6 +758,7 @@ bool tui_engine_init(tui_engine_t *eng, FILE *in_stream, bool is_2d, uint32_t nb
     eng->y_col = 2;
     eng->w_col = has_weights ? 2 : 0;
     eng->flags = flags;
+    eng->scale_input = 1.0;
     eng->running = false;
     eng->finished_reading = false;
     eng->paused = false;
@@ -352,27 +787,97 @@ bool tui_engine_init(tui_engine_t *eng, FILE *in_stream, bool is_2d, uint32_t nb
     return true;
 }
 
+bool tui_engine_init_shm(tui_engine_t *eng, const char *shm_path, bool is_2d, uint32_t nbins, double rmin, double rmax, uint32_t flags) {
+    if (!eng || !shm_path) return false;
+    memset(eng, 0, sizeof(*eng));
+
+    if (!histo_shm_open(&eng->shm, shm_path)) {
+        return false;
+    }
+
+    eng->is_shm = true;
+    eng->is_2d = is_2d;
+    eng->has_weights = false;
+    eng->val_col = 1;
+    eng->x_col = 1;
+    eng->y_col = 2;
+    eng->w_col = 0;
+    eng->flags = flags;
+    eng->scale_input = 1.0;
+    eng->running = false;
+    eng->finished_reading = false;
+    eng->paused = false;
+    eng->window_size = 0;
+    eng->decay_lambda = 0.0;
+    eng->last_decay_time = get_time_now_sec();
+
+    if (rmin >= rmax) {
+        rmin = 0.0;
+        rmax = 100.0;
+    }
+    if (nbins == 0) nbins = 50;
+
+    histo_mutex_init(&eng->mutex);
+
+    if (is_2d) {
+        eng->live_2d = histo2d_create_uniform(nbins, rmin, rmax, nbins, rmin, rmax, flags);
+    } else {
+        eng->live_1d = histo_create_uniform(nbins, rmin, rmax, flags);
+    }
+
+    reservoir_init(&eng->reservoir, TUI_RESERVOIR_DEFAULT_CAP, is_2d, false);
+    eng->auto_range = true;
+    eng->auto_range_threshold = 0.05;
+    eng->last_autorange_time_sec = get_time_now_sec();
+    return true;
+}
+
+void tui_engine_set_scale_input(tui_engine_t *eng, double scale_input) {
+    if (!eng) return;
+    histo_mutex_lock(&eng->mutex);
+    eng->scale_input = (scale_input > 0.0) ? scale_input : 1.0;
+    histo_mutex_unlock(&eng->mutex);
+}
+
+void tui_engine_set_binary(tui_engine_t *eng, bool is_binary) {
+    if (!eng) return;
+    histo_mutex_lock(&eng->mutex);
+    eng->is_binary = is_binary;
+    histo_mutex_unlock(&eng->mutex);
+}
+
 bool tui_engine_start(tui_engine_t *eng) {
     if (!eng) return false;
+    histo_mutex_lock(&eng->mutex);
+    if (eng->thread_started) {
+        histo_mutex_unlock(&eng->mutex);
+        return true;
+    }
     eng->running = true;
     eng->last_time_sec = get_time_now_sec();
     if (histo_thread_create(&eng->thread, ingest_worker_thread, eng) != 0) {
         eng->running = false;
+        histo_mutex_unlock(&eng->mutex);
         return false;
     }
+    eng->thread_started = true;
+    histo_mutex_unlock(&eng->mutex);
     return true;
 }
 
 void tui_engine_stop(tui_engine_t *eng) {
     if (!eng) return;
     histo_mutex_lock(&eng->mutex);
-    if (!eng->running) {
+    if (!eng->thread_started) {
+        eng->running = false;
         histo_mutex_unlock(&eng->mutex);
         return;
     }
     eng->running = false;
+    eng->thread_started = false;
+    histo_thread_t th = eng->thread;
     histo_mutex_unlock(&eng->mutex);
-    histo_thread_join(eng->thread);
+    histo_thread_join(th);
 }
 
 void tui_engine_free(tui_engine_t *eng) {
@@ -388,6 +893,9 @@ void tui_engine_free(tui_engine_t *eng) {
         eng->live_2d = NULL;
     }
     reservoir_free(&eng->reservoir);
+    if (eng->is_shm) {
+        histo_shm_close(&eng->shm);
+    }
     histo_mutex_unlock(&eng->mutex);
     histo_mutex_destroy(&eng->mutex);
 }
@@ -450,155 +958,123 @@ static bool tui_engine_check_and_autorange_locked(tui_engine_t *eng) {
     memcpy(sorted, tmp_x, win_n * sizeof(double));
     qsort(sorted, win_n, sizeof(double), double_cmp);
 
-    size_t valid_n = win_n;
-    while (valid_n > 0 && !isfinite(sorted[valid_n - 1])) {
-        valid_n--;
-    }
-    if (valid_n < 10) {
-        free(sorted);
+    size_t idx_p01 = (size_t)(win_n * 0.01);
+    size_t idx_p99 = (size_t)(win_n * 0.99);
+    if (idx_p99 >= win_n) idx_p99 = win_n - 1;
+
+    double n_min = sorted[idx_p01];
+    double n_max = sorted[idx_p99];
+    free(sorted);
+
+    if (n_max <= n_min || isnan(n_min) || isnan(n_max) || isinf(n_min) || isinf(n_max)) {
         free(tmp_x);
         free(tmp_w);
         return false;
     }
 
-    size_t idx_p1 = (size_t)(0.01 * (double)(valid_n - 1));
-    size_t idx_p99 = (size_t)(0.99 * (double)(valid_n - 1) + 0.5);
-    if (idx_p99 >= valid_n) idx_p99 = valid_n - 1;
-
-    double p1 = sorted[idx_p1];
-    double p99 = sorted[idx_p99];
-    free(sorted);
-
-    double span = p99 - p1;
-    double rmin, rmax;
-    if (span <= 1e-9) {
-        rmin = p1 - 1.0;
-        rmax = p99 + 1.0;
-    } else {
-        double margin = span * 0.05;
-        rmin = p1 - margin;
-        rmax = p99 + margin;
-    }
+    double pad = (n_max - n_min) * 0.05;
+    if (pad <= 0.0) pad = 1.0;
+    n_min -= pad;
+    n_max += pad;
 
     uint32_t nbins = histo_nbins(eng->live_1d);
-    if (nbins < 5) nbins = 50;
-
-    histo_t *new_h = histo_create_uniform(nbins, rmin, rmax, eng->flags);
+    histo_t *new_h = histo_create_uniform(nbins, n_min, n_max, eng->flags);
     if (!new_h) {
         free(tmp_x);
         free(tmp_w);
         return false;
     }
 
-    if (eng->reservoir.has_weights && eng->reservoir.weights) {
+    if (eng->has_weights) {
         histo_fill_n(new_h, win_n, tmp_x, tmp_w);
     } else {
         histo_fill_n(new_h, win_n, tmp_x, NULL);
     }
 
+    histo_destroy(eng->live_1d);
+    eng->live_1d = new_h;
+
     free(tmp_x);
     free(tmp_w);
-
-    if (eng->live_1d) histo_destroy(eng->live_1d);
-    eng->live_1d = new_h;
     return true;
+}
+
+bool tui_engine_check_and_autorange(tui_engine_t *eng) {
+    if (!eng) return false;
+    histo_mutex_lock(&eng->mutex);
+    bool changed = tui_engine_check_and_autorange_locked(eng);
+    histo_mutex_unlock(&eng->mutex);
+    return changed;
 }
 
 void tui_engine_set_autorange(tui_engine_t *eng, bool enable, double threshold) {
     if (!eng) return;
     histo_mutex_lock(&eng->mutex);
     eng->auto_range = enable;
-    if (threshold > 0.0 && threshold < 1.0) {
-        eng->auto_range_threshold = threshold;
-    }
+    if (threshold > 0.0) eng->auto_range_threshold = threshold;
     histo_mutex_unlock(&eng->mutex);
-}
-
-bool tui_engine_check_and_autorange(tui_engine_t *eng) {
-    if (!eng) return false;
-    histo_mutex_lock(&eng->mutex);
-    bool r = tui_engine_check_and_autorange_locked(eng);
-    histo_mutex_unlock(&eng->mutex);
-    return r;
 }
 
 histo_t *tui_engine_get_snapshot_1d(tui_engine_t *eng) {
     if (!eng) return NULL;
     histo_mutex_lock(&eng->mutex);
     tui_engine_check_and_autorange_locked(eng);
-    histo_t *snapshot = NULL;
-    if (eng->live_1d) {
-        snapshot = histo_clone(eng->live_1d, false);
-    }
+    histo_t *snap = eng->live_1d ? histo_clone(eng->live_1d, false) : NULL;
     histo_mutex_unlock(&eng->mutex);
-    return snapshot;
+    return snap;
 }
 
 histo2d_t *tui_engine_get_snapshot_2d(tui_engine_t *eng) {
     if (!eng) return NULL;
     histo_mutex_lock(&eng->mutex);
-    histo2d_t *snapshot = NULL;
-    if (eng->live_2d) {
-        snapshot = histo2d_clone(eng->live_2d, false);
-    }
+    histo2d_t *snap = eng->live_2d ? histo2d_clone(eng->live_2d, false) : NULL;
     histo_mutex_unlock(&eng->mutex);
-    return snapshot;
+    return snap;
 }
 
 bool tui_engine_rebuild_1d(tui_engine_t *eng, uint32_t nbins, double rmin, double rmax, histo_t **out_h) {
     if (!eng) return false;
     histo_mutex_lock(&eng->mutex);
-    if (eng->reservoir.count == 0) {
-        histo_mutex_unlock(&eng->mutex);
-        return false;
-    }
 
     size_t count = eng->reservoir.count;
-    double *tmp_x = (double *)malloc(count * sizeof(double));
-    double *tmp_w = (double *)malloc(count * sizeof(double));
-    if (!tmp_x || !tmp_w) {
-        if (tmp_x) free(tmp_x);
-        if (tmp_w) free(tmp_w);
+    if (count == 0 && !eng->live_1d) {
         histo_mutex_unlock(&eng->mutex);
         return false;
     }
 
-    size_t win_n = get_reservoir_window(eng, tmp_x, NULL, tmp_w, eng->val_col, 0);
-
     if (rmin >= rmax) {
-        rmin = tmp_x[0];
-        rmax = tmp_x[0];
-        for (size_t i = 1; i < win_n; ++i) {
-            if (tmp_x[i] < rmin) rmin = tmp_x[i];
-            if (tmp_x[i] > rmax) rmax = tmp_x[i];
-        }
-        if (fabs(rmax - rmin) < 1e-12) {
-            rmin -= 1.0;
-            rmax += 1.0;
+        if (eng->live_1d) {
+            histo_range(eng->live_1d, &rmin, &rmax);
         } else {
-            rmax += (rmax - rmin) * 1e-6;
+            rmin = 0.0; rmax = 100.0;
         }
     }
+    if (nbins == 0) nbins = 50;
 
     histo_t *new_h = histo_create_uniform(nbins, rmin, rmax, eng->flags);
     if (!new_h) {
-        free(tmp_x);
-        free(tmp_w);
         histo_mutex_unlock(&eng->mutex);
         return false;
     }
 
-    if (eng->reservoir.has_weights && eng->reservoir.weights) {
-        histo_fill_n(new_h, win_n, tmp_x, tmp_w);
-    } else {
-        histo_fill_n(new_h, win_n, tmp_x, NULL);
+    if (count > 0) {
+        double *tmp_x = (double *)malloc(count * sizeof(double));
+        double *tmp_w = (double *)malloc(count * sizeof(double));
+        if (tmp_x && tmp_w) {
+            size_t win_n = get_reservoir_window(eng, tmp_x, NULL, tmp_w, eng->val_col, 0);
+            if (eng->has_weights) {
+                histo_fill_n(new_h, win_n, tmp_x, tmp_w);
+            } else {
+                histo_fill_n(new_h, win_n, tmp_x, NULL);
+            }
+        }
+        if (tmp_x) free(tmp_x);
+        if (tmp_w) free(tmp_w);
     }
-
-    free(tmp_x);
-    free(tmp_w);
 
     if (eng->live_1d) histo_destroy(eng->live_1d);
     eng->live_1d = new_h;
+
     if (out_h) {
         *out_h = histo_clone(new_h, false);
     }
@@ -609,76 +1085,72 @@ bool tui_engine_rebuild_1d(tui_engine_t *eng, uint32_t nbins, double rmin, doubl
 
 bool tui_engine_rebuild_1d_log(tui_engine_t *eng, uint32_t nbins, histo_t **out_h) {
     if (!eng) return false;
-    if (nbins < 2) nbins = 2;
-
     histo_mutex_lock(&eng->mutex);
-    if (eng->reservoir.count == 0) {
-        histo_mutex_unlock(&eng->mutex);
-        return false;
-    }
 
     size_t count = eng->reservoir.count;
-    double *tmp_x = (double *)malloc(count * sizeof(double));
-    double *tmp_w = (double *)malloc(count * sizeof(double));
-    if (!tmp_x || !tmp_w) {
-        if (tmp_x) free(tmp_x);
-        if (tmp_w) free(tmp_w);
-        histo_mutex_unlock(&eng->mutex);
-        return false;
-    }
-
-    size_t win_n = get_reservoir_window(eng, tmp_x, NULL, tmp_w, eng->val_col, 0);
-
-    double pos_min = 1e300;
-    double pos_max = -1e300;
-    for (size_t i = 0; i < win_n; ++i) {
-        double val = tmp_x[i];
-        if (val > 0.0) {
-            if (val < pos_min) pos_min = val;
-            if (val > pos_max) pos_max = val;
+    double rmin = 0.1, rmax = 100.0;
+    if (count > 0) {
+        double *tmp_x = (double *)malloc(count * sizeof(double));
+        if (tmp_x) {
+            size_t win_n = get_reservoir_window(eng, tmp_x, NULL, NULL, eng->val_col, 0);
+            bool found_pos = false;
+            for (size_t i = 0; i < win_n; ++i) {
+                if (tmp_x[i] > 0.0) {
+                    if (!found_pos) {
+                        rmin = tmp_x[i];
+                        rmax = tmp_x[i];
+                        found_pos = true;
+                    } else {
+                        if (tmp_x[i] < rmin) rmin = tmp_x[i];
+                        if (tmp_x[i] > rmax) rmax = tmp_x[i];
+                    }
+                }
+            }
+            free(tmp_x);
         }
     }
-
-    if (pos_min >= pos_max || pos_min <= 0.0 || pos_min > 1e200) {
-        pos_min = 1.0;
-        pos_max = 100.0;
-    }
+    if (rmin <= 0.0) rmin = 1e-3;
+    if (rmax <= rmin) rmax = rmin * 100.0;
+    if (nbins == 0) nbins = 50;
 
     double *edges = (double *)malloc((nbins + 1) * sizeof(double));
     if (!edges) {
-        free(tmp_x);
-        free(tmp_w);
         histo_mutex_unlock(&eng->mutex);
         return false;
     }
 
-    double log_min = log10(pos_min);
-    double log_max = log10(pos_max * 1.000001);
+    double log_min = log10(rmin);
+    double log_max = log10(rmax * 1.000001);
     double step = (log_max - log_min) / (double)nbins;
     for (uint32_t i = 0; i <= nbins; ++i) {
-        edges[i] = pow(10.0, log_min + (double)i * step);
+        edges[i] = pow(10.0, log_min + i * step);
     }
 
     histo_t *new_h = histo_create_variable(nbins, edges, eng->flags);
     free(edges);
     if (!new_h) {
-        free(tmp_x);
-        free(tmp_w);
         histo_mutex_unlock(&eng->mutex);
         return false;
     }
 
-    if (eng->reservoir.has_weights && eng->reservoir.weights) {
-        histo_fill_n(new_h, win_n, tmp_x, tmp_w);
-    } else {
-        histo_fill_n(new_h, win_n, tmp_x, NULL);
+    if (count > 0) {
+        double *tmp_x = (double *)malloc(count * sizeof(double));
+        double *tmp_w = (double *)malloc(count * sizeof(double));
+        if (tmp_x && tmp_w) {
+            size_t win_n = get_reservoir_window(eng, tmp_x, NULL, tmp_w, eng->val_col, 0);
+            if (eng->has_weights) {
+                histo_fill_n(new_h, win_n, tmp_x, tmp_w);
+            } else {
+                histo_fill_n(new_h, win_n, tmp_x, NULL);
+            }
+        }
+        if (tmp_x) free(tmp_x);
+        if (tmp_w) free(tmp_w);
     }
-
-    free(tmp_x);
-    free(tmp_w);
 
     if (eng->live_1d) histo_destroy(eng->live_1d);
     eng->live_1d = new_h;
+
     if (out_h) {
         *out_h = histo_clone(new_h, false);
     }
@@ -688,29 +1160,28 @@ bool tui_engine_rebuild_1d_log(tui_engine_t *eng, uint32_t nbins, histo_t **out_
 }
 
 bool tui_engine_zoom_1d(tui_engine_t *eng, double factor, histo_t **out_h) {
-    if (!eng) return false;
+    if (!eng || factor <= 0.0) return false;
     histo_mutex_lock(&eng->mutex);
     histo_t *source = eng->live_1d;
     if (!source) {
         histo_mutex_unlock(&eng->mutex);
         return false;
     }
-    double rmin = 0.0, rmax = 0.0;
+    double rmin, rmax;
     histo_range(source, &rmin, &rmax);
-    uint32_t nbins = histo_nbins(source);
-    if (nbins < 2) nbins = 50;
+    uint32_t nb = histo_nbins(source);
 
     double center = 0.5 * (rmin + rmax);
     double half_span = 0.5 * (rmax - rmin) * factor;
     if (half_span < 1e-12) half_span = 1.0;
 
-    double new_min = center - half_span;
-    double new_max = center + half_span;
+    double n_min = center - half_span;
+    double n_max = center + half_span;
 
     eng->auto_range = false;
     histo_mutex_unlock(&eng->mutex);
 
-    return tui_engine_rebuild_1d(eng, nbins, new_min, new_max, out_h);
+    return tui_engine_rebuild_1d(eng, nb, n_min, n_max, out_h);
 }
 
 bool tui_engine_pan_1d(tui_engine_t *eng, double fraction, histo_t **out_h) {
@@ -721,70 +1192,69 @@ bool tui_engine_pan_1d(tui_engine_t *eng, double fraction, histo_t **out_h) {
         histo_mutex_unlock(&eng->mutex);
         return false;
     }
-    double rmin = 0.0, rmax = 0.0;
+    double rmin, rmax;
     histo_range(source, &rmin, &rmax);
-    uint32_t nbins = histo_nbins(source);
-    if (nbins < 2) nbins = 50;
+    uint32_t nb = histo_nbins(source);
 
     double shift = (rmax - rmin) * fraction;
-    double new_min = rmin + shift;
-    double new_max = rmax + shift;
+    double n_min = rmin + shift;
+    double n_max = rmax + shift;
 
     eng->auto_range = false;
     histo_mutex_unlock(&eng->mutex);
 
-    return tui_engine_rebuild_1d(eng, nbins, new_min, new_max, out_h);
+    return tui_engine_rebuild_1d(eng, nb, n_min, n_max, out_h);
 }
 
-bool tui_engine_rebuild_2d(tui_engine_t *eng, uint32_t xbins, double xmin, double xmax,
-                           uint32_t ybins, double ymin, double ymax, histo2d_t **out_h) {
+bool tui_engine_rebuild_2d(tui_engine_t *eng, uint32_t xbins, double xmin, double xmax, uint32_t ybins, double ymin, double ymax, histo2d_t **out_h) {
     if (!eng) return false;
     histo_mutex_lock(&eng->mutex);
-    if (eng->reservoir.count == 0) {
-        histo_mutex_unlock(&eng->mutex);
-        return false;
-    }
-
-    if (xbins < 2) xbins = 50;
-    if (ybins < 2) ybins = 50;
-    if (xmin >= xmax) { xmin = 0.0; xmax = 100.0; }
-    if (ymin >= ymax) { ymin = 0.0; ymax = 100.0; }
 
     size_t count = eng->reservoir.count;
-    double *tmp_x = (double *)malloc(count * sizeof(double));
-    double *tmp_y = (double *)malloc(count * sizeof(double));
-    double *tmp_w = (double *)malloc(count * sizeof(double));
-    if (!tmp_x || !tmp_y || !tmp_w) {
-        if (tmp_x) free(tmp_x);
-        if (tmp_y) free(tmp_y);
-        if (tmp_w) free(tmp_w);
+    if (count == 0 && !eng->live_2d) {
         histo_mutex_unlock(&eng->mutex);
         return false;
     }
 
-    size_t win_n = get_reservoir_window(eng, tmp_x, tmp_y, tmp_w, eng->x_col, eng->y_col);
+    if (xmin >= xmax || ymin >= ymax) {
+        if (eng->live_2d) {
+            histo2d_axis_t ax, ay;
+            histo2d_axis_x(eng->live_2d, &ax);
+            histo2d_axis_y(eng->live_2d, &ay);
+            xmin = ax.min; xmax = ax.max;
+            ymin = ay.min; ymax = ay.max;
+        } else {
+            xmin = 0.0; xmax = 100.0;
+            ymin = 0.0; ymax = 100.0;
+        }
+    }
+    if (xbins == 0) xbins = 50;
+    if (ybins == 0) ybins = 50;
 
     histo2d_t *new_h = histo2d_create_uniform(xbins, xmin, xmax, ybins, ymin, ymax, eng->flags);
     if (!new_h) {
-        free(tmp_x);
-        free(tmp_y);
-        free(tmp_w);
         histo_mutex_unlock(&eng->mutex);
         return false;
     }
 
-    if (eng->reservoir.has_weights && eng->reservoir.weights) {
-        histo2d_fill_n(new_h, win_n, tmp_x, tmp_y, tmp_w);
-    } else {
-        histo2d_fill_n(new_h, win_n, tmp_x, tmp_y, NULL);
+    if (count > 0) {
+        double *tmp_x = (double *)malloc(count * sizeof(double));
+        double *tmp_y = (double *)malloc(count * sizeof(double));
+        double *tmp_w = (double *)malloc(count * sizeof(double));
+        if (tmp_x && tmp_y && tmp_w) {
+            size_t win_n = get_reservoir_window(eng, tmp_x, tmp_y, tmp_w, eng->x_col, eng->y_col);
+            for (size_t i = 0; i < win_n; ++i) {
+                histo2d_fill_w(new_h, tmp_x[i], tmp_y[i], tmp_w[i]);
+            }
+        }
+        if (tmp_x) free(tmp_x);
+        if (tmp_y) free(tmp_y);
+        if (tmp_w) free(tmp_w);
     }
-
-    free(tmp_x);
-    free(tmp_y);
-    free(tmp_w);
 
     if (eng->live_2d) histo2d_destroy(eng->live_2d);
     eng->live_2d = new_h;
+
     if (out_h) {
         *out_h = histo2d_clone(new_h, false);
     }
@@ -794,7 +1264,7 @@ bool tui_engine_rebuild_2d(tui_engine_t *eng, uint32_t xbins, double xmin, doubl
 }
 
 bool tui_engine_zoom_2d(tui_engine_t *eng, double factor, histo2d_t **out_h) {
-    if (!eng) return false;
+    if (!eng || factor <= 0.0) return false;
     histo_mutex_lock(&eng->mutex);
     histo2d_t *source = eng->live_2d;
     if (!source) {

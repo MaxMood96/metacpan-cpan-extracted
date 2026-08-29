@@ -5,7 +5,7 @@ use warnings;
 
 use Object::Pad 0.825;
 
-package App::pod2gfm;  # For toolchain compatibility.
+package App::pod2gfm;  # For toolchain compatibility
 class App::pod2gfm;
 
 use File::Basename qw< basename >;
@@ -13,15 +13,23 @@ use File::Spec     ();
 use Pod::Usage;
 use Pod::Markdown::Githubert 0.05;
 
-our $VERSION = 'v1.1.0';
+our $VERSION = 'v1.1.1';
 
 my $PROG = basename($0);
 
 field @_argv;
 field %_opts    :reader;
 field %_gh_opts :reader = ( output_encoding => 'UTF-8' );  # Pod::Markdown::Githubert options
-field $_infile  :reader;
-field $_outfile :reader;
+field %_handles :reader = (
+    infile => {
+        name => undef,
+        fh   => undef,
+    },
+    outfile => {
+        name => undef,
+        fh   => undef,
+    },
+);
 field $_has_stdin = false;
 
 method init (@argv)
@@ -33,13 +41,18 @@ method init (@argv)
 
 method run ()
 {
-    my $start = true;  # Process STDIN.
+    my $start = true;  # Process STDIN
+    my $err   = 0;
 
     while ( $start || @_argv ) {
-        $start = false     if $start;
-        $self->_convert_md if $self->_set_handles == 0;
+        $start = false if $start;
+
+        my $ret;
+        $ret = $self->_convert_md if $self->_set_handles == 0;
+        $err = 1                  if defined $ret && $ret == 1;
     }
 
+    return 1 if $err == 1;
     return 0;
 }
 
@@ -47,7 +60,7 @@ method _process_opts ( $argv = undef )
 {
     return 0 unless defined $argv;
 
-    # Transform Getopt::Long error warns.
+    # Transform Getopt::Long error warns
     local $SIG{__WARN__} = sub {
         chomp( my $msg = shift );
 
@@ -73,7 +86,7 @@ method _process_opts ( $argv = undef )
         );
     }
     catch ($e) {
-        # Use Getopt::Long as fallback.
+        # Use Getopt::Long as fallback
         require Getopt::Long;
 
         Getopt::Long->import(
@@ -127,17 +140,23 @@ method _process_opts ( $argv = undef )
 
 method _set_handles ()
 {
-    my ( $in_fh, $infile ) = $self->_get_infile;
-    my $out_fh = $self->_get_outfile($infile);
+    my ( $in_fh,  $infile )  = $self->_get_infile;
+    my ( $out_fh, $outfile ) = $self->_get_outfile($infile);
 
-    # File exists (--force not set).
+    # File exists (--force not set)
     return 1 if !fileno $out_fh && $out_fh == 1;
 
     # Return only bytes to avoid PERL_UNICODE effects.
     binmode $_, ':bytes' foreach ( $in_fh, $out_fh );
 
-    $_infile  = $in_fh;
-    $_outfile = $out_fh;
+    $_handles{infile}{fh} = $in_fh;
+    $_handles{infile}{name} =
+      ( !defined $infile || $infile eq '-' )
+      ? 'STDIN'
+      : $infile;
+
+    $_handles{outfile}{fh}   = $out_fh;
+    $_handles{outfile}{name} = $outfile;
 
     return 0;
 }
@@ -148,7 +167,7 @@ method _get_infile ()
     my $infile = shift @_argv;
 
     if ( $_has_stdin eq false && ( !defined $infile || $infile eq '-' ) ) {
-        $in_fh      = *STDIN;  # Read STDIN.
+        $in_fh      = *STDIN;  # Read STDIN
         $_has_stdin = true;    # Only one STDIN is allowed per process.
     }
     else {
@@ -174,8 +193,9 @@ method _get_outfile ($infile)
       ? $infile
       : shift @_argv;
 
-    if ( !defined $infile || !defined $outfile && !$auto ) {
-        $out_fh = *STDOUT;  # Print to STDOUT.
+    if ( !defined $infile || ( $infile eq '-' && $auto ) || ( !defined $outfile && !$auto ) ) {
+        $out_fh  = *STDOUT;  # Print to STDOUT
+        $outfile = 'STDOUT';
     }
     else {
         if ($auto) {
@@ -185,7 +205,7 @@ method _get_outfile ($infile)
             my $auto_file =
                 $_opts{no_strip_ext}
               ? $infile
-              : $infile =~ s{\.(?> pm | pod | pl)\z}{}xr;  # Strip extension.
+              : $infile =~ s{\.(?> pm | pod | pl)\z}{}xr;  # Strip extension
 
             my $ext = $_opts{file_ext} // 'md';
 
@@ -210,20 +230,42 @@ method _get_outfile ($infile)
         $out_fh = $fh;
     }
 
-    return $out_fh;
+    return ( $out_fh, $outfile );
 }
 
 method _convert_md ()
 {
-    my $parser = Pod::Markdown::Githubert->new(%_gh_opts);
+    my $parsed = do {
+        try {
+            my $parser = Pod::Markdown::Githubert->new(%_gh_opts);
 
-    $parser->output_fh($_outfile);
-    $parser->parse_file($_infile);
+            $parser->no_errata_section(true);
+            $parser->output_fh( $_handles{outfile}{fh} );
+            $parser->parse_file( $_handles{infile}{fh} );
+        }
+        catch ($e) {
+            warn $e;
+            undef;
+        }
+    };
 
-    close $_infile  or die $!;
-    close $_outfile or die $!;
+    close $_handles{infile}{fh}  or die $!;
+    close $_handles{outfile}{fh} or die $!;
 
-    return $self;
+    if ( defined $parsed && $parsed->any_errata_seen ) {
+        warn "POD ERRORS ($_handles{infile}{name})\n";
+
+        foreach my ( $ln, $err ) ( $parsed->errata_seen->%* ) {
+            warn "  around line $ln: $err->@*\n";
+        }
+    }
+
+    if ( !defined $parsed || $parsed->any_errata_seen ) {
+        warn "$PROG: failed to convert $_handles{infile}{name} (POD) to $_handles{outfile}{name} (GFM)\n";
+        return 1;
+    }
+
+    return 0;
 }
 
 sub _exit ($code)
@@ -287,6 +329,8 @@ following:
 =item * File access/permission issues.
 
 =item * Invalid command-line options.
+
+=item * L<Pod::Markdown> or L<Pod::Simple> errors.
 
 =back
 

@@ -41,7 +41,7 @@ on 'test' => sub {
 	requires 'HTML::TableExtract';
 	requires 'IPC::System::Simple';
 	requires 'JSON::MaybeXS';
-	requires 'LWP::UserAgent';
+	requires 'LWP::UserAgent::Cached';
 	requires 'POSIX';
 	requires 'Readonly';
 	requires 'Test::Carp';
@@ -54,6 +54,7 @@ on 'test' => sub {
 	requires 'Test::NoWarnings';
 	requires 'Test::Returns';
 	requires 'Test::Warn';
+	requires 'Test::Which';
 	requires 'Test::Without::Module';
 	requires 'Text::xSV::Slurp';
 	requires 'XML::Simple';

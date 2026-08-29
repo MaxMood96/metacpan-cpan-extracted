@@ -50,10 +50,10 @@ Manual install:
 
 =head2 Examples
 
-For examples of what you can do, see the various examples in the C<example/> 
+For examples of what you can do, see the various examples in the C<examples/> 
 directory. You can try them out via:
   
-  perl example/hello_world.pl
+  perl examples/hello_world.pl
 
 =head1 Credits
 

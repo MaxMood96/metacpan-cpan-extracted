@@ -1,11 +1,13 @@
 ^\.git(?:/|$)
+^\.github(?:/|$)
 ^blib(?:/|$)
 ^_build(?:/|$)
 ^Makefile$
+^(?:.*/)?Makefile\.old$
 ^MYMETA\.(?:json|yml)$
 ^(?:.*/)?pm_to_blib$
 ^xsloop/(?:Makefile$|MYMETA\.(?:json|yml)$|Loop\.(?:c|o|bs|xsc)$|blib(?:/|$))
-^xsstream/(?:Makefile$|MYMETA\.(?:json|yml)$|Stream\.(?:c|o|bs|xsc)$|blib(?:/|$))
+^xsstream/(?:Makefile$|MYMETA\.(?:json|yml)$|Stream\.(?:c|bs|xsc)$|[^/]+\.o$|blib(?:/|$))
 ^xstls/(?:Makefile$|MYMETA\.(?:json|yml)$|TLS\.(?:c|o|bs|xsc)$|blib(?:/|$)|check_openssl(?:\.o)?$)
 ^xsconnection/(?:Makefile$|MYMETA\.(?:json|yml)$|Connection\.(?:c|o|bs|xsc)$|_Connection\.bs$|blib(?:/|$))
 ^xslistener/(?:Makefile$|MYMETA\.(?:json|yml)$|Listener\.(?:c|o|bs|xsc)$|blib(?:/|$))

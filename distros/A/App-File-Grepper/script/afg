@@ -5,8 +5,8 @@
 # Author          : Johan Vromans
 # Created On      : Sat Apr 28 19:50:34 2012
 # Last Modified By: Johan Vromans
-# Last Modified On: Tue May 14 21:13:58 2013
-# Update Count    : 32
+# Last Modified On: Fri Aug 28 19:27:10 2026
+# Update Count    : 33
 # Status          : Unknown, Use with caution!
 
 ################ Common stuff ################
@@ -59,8 +59,8 @@ sub app_setup {
        ### ADD OPTIONS HERE ###
 
        'ignorecase'	=> undef,
-       'filter'		=> undef,
-       'exclude'	=> undef,
+       'filter'		=> [],
+       'exclude'	=> [],
        'edit-with-emacs'=> 0,
        'edit-with-vi'	=> 0,
        'view'		=> 0,
@@ -92,8 +92,8 @@ sub app_setup {
 	  ### ADD OPTIONS HERE ###
 
 	 'ignorecase|i',
-	 'filter|G=s',
-	 'exclude|E=s',
+	 'filter|G=s@',
+	 'exclude|E=s@',
 	 'edit-with-emacs|e',
 	 'edit-with-vi|v',
 	 'pattern=s',

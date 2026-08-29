@@ -1,0 +1,236 @@
+NAME
+
+    Typesense::Client - Perl client for the Typesense search engine
+
+SYNOPSIS
+
+        use Typesense::Client;
+    
+        my $ts = Typesense::Client->new(
+            url     => 'http://localhost:8108',
+            api_key => $ENV{TYPESENSE_API_KEY},
+        );
+    
+        $ts->collections->create({
+            name   => 'products',
+            fields => [
+                { name => 'name',  type => 'string' },
+                { name => 'brand', type => 'string', facet => \1 },   # JSON boolean
+                { name => 'price', type => 'float'  },
+            ],
+            default_sorting_field => 'price',
+        });
+    
+        $ts->documents->import_docs('products', \@docs);       # JSONL bulk load
+    
+        my $r = $ts->search('products', {
+            q        => 'aple',                                # typo tolerated
+            query_by => 'name,brand',
+            filter_by => 'price:[100..500]',
+        });
+        say $r->{found};
+
+DESCRIPTION
+
+    A complete, dependency-light client for Typesense
+    <https://typesense.org> v28 and later. It covers collections, documents
+    (including JSONL bulk import and export), aliases, single and federated
+    search, synonyms, curation overrides, the analytics API, and scoped API
+    keys.
+
+    The client is a thin layer over the REST API: it builds requests,
+    applies the API key, decodes JSON and turns failures into exceptions.
+    It does not model schemas or validate documents - Typesense does that,
+    and its error messages are good.
+
+ Relationship to Search::Typesense
+
+    Search::Typesense is an earlier and independent client, last released
+    in 2021 against Typesense 0.19 and marked as alpha by its author. It
+    covers collections and documents. This distribution exists because
+    several parts of the API that production deployments depend on had no
+    Perl binding at all: multi_search, aliases (which is how you reindex
+    without downtime), synonyms, curation overrides, the analytics API, and
+    scoped keys. It also differs in two design decisions: errors are
+    exception objects rather than return values, and "fail_open" is offered
+    for callers that must degrade instead of die.
+
+    If Search::Typesense covers what you need, there is no reason to
+    switch.
+
+CONSTRUCTOR
+
+        my $ts = Typesense::Client->new(url => ..., api_key => ..., %options);
+
+      * url (required)
+
+      Base URL of the server, e.g. http://localhost:8108. A trailing slash
+      is stripped.
+
+      * api_key (required)
+
+      Sent as the X-TYPESENSE-API-KEY header on every request.
+
+      * connect_timeout, request_timeout
+
+      Seconds, for ordinary requests. Default 0.3 and 1.5 - deliberately
+      short, because a search that misses those deadlines is no longer
+      useful for rendering a page. Raise them for interactive
+      administration.
+
+      * bulk_timeout
+
+      Seconds, for import and export. Default 120.
+
+      * fail_open
+
+      When true, failures return undef and leave the exception in
+      "last_error" instead of dying. See "ERROR HANDLING".
+
+      * ua, bulk_ua
+
+      Supply your own Mojo::UserAgent instances. Mostly useful in tests,
+      where sharing Mojo::IOLoop->singleton with an in-process server
+      matters.
+
+JSON BOOLEANS
+
+    Typesense validates types strictly, and Perl has no native boolean to
+    hand it. A schema flag written as facet => 1 reaches the server as the
+    number 1 and is rejected:
+
+        400 The `facet` property of the field `brand` should be a boolean.
+
+    Use a reference to a scalar, which Mojo::JSON encodes as a JSON
+    boolean:
+
+        { name => 'brand', type => 'string', facet => \1 }   # true
+        { name => 'brand', type => 'string', facet => \0 }   # false
+
+    The same applies to every other boolean the API takes - optional,
+    index, sort, infix, store, enable_nested_fields, expand_query - and to
+    booleans inside documents you index. This client passes your data
+    through untouched by design, so the conversion is yours to make.
+
+ERROR HANDLING
+
+    By default any transport or HTTP failure throws a
+    Typesense::Client::Error, which stringifies to a full message:
+
+        my $r = eval { $ts->search('products', { q => 'x', query_by => 'name' }) };
+        if (my $err = $@) {
+            die $err unless ref $err;
+            warn "search failed: $err";
+        }
+
+    With fail_open => 1 nothing is thrown; the call returns undef and the
+    error object is available afterwards:
+
+        my $ts = Typesense::Client->new(..., fail_open => 1);
+        my $r  = $ts->search('products', { q => 'x', query_by => 'name' })
+            or fall_back_to_sql($ts->last_error);
+
+    That mode exists for the search path of a public site, where the right
+    answer to "the engine is down" is to serve something else, not to
+    return a 500.
+
+METHODS
+
+ collections, documents, aliases, synonyms, overrides, analytics, keys
+
+    Resource accessors. Each returns a delegate object, created on first
+    use: Typesense::Client::Collections, Typesense::Client::Documents,
+    Typesense::Client::Aliases, Typesense::Client::Synonyms,
+    Typesense::Client::Overrides, Typesense::Client::Analytics,
+    Typesense::Client::Keys.
+
+ search
+
+        my $r = $ts->search($collection, \%params, %opt);
+
+    GET /collections/{name}/documents/search. %params is passed through
+    unchanged, so every search parameter Typesense supports is available.
+    Query string keys are sorted, so equivalent calls produce
+    byte-identical URLs - which is what makes the response cacheable
+    upstream.
+
+    %opt goes to "request", which in practice means headers:
+
+        $ts->search('products', { q => 'laptop', query_by => 'name' },
+                    headers => { 'x-typesense-user-id' => $session_id });
+
+    That header is what makes the analytics API attribute events to a
+    person. Without it Typesense aggregates by IP address, and behind a
+    reverse proxy that is a single visitor for the whole site. Pass the
+    same identifier here that you pass as user_id to "event" in
+    Typesense::Client::Analytics.
+
+ multi_search
+
+        my $r = $ts->multi_search(\@searches, \%common, %opt);
+
+    POST /multi_search. Runs several searches in one round trip.
+
+    Important: %common travels in the query string, and Typesense lets
+    those values override the per-search ones in the body. A parameter that
+    must differ between branches - drop_tokens_threshold is the usual one -
+    has to be set inside each element of @searches and kept out of %common,
+    or it silently has no effect.
+
+ health, stats, metrics, debug
+
+    /health, /stats.json, /metrics.json and /debug.
+
+ server_version
+
+        my $v = $ts->server_version;
+        if ( $v->is_at_least('28.0') ) { ... }
+
+    GET /debug, wrapped in a Typesense::Client::Version object that
+    stringifies to the version and compares properly. Returns undef in
+    fail_open mode when the server cannot be reached.
+
+ request
+
+        my $data = $ts->request($method, $path, %opt);
+
+    The low-level escape hatch, for endpoints this module does not wrap
+    yet. %opt accepts json (body to encode), raw (body sent verbatim, for
+    JSONL), bulk (use the long-timeout agent), raw_response (return the
+    undecoded body), ok_404 (treat 404 as success returning undef) and
+    headers (a hash reference of extra request headers).
+
+    Your headers are merged after the API key, so they win. That is what
+    lets a single client send a per-request key - a scoped key derived for
+    one customer, say - without building a second client for every tenant:
+
+        $ts->search('products', \%params,
+                    headers => { 'X-TYPESENSE-API-KEY' => $scoped_key });
+
+ last_error
+
+    The Typesense::Client::Error from the most recent failed call, or
+    undef. Reset at the start of every request. Chiefly for fail_open mode.
+
+ url, fail_open
+
+    Read-only accessors for the corresponding constructor arguments.
+
+SEE ALSO
+
+    https://typesense.org/docs/ - the API reference this module follows.
+
+    Search::Typesense - the earlier Perl client; see "Relationship to
+    Search::Typesense".
+
+AUTHOR
+
+    SeHarrys
+
+COPYRIGHT AND LICENSE
+
+    This software is copyright (c) 2026 by SeHarrys.
+
+    This is free software; you can redistribute it and/or modify it under
+    the terms of the Artistic License 2.0.
+

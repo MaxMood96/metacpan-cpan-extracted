@@ -2,7 +2,7 @@ package Map::Tube::Plugin::Graph::Utils;
 
 use version;
 
-our $VERSION   = qv('v1.1.2');
+our $VERSION   = qv('v1.2.0');
 our $AUTHORITY = 'cpan:MANWAR';
 
 =head1 NAME
@@ -11,7 +11,7 @@ Map::Tube::Plugin::Graph::Utils - Helper package for Map::Tube::Plugin::Graph.
 
 =head1 VERSION
 
-Version v1.1.2
+Version v1.2.0
 
 =cut
 
@@ -79,6 +79,7 @@ sub graph_line_image {
     $line_name  = $line->name;
     my $bgcolor = $map->bgcolor;
     $bgcolor    = _graph_bgcolor($color) unless defined $bgcolor;
+    my $overlap = exists $args{overlap} ? !!$args{overlap} : 0;
 
     my $g = $map->as_graph;
     $g->set_graph_attribute(graphviz => {
@@ -87,7 +88,9 @@ sub graph_line_image {
         node   => { shape     => $SHAPE     },
         graph  => { label     => _graph_line_label($line_name, $map->name),
                     labelloc  => $LABELLOC,
-                    bgcolor   => $bgcolor }
+                    bgcolor   => $bgcolor,
+                    overlap   => $overlap,
+                  }
     });
     my $skip = $map->{skip};
     $g->filter_edges(sub { !exists $skip->{$_[3]}{$_[1]}{$_[2]} }) if defined $skip;
@@ -137,6 +140,8 @@ sub graph_map_image {
     }
     my $bgcolor = $map->bgcolor;
     $bgcolor = $BGCOLOR unless defined $bgcolor;
+    my $overlap = exists $args{overlap} ? !!$args{overlap} : 0;
+
     my $g = $map->as_graph;
     $g->set_graph_attribute(graphviz => {
         node   => { shape     => $SHAPE, color => $NODE_COLOR, fontcolor => $NODE_COLOR },
@@ -144,7 +149,7 @@ sub graph_map_image {
         graph  => { label     => _graph_map_label($map->name),
                     labelloc  => $LABELLOC,
                     bgcolor   => $bgcolor,
-                    overlap   => 0,
+                    overlap   => $overlap,
                   },
         global => { name => 'Map_Tube', },
     });

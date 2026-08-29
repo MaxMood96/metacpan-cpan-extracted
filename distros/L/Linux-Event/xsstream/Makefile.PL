@@ -11,6 +11,25 @@ WriteMakefile(
     MIN_PERL_VERSION => '5.036000',
     PM               => {},
     XS               => { 'Stream.xs' => 'Stream.c' },
-    OBJECT           => 'Stream$(OBJ_EXT)',
+    OBJECT           => join(' ', map { "$_\$(OBJ_EXT)" } qw(
+        Stream
+        stream_state
+        stream_transport
+        stream_callbacks
+        stream_input
+        stream_delivery
+        stream_read
+        stream_write
+        stream_transition
+        framer_delimiter
+        framer_fixed
+        framer_length
+        framer_netstring
+        framer_varint
+        framer_decimal
+    )),
+    depend           => {
+        '$(OBJECT)' => 'stream_internal.h stream_transport_abi.h',
+    },
     clean            => { FILES => 'Stream.c' },
 );

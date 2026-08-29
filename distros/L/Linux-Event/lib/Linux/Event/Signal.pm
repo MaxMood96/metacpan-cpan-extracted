@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.103';
+our $VERSION = '0.105';
 
 use Carp qw(croak);
 use Hash::Util::FieldHash qw(fieldhash);
@@ -74,6 +74,11 @@ sub _attach_to_loop ($self, $loop) {
     return $self->_attach_native($loop, $engine->{native});
 }
 
+sub _objects_for_loop ($class, $loop) {
+    my $engine = $ENGINE_FOR_LOOP{$loop};
+    return $engine ? $engine->{native}->objects : [];
+}
+
 sub CLONE ($class) {
     %CLASS_DESCRIPTOR = ();
     %ENGINE_FOR_LOOP = ();
@@ -105,6 +110,7 @@ sub _new ($class, $loop) {
     my $failed = sub { die "Linux::Event Signal event source failed\n" };
     $loop->watch(
         fd      => $self->{native}->fd,
+        _internal => 1,
         read    => $ready,
         error   => $failed,
         no_args => 1,

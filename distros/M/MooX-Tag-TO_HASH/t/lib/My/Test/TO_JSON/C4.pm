@@ -1,6 +1,7 @@
 package My::Test::TO_JSON::C4;
 
 use Moo;
+use Ref::Util 'is_ref';
 with 'MooX::Tag::TO_JSON';
 
 has c4_bool => ( is => 'ro', to_json => ',bool', default => 42 );
@@ -16,8 +17,7 @@ has secret_admirer => ( is => 'ro', );
 
 sub modify_jsonr {
     my ( $self, $jsonr ) = @_;
-    $jsonr->{$_} = uc $jsonr->{$_} for grep defined $jsonr->{$_}, keys %$jsonr;
+    $_ = uc for grep { defined and !is_ref( $_ ) } values %$jsonr;
 }
-
 1;
 

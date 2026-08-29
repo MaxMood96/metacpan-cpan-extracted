@@ -3,13 +3,16 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.103';
+our $VERSION = '0.105';
 
 use Carp qw(croak);
 use Scalar::Util qw(blessed);
 
 require XSLoader;
 XSLoader::load(__PACKAGE__, $VERSION);
+
+require Linux::Event::Loop::Introspection;
+our @ISA = ('Linux::Event::Loop::Introspection');
 
 sub add ($self, $object) {
     croak 'add(): object must support loop attachment'
@@ -199,13 +202,79 @@ rejected while its Loop is running or dispatching.
 Requests that the active C<run> or C<run_for> return after the current dispatch
 work completes.
 
+=head1 INTROSPECTION
+
+=head2 running
+
+Returns true while this Loop is inside C<run>, C<run_once>, or C<run_for>,
+including from a callback. This is an O(1) query of native driver state.
+
+=head2 count
+
+Returns the number of current managed public objects. Managed objects are
+Stream, Listener, Datagram, Timer, Signal, Wakeup, and Process instances.
+Opaque raw registrations and private helper objects are excluded. This query
+enumerates existing object and fd registries.
+
+=head2 has($object)
+
+Returns true only when the exact object is current in this Loop. An object
+owned by another Loop, or one which is detached or terminal, returns false.
+Identity is exact; the query enumerates the current object snapshot.
+
+=head2 objects
+
+Returns a new array reference containing the actual current managed objects.
+Order is unspecified. The query enumerates authoritative native and service
+registries without maintaining a duplicate public-object registry.
+
+=head2 inspect($object)
+
+Returns a new type-specific snapshot. Every result contains C<type>, C<class>,
+and C<registered>. A supported object which is not current in this Loop returns
+only those common fields with C<registered =E<gt> 0>. Current objects also
+include C<state> and fields appropriate to Stream, Listener, Datagram, Timer,
+Signal, Wakeup, or Process. See F<docs/INTROSPECTION.md> for the complete field
+table.
+
+=head2 census
+
+Returns a new hash reference containing counts for C<stream>, C<listener>,
+C<datagram>, C<timer>, C<signal>, C<wakeup>, and C<process>. Every key is
+present even when its count is zero.
+
+=head2 resources
+
+Returns a native resource snapshot: epoll and timer fds, total/public/internal
+registration counts, public registration fds, active Timers, and current
+registry, Timer heap, and event-buffer capacities. C<timer_fd> is undef until
+the first Timer creates the Loop's shared timer source. This scans the native
+fd registry and does not create resources.
+
+=head2 why_alive
+
+Returns an array reference of actionable user-visible liveness reasons.
+Managed-object entries contain the same snapshot as C<inspect> plus the exact
+C<object>. Direct raw C<watch> registrations appear as C<registration> entries
+with their fd. Private backing registrations are not repeated as reasons.
+
+=head2 pressure
+
+Returns conservative C<registrations>, C<timers>, and C<event_batch> capacity
+and utilization snapshots. Event-batch maximum and utilization are undef until
+an epoll wait has completed. This is implementation pressure, not a synthesized
+health or latency score.
+
 =head1 DIAGNOSTICS AND TUNING
 
 C<stats> returns counters for epoll waits, event classes, callbacks,
 registrations, Timer scheduling and delivery, dispatch batching, and lifecycle
 activity. C<reset_stats>
-resets them. C<enable_profile(1)> additionally records nanosecond timing and
-changes the measured workload, so it should be disabled for normal benchmarks.
+resets them without changing profiling state. C<profile($boolean)> returns the
+Loop and changes future nanosecond timing collection without resetting existing
+statistics. Statistics remain readable while profiling is disabled. The first
+API does not place a clock read around each callback. Profiling changes the
+measured workload, so it should be disabled for normal benchmarks.
 
 C<event_capacity> and C<set_event_capacity> inspect or change the reusable
 event array. C<callback_scope_limit> and C<set_callback_scope_limit> control

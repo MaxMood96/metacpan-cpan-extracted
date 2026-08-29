@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::Timestamp::Request;
-$Crypt::OpenSSL3::Timestamp::Request::VERSION = '0.011';
+$Crypt::OpenSSL3::Timestamp::Request::VERSION = '0.012';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::Timestamp::Request - A Timestamp Protocol request
 
 =head1 VERSION
 
-version 0.011
+version 0.012
 
 =head1 METHODS
 

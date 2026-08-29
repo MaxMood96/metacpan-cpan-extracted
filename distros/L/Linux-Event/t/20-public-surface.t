@@ -28,6 +28,7 @@ for my $required (
     'docs/PROCESS-DESIGN.md',
     'docs/CHOOSING-A-FRAMER.md',
     'docs/FRAMING.md',
+    'docs/INTROSPECTION.md',
     'bench/README.md',
     'bench/run-connect-microbench.pl',
     'bench/run-listen-microbench.pl',
@@ -37,11 +38,14 @@ for my $required (
     'bench/run-wakeup-microbench.pl',
     'bench/run-datagram-microbench.pl',
     'bench/run-process-microbench.pl',
+    'bench/run-callback-batching-fairness.pl',
+    'bench/run-callback-batching-microbench.pl',
     'bench/run-callback-ceiling.pl',
     'bench/run-stream-lifecycle-bench.pl',
     'bench/run-stream-microbench.pl',
     'bench/run-tls-microbench.pl',
     'bench/run-stream-transition-bench.pl',
+    'bench/run-stream-watcher-state-bench.pl',
     'bench/run-framing-microbench.pl',
     'bench/run-native-framers-microbench.pl',
     'bench/run-performance-regression.pl',
@@ -60,11 +64,13 @@ for my $required (
     'lib/Linux/Event/Framer/Varint.pm',
     'lib/Linux/Event/TLS.pm',
     'lib/Linux/Event/Loop.pm',
+    'lib/Linux/Event/Loop/Introspection.pm',
     'lib/Linux/Event/Signal.pm',
     'lib/Linux/Event/Wakeup.pm',
     'lib/Linux/Event/Listener.pm',
     'lib/Linux/Event/Stream.pm',
     'lib/Linux/Event/Stream/_Connection.pm',
+    'lib/Linux/Event/Stream/_Descriptor.pm',
     'lib/Linux/Event/Timer.pm',
     'lib/Linux/Event/Datagram.pm',
     'lib/Linux/Event/Process.pm',
@@ -116,6 +122,7 @@ for my $live (
     'docs/PROCESS-DESIGN.md',
     'docs/CHOOSING-A-FRAMER.md',
     'docs/FRAMING.md',
+    'docs/INTROSPECTION.md',
     'bench/README.md',
     'bench/run-connect-microbench.pl',
     'bench/run-listen-microbench.pl',
@@ -130,6 +137,7 @@ for my $live (
     'bench/run-stream-microbench.pl',
     'bench/run-tls-microbench.pl',
     'bench/run-stream-transition-bench.pl',
+    'bench/run-stream-watcher-state-bench.pl',
     'bench/run-framing-microbench.pl',
     'bench/run-native-framers-microbench.pl',
     'bench/run-performance-regression.pl',
@@ -157,11 +165,14 @@ my %allowed = map { $_ => 1 } qw(
     run-wakeup-microbench.pl
     run-datagram-microbench.pl
     run-process-microbench.pl
+    run-callback-batching-fairness.pl
+    run-callback-batching-microbench.pl
     run-callback-ceiling.pl
     run-stream-lifecycle-bench.pl
     run-stream-microbench.pl
     run-tls-microbench.pl
     run-stream-transition-bench.pl
+    run-stream-watcher-state-bench.pl
     run-framing-microbench.pl
     run-native-framers-microbench.pl
     run-performance-regression.pl

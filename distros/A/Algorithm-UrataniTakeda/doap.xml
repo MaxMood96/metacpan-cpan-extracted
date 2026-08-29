@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Project
+  xmlns="http://usefulinc.com/ns/doap#"
+  xmlns:dc="http://purl.org/dc/terms/"
+  xmlns:foaf="http://xmlns.com/foaf/0.1/"
+  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+  >
+  <name>Algorithm-UrataniTakeda</name>
+  <shortdesc>an implementation of the Uratani-Takeda string searching algorithm</shortdesc>
+  <category rdfs:label="Aho-Corasick" />
+  <category rdfs:label="Boyer-Moore" />
+  <category rdfs:label="Commentz-Walter" />
+  <category rdfs:label="Uratani-Takeda" />
+  <category rdfs:label="algorithm" />
+  <category rdfs:label="multi-term" />
+  <category rdfs:label="multiple" />
+  <category rdfs:label="patterns" />
+  <category rdfs:label="pattern" />
+  <category rdfs:label="matching" />
+  <category rdfs:label="string" />
+  <category rdfs:label="matching" />
+  <category rdfs:label="string" />
+  <category rdfs:label="searching" />
+  <category rdfs:label="text-search" />
+  <developer>
+    <foaf:Person>
+      <foaf:name>Robert Rothenberg</foaf:name>
+      <foaf:mbox rdf:resource="mailto:perl@rhizomnic.com" />
+    </foaf:Person>
+  </developer>
+  <license rdf:resource="http://www.perlfoundation.org/artistic_license_2_0" />
+  <bug-database rdf:resource="https://github.com/robrwo/perl-Algorithm-UrataniTakeda/issues" />
+  <repository>
+    <GitRepository>
+      <browse rdf:resource="https://github.com/robrwo/perl-Algorithm-UrataniTakeda" />
+      <location rdf:resource="git://github.com/robrwo/perl-Algorithm-UrataniTakeda.git" />
+    </GitRepository>
+  </repository>
+  <programming-language>Perl</programming-language>
+</Project>

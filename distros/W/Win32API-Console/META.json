@@ -4,13 +4,13 @@
       "J. Schneider"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "ExtUtils::MakeMaker version 7.1, CPAN::Meta::Converter version 2.150010",
+   "generated_by" : "ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010",
    "license" : [
       "mit"
    ],
    "meta-spec" : {
       "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
-      "version" : "2"
+      "version" : 2
    },
    "name" : "Win32API-Console",
    "no_index" : {
@@ -39,15 +39,10 @@
             "Win32API::Registry" : "0.21"
          },
          "requires" : {
-            "Encode" : "0",
-            "Exporter" : "0",
-            "Hash::Util" : "0",
             "Win32" : "0.44",
             "Win32::API" : "0.77",
             "Win32::Console" : "0.10",
-            "Win32API::File" : "0.08",
-            "perl" : "5.014",
-            "version" : "0.77"
+            "perl" : "5.014"
          }
       },
       "test" : {
@@ -68,6 +63,6 @@
          "web" : "https://github.com/brickpool/Win32API-Console"
       }
    },
-   "version" : "v0.3.1",
-   "x_serialization_backend" : "JSON::PP version 2.27300"
+   "version" : "v0.3.3",
+   "x_serialization_backend" : "JSON::PP version 4.16"
 }

@@ -136,7 +136,7 @@ Note that L<Getopt::Long::More> is required.
 
 =head1 BUGS
 
-Report bugs at L<https://github.com/author/App-pod2gfm/issues>.
+Report bugs at L<https://github.com/ryoskzypu/App-pod2gfm/issues>.
 
 =head1 AUTHOR
 

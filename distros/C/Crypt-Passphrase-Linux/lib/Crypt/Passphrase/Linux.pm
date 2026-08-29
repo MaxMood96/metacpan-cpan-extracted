@@ -1,15 +1,16 @@
 package Crypt::Passphrase::Linux;
-$Crypt::Passphrase::Linux::VERSION = '0.003';
+$Crypt::Passphrase::Linux::VERSION = '0.004';
 use strict;
 use warnings;
 
-use Crypt::Passphrase 0.010 -encoder;
+use parent 'Crypt::Passphrase::Encoder';
 
 use Carp 'croak';
-use Crypt::Passwd::XS 'crypt';
-use MIME::Base64 qw/encode_base64/;
+use Crypt::Passwd::XS;
+use Crypt::Passphrase::Util::Crypt64 'encode_crypt64';
 
 my %identifier_for = (
+	des        => '',
 	md5        => '1',
 	apache_md5 => 'apr1',
 	sha256     => '5',
@@ -17,6 +18,7 @@ my %identifier_for = (
 );
 
 my %salt_size = (
+	des        => 2,
 	md5        => 6,
 	apache_md5 => 6,
 	sha256     => 12,
@@ -40,8 +42,9 @@ sub new {
 sub hash_password {
 	my ($self, $password) = @_;
 	my $salt = $self->random_bytes($self->{salt_size});
-	(my $encoded_salt = encode_base64($salt, "")) =~ tr{A-Za-z0-9+/=}{./A-Za-z0-9}d;
-	my $settings = sprintf '$%s$rounds=%d$%s', $self->{type}, $self->{rounds}, $encoded_salt;
+	my $encoded_salt = encode_crypt64($salt);
+	substr $encoded_salt, 2, 1, '' if $self->{salt_size} == 2; # descrypt
+	my $settings = $self->{type} ? sprintf '$%s$rounds=%d$%s', $self->{type}, $self->{rounds}, $encoded_salt : $encoded_salt;
 	return Crypt::Passwd::XS::crypt($password, $settings);
 }
 
@@ -58,9 +61,13 @@ my $regex = qr/ ^ \$ (1|5|6|apr1) \$ (?: rounds= ([0-9]+) \$ )? ([^\$]*) \$ [^\$
 
 sub needs_rehash {
 	my ($self, $hash) = @_;
-	my ($type, $rounds, $salt) = $hash =~ $regex or return 1;
-	$rounds = 5000 if $rounds eq '';
-	return $type ne $self->{type} || $rounds != $self->{rounds} || length $salt != $self->{salt_size} * 4 / 3;
+	if (length $self->{type}) {
+		my ($type, $rounds, $salt) = $hash =~ $regex or return 1;
+		$rounds = 5000 if $rounds eq '';
+		return $type ne $self->{type} || $rounds != $self->{rounds} || length $salt != $self->{salt_size} * 4 / 3;
+	} else {
+		return $hash !~ / \A [.\/A-Za-z0-9]{13} \z /x;
+	}
 }
 
 sub verify_password {
@@ -85,7 +92,7 @@ Crypt::Passphrase::Linux - An linux crypt encoder for Crypt::Passphrase
 
 =head1 VERSION
 
-version 0.003
+version 0.004
 
 =head1 SYNOPSIS
 
@@ -97,45 +104,25 @@ version 0.003
 
 =head1 DESCRIPTION
 
-This class implements a Crypt::Passphrase encoder compatible with Linux' crypt.
+This class implements a Crypt::Passphrase encoder compatible with Linux' crypt. This is useful when needing to specifically support the sha256 and sha512 password types.
 
-=head1 METHODS
-
-=head2 new(%args)
-
-This creates a new crypt encoder, it takes named parameters that are all optional. Note that some defaults are likely to change at some point in the future, as computers get progressively more powerful and cryptoanalysis gets more advanced.
+=head2 ARGUMENTS
 
 =over 4
 
 =item * type
 
-This choses the crypt type. It supports the following crypt types: C<sha512> (default), C<sha256>, C<md5>, and C<apache_md5>
+This choses the crypt type. It supports the following crypt types: C<sha512> (default), C<sha256>, C<md5>, C<apache_md5> and C<des>.
 
 =item * rounds
 
-The number of rounds using by the crypt implementation. This defaults to C<656000>, but may change at any time in the future.
+The number of rounds using by the crypt implementation. This defaults to C<656000>, but may change at any time in the future. It is ignored for C<des>.
 
 =back
 
-=head2 hash_password($password)
-
-This hashes the passwords with argon2 according to the specified settings and a random salt (and will thus return a different result each time).
-
-=head2 needs_rehash($hash)
-
-This returns true if the hash uses a different cipher, or if any of the parameters are different than desired by the encoder.
-
-=head2 crypt_types()
-
-This class supports the following crypt types: C<1>, C<5>, C<6>, C<apr1>.
-
-=head2 verify_password($password, $hash)
-
-This will check if a password matches a linux crypt hash.
-
 =head1 AUTHOR
 
-Leon Timmermans <leont@cpan.org>
+Leon Timmermans <fawaka@gmail.com>
 
 =head1 COPYRIGHT AND LICENSE
 

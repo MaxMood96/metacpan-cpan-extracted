@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::SSL::Session;
-$Crypt::OpenSSL3::SSL::Session::VERSION = '0.011';
+$Crypt::OpenSSL3::SSL::Session::VERSION = '0.012';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::SSL::Session - SSL Session state
 
 =head1 VERSION
 
-version 0.011
+version 0.012
 
 =head1 DESCRIPTION
 

@@ -27,29 +27,9 @@ DESCRIPTION
 
 RECENT CHANGES
 
-    Changes for version 0.011 (2026-08-27)
+    Changes for version 0.012 (2026-08-28)
 
-      * Allow an undefined message digest in MD::Context->verify_init
-
-      * Decode UTF8 data coming from ASN1 properly
-
-      * Add Encoder and Decoder classes for PKey
-
-      * Fix error_string method to actually return a valid value
-
-      * Add SKey support
-
-      * Add algorithm parameter support to X509::Algorithm
-
-      * Add BasicConstraints class
-
-      * Remove ctrl methods from MD and Cipher contexts
-
-      * Remove typed param methods from PKey
-
-      * Invert return value of set_alpn_protos
-
-      * Always add null byte to buffers
+      * Add version guards for OpenSSL 3.5
 
     See the Changes file for more details.
 

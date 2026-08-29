@@ -18,6 +18,8 @@ bench/archive/run-phase18.pl
 bench/archive/run-watcher-reuse-bench.pl
 bench/README.md
 bench/results/.gitkeep
+bench/run-callback-batching-fairness.pl
+bench/run-callback-batching-microbench.pl
 bench/run-callback-ceiling.pl
 bench/run-connect-microbench.pl
 bench/run-datagram-microbench.pl
@@ -32,17 +34,20 @@ bench/run-signal-microbench.pl
 bench/run-stream-lifecycle-bench.pl
 bench/run-stream-microbench.pl
 bench/run-stream-transition-bench.pl
+bench/run-stream-watcher-state-bench.pl
 bench/run-timer-microbench.pl
 bench/run-tls-microbench.pl
 bench/run-wakeup-microbench.pl
 bench/STREAM-COMPETITOR-PLAN.md
 Changes
+CONTRIBUTING.md
 docs/ARCHITECTURE.md
 docs/CHOOSING-A-FRAMER.md
 docs/CORE.md
 docs/DATAGRAM-DESIGN.md
 docs/DEVELOPMENT-HISTORY.md
 docs/FRAMING.md
+docs/INTROSPECTION.md
 docs/LISTENER-DESIGN.md
 docs/OBJECT-LIFECYCLE.md
 docs/PROCESS-DESIGN.md
@@ -77,10 +82,12 @@ lib/Linux/Event/Framer/U32BE.pm
 lib/Linux/Event/Framer/Varint.pm
 lib/Linux/Event/Listener.pm
 lib/Linux/Event/Loop.pm
+lib/Linux/Event/Loop/Introspection.pm
 lib/Linux/Event/Process.pm
 lib/Linux/Event/Signal.pm
 lib/Linux/Event/Stream.pm
 lib/Linux/Event/Stream/_Connection.pm
+lib/Linux/Event/Stream/_Descriptor.pm
 lib/Linux/Event/Timer.pm
 lib/Linux/Event/TLS.pm
 lib/Linux/Event/Wakeup.pm
@@ -91,6 +98,7 @@ MANIFEST.SKIP
 META.json			Module JSON meta-data (added by MakeMaker)
 META.yml			Module YAML meta-data (added by MakeMaker)
 README.md
+SECURITY.md
 t/00-load.t
 t/01-pipe-read.t
 t/02-watch-options.t
@@ -125,6 +133,9 @@ t/30-ithread-class-descriptors.t
 t/31-registration-lifecycle-regressions.t
 t/32-loop-dispatch-recovery.t
 t/33-loop-driver-contract.t
+t/34-loop-introspection.t
+t/35-loop-introspection-types.t
+t/36-configure-platform.t
 t/connect-13-benchmark-smoke.t
 t/datagram-00-api.t
 t/datagram-10-udp.t
@@ -205,6 +216,11 @@ t/stream-50-tcp-socket-options.t
 t/stream-51-local-bind-errors.t
 t/stream-52-preconnect-backpressure.t
 t/stream-53-adopted-and-callback-close.t
+t/stream-54-watcher-state-benchmark-smoke.t
+t/stream-55-callback-batching.t
+t/stream-56-message-batch-framers.t
+t/stream-57-callback-batching-benchmark-smoke.t
+t/stream-58-callback-batching-fairness-smoke.t
 t/tls-00-load.t
 t/tls-01-declaration.t
 t/tls-10-stream.t
@@ -236,9 +252,24 @@ xsresolver/Makefile.PL
 xsresolver/Resolver.xs
 xssignal/Makefile.PL
 xssignal/Signal.xs
+xsstream/framer_decimal.c
+xsstream/framer_delimiter.c
+xsstream/framer_fixed.c
+xsstream/framer_length.c
+xsstream/framer_netstring.c
+xsstream/framer_varint.c
 xsstream/Makefile.PL
 xsstream/Stream.xs
+xsstream/stream_callbacks.c
+xsstream/stream_delivery.c
+xsstream/stream_input.c
+xsstream/stream_internal.h
+xsstream/stream_read.c
+xsstream/stream_state.c
+xsstream/stream_transition.c
+xsstream/stream_transport.c
 xsstream/stream_transport_abi.h
+xsstream/stream_write.c
 xstls/check_openssl.c
 xstls/Makefile.PL
 xstls/TLS.xs

@@ -12,6 +12,7 @@ WriteMakefile(
     MIN_PERL_VERSION => '5.016',
     PL_FILES         => {},
     EXE_FILES        => [
+        'bin/amberdb_backup.pl',
         'bin/convert_dbstore.pl',
         'bin/setup_ramdisk.pl',
     ],
@@ -35,11 +36,17 @@ WriteMakefile(
         'List::Util'   => '0',
         'Getopt::Long' => '0',
         'parent'       => '0',
+        'Archive::Tar' => '0',
+        'Digest::SHA'  => '0',
+        'JSON::PP'     => '0',
+        'Hash::Util'   => '0',
     },
     TEST_REQUIRES => {
-        'Test::More' => '0.98',
-        'File::Temp' => '0',
-        'FindBin'    => '0',
+        'Test::More'   => '0.98',
+        'File::Temp'   => '0',
+        'FindBin'      => '0',
+        'Archive::Tar' => '0',
+        'JSON::PP'     => '0',
     },
     META_MERGE => {
         'meta-spec' => { version => 2 },

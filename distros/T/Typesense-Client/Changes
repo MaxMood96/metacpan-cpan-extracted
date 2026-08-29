@@ -1,0 +1,7 @@
+Revision history for Typesense-Client
+
+0.001     2026-08-29 01:53:21+02:00 Europe/Madrid
+  - First release. Full Typesense v28+ API surface: collections, documents
+    (including JSONL import/export), aliases, search and multi_search,
+    synonyms, overrides (curation), analytics rules and events, API keys and
+    scoped search keys, plus a comparable server version object.

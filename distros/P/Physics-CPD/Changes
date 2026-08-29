@@ -1,0 +1,39 @@
+Revision history for Physics-CPD
+
+0.03  2026-08-28
+      - Renamed the CPAN distribution from Physics-Stellarator to Physics-CPD
+        so the upload identity matches the primary indexed module,
+        Physics::CPD.
+      - Updated documentation to describe Physics::CPD as the generic
+        computational plasma dynamics package and Physics::CPD::Stellarator as
+        its stellarator fusion-reactor modelling submodule.
+
+0.02  2026-07-06
+      - Physics::CPD::Stellarator: theoretical fusion-power production for a
+        50:50 D-T plasma - Bosch-Hale reactivity (dt_reactivity), fusion power
+        density and total fusion power (fusion_power / fusion_power_MW), the
+        neutron/alpha split (neutron_power_MW / alpha_power_MW), neutron wall
+        loading (neutron_wall_load), fusion gain Q (fusion_gain_Q) and a
+        power_report; new dt_fuel_fraction attribute.
+      - examples/power_production.pl: theoretical D-T fusion power of the
+        W7-X-class design with ion-temperature and density scans.
+      - README: added a full API reference for both modules and a fusion-power
+        section; expanded method/attribute documentation in the POD.
+      - Tests: t/05-fusion.t validates the reactivity and power relationships.
+
+0.01  2026-07-06
+      - Initial release.
+      - Physics::CPD: pure-Perl computational-plasma-dynamics engine
+        (plasma/cyclotron frequencies, Debye length, gyroradii, thermal and
+        Alfven speeds, ion sound speed, pressures, beta, Coulomb logarithm,
+        collision frequency, mean free path, Spitzer resistivity, plasma
+        parameter; multi-species support).
+      - Physics::CPD::Stellarator: Wendelstein 7-X model extending Physics::CPD
+        (aspect ratio, plasma volume/surface, rotational transform, ISS04
+        confinement scaling, stored energy, Sudo density limit, beta/density
+        fractions, Lawson triple product, ECRH resonance field, radial
+        profiles).
+      - VMEC-style Fourier boundary geometry: flux surfaces, helical magnetic
+        axis, nested surfaces and modular coils.
+      - Plotting via PDL::Graphics::Gnuplot: 3-D design diagram, poloidal
+        cross sections, radial profiles and confinement scans.

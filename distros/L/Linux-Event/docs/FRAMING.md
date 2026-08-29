@@ -120,6 +120,32 @@ Each concrete subclass gets its own cached descriptor, so its resolved callback
 set is stable. It does not get a copy of immutable framing data per connection.
 A class may not declare two framers or combine `on_data` with framed mode.
 
+## Explicit message batches
+
+The ordinary API delivers one complete message at a time. A pipelined protocol
+may explicitly select bounded array delivery in its cached class policy:
+
+```perl
+sub stream_options ($class) {
+    return message_batch_size => 32;
+}
+
+sub on_messages ($stream, $messages) {
+    process_message($stream, $_) for @$messages;
+}
+```
+
+`on_message` and `on_messages` are mutually exclusive. A positive
+`message_batch_size` requires `on_messages`; defining the method without the
+option is rejected. XS flushes a partial batch when the current read drain
+reaches EAGAIN, before EOF or a framing error, and when accumulated payload
+reaches the class `max_buffer`. It never waits for later input merely to fill
+the array.
+
+Pause, close, and `transition_to` take effect after the complete callback
+array. Consequently a negotiation protocol that must change type immediately
+after one particular message should retain ordinary `on_message` delivery.
+
 ## Changing framing on a live connection
 
 Negotiated and upgraded protocols may move between raw and framed Stream
@@ -176,9 +202,12 @@ silently converted or swallowed.
 The descriptor stores immutable parser config and resolved named CVs once per
 class. XS appends bytes directly to per-connection native storage, finds every
 complete built-in frame available, and crosses into Perl only to deliver
-semantic messages or lifecycle errors. This removes per-read chunk scalars for
-framed mode and removes per-frame parser calls whose only result would be a
-boundary tuple.
+semantic messages or lifecycle errors. Explicit message batching can amortize
+that semantic crossing across several frames. The zero default preserves
+ordinary one-message delivery without constructing arrays. Native framing
+also removes per-read chunk scalars and per-frame parser calls whose only result
+would be a boundary tuple.
 
 Measure changes with `bench/run-framing-microbench.pl`,
-`bench/run-native-framers-microbench.pl`, and the versioned lifecycle benchmark.
+`bench/run-native-framers-microbench.pl`, the callback-batching throughput and
+fairness benchmarks, and the versioned lifecycle benchmark.

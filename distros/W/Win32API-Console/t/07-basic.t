@@ -1,18 +1,28 @@
 use strict;
 use warnings;
 
-use Test::More tests => 8;
+use Test::More tests => 9;
 use File::Basename;
 use lib dirname(__FILE__) . '\lib';
 
 BEGIN {
   use_ok 'TestConsole', qw( GetConsoleOutputHandle );
   use_ok 'Win32API::Console', qw(
+    GetStdHandle
     GetConsoleWindow
     GetOSVersion
     INVALID_HANDLE_VALUE
   );
 }
+
+# Test: INVALID_HANDLE_VALUE constant
+my $invalid = GetStdHandle( -1 );
+diag "INVALID_HANDLE_VALUE => $invalid" unless $invalid < 0;
+is(
+  $invalid, 
+  INVALID_HANDLE_VALUE, 
+  'GetStdHandle(-1) returned INVALID_HANDLE_VALUE'
+);
 
 # Get a handle to the current console output
 my $hConsole = GetConsoleOutputHandle();

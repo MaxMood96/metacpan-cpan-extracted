@@ -4,7 +4,7 @@ MooX::Tag::TO\_HASH - Controlled translation of Moo objects into Hashes
 
 # VERSION
 
-version 0.06
+version 0.07
 
 # SYNOPSIS
 
@@ -33,9 +33,9 @@ version 0.06
 \# resulting in
 
     $VAR1 = {
-              'goose' => 'Frank',
+              'cow' => 'Daisy',
               'hen' => undef,
-              'cow' => 'Daisy'
+              'goose' => 'Frank'
             };
 
 # DESCRIPTION
@@ -163,10 +163,10 @@ This method is added to the consuming class or role.
 \# resulting in
 
     $VAR1 = {
-              'HEN' => 'Ruby',
               'COW' => 'Daisy',
-              'GOOSE' => 'Donald',
-              'HORSE' => 'Ed'
+              'HEN' => 'Ruby',
+              'HORSE' => 'Ed',
+              'GOOSE' => 'Donald'
             };
 
 # DEPRECATED BEHAVIOR

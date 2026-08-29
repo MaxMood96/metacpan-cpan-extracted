@@ -11,7 +11,7 @@ App::File::Grepper - Greps files for pattern
 
 =cut
 
-our $VERSION = '1.02';
+our $VERSION = '1.04';
 
 =head1 SYNOPSIS
 
@@ -62,14 +62,15 @@ Pass each file where the pattern is found to the less viewer.
 
 =item filter
 
-A perl pattern to select which files must be processed. Note that this
-pattern is applied to the basename of each file, not the full path.
+A list of perl patterns to select which files must be processed. Note
+that these patterns are applied to the basename of each file, not the
+full path.
 
 =item exclude
 
-A perl pattern to select which files must be rejected. Note that this
-pattern is applied to the basename of each file, not the full path.
-Also, this pattern is applied before the filter pattern.
+A list of perl patterns to select which files must be rejected. Note
+that these patterns are applied to the basename of each file, not the
+full path. Also, these pattern are applied before the filter patterns.
 
 Version control directories C<RCS>, C<CVS>, C<.svn>, C<.git> and
 C<.hg> are always excluded, as are common editor backups.
@@ -117,17 +118,17 @@ sub main {
 	: sub { $_[0] };
 
     my $filter;
-    if ( defined $opts->{filter} ) {
-	$filter = $opts->{filter};
+    if ( defined $opts->{filter} && @{$opts->{filter}} ) {
+	$filter = '(?:' . join('|', @{$opts->{filter}}) . ')';
 	$filter = qr/$filter/;
     }
     my $exclude;
-    if ( defined $opts->{exclude} ) {
-	$exclude = $opts->{exclude};
+    if ( defined $opts->{exclude} && @{$opts->{exclude}} ) {
+	$exclude = '(?:' . join('|', @{$opts->{exclude}}) . ')';
 	$exclude = qr/$exclude/;
     }
     else {
-	$exclude = qr{ (?: ^\# | ^\.\.?(?!/) | ~$ ) }x;
+	$exclude = qr{ (?: ^\# | ^\.(?>\.?)(?!/) | ~$ ) }x;
     }
 
     binmode( STDOUT, ":utf8" );
@@ -145,7 +146,7 @@ sub main {
 
 	# Handle include/exclude filters.
 	if ( $exclude && ( $_ =~ $exclude ) ) {
-	    warn("EXCL: $_\n") if $opts->{debug};
+	    warn("EXCL: $_ ($exclude)\n") if $opts->{debug};
 	    return;
 	}
 	if ( $filter && ( $_ !~ $filter ) ) {
@@ -214,39 +215,28 @@ sub main {
 
 =head1 AUTHOR
 
-Johan Vromans, C<< <jv at cpan.org> >>
+Johan Vromans, C<< <JV at cpan.org> >>
 
-=head1 BUGS
-
-Please report any bugs or feature requests to C<bug-app-file-grepper at rt.cpan.org>, or through
-the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=App-File-Grepper>.  I will be notified, and then you'll
-automatically be notified of progress on your bug as I make changes.
-
-=head1 SUPPORT
+=head1 SUPPORT AND DOCUMENTATION
 
 Development of this module takes place on GitHub:
-L<https://github.com/sciurius/afg>.
+https://github.com/sciurius/afg.
 
 You can find documentation for this module with the perldoc command.
 
-    perldoc App::Packager
+    perldoc App::File::Grepper
 
 Please report any bugs or feature requests using the issue tracker on
 GitHub.
 
-=back
-
 =head1 ACKNOWLEDGEMENTS
-
-This program was inspired by C<ack> not having a B<-e> option.
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2012,2016,2022 Johan Vromans, all rights reserved.
+Copyright 2012,2016,2022,2026 Johan Vromans, all rights reserved.
 
 This program is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
-
 
 =cut
 

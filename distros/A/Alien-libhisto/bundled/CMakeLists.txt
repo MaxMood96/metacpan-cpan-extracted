@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 project(libhisto
-    VERSION 0.2.0
+    VERSION 0.3.0
     DESCRIPTION "Fast, portable, memory-safe 1D and 2D histogramming and statistical computing C library"
     LANGUAGES C
 )
@@ -24,6 +24,7 @@ option(LIBHISTO_ENABLE_ASAN "Enable AddressSanitizer and UndefinedBehaviorSaniti
 option(LIBHISTO_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(LIBHISTO_ENABLE_MSAN "Enable MemorySanitizer (Clang only)" OFF)
 option(LIBHISTO_ENABLE_FUZZING "Build fuzz testing harnesses and standalone corpus runners" OFF)
+option(LIBHISTO_ENABLE_BINDINGS_TESTS "Enable language binding tests in CTest" OFF)
 option(LIBHISTO_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ON)
 option(LIBHISTO_BUILD_DOCS "Build Doxygen documentation" OFF)
 
@@ -60,7 +61,7 @@ find_package(Threads REQUIRED)
 # Configure common warning flags
 add_library(histo_compiler_flags INTERFACE)
 if(MSVC)
-    target_compile_options(histo_compiler_flags INTERFACE /W4)
+    target_compile_options(histo_compiler_flags INTERFACE /W4 /wd4056 /wd4756 /wd4996)
     if(LIBHISTO_WARNINGS_AS_ERRORS)
         target_compile_options(histo_compiler_flags INTERFACE /WX)
     endif()

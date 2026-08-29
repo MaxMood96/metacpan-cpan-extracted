@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.103';
+our $VERSION = '0.105';
 
 use Carp qw(croak);
 
@@ -96,7 +96,8 @@ only its changing parser state.
 =head1 RAW STREAMS
 
 A subclass that does not import a framer is a raw Stream type and must define
-C<on_data>. A framed subclass must define C<on_message>. See
+C<on_data>. A framed subclass normally defines C<on_message>; a subclass that
+explicitly enables C<message_batch_size> defines C<on_messages> instead. See
 L<Linux::Event::Stream> and F<docs/FRAMING.md>.
 
 =head1 EXTENDING THE BUILT-IN FAMILY

@@ -18,7 +18,6 @@ use Test2::V1 qw<
 >;
 
 use App::pod2gfm;
-
 use File::Spec::Functions qw< catdir >;
 use Capture::Tiny 0.50 qw< capture_stdout capture_stderr >;
 use Path::Tiny 0.150;
@@ -46,11 +45,11 @@ my %DEFAULTS = (
 
 # Unit test each method separately.
 subtest 'Unit test' => sub {
-    #skip_all;
+    # skip_all;
 
-    # Test constructor.
+    # Test constructor
     subtest 'Construct App::pod2gfm instance' => sub {
-        #skip_all;
+        # skip_all;
 
         my $pod2gfm = App::pod2gfm->new;
 
@@ -60,15 +59,15 @@ subtest 'Unit test' => sub {
         );
     };
 
-    # Test options processing.
+    # Test options processing
     #
     # NOTE:
     #   Do not test --help and --version because they must exit() immediately when
     #   invoked via CLI; they are so simple that can be skipped.
     subtest 'Options processing' => sub {
-        #skip_all;
+        # skip_all;
 
-        my %TESTS_OPTS = (
+        my %TESTS = (
             'nothing' => {
                 success => undef,
             },
@@ -116,7 +115,7 @@ subtest 'Unit test' => sub {
 
         my $pod2gfm = App::pod2gfm->new;
 
-        foreach my ( $k, $v ) (%TESTS_OPTS) {
+        foreach my ( $k, $v ) (%TESTS) {
             subtest $k => sub {
                 if ( defined $v->{error} ) {
                     my ( $stderr, @return ) = capture_stderr {
@@ -151,9 +150,9 @@ subtest 'Unit test' => sub {
         }
     };
 
-    # Test filehandle argument logic.
+    # Test filehandle argument logic
     subtest 'Filehandle processing' => sub {
-        #skip_all;
+        # skip_all;
 
         my %TESTS = (
             'STDIN -> STDOUT' => {
@@ -232,8 +231,9 @@ subtest 'Unit test' => sub {
                 return $pod2gfm->_set_handles;
             };
 
-            my $in_fh  = $pod2gfm->infile;
-            my $out_fh = $pod2gfm->outfile;
+            my %handles = $pod2gfm->handles;
+            my $in_fh   = $handles{infile}{fh};
+            my $out_fh  = $handles{outfile}{fh};
 
             if ( defined $opts{no_force} ) {
                 is(
@@ -273,15 +273,14 @@ subtest 'Unit test' => sub {
                 is_fh( $v->%* );
             };
         }
-
     };
 };
 
 # Test if App::pod2gfm methods work together correctly.
 subtest 'Integration test' => sub {
-    #skip_all;
+    # skip_all;
 
-    # Test file processing.
+    # Test file processing
     #
     # NOTE:
     #   Assert that pod2gfm runs correctly as documented in the POD.
@@ -289,7 +288,7 @@ subtest 'Integration test' => sub {
     #   Do not test --hl-language, --man-url-prefix, and --perldoc-url-prefix options
     #   since they are tested by Pod::Markdown::Githubert and Pod::Markdown distros.
     subtest 'File processing' => sub {
-        #skip_all;
+        # skip_all;
 
         my $data     = $DEFAULTS{data}{got};
         my $expected = $DEFAULTS{data}{expected};
@@ -500,6 +499,109 @@ subtest 'Integration test' => sub {
                 elsif ( $v->{mode} =~ /\Amulti_/ ) {
                     is_data_multi( $v->%* );
                 }
+            };
+        }
+    };
+
+    # Test error handling
+    subtest 'Error handling' => sub {
+        # skip_all;
+
+        my %DATA = (
+            wrong => {
+                got => <<~'END',
+                   =headX Wrong directive
+
+                   Text
+                   END
+
+                expected => <<~'END',
+                    Text
+                    END
+            },
+            ok => {
+                got => <<~'END',
+                   =head1 Correct directive
+
+                   Text
+                   END
+
+                expected => <<~'END',
+                    # Correct directive
+
+                    Text
+                    END
+            },
+        );
+
+        my %TESTS = (
+            single => {
+                wrong => {
+                    $DATA{wrong}->%*,
+                },
+            },
+            multi => {
+                %DATA,
+            },
+        );
+
+        foreach my ( $k, $v ) (%TESTS) {
+            subtest $k => sub {
+                my $pod2gfm = App::pod2gfm->new;
+                my $tempdir = Path::Tiny->tempdir;
+
+                my %wrong = my %ok = (
+                    data     => undef,
+                    expected => undef,
+                    infile   => undef,
+                    outfile  => undef,
+                    got      => undef,
+                );
+
+                $wrong{data}     = $v->{wrong}{got};
+                $wrong{expected} = $v->{wrong}{expected};
+                $wrong{infile}   = $tempdir->child('file_a.pod');
+                $wrong{outfile}  = $tempdir->child('file_a.md');
+
+                path( $wrong{infile} )->spew_utf8( $wrong{data} );
+
+                if ( $k eq 'multi' ) {
+                    $ok{data}     = $v->{ok}{got};
+                    $ok{expected} = $v->{ok}{expected};
+                    $ok{infile}   = $tempdir->child('file_b.pod');
+                    $ok{outfile}  = $tempdir->child('file_b.md');
+
+                    path( $ok{infile} )->spew_utf8( $ok{data} );
+                }
+
+                my @args = ( $wrong{infile}, $wrong{outfile} );
+                push @args, $ok{infile}, $ok{outfile}
+                  if $k eq 'multi';
+
+                my ( $stdout, @ret ) = capture_stderr {
+                    return $pod2gfm->init(@args)->run;
+                };
+
+                my $return = $ret[0];
+
+                $wrong{got} = path( $wrong{outfile} )->slurp_utf8;
+                $ok{got}    = path( $ok{outfile} )->slurp_utf8
+                  if $k eq 'multi';
+
+                is(
+                    $wrong{got}, $wrong{expected},
+                    "data match ($wrong{infile}, $wrong{outfile})",
+                );
+
+                is(
+                    $ok{got}, $ok{expected},
+                    "data match ($ok{infile}, $ok{outfile})",
+                ) if $k eq 'multi';
+
+                is(
+                    $return, number(1),
+                    'return value (error)',
+                );
             };
         }
     };

@@ -3,8 +3,8 @@
    "author" : [
       "ryoskzypu <ryoskzypu@proton.me>"
    ],
-   "dynamic_config" : 1,
-   "generated_by" : "ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010",
+   "dynamic_config" : 0,
+   "generated_by" : "ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013",
    "license" : [
       "open_source"
    ],
@@ -86,8 +86,9 @@
          "web" : "https://github.com/ryoskzypu/App-pod2gfm"
       }
    },
-   "version" : "v1.1.0",
+   "version" : "v1.1.1",
    "x_contributors" : [
+      "Lukas Mai <lmai at web.de>",
       "ryoskzypu <ryoskzypu@proton.me>"
    ],
    "x_serialization_backend" : "JSON::PP version 4.16",

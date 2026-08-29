@@ -1,5 +1,11 @@
 # Linux::Event
 
+[![CPAN version](https://badge.fury.io/pl/Linux-Event.svg)](https://metacpan.org/dist/Linux-Event)
+[![CPANTS Kwalitee](https://cpants.cpanauthors.org/dist/Linux-Event.svg)](https://cpants.cpanauthors.org/dist/Linux-Event)
+[![CI](https://github.com/haxmeister/perl-linux-event/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/haxmeister/perl-linux-event/actions/workflows/ci.yml)
+[![License](https://img.shields.io/cpan/l/Linux-Event.svg)](https://github.com/haxmeister/perl-linux-event/blob/main/LICENSE)
+[![Perl](https://img.shields.io/badge/perl-5.36%2B-blue.svg)](https://www.perl.org/)
+
 Linux::Event is a Linux-only asynchronous I/O foundation for Perl. It combines
 an XS-first `epoll` reactor with timers, synchronous signal handling, eventfd
 wakeups, inbound and outbound byte streams, packet-preserving datagrams,
@@ -47,6 +53,7 @@ details. Applications must not construct, subclass, or depend on them.
 - no-argument callback fast path and bounded callback scopes
 - runtime read/write interest changes
 - profiling and statistics support
+- query-driven object, resource, liveness, and pressure introspection
 
 ### Object lifecycle
 
@@ -170,6 +177,7 @@ my $server = ServerListener->new(
 - subclass-defined behavior with one cached descriptor per Stream type
 - named callback CVs resolved once and called directly
 - native read draining and framed-input storage
+- opt-in bounded raw-read coalescing and framed `on_messages` arrays
 - native immediate writes and segmented `writev()` queue draining
 - versioned transport ABI with a specialized plain path and built-in OpenSSL
   `Linux::Event::TLS` provider support
@@ -187,6 +195,29 @@ my $server = ServerListener->new(
 
 The raw reactor never performs application I/O automatically. Stream is the
 higher-level layer for applications that want owned byte-stream I/O.
+
+### Stream callback batching
+
+Callback batching is an explicit class policy for pipelined workloads. A
+framed Stream replaces one-message delivery with bounded arrays like this:
+
+```perl
+sub stream_options ($class) {
+    return message_batch_size => 32;
+}
+
+sub on_messages ($stream, $messages) {
+    process_message($stream, $_) for @$messages;
+}
+```
+
+`on_message` and `on_messages` are mutually exclusive. XS flushes a partial
+array when the current read drain reaches `EAGAIN`, so it never waits for a
+future message merely to reach 32. A raw Stream may instead set
+`read_batch_bytes` to combine successful reads up to a byte bound before
+calling `on_data`. Both settings default to zero. Pause, close, and protocol
+transition take effect at the selected batch boundary, so negotiation streams
+that must transition after one specific message should keep `on_message`.
 
 ### Established Stream deadlines
 
@@ -269,6 +300,27 @@ my $worker = $loop->add(WorkerProcess->spawn(
 These are equivalent attachment styles. `add()` stores the Loop, starts the
 object, and returns that same object. An object can be attached only once and
 cannot move between Loops.
+
+## Loop introspection
+
+Loop diagnostics query existing native and service state only when requested:
+
+```perl
+my $objects   = $loop->objects;
+my $snapshot  = $loop->inspect($objects->[0]);
+my $census    = $loop->census;
+my $resources = $loop->resources;
+my $reasons   = $loop->why_alive;
+my $pressure  = $loop->pressure;
+```
+
+`running` is O(1). Object and resource queries enumerate authoritative
+registries and do not maintain a duplicate public-object registry in the hot
+path. `profile(1)`, `stats`, and `reset_stats` provide opt-in native timing and
+counters; profiling changes the measured workload and should remain disabled
+for ordinary throughput comparisons. See
+[`docs/INTROSPECTION.md`](docs/INTROSPECTION.md) for exact return shapes and
+costs.
 
 ## Timer example
 
@@ -407,7 +459,9 @@ make test
 All ten native extensions are built into the same `blib` tree. The supported
 runtime is Linux 5.4 or newer. Building requires Linux pidfd syscall headers, a
 libc with `posix_spawn_file_actions_addchdir_np`, and OpenSSL 1.1.1 or newer
-development headers and libraries. Perl 5.36 or newer is required; Perl
+development headers and libraries. On another operating system, configuration
+prints `OS unsupported` and exits successfully so CPAN Testers records `NA`
+rather than a misleading build failure. Perl 5.36 or newer is required; Perl
 ithreads are not. To use the built copy without installing it:
 
 ```bash
@@ -646,6 +700,15 @@ sub stream_options ($class) {
 }
 ```
 
+Both batching options default to zero and are alternatives, not settings for
+the same subclass. Raw `read_batch_bytes => 256 * 1024` combines
+successful reads only until its byte limit or the current drain reaches
+EAGAIN. Framed `message_batch_size => 32` requires
+`on_messages($stream, $messages)` instead of `on_message`; it never delays
+input to fill an array. Pause, close, and protocol transition take effect at
+the explicit batch boundary, so message-sensitive negotiation streams should
+keep ordinary `on_message`.
+
 Watermarks are cooperative: a false `write()` return still means the bytes
 were accepted and the producer should wait for `on_drain`. The same return,
 `pending_bytes`, `is_write_blocked`, and eventual drain behavior applies to
@@ -676,6 +739,7 @@ memory against the versioned object-configured baseline.
 
 - [`docs/CORE.md`](docs/CORE.md) - raw reactor and registration API
 - [`docs/OBJECT-LIFECYCLE.md`](docs/OBJECT-LIFECYCLE.md) - Loop attachment and resource ownership
+- [`docs/INTROSPECTION.md`](docs/INTROSPECTION.md) - Loop objects, resources, liveness, pressure, and profiling
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - native reactor and Stream architecture
 - [`docs/TIMER-DESIGN.md`](docs/TIMER-DESIGN.md) - Timer API, scheduler, and lifecycle semantics
 - [`docs/SIGNAL-DESIGN.md`](docs/SIGNAL-DESIGN.md) - signalfd fan-out, mask ownership, and lifecycle
@@ -712,6 +776,13 @@ eventfd wakeups, asynchronous DNS and Happy Eyeballs, signalfd signals,
 pidfd processes, packet-preserving datagrams, established Stream deadlines,
 and production socket configuration. Further work is optimization or expansion
 of general protocol facilities rather than a missing lifecycle primitive.
+
+Future, Promise, and async/await runtimes are explicitly outside the core
+roadmap. Independent distributions may build them from Loop driving, zero-delay
+Timers, object cancellation, deadlines, semantic callbacks, structured errors,
+and Wakeup. Linux::Event will consider a missing general reactor primitive when
+an external implementation proves it cannot be expressed safely, but it will
+not absorb Future-specific policy or continuation scheduling.
 
 ## License
 

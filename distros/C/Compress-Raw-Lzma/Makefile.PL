@@ -1,7 +1,7 @@
 #! perl -w
 
 use strict ;
-require 5.006 ;
+require 5.008 ;
 
 use lib '.';
 use private::MakeUtil;
@@ -15,9 +15,6 @@ my $LIBLZMA_INCLUDE ;
 my $LIBS = '-llzma';
 
 ParseCONFIG() ;
-
-UpDowngrade(getPerlFiles('MANIFEST'))
-    unless $ENV{PERL_CORE};
 
 WriteMakefile(
     NAME         => 'Compress::Raw::Lzma',
@@ -43,12 +40,8 @@ WriteMakefile(
         : ()
     ),
 
-    (
-      $] >= 5.005
-        ? (ABSTRACT_FROM => 'lib/Compress/Raw/Lzma.pm',
-            AUTHOR       => 'Paul Marquess <pmqs@cpan.org>')
-        : ()
-    ),
+    ABSTRACT_FROM => 'lib/Compress/Raw/Lzma.pm',
+    AUTHOR        => 'Paul Marquess <pmqs@cpan.org>',
 
      ( eval { ExtUtils::MakeMaker->VERSION(6.46) }
         ? ( META_MERGE  => {

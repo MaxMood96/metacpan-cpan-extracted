@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.103';
+our $VERSION = '0.105';
 
 use Hash::Util::FieldHash qw(fieldhash);
 use Scalar::Util qw(weaken);
@@ -27,6 +27,7 @@ sub _new ($class, $loop) {
     my $ready = sub { $self->_ready };
     $loop->watch(
         fd      => $self->{native}->event_fd,
+        _internal => 1,
         read    => $ready,
         no_args => 1,
         lean    => 1,
@@ -44,6 +45,12 @@ sub submit ($self, $recipient, $host, $port, $socktype = undef) {
 
 sub cancel ($self, $id) {
     return defined($id) ? !!delete($self->{requests}{$id}) : 0;
+}
+
+sub _objects_for_loop ($class, $loop) {
+    my $self = $FOR_LOOP{$loop};
+    return [] if !$self;
+    return [ values %{ $self->{requests} } ];
 }
 
 sub _ready ($self) {

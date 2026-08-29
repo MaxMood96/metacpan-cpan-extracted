@@ -228,6 +228,30 @@ mutate a later registration that happens to reuse the same native storage.
 This model also prevents ambiguous dispatch when file-descriptor numbers are
 reused by the operating system.
 
+## Introspection
+
+The Loop exposes current managed objects, native resources, liveness reasons,
+and conservative capacity pressure without adding work to readiness dispatch:
+
+```perl
+my $objects   = $loop->objects;
+my $snapshot  = $loop->inspect($objects->[0]);
+my $census    = $loop->census;
+my $resources = $loop->resources;
+my $reasons   = $loop->why_alive;
+my $pressure  = $loop->pressure;
+```
+
+`running` is an O(1) native driver-state query. `count`, `objects`, `has`, and
+`census` enumerate existing native and service registries at query time;
+`has($object)` uses exact identity. Raw registrations and private helper
+objects are excluded from that managed-object view. `resources` still reports their native footprint,
+while `why_alive` reports public raw registrations without duplicating the
+private registrations behind managed objects.
+
+See [Loop Introspection](INTROSPECTION.md) for exact return shapes, field
+definitions, and complexity.
+
 ## Statistics
 
 ```perl
@@ -242,10 +266,10 @@ activity, and loop drive methods.
 Optional nanosecond profiling:
 
 ```perl
-$loop->enable_profile(1);
+$loop->profile(1);
 # run workload
 my $stats = $loop->stats;
-$loop->enable_profile(0);
+$loop->profile(0);
 ```
 
 Profiling intentionally adds overhead. Do not enable it for ordinary throughput
@@ -286,6 +310,7 @@ The raw reactor does not own:
 - framing or codecs
 - application backpressure policy
 - protocol parsing
+- Future, Promise, or async/await scheduling
 
 Those responsibilities belong to `Linux::Event::Stream` subclasses. Keeping
 that separation gives Linux::Event both a low-level general reactor and a
@@ -295,3 +320,9 @@ Packet boundaries belong to Datagram, listening ownership to Listener,
 eventfd clone rules to Wakeup, and pidfd/stdio lifecycle to Process. Raw
 `watch` remains appropriate when an application intentionally owns a different
 descriptor protocol and all of its cleanup rules.
+
+Third-party asynchronous abstractions may compose the public driver, Timer,
+object lifecycle, deadline, error, and Wakeup primitives. Their continuation,
+microtask, and Future policies remain outside the core distribution. A missing
+general reactor primitive may be considered when an external implementation
+demonstrates that the existing surface cannot express it safely.

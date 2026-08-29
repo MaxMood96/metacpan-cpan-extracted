@@ -7,7 +7,7 @@
 #
 #   The GNU Lesser General Public License, Version 2.1, February 1999
 #
-package Config::Model::TkUI 1.381;
+package Config::Model::TkUI 1.382;
 
 use 5.20.1;
 use strict;
@@ -766,15 +766,15 @@ sub update_loc_bar {
     return $loc;
 }
 
-sub update_history ($cw, $loc) {
+sub update_history ($cw, $path) {
     my $history = $cw->{path_history};
 
     # avoid consecutive duplicated entries
-    if ($history->@* > 1 and $loc eq $history->[-1]) {
+    if ($history->@* > 1 and $path eq $history->[-1]) {
         return;
     }
 
-    push $history->@*, $loc;
+    push $history->@*, $path;
     my $path_idx = $cw->{path_index} = $history->$#*;
 
     # enable previous button when history has more than one item
@@ -785,27 +785,16 @@ sub update_history ($cw, $loc) {
     my $max_count = 20;
     $cw->{history_count} //= 0;
 
+    # remove oldest entry
     if ($cw->{history_count}++ > $max_count) {
-        # delete all history entries from the menu
-        $h_cascade->menu->delete(0, 'end');
+        $h_cascade->menu->delete('end');
+    }
 
-        # Add the last $max_count history entries to the menu
-        for (my $i = 0; $i <= $max_count; $i++) {
-            my $entry_idx = $path_idx - $i;
-            $h_cascade->menu->add(
-                'command',
-                -label => $history->[$entry_idx],
-                -command =>sub { $cw->go_to_loc($path_idx); }
-            );
-        }
-    }
-    else {
-        # add a menu entry
-        $h_cascade->command(
-            -label => $loc,
-            -command => sub { $cw->go_to_loc($path_idx); }
-        );
-    }
+    # add newest entry
+    $h_cascade->command(
+        -label => $cw->{tktree}->infoData($path)->[1]->location_short,
+        -command => sub { $cw->go_to_loc($path_idx); }
+    );
 
     return;
 }
@@ -1641,8 +1630,8 @@ configuration tree. Beware, there's no "undo" operation.
 
 =item *
 
-Before saving your modifications, you can review the change list with the 
-menu entry C<< File -> show unsaved changes >>. This list is cleared after 
+Before saving your modifications, you can review the change list with the
+menu entry C<< File -> show unsaved changes >>. This list is cleared after
 performing a C<< File -> save >>.
 
 =item *
@@ -1659,13 +1648,13 @@ buffer into the element.
 =item *
 
 a list element will split the content of the
-buffer with /\n/ or /,/ and push the resulting array at the 
-end of the list element. 
+buffer with /\n/ or /,/ and push the resulting array at the
+end of the list element.
 
 =item *
 
-a hash element will use the content of the cut buffer to create a new key 
-in the hash element. 
+a hash element will use the content of the cut buffer to create a new key
+in the hash element.
 
 =back
 
@@ -1678,12 +1667,12 @@ C<~/.cme/config/tkui.yml>.
 
 =head2 Search
 
-Hit C<Ctrl-F> or use menu C<< Edit -> Search >> to open a search widget at the bottom 
+Hit C<Ctrl-F> or use menu C<< Edit -> Search >> to open a search widget at the bottom
 of the window.
 
 Enter a keyword in the entry widget and click on C<Next> button.
 
-The keyword will be searched in the configuration tree, in element name, in element value and 
+The keyword will be searched in the configuration tree, in element name, in element value and
 in documentation.
 
 =head2 Editor widget
@@ -1771,6 +1760,3 @@ L<Config::Model>, L<cme>
 https://github.com/dod38fr/config-model-tkui/wiki
 
 =back
-
-
-

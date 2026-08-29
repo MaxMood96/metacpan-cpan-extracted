@@ -2043,7 +2043,7 @@ BOOT:
 	CONSTANT2(X509_, V_FLAG_PARTIAL_CHAIN);
 	CONSTANT2(X509_, V_FLAG_NO_ALT_CHAINS);
 	CONSTANT2(X509_, V_FLAG_NO_CHECK_TIME);
-#if OPENSSL_VERSION_PREREQ(3, 5)
+#if OPENSSL_VERSION_PREREQ(3, 6)
 	CONSTANT2(X509_, V_FLAG_OCSP_RESP_CHECK);
 	CONSTANT2(X509_, V_FLAG_OCSP_RESP_CHECK_ALL);
 #endif
@@ -4608,10 +4608,12 @@ C_ARGS: NULL, skeymgmtname, propquery, selection, real_params
 Crypt::OpenSSL3::SKey EVP_SKEY_import_raw_key(class, const char *skeymgmtname, unsigned char *key, size_t length(key), const char *propquery = NULL)
 C_ARGS: NULL, skeymgmtname, key, XSauto_length_of_key, propquery
 
+#if OPENSSL_VERSION_PREREQ(3,6)
 Crypt::OpenSSL3::SKey EVP_SKEY_import_SKEYMGMT(class, Crypt::OpenSSL3::SKey::Management skeymgmt, int selection, SV* params)
 INIT:
 	OSSL_PARAM* real_params = params ? params_for(EVP_SKEYMGMT_get0_imp_settable_params(skeymgmt), params) : NULL;
 C_ARGS: NULL, skeymgmt, selection, real_params
+#endif
 
 SV* EVP_SKEY_get_raw_key(Crypt::OpenSSL3::SKey skey)
 CODE:
@@ -5145,7 +5147,7 @@ Crypt::OpenSSL3::KDF EVP_KDF_CTX_kdf(Crypt::OpenSSL3::KDF::Context ctx)
 POSTCALL:
 	EVP_KDF_up_ref(RETVAL);
 
-#if OPENSSL_VERSION_PREREQ(3, 5)
+#if OPENSSL_VERSION_PREREQ(3, 6)
 bool EVP_KDF_CTX_set_SKey(Crypt::OpenSSL3::KDF::Context ctx, Crypt::OpenSSL3::SKey key, const char *paramname = NULL);
 #endif
 
@@ -5159,7 +5161,7 @@ POSTCALL:
 	if (RETVAL)
 		set_buffer_length(derived, keylen);
 
-#if OPENSSL_VERSION_PREREQ(3, 5)
+#if OPENSSL_VERSION_PREREQ(3, 6)
 
 Crypt::OpenSSL3::SKey EVP_KDF_derive_SKey(Crypt::OpenSSL3::KDF::Context ctx, const char* key_type, size_t keylen, Crypt::OpenSSL3::SKey::Management skeymgmt = NULL, const char* propquery = NULL, PARAMS(EVP_KDF_CTX) params = NULL)
 C_ARGS: ctx, skeymgmt, key_type, propquery, keylen, params
@@ -5593,7 +5595,7 @@ CODE:
 		RETVAL = &PL_sv_undef;
 OUTPUT: RETVAL
 
-#if OPENSSL_VERSION_PREREQ(3, 5)
+#if OPENSSL_VERSION_PREREQ(3, 6)
 
 Crypt::OpenSSL3::SKey EVP_PKEY_derive_SKey(Crypt::OpenSSL3::PKey::Context ctx, const char *key_type, size_t keylen, Crypt::OpenSSL3::SKey::Management mgmt = NULL, const char *propquery = NULL);
 C_ARGS: ctx, mgmt, key_type, propquery, keylen, NULL

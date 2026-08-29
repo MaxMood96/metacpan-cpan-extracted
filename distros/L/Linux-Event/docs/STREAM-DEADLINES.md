@@ -104,9 +104,11 @@ is exposed publicly.
 
 Successful native reads and writes update monotonic timestamps only when at
 least one inactivity policy is enabled. A Stream with all three inactivity
-values at zero performs no activity clock reads. I/O progress does not enter
-Perl merely to reschedule a Timer. If progress moves a deadline, an early Timer
-callback reads the latest native snapshot and reschedules itself.
+values at zero performs no activity clock reads. Pause, resume, EOF, and output
+drain also skip deadline candidate rebuilding unless the corresponding read or
+write timeout is enabled. I/O progress does not enter Perl merely to reschedule
+a Timer. If progress moves a deadline, an early Timer callback reads the latest
+native snapshot and reschedules itself.
 
 Closing, detaching, failure, and Loop teardown cancel scheduler ownership.
 Protocol transitions retain an explicit operation deadline and apply the

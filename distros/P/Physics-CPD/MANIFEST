@@ -1,0 +1,19 @@
+Changes
+examples/plasma_parameters.pl
+examples/plot_3d_design.pl
+examples/power_production.pl
+examples/w7x_simulation.pl
+lib/Physics/CPD.pm
+lib/Physics/CPD/Stellarator.pm
+LICENSE
+Makefile.PL
+MANIFEST
+README.md
+t/00-load.t
+t/01-cpd.t
+t/02-stellarator.t
+t/03-geometry.t
+t/04-plotting.t
+t/05-fusion.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

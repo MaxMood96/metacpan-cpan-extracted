@@ -807,7 +807,7 @@ sub run_xsloop ($server, $clients, $messages, $warmup, $bytes, $timeout) {
     $loop->set_event_capacity($xsloop_event_cap) if $xsloop_event_cap;
     $loop->set_callback_scope_limit(128) if is_phase35_system($ACTIVE_SYSTEM) || $ACTIVE_SYSTEM eq 'phase34' || $ACTIVE_SYSTEM eq 'phase34b' || $ACTIVE_SYSTEM eq 'phase34c';
     $loop->set_callback_scope_limit(phase33c_scope_limit($ACTIVE_SYSTEM)) if is_phase33c_system($ACTIVE_SYSTEM);
-    $loop->enable_profile(1) if $xsloop_profile;
+    $loop->profile(1) if $xsloop_profile;
     $loop->enable_watcher_reclaim(1) if $ACTIVE_SYSTEM eq 'phase31' || $ACTIVE_SYSTEM eq 'phase30';
     my %c = base_counters($clients, $messages, $warmup, $bytes);
     my $server_w;
@@ -891,7 +891,7 @@ sub run_xsloop ($server, $clients, $messages, $warmup, $bytes, $timeout) {
         epoll_ctl_add_calls epoll_ctl_mod_calls epoll_ctl_del_calls
         watcher_lookup_calls direct_watcher_events dispatch_events profile_enabled
         epoll_wait_ns epoll_ctl_add_ns epoll_ctl_mod_ns epoll_ctl_del_ns
-        watcher_lookup_ns callback_ns dispatch_ns callback_noarg_calls callback_onearg_calls callback_direct_cv_calls callback_sv_calls callback_batch_scope_enters callback_scope_rotations callback_scope_max_callbacks callback_scope_limit run_once_calls run_calls run_for_calls
+        watcher_lookup_ns dispatch_ns callback_noarg_calls callback_onearg_calls callback_direct_cv_calls callback_sv_calls callback_batch_scope_enters callback_scope_rotations callback_scope_max_callbacks callback_scope_limit run_once_calls run_calls run_for_calls
         bench_native_echo_read_events bench_native_echo_perl_read_callbacks bench_native_echo_sysread_calls bench_native_echo_syswrite_calls bench_native_echo_bytes_read bench_native_echo_bytes_written bench_native_echo_read_eagain bench_native_echo_write_eagain bench_native_echo_partial_writes bench_native_echo_read_zero bench_native_echo_errors
         lean_watchers watcher_alloc_calls watcher_reuse_calls watcher_recycle_calls watcher_destroy_calls watcher_freelist_depth watcher_freelist_max_depth watcher_reclaim_enabled
     )) {

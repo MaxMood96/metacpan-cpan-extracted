@@ -20,10 +20,9 @@ my %WriteMakefileArgs = (
     "OpenTelemetry" => "0.018",
     "OpenTelemetry::SDK" => "0.020",
     "Plack" => "1.0050",
-    "Syntax::Keyword::Dynamically" => 0,
     "parent" => "0.223"
   },
-  "VERSION" => "0.252280",
+  "VERSION" => "0.262410",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -35,7 +34,6 @@ my %FallbackPrereqs = (
   "OpenTelemetry" => "0.018",
   "OpenTelemetry::SDK" => "0.020",
   "Plack" => "1.0050",
-  "Syntax::Keyword::Dynamically" => 0,
   "parent" => "0.223"
 );
 

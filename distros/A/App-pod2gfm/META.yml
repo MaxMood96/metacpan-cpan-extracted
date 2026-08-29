@@ -11,8 +11,8 @@ build_requires:
   Test2::V1: '0'
 configure_requires:
   ExtUtils::MakeMaker: '6.64'
-dynamic_config: 1
-generated_by: 'ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010'
+dynamic_config: 0
+generated_by: 'ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013'
 license: open_source
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -38,8 +38,9 @@ requires:
 resources:
   bugtracker: https://github.com/ryoskzypu/App-pod2gfm/issues
   repository: https://github.com/ryoskzypu/App-pod2gfm.git
-version: v1.1.0
+version: v1.1.1
 x_contributors:
+  - 'Lukas Mai <lmai at web.de>'
   - 'ryoskzypu <ryoskzypu@proton.me>'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'
 x_spdx_expression: MIT-0

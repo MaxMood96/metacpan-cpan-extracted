@@ -1,5 +1,16 @@
 # This file documents the revision history for Perl extension PAGI
 
+0.002006 - 2026-08-28
+
+  [Specification - pending I/O at disconnect]
+  - Core spec 0.4 -> 0.5, HTTP/WebSocket/SSE sub-spec 0.3 -> 0.4: defined
+    settlement of send and receive Futures still pending at disconnect
+    (settle by resolving, never cancel), the disconnect-transition
+    ordering invariant, loop-deferred delivery of disconnect
+    notifications, and the corrected HTTP/2 RST_STREAM mapping. See the
+    Send Completion Contract in PAGI::Spec and State Transition Order in
+    PAGI::Spec::Www.
+
 0.002005 - 2026-08-26
 
   [Specification clarifications - resolved ambiguities]

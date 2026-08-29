@@ -39,7 +39,7 @@ subtest 'specify all values' => sub {
     is(
         $obj->TO_JSON,
         hash {
-            field c4_bool => '1';
+            field c4_bool => exact_ref JSON::MaybeXS::true;
             field c4_num  => '44';
             field c4_str  => '43';
             field cow     => 'DAISY';
@@ -70,7 +70,7 @@ subtest 'omit values' => sub {
     is(
         $obj->TO_JSON,
         hash {
-            field c4_bool => '1';
+            field c4_bool => exact_ref JSON::MaybeXS::true;
             field c4_num  => '44';
             field c4_str  => '43';
             field cow     => U();

@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::X509::EDIPartyName;
-$Crypt::OpenSSL3::X509::EDIPartyName::VERSION = '0.011';
+$Crypt::OpenSSL3::X509::EDIPartyName::VERSION = '0.012';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::X509::EDIPartyName - An X509 EDI party name
 
 =head1 VERSION
 
-version 0.011
+version 0.012
 
 =head1 METHODS
 
