@@ -1,11 +1,11 @@
 package Punk::Mailer::Job;
 
-use 5.016;
+use 5.010001;
 use strict;
 use warnings;
 use Punk::Mailer ();
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 1;
 

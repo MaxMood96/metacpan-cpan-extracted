@@ -12,6 +12,19 @@
 #define _GNU_SOURCE            /* memmem on glibc */
 #endif
 #define PERL_NO_GET_CONTEXT
+/* Under PERL_IMPLICIT_SYS - every Strawberry build - XSUB.h rewrites the
+ * plain CRT and socket names into PerlMem_/PerlSock_/PerlEnv_ macros that
+ * dereference my_perl. This core is C: its helpers are static functions in
+ * headers with no interpreter to hand, and even a struct member called
+ * `wait` collides with the PerlProc_wait macro. NO_XSLOCKS is the switch
+ * XSUB.h provides for exactly that, and it must come before the include or
+ * the rewrites are already in place.
+ *
+ * Nothing is given up. This code owns what it allocates and closes what it
+ * opens end to end, so it never hands a pointer to perl's allocator or takes
+ * one from it; the SV and PerlIO calls it does make are functions, not
+ * remapped names, and are unaffected. */
+#define NO_XSLOCKS
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"

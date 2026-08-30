@@ -4,41 +4,37 @@ Sys::OsRelease - read operating system details from standard /etc/os-release fil
 
 # VERSION
 
-version 0.4.6
+version 0.5.0
 
 # SYNOPSIS
+
+object-oriented
+
+    use if $] >= 5.022, "Sys::OsRelease";
+    use if $] < 5.022, "Sys::OsRelease::Lite";
+    use feature qw(say);
+
+    sub get_like_distro
+    {
+      my $info = osrelease();
+      my @ids = ( $info->id(), $info->id_like() // () );
+      return @ids;
+    }
+    say join " ", get_like_distro();
 
 non-object-oriented (Perl 5.22 and later):
 
     use Sys::OsRelease;
 
-    Sys::OsRelease->init();
     my $id = Sys::OsRelease->id();
     my $id_like = Sys::OsRelease->id_like();
 
-object-oriented (Perl 5.22 and later):
-
-    use Sys::OsRelease;
-
-    my $osrelease = Sys::OsRelease->instance();
-    my $id = $osrelease->id();
-    my $id_like = $osrelease->id_like();
-
-non-object-oriented (Perl up to 5.20):
+non-object-oriented (Perl 5.10.1 to 5.21):
 
     use Sys::OsRelease::Lite;
 
-    Sys::OsRelease::Lite->init();
     my $id = Sys::OsRelease::Lite->id();
     my $id_like = Sys::OsRelease::Lite->id_like();
-
-object-oriented (Perl up to 5.20):
-
-    use Sys::OsRelease::Lite;
-
-    my $osrelease = Sys::OsRelease::Lite->instance();
-    my $id = $osrelease->id();
-    my $id_like = $osrelease->id_like();
 
 # DESCRIPTION
 
@@ -64,8 +60,8 @@ It can also be used for installing or configuring software that needs to know ab
 
 FreeDesktop.Org's os-release standard is at [https://www.freedesktop.org/software/systemd/man/os-release.html](https://www.freedesktop.org/software/systemd/man/os-release.html).
 
-Current attributes recognized by Sys::OsRelease are:
-    NAME ID ID\_LIKE PRETTY\_NAME CPE\_NAME VARIANT VARIANT\_ID VERSION VERSION\_ID VERSION\_CODENAME
+Current attributes recognized by Sys::OsRelease and Sys::OsRelease::Lite are:
+    NAME ID ID\_LIKE PRETTY\_NAME FANCY\_NAME CPE\_NAME VARIANT VARIANT\_ID VERSION VERSION\_ID VERSION\_CODENAME
     BUILD\_ID IMAGE\_ID IMAGE\_VERSION RELEASE\_TYPE HOME\_URL DOCUMENTATION\_URL SUPPORT\_URL BUG\_REPORT\_URL
     PRIVACY\_POLICY\_URL SUPPORT\_END LOGO ANSI\_COLOR ANSI\_COLOR\_REVERSE VENDOR\_NAME VENDOR\_URL EXPERIMENT
     EXPERIMENT\_URL DEFAULT\_HOSTNAME ARCHITECTURE SYSEXT\_LEVEL CONFEXT\_LEVEL SYSEXT\_SCOPE CONFEXT\_SCOPE
@@ -85,6 +81,12 @@ in order to retain support for legacy Perl installations.
 Sys::OsRelease::Lite is the same module in all but name. A release script filters the source code of Sys::OsRelease to change its name. Then Sys::OsRelease::Lite is built with ExtUtils::MakeMaker to maintain compatibility back to Perl 5.10. The two are released in parallel with the same version number.
 
 # METHODS
+
+## Exported functions
+
+- osrelease()
+
+    This function is exported by both _Sys::OsRelease_ and _Sys::OsRelease::Lite_ into the caller's namespace. It takes no arguments and returns a reference to the singleton instance. This can be used for uniform access to the instance by whichever class was loaded.
 
 ## Class methods
 

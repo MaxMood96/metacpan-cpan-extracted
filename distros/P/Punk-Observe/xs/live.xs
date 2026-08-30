@@ -261,7 +261,7 @@ poli_bus_publish(SV *topic, SV *payload)
 # A GAP IS REPORTED, NOT SWALLOWED. A slow consumer that gets lapped and says
 # nothing produces a stream indistinguishable from a quiet one.
 void
-poli_bus_drain(SV *topic)
+poli_bus_drain(SV *topic, ...)
     PPCODE:
         {
 #ifdef PO_HAVE_BUS
@@ -270,11 +270,24 @@ poli_bus_drain(SV *topic)
             STRLEN tl;
             const char *t = SvPV(topic, tl);
             long got;
+            po_u64 before = po_live_gaps;
             po_live_ud ud;
             ud.av = out; ud.t = t; ud.tl = (size_t)tl;
             got = hm_bus_drain((uint64_t *)&po_live_cursor,
                                (uint64_t *)&po_live_gaps,
                                po_live_collect, &ud);
+            /* THE DELTA GOES TO THE ARENA, when the caller passed one.
+             *
+             * po_live_gaps is a per-process cumulative: honest to this
+             * worker, invisible to the one that renders the status page. The
+             * arena is the cross-worker ledger, and it takes the DELTA
+             * because adding the cumulative on every drain would count each
+             * lost line once per drain that happened after it. */
+            if (items > 1 && SvOK(ST(1)) && po_live_gaps > before) {
+                po_shared *sh = INT2PTR(po_shared *, SvIV(ST(1)));
+                if (sh && sh->ok)
+                    po_atomic_add(&sh->m->live_gaps, po_live_gaps - before);
+            }
             hv_stores(res, "count", newSViv(got));
             hv_stores(res, "gaps",  po_u64_to_sv(po_live_gaps));
             hv_stores(res, "rows",  newRV_noinc((SV *)out));

@@ -1,7 +1,9 @@
 package Dist::Zilla::Plugin::Docker::API::Client;
 # ABSTRACT: Thin adapter around API::Docker
-our $VERSION = '0.103';
+our $VERSION = '0.104';
 use Moo;
+use Archive::Tar;
+use Carp qw( croak );
 use Path::Tiny;
 use JSON::MaybeXS qw( decode_json );
 use MIME::Base64 qw( decode_base64 );
@@ -53,6 +55,46 @@ has _docker_config => (
     },
 );
 
+# Cheapest round trip that proves an engine is actually listening on the
+# socket. Used by the plugin's before_build precheck, so a missing daemon
+# is reported before Dist::Zilla does any work rather than after.
+sub engine_info {
+    my ($self) = @_;
+
+    my $version = eval { $self->docker->system->version };
+    croak $@ if $@;
+    croak 'the engine returned no version information'
+        unless ref $version eq 'HASH';
+
+    my ($engine) = grep { ($_->{Name} // '') =~ /engine/i }
+        @{ $version->{Components} // [] };
+
+    return {
+        version     => $version->{Version},
+        api_version => $version->{ApiVersion},
+        engine      => $engine ? $engine->{Name} : undef,
+    };
+}
+
+# The engine's tag endpoint takes the repository and the tag as two separate
+# parameters (POST /images/{name}/tag?repo=&tag=), so a full image reference
+# has to be taken apart before it goes over the wire. Passing the whole thing
+# as `repo` leaves `tag` empty and the engine fills in its own default:
+# podman then rejects `example/app:1.0:latest` with a 500 and every version
+# tag is quietly lost. Splitting happens here rather than in API::Docker,
+# which mirrors the endpoint and should keep doing so.
+sub _split_image_ref {
+    my ( $self, $ref ) = @_;
+
+    my $colon = rindex $ref, ':';
+    return ( $ref, undef ) if $colon < 0;
+    # A colon before the last slash belongs to a registry host:port, not to a
+    # tag: registry.example.com:5000/team/app carries no tag at all.
+    return ( $ref, undef ) if rindex($ref, '/') > $colon;
+
+    return ( substr($ref, 0, $colon), substr($ref, $colon + 1) );
+}
+
 sub build_image {
     my ($self, %arg) = @_;
 
@@ -65,10 +107,10 @@ sub build_image {
     my $nocache = $arg{nocache} // 0;
     my $rm = $arg{rm} // 1;
     my $forcerm = $arg{forcerm} // 1;
-    my $push = $arg{push} // 0;
     my $target = $arg{target};
     my $network_mode = $arg{network_mode};
     my $platform = $arg{platform};
+    my $verbose = $arg{verbose} // 0;
 
     my $docker = $self->docker;
 
@@ -90,16 +132,24 @@ sub build_image {
     my $image_id;
     my @processed_tags;
 
+    # Concise mode (default): only forward Dockerfile step headers — both the
+    # legacy builder ("Step N/M : ...") and BuildKit ("#N [N/M] ..."). Skip the
+    # noisy intermediate container chatter. Verbose mode forwards every line.
+    # The line buffer is used in both modes so the Dist::Zilla logger (which
+    # appends its own newline) doesn't get a stream chunk with a trailing \n.
+    my $line_buf = '';
     my $progress_cb = sub {
         my ($event) = @_;
         if ($event->{errorDetail}) {
             $self->logger_fatal->("Docker build error: " . $event->{errorDetail}{message});
         }
-        elsif ($event->{stream}) {
-            $self->logger->($event->{stream});
+        elsif (defined $event->{stream}) {
+            for my $line ($self->_extract_build_lines(\$line_buf, $event->{stream}, $verbose)) {
+                $self->logger->($line);
+            }
         }
         elsif ($event->{progress}) {
-            $self->logger->($event->{status} . ' ' . $event->{progress});
+            $self->logger->($event->{status} . ' ' . $event->{progress}) if $verbose;
         }
         if ($event->{aux} && $event->{aux}{ID}) {
             $image_id = $event->{aux}{ID};
@@ -133,41 +183,74 @@ sub build_image {
         }
     };
 
-    if ($@) {
-        $self->logger_fatal->("Docker build failed: $@");
+    if (my $err = $@) {
+        # API::Docker 0.003 croaks on the errorDetail event before the loop
+        # above gets to run, so the output that led up to the failure rides
+        # on the exception instead. Drain it from there, or a failed build
+        # logs nothing but the last line (api-docker #12). The error event
+        # itself is left out: the reason arrives through the fatal below.
+        if (ref $err && $err->can('events')) {
+            $progress_cb->($_) for grep { !$_->{errorDetail} } @{ $err->events };
+        }
+        $self->logger_fatal->("Docker build failed: $err");
     }
 
     for my $tag (@tags) {
         next if $tag eq ($tags[0] // '');
+        my ( $repo, $tag_name ) = $self->_split_image_ref($tag);
         eval {
-            $docker->images->tag($image_id, repo => $tag);
+            $docker->images->tag($image_id,
+                repo => $repo,
+                defined $tag_name ? ( tag => $tag_name ) : (),
+            );
         };
         if ($@) {
             $self->logger->("Warning: failed to tag image as $tag: $@");
+            next;
         }
         push @processed_tags, $tag;
     }
 
-    my $result = Dist::Zilla::Plugin::Docker::API::Result->new(
+    return Dist::Zilla::Plugin::Docker::API::Result->new(
         image_id => $image_id,
         tags     => \@processed_tags,
         pushed   => [],
     );
+}
 
-    if ($push && @tags) {
-        $self->_push_tags($docker, \@tags, \$result);
+sub _extract_build_lines {
+    my ($self, $buf_ref, $chunk, $verbose) = @_;
+    $$buf_ref .= $chunk;
+    my @out;
+    while ($$buf_ref =~ s/^([^\n]*)\n//) {
+        my $line = $1;
+        next unless length $line;
+        if ($verbose) {
+            push @out, $line;
+        }
+        elsif ($self->_is_build_step_header($line)) {
+            push @out, $line;
+        }
     }
+    return @out;
+}
 
-    return $result;
+sub _is_build_step_header {
+    my ($self, $line) = @_;
+    return 0 unless defined $line && length $line;
+    # Legacy builder: "Step 3/18 : RUN apt-get update"
+    return 1 if $line =~ m{^Step \s+ \d+/\d+ \s* :}x;
+    # Podman classic builder: "STEP 3/18: RUN apt-get update"
+    return 1 if $line =~ m{^STEP \s+ \d+/\d+ \s* :}x;
+    # BuildKit stage header: "#5 [4/12] RUN apt-get update"
+    return 1 if $line =~ m{^\#\d+ \s+ \[\d+/\d+\]}x;
+    # BuildKit named stage: "#7 [builder 3/8] COPY . ."
+    return 1 if $line =~ m{^\#\d+ \s+ \[[^\]]+ \s+ \d+/\d+\]}x;
+    return 0;
 }
 
 sub _create_tar {
     my ($self, $dir, $dockerfile) = @_;
-
-    eval { require Archive::Tar; };
-    if ($@) {
-        $self->logger_fatal->("Archive::Tar required for creating tar context: $@");
-    }
 
     my $root = Path::Tiny::path($dir);
     my @entries = $self->_collect_files($root, $root);
@@ -205,43 +288,6 @@ sub _collect_files {
         }
     }
     return @files;
-}
-
-sub _push_tags {
-    my ($self, $docker, $tags, $result_ref) = @_;
-
-    for my $tag (@$tags) {
-        $self->logger->("Pushing $tag...");
-
-        my $push_progress = sub {
-            my ($event) = @_;
-            if ($event->{errorDetail}) {
-                $self->logger_fatal->("Push error for $tag: " . $event->{errorDetail}{message});
-            }
-            elsif ($event->{progress}) {
-                $self->logger->($event->{status} . ' ' . $event->{progress});
-            }
-        };
-
-        my $auth = $self->auth_for_image_ref($tag);
-
-        eval {
-            my $events = $docker->images->push($tag, auth => $auth);
-            for my $event (@{$events // []}) {
-                $push_progress->($event);
-                if ($event->{aux} && $event->{aux}{Digest}) {
-                    $$result_ref->{digest} = $event->{aux}{Digest};
-                }
-            }
-        };
-
-        if ($@) {
-            $self->logger->("Warning: failed to push $tag: $@");
-        }
-        else {
-            push @{ $$result_ref->{pushed} }, $tag;
-        }
-    }
 }
 
 sub auth_for_image_ref {
@@ -323,9 +369,12 @@ sub tag_image {
     my $source = $arg{source};
     my $target = $arg{target};
 
+    my ( $repo, $tag ) = $self->_split_image_ref($target);
+
     $self->docker->images->tag(
         $source,
-        repo => $target,
+        repo => $repo,
+        defined $tag ? ( tag => $tag ) : (),
     );
 }
 
@@ -335,7 +384,30 @@ sub push_image {
     my $image_ref = $arg{image_ref};
     my $auth = exists $arg{auth} ? $arg{auth} : $self->auth_for_image_ref($image_ref);
 
-    my $events = $self->docker->images->push($image_ref, auth => $auth);
+    my $events;
+    eval {
+        $events = $self->docker->images->push($image_ref, auth => $auth);
+    };
+
+    if (my $err = $@) {
+        # API::Docker 0.004 croaks on a push failure instead of handing back the
+        # errorDetail event in the returned array (against Docker an
+        # API::Docker::Error::Stream with ->events, on Podman it may be a plain
+        # HTTP error). Pull the message off the stream event when it is there,
+        # otherwise report the exception itself (api-docker #12).
+        my $message = "$err";
+        if (ref $err && $err->can('events')) {
+            for my $event (@{ $err->events }) {
+                next unless $event->{errorDetail};
+                $message = $event->{errorDetail}{message};
+                last;
+            }
+        }
+        $self->logger_fatal->("Push error: " . $message);
+    }
+
+    # A success still returns the raw array; keep scanning it, defensively, in
+    # case an engine reports a failure inside a 200 stream.
     for my $event (@{$events // []}) {
         if ($event->{errorDetail}) {
             $self->logger_fatal->("Push error: " . $event->{errorDetail}{message});
@@ -349,10 +421,42 @@ sub inspect_image {
     return $self->docker->images->inspect($image_ref);
 }
 
+# Ask the *registry* whether a reference is already published, through the
+# engine's GET /distribution/{name}/json. Credentials are optional: without
+# any, the lookup is anonymous, which is what a public image needs.
+#
+# API::Docker's exists() croaks instead of answering "no" when the engine has
+# no /distribution route -- rootless Podman has none, measured -- and that
+# croak is deliberately not caught here. "This engine cannot answer" is not
+# the same as "the tag is free", and only the caller can decide what to do
+# about the difference.
 sub remote_tag_exists {
     my ($self, $image_ref) = @_;
 
-    return 0;
+    my $auth = $self->auth_for_image_ref($image_ref);
+
+    return $self->docker->distribution->exists(
+        $image_ref,
+        defined $auth ? ( auth => $auth ) : (),
+    ) ? 1 : 0;
+}
+
+# Pre-flight for the release push: hand the engine, through POST /auth, the
+# very credentials push_image would use for this reference and let the
+# registry judge them. A rejected credential croaks; the caller is meant to
+# make that fatal before anything is built.
+#
+# Returns undef when no credential could be resolved for the reference. That
+# is not a failure -- an anonymous push to a public registry is a legal thing
+# to do, and system->auth croaks on an empty AuthConfig, so there would be
+# nothing to ask about.
+sub verify_auth_for_image_ref {
+    my ($self, $image_ref) = @_;
+
+    my $auth = $self->auth_for_image_ref($image_ref);
+    return undef unless $auth;
+
+    return $self->docker->system->auth(auth => $auth);
 }
 
 1;
@@ -369,7 +473,7 @@ Dist::Zilla::Plugin::Docker::API::Client - Thin adapter around API::Docker
 
 =head1 VERSION
 
-version 0.103
+version 0.104
 
 =head1 SUPPORT
 

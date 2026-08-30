@@ -1,61 +1,43 @@
 package API::Docker::Network;
-# ABSTRACT: Docker network entity
-our $VERSION = '0.003';
-use Moo;
-use namespace::clean;
+# ABSTRACT: Removed in 0.004 -- replaced by API::Docker::Type::Network
+our $VERSION = '0.004';
+use strict;
+use warnings;
+use Carp qw( croak );
 
+# A removed class, kept as a stub on purpose (karr k92). A module that
+# disappears from a distribution does not disappear from the disks it was
+# installed on: the old file stays behind and keeps loading, so deleting it
+# here would leave a working API::Docker::Network shadowing this release for
+# everyone who ever installed the last one. Shipping a file overwrites it;
+# shipping nothing does not.
+#
+# It refuses instead of working, and it refuses at load rather than at the
+# first method call, because that is the earliest point at which the caller
+# can be told -- and because @Author::GETTY generates no compile-all author
+# test that a dying module would fail. Measured on 2026-08-28: the bundle
+# generates exactly xt/author/pod-syntax.t, which parses POD without loading
+# anything, and xt/release/changes_has_content.t, which only reads Changes.
+my $REFUSED =
+  __PACKAGE__ . ' was removed in API::Docker 0.004 and this file is a stub'
+  . ' with nothing in it: it ships only so that installing this'
+  . ' release overwrites the working copy an earlier one left on'
+  . ' disk. You have not hit a fault in the distribution. The'
+  . ' networks the daemon answers with are'
+  . ' API::Docker::Type::Network (networks->list and'
+  . ' networks->inspect), with the field names the swagger\'s own'
+  . ' in snake_case, and inspect, remove, connect and disconnect'
+  . ' are unchanged on them, composed in from'
+  . ' API::Docker::Role::Entity::Network. This stub refuses';
 
-has client => (
-  is       => 'ro',
-  weak_ref => 1,
-);
+# The croak below is what a caller normally hits. AUTOLOAD is for the one who
+# swallowed it -- eval { require API::Docker::Network } and then called a
+# method anyway; the answer has to be the same one, not a bare "Can't locate
+# object method". DESTROY is defined so it does not reach AUTOLOAD.
+sub AUTOLOAD { croak $REFUSED }
+sub DESTROY  { }
 
-
-has Id         => (is => 'ro');
-
-
-has Name       => (is => 'ro');
-
-
-has Created    => (is => 'ro');
-has Scope      => (is => 'ro');
-has Driver     => (is => 'ro');
-
-
-has EnableIPv6 => (is => 'ro');
-has IPAM       => (is => 'ro');
-has Internal   => (is => 'ro');
-has Attachable => (is => 'ro');
-has Ingress    => (is => 'ro');
-has Options    => (is => 'ro');
-has Labels     => (is => 'ro');
-has Containers => (is => 'ro');
-has ConfigFrom => (is => 'ro');
-has ConfigOnly => (is => 'ro');
-
-sub inspect {
-  my ($self) = @_;
-  return $self->client->networks->inspect($self->Id);
-}
-
-
-sub remove {
-  my ($self) = @_;
-  return $self->client->networks->remove($self->Id);
-}
-
-
-sub connect {
-  my ($self, %opts) = @_;
-  return $self->client->networks->connect($self->Id, %opts);
-}
-
-
-sub disconnect {
-  my ($self, %opts) = @_;
-  return $self->client->networks->disconnect($self->Id, %opts);
-}
-
+croak $REFUSED;
 
 
 1;
@@ -68,77 +50,43 @@ __END__
 
 =head1 NAME
 
-API::Docker::Network - Docker network entity
+API::Docker::Network - Removed in 0.004 -- replaced by API::Docker::Type::Network
 
 =head1 VERSION
 
-version 0.003
-
-=head1 SYNOPSIS
-
-    my $docker = API::Docker->new;
-    my $networks = $docker->networks->list;
-    my $network = $networks->[0];
-
-    say $network->Name;
-    say $network->Driver;
-
-    $network->connect(Container => $container_id);
-    $network->disconnect(Container => $container_id);
-    $network->remove;
+version 0.004
 
 =head1 DESCRIPTION
 
-This class represents a Docker network. Instances are returned by
-L<API::Docker::API::Networks> methods.
+B<This class is gone.> It has been replaced by the generated type model, and
+this file is a stub: loading it croaks, and so does every method call on it.
 
-=head2 client
+This class was released in 0.003 and removed in 0.004. Installing 0.004
+over it replaces the working copy with this stub, which is the only reason
+the file is still in the distribution.
 
-Reference to L<API::Docker> client.
+What to reach for instead:
 
-=head2 Id
+=over
 
-Network ID.
+=item * L<API::Docker::Type::Network> -- what C<< networks->list >> and C<< networks->inspect >> return
 
-=head2 Name
+=item * L<API::Docker::Role::Entity::Network> -- inspect, remove, connect and disconnect,
+unchanged, composed into the above at load time
 
-Network name.
+=back
 
-=head2 Driver
-
-Network driver (e.g., C<bridge>, C<overlay>).
-
-=head2 inspect
-
-    my $updated = $network->inspect;
-
-Get fresh network information.
-
-=head2 remove
-
-    $network->remove;
-
-Remove the network.
-
-=head2 connect
-
-    $network->connect(Container => $container_id);
-
-Connect a container to this network.
-
-=head2 disconnect
-
-    $network->disconnect(Container => $container_id, Force => 1);
-
-Disconnect a container from this network.
+Where this class mirrored the daemon's CamelCase verbatim, the generated
+classes carry the swagger's own names in snake_case.
+L<API::Docker::API::Networks> documents the shape each method returns.
 
 =head1 SEE ALSO
 
 =over
 
-=item * L<API::Docker::API::Networks> - Network API operations
+=item * L<API::Docker::API::Networks> - the resource class these objects come from
 
-=item * L<API::Docker> - Main Docker client
+=item * L<API::Docker::Role::Entity> - why the methods live in a role
 
 =back
 

@@ -3,8 +3,16 @@
     <input type="text" name="q" value="{% query %}" spellcheck="false"
            placeholder='spans | where duration > 500ms | by service | count'>
     <button type="submit">Run</button>
+    <a class="helpicon" href="{% prefix %}/help"
+       title="What can I type here?" aria-label="Query language help">?</a>
     {% include _range.tmpl %}
   </form>
+</div>
+
+{% include _discover.tmpl %}
+
+<div class="toolbar">
+  {% include _views.tmpl %}
 </div>
 
 {% if error %}

@@ -183,17 +183,26 @@ static void se_field(pTHX_ punk_sse *sse, const char *field, SV *val) {
 
 static void se_arm_heartbeat(pTHX_ punk_sse *sse);
 
+/* The keep-alive write is how a stream with nothing to say finds out its
+ * client has gone, so tearing down from inside it is the normal case, not the
+ * unlikely one - and teardown drops the stream's own reference, which for a
+ * handler that has already returned is the LAST one. So the reference is held
+ * across the write: without it the re-arm below reads freed memory and hands
+ * the loop a timer pointed at it. */
 static void se_heartbeat_cb(pTHX_ void *ud) {
     punk_sse *sse = (punk_sse *)ud;
+    SV *keep = sse->self_rv ? SvREFCNT_inc(sse->self_rv) : NULL;
     sse->hb_tw = NULL;
-    if (sse->state != SSE_OPEN) return;
-    se_write(aTHX_ sse, ":\n\n", 3);             /* a keep-alive comment */
-    se_arm_heartbeat(aTHX_ sse);
+    if (sse->state == SSE_OPEN) {
+        se_write(aTHX_ sse, ":\n\n", 3);         /* a keep-alive comment */
+        se_arm_heartbeat(aTHX_ sse);
+    }
+    if (keep) SvREFCNT_dec(keep);                /* sse may be gone after this */
 }
 
 static void se_arm_heartbeat(pTHX_ punk_sse *sse) {
-    if (sse->heartbeat > 0 && sse->mode == SSE_MODE_DETACH
-        && sse->abi && sse->loop)
+    if (sse->state == SSE_OPEN && sse->heartbeat > 0
+        && sse->mode == SSE_MODE_DETACH && sse->abi && sse->loop)
         sse->hb_tw = sse->abi->timer(aTHX_ sse->loop, sse->heartbeat,
                                      se_heartbeat_cb, sse);
 }
@@ -240,8 +249,14 @@ static void se_teardown(pTHX_ punk_sse *sse) {
 
 static void se_free(pTHX_ punk_sse *sse) {
     if (!sse) return;
-    if (sse->mode == SSE_MODE_DETACH && sse->abi && sse->loop && sse->hb_tw)
-        sse->abi->timer_cancel(aTHX_ sse->loop, sse->hb_tw);
+    if (sse->mode == SSE_MODE_DETACH && sse->abi && sse->loop) {
+        /* the watchers name this struct, so they must go before it does -
+         * and before the fd, or the loop is left watching a number the next
+         * connection will be given */
+        if (sse->reading) sse->abi->io_unwatch(aTHX_ sse->loop, sse->fd, HM_ABI_READ);
+        if (sse->writing) sse->abi->io_unwatch(aTHX_ sse->loop, sse->fd, HM_ABI_WRITE);
+        if (sse->hb_tw)   sse->abi->timer_cancel(aTHX_ sse->loop, sse->hb_tw);
+    }
     if (sse->fd >= 0) close(sse->fd);
     if (sse->wbuf)   free(sse->wbuf);
     if (sse->writer) SvREFCNT_dec(sse->writer);

@@ -10,10 +10,18 @@ use_ok('API::Docker::API::Images');
 use_ok('API::Docker::API::Networks');
 use_ok('API::Docker::API::Volumes');
 use_ok('API::Docker::API::Exec');
-use_ok('API::Docker::Container');
-use_ok('API::Docker::Image');
-use_ok('API::Docker::Network');
-use_ok('API::Docker::Volume');
+use_ok('API::Docker::API::Distribution');
+use_ok('API::Docker::API::Secrets');
+use_ok('API::Docker::API::Configs');
+use_ok('API::Docker::API::Plugins');
+use_ok('API::Docker::Role::Entity');
+use_ok('API::Docker::Role::Entity::Container');
+use_ok('API::Docker::Role::Entity::Image');
+use_ok('API::Docker::Role::Entity::Network');
+use_ok('API::Docker::Role::Entity::Volume');
+use_ok('API::Docker::Role::Entity::Plugin');
+use_ok('API::Docker::Role::Entity::Secret');
+use_ok('API::Docker::Role::Entity::Config');
 
 # Test default construction. host resolves DOCKER_HOST before the socket path,
 # so the socket default is only observable with that variable gone -- any
@@ -46,7 +54,10 @@ my $docker_tcp = API::Docker->new(
 is($docker_tcp->host, 'tcp://remote:2375', 'custom host');
 
 # Test API accessors exist
-can_ok($docker, qw(system containers images networks volumes exec));
+can_ok($docker, qw(
+  system containers images networks volumes exec
+  distribution secrets configs plugins
+));
 
 # Test API accessor types
 isa_ok($docker->system, 'API::Docker::API::System');
@@ -55,5 +66,9 @@ isa_ok($docker->images, 'API::Docker::API::Images');
 isa_ok($docker->networks, 'API::Docker::API::Networks');
 isa_ok($docker->volumes, 'API::Docker::API::Volumes');
 isa_ok($docker->exec, 'API::Docker::API::Exec');
+isa_ok($docker->distribution, 'API::Docker::API::Distribution');
+isa_ok($docker->secrets, 'API::Docker::API::Secrets');
+isa_ok($docker->configs, 'API::Docker::API::Configs');
+isa_ok($docker->plugins, 'API::Docker::API::Plugins');
 
 done_testing;

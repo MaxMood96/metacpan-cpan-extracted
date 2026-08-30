@@ -215,14 +215,15 @@
           [%- END -%]
         </select>
       </div>
-      <div class="join-field">
-        <label for="graph-y-sel">Y axis (vertical, must be numeric)</label>
+      <div class="join-field" id="graph-y-field">
+        <label for="graph-y-sel" id="graph-y-label">Y axis (vertical, must be numeric)</label>
         <select id="graph-y-sel" name="y" required>
           <option value="">&#x2014; select column &#x2014;</option>
           [%- FOREACH col IN columns -%]
           <option value="[% col | html %]">[% col | html %]</option>
           [%- END -%]
         </select>
+        <input type="text" id="graph-y-text" readonly hidden tabindex="-1">
       </div>
       <div class="graph-btn-col">
         <span class="graph-btn-spacer"></span>
@@ -875,11 +876,15 @@
     return s !== '' && /^-?\d+(?:\.\d+)?$/.test(s);
   }
 
+  var yTextInput = document.getElementById('graph-y-text');
+  var yLabel     = document.getElementById('graph-y-label');
+
   // Rebuild the Y-axis select to show only columns whose non-empty values are
   // all numeric (after stripping currency symbols etc.) and not date-shaped.
+  // Returns the number of numeric options added (excluding the placeholder).
   function buildYSelect() {
     var tbl = document.querySelector('table[data-table]') || document.querySelector('table');
-    if (!tbl || !tbl.tHead || !tbl.tBodies[0]) return;
+    if (!tbl || !tbl.tHead || !tbl.tBodies[0]) return 0;
     var headers = Array.from(tbl.tHead.rows[0].cells);
     var rows    = Array.from(tbl.tBodies[0].rows);
     var prev    = ySel.value;
@@ -897,12 +902,40 @@
       if (name === prev) opt.selected = true;
       ySel.appendChild(opt);
     });
+    return ySel.options.length - 1;  // subtract placeholder
   }
+
+  // Apply the single-column shortcut: hide the dropdown and show a read-only
+  // label when exactly one numeric column exists, so the user only picks X.
+  function applyYAutoSelect(numericCount) {
+    if (numericCount === 1) {
+      ySel.options[1].selected = true;
+      ySel.hidden              = true;
+      if (yTextInput) { yTextInput.value = ySel.options[1].value; yTextInput.hidden = false; }
+      if (yLabel)     { yLabel.textContent = 'Y axis (auto-selected)'; }
+    } else {
+      ySel.hidden = false;
+      if (yTextInput) yTextInput.hidden = true;
+      if (yLabel)     yLabel.textContent = 'Y axis (vertical, must be numeric)';
+    }
+  }
+
+  // Check for numeric columns once on page load; grey out the button when
+  // none exist so the user knows immediately without opening the panel.
+  (function initGraphBtn() {
+    var n = buildYSelect();
+    applyYAutoSelect(n);
+    if (n === 0) {
+      btnOpen.disabled = true;
+      btnOpen.title    = 'Line graphs need a numeric column';
+    }
+  }());
 
   btnOpen.addEventListener('click', function () {
     otherPanels.forEach(function (p) { p.hidden = true; });
     backInp.value = window.location.href;
-    buildYSelect();
+    var n = buildYSelect();
+    applyYAutoSelect(n);
     panel.hidden  = !panel.hidden;
     checkPlot();
   });
@@ -947,8 +980,9 @@
     .replace(/[^a-z0-9]+/g, '_') || 'export';
 
   function getFormat(name) {
-    if (/\.csv$/i.test(name)) return 'csv';
-    if (/\.sql$/i.test(name)) return 'sqlite';
+    if (/\.csv$/i.test(name))  return 'csv';
+    if (/\.sql$/i.test(name))  return 'sqlite';
+    if (/\.json$/i.test(name)) return 'json';
     return null;
   }
 
@@ -960,8 +994,11 @@
     } else if (fmt === 'sqlite') {
       fmtBadge.textContent = 'SQLite';
       fmtBadge.className   = 'export-format-badge sqlite';
+    } else if (fmt === 'json') {
+      fmtBadge.textContent = 'JSON';
+      fmtBadge.className   = 'export-format-badge csv';
     } else {
-      fmtBadge.textContent = 'unknown — add .csv or .sql';
+      fmtBadge.textContent = 'unknown — add .csv, .sql or .json';
       fmtBadge.className   = 'export-format-badge unknown';
     }
     btnSave.disabled = !fmt;

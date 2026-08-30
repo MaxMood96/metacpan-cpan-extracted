@@ -39,9 +39,10 @@
             "Database::Abstraction" : "0.38",
             "File::Spec" : "3.40",
             "File::Temp" : "0.22",
-            "HTML::D3" : "0.08",
+            "HTML::D3" : "0.1",
             "HTML::TableExtract" : "0",
             "LWP::UserAgent" : "0",
+            "LWP::UserAgent::Cached" : "0",
             "Mojolicious" : "9.49",
             "Mojolicious::Plugin::TemplateToolkit" : "0",
             "Params::Get" : "0",
@@ -80,6 +81,6 @@
          "web" : "https://github.com/nigelhorne/Database-BI"
       }
    },
-   "version" : "v0.004.0",
+   "version" : "v0.005.0",
    "x_serialization_backend" : "JSON::PP version 4.18"
 }

@@ -13,8 +13,11 @@
 #  include <sys/stat.h>
 #endif
 
-#define CC_ERR_NOTREG    -7   /* not a regular file */
-#define CC_ERR_NOFDPASS  -8   /* this transport or platform cannot pass one */
+/* CC_ERR_NOTREG and CC_ERR_NOFDPASS live in clamd_conn.h. They were
+ * defined here, below the includes, which meant clamd_async.h - included
+ * above - had already been parsed without them: the branch it takes on a
+ * platform that cannot pass descriptors raises NOFDPASS, and would not
+ * compile. */
 
 #if CC_HAVE_FD_PASSING
 

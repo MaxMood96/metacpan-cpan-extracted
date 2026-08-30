@@ -1,0 +1,73 @@
+{% if error %}
+<div class="warnbox"><strong>{% error %}</strong>{% if hint %} {% hint %}{% end %}</div>
+{% end %}
+
+{% if writable %}{% else %}
+<div class="warnbox">This mount is read-only. Editing needs somewhere to write
+  and a CSRF token; see the <code>db</code> and <code>writable</code> options,
+  and turn on <code>csrf</code> in the application.</div>
+{% end %}
+
+<div class="panel">
+  <h2>Health targets</h2>
+  <p class="note">Each target is polled at its own interval and the answers
+    are stored as <code class="mono">punk.health.ok</code> and
+    <code class="mono">punk.health.ms</code> metric points - so the history
+    is in the explorer and an alert on a failing check needs no new rule
+    type. Point each URL at a service's
+    <code class="mono">/readyz</code>.</p>
+
+  {% for t in health %}
+  <form method="post" action="{% prefix %}/health-targets" class="panelform">
+    {% raw csrf_field %}
+    <input type="hidden" name="name" value="{% t.name %}">
+    <span class="mono">{% t.name %}</span>
+    <input type="text" name="url" value="{% t.url %}" class="mono"
+           spellcheck="false" aria-label="readiness URL">
+    <input type="number" name="every_s" value="{% t.every_s %}" min="10"
+           aria-label="poll every, seconds">
+    <input type="number" name="timeout_ms" value="{% t.timeout_ms %}"
+           min="100" max="60000" aria-label="timeout, milliseconds">
+    <button type="submit">Save</button>
+  </form>
+  <form method="post" action="{% prefix %}/health-targets/{% t.name %}/delete"
+        class="panelform">
+    {% raw csrf_field %}
+    <button type="submit" class="danger">Remove {% t.name %}</button>
+  </form>
+  {% end %}
+</div>
+
+<div class="panel">
+  <h2>Add a target</h2>
+  <form method="post" action="{% prefix %}/health-targets">
+    {% raw csrf_field %}
+    <div class="field">
+      <label for="ht-name">Name</label>
+      <input type="text" id="ht-name" name="name" spellcheck="false"
+             placeholder="shop">
+      <p class="note">Letters, digits, dash and underscore. It becomes the
+        <code class="mono">target</code> label on every point.</p>
+    </div>
+    <div class="field">
+      <label for="ht-url">Readiness URL</label>
+      <input type="text" id="ht-url" name="url" class="mono"
+             spellcheck="false" placeholder="https://shop.internal/readyz">
+      <p class="note">Checked against the outbound-URL policy before it is
+        stored and again before every poll. Loopback and private ranges need
+        the <code class="mono">health_allow</code> allowlist.</p>
+    </div>
+    <div class="field">
+      <label for="ht-every">Poll every (seconds)</label>
+      <input type="number" id="ht-every" name="every_s" value="60" min="10">
+    </div>
+    <div class="field">
+      <label for="ht-tmo">Timeout (ms)</label>
+      <input type="number" id="ht-tmo" name="timeout_ms" value="5000"
+             min="100" max="60000">
+    </div>
+    <button type="submit">Save target</button>
+  </form>
+</div>
+
+<p class="note"><a href="{% prefix %}/status">Back to the overview</a></p>

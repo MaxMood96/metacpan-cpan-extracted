@@ -1,6 +1,8 @@
 
 {% if error %}
 <div class="warnbox"><strong>{% error %}</strong>{% if hint %} {% hint %}{% end %}</div>
+
+{% include _discover.tmpl %}
 {% end %}
 
 {% if spans %}{% else %}
@@ -14,8 +16,14 @@
            placeholder="e.g. 500ms"
            title="Duration: 500ms is slower than 500ms; &lt; 100ms is faster than 100ms. 100 means 100ms; 250us and 1.5s work too.">
     <button type="submit">Search</button>
+    <a class="helpicon" href="{% prefix %}/help"
+       title="What can I type here?" aria-label="Query language help">?</a>
     {% include _range.tmpl %}
   </form>
+</div>
+
+<div class="toolbar">
+  {% include _views.tmpl %}
 </div>
 {% end %}
 
@@ -53,6 +61,19 @@
       </tbody>
     </table>
   </div>
+
+{% if next_cursor %}
+<p class="pager">
+  <a href="{% prefix %}/traces?q={% query_esc %}&min_ms={% min_ms %}{% if errors_only %}&errors=1{% end %}&after={% next_cursor %}{% range_amp %}">Next
+    50</a>
+  {% if paged %}
+  <a href="{% prefix %}/traces?q={% query_esc %}&min_ms={% min_ms %}{% if errors_only %}&errors=1{% end %}{% range_amp %}">Back to the slowest</a>
+  {% end %}
+</p>
+{% else %}{% if paged %}
+<p class="pager">That is the last trace in this window.
+  <a href="{% prefix %}/traces?q={% query_esc %}&min_ms={% min_ms %}{% if errors_only %}&errors=1{% end %}{% range_amp %}">Back to the slowest</a></p>
+{% end %}{% end %}
 </div>
 {% end %}
 

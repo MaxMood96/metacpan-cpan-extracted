@@ -8,6 +8,10 @@ check_live_access();
 
 # --- Read Tests (always run) ---
 
+# Captured 2026-08-28 (karr k101) against Docker Engine Community 29.7.2
+# (API 1.55): GET /networks on this host's real engine, unmodified -- three
+# entries (none/host/bridge) because that is the whole list a fresh install
+# starts with; none were created for this capture.
 subtest 'list networks' => sub {
   my $docker = test_docker(
     'GET /networks' => load_fixture('networks_list'),
@@ -17,18 +21,21 @@ subtest 'list networks' => sub {
 
   is(ref $networks, 'ARRAY', 'returns array');
   if (@$networks) {
-    isa_ok($networks->[0], 'API::Docker::Network');
-    ok($networks->[0]->Name, 'has Name');
+    isa_ok($networks->[0], 'API::Docker::Type::Network');
+    ok($networks->[0]->name, 'has name');
   }
 
   unless (is_live()) {
-    is(scalar @$networks, 2, 'two networks');
+    is(scalar @$networks, 3, 'three networks');
 
-    my $first = $networks->[0];
-    is($first->Name, 'bridge', 'network name');
-    is($first->Driver, 'bridge', 'network driver');
-    is($first->Scope, 'local', 'network scope');
-    ok(!$first->Internal, 'not internal');
+    my ($bridge) = grep { $_->name eq 'bridge' } @$networks;
+    ok $bridge, 'the bridge network is in the list';
+    is($bridge->driver, 'bridge', 'network driver');
+    is($bridge->scope, 'local', 'network scope');
+    ok(!$bridge->internal, 'not internal');
+    is($bridge->ipam->config->[0]->subnet, '172.17.0.0/16',
+      'and IPAM is inflated into its own generated classes rather than '
+      . 'staying the raw HashRef the old entity kept');
   }
 };
 
@@ -37,10 +44,12 @@ subtest 'list networks' => sub {
 subtest 'network lifecycle' => sub {
   skip_unless_write();
 
+  my ($connect_body, $disconnect_body);
   my $docker = test_docker(
     'POST /networks/create' => sub {
       my ($method, $path, %opts) = @_;
-      is($opts{body}{Name}, 'test-net', 'network name in body') unless is_live();
+      is_deeply($opts{body}, { Name => 'test-net', Driver => 'bridge' },
+        'the full create body reached the daemon') unless is_live();
       return { Id => 'mock-net-123', Warning => '' };
     },
     'GET /networks/mock-net-123'             => {
@@ -50,8 +59,16 @@ subtest 'network lifecycle' => sub {
       Scope  => 'local',
       Labels => {},
     },
-    'POST /networks/mock-net-123/connect'    => undef,
-    'POST /networks/mock-net-123/disconnect' => undef,
+    'POST /networks/mock-net-123/connect'    => sub {
+      my ($method, $path, %opts) = @_;
+      $connect_body = $opts{body};
+      return undef;
+    },
+    'POST /networks/mock-net-123/disconnect' => sub {
+      my ($method, $path, %opts) = @_;
+      $disconnect_body = $opts{body};
+      return undef;
+    },
     'DELETE /networks/mock-net-123'          => undef,
   );
 
@@ -66,15 +83,17 @@ subtest 'network lifecycle' => sub {
   register_cleanup(sub { eval { $docker->networks->remove($id) } }) if is_live();
 
   my $network = $docker->networks->inspect($id);
-  isa_ok($network, 'API::Docker::Network');
-  ok($network->Name, 'has Name');
+  isa_ok($network, 'API::Docker::Type::Network');
+  ok($network->name, 'has name');
 
   unless (is_live()) {
     $docker->networks->connect($id, Container => 'abc123');
-    pass('connect completed');
+    is_deeply($connect_body, { Container => 'abc123' },
+      'connect posted the container id in the request body');
 
-    $docker->networks->disconnect($id, Container => 'abc123');
-    pass('disconnect completed');
+    $docker->networks->disconnect($id, Container => 'abc123', Force => 1);
+    is_deeply($disconnect_body, { Container => 'abc123', Force => \1 },
+      'disconnect posted its body too, with Force normalised to a JSON boolean');
   }
 
   $docker->networks->remove($id);
@@ -98,6 +117,25 @@ subtest 'connect requires container' => sub {
 
   eval { $docker->networks->connect('net1') };
   like($@, qr/Container required/, 'croak on missing container for connect');
+};
+
+subtest 'prune sends its filters and returns the daemon response' => sub {
+  plan skip_all => 'route assertions are fixture-only' if is_live();
+
+  my $params;
+  my $docker = test_docker(
+    'POST /networks/prune' => sub {
+      my ($method, $path, %opts) = @_;
+      $params = $opts{params};
+      return { NetworksDeleted => ['unused-net'] };
+    },
+  );
+
+  my $result = $docker->networks->prune(filters => { until => ['24h'] });
+  is_deeply($result, { NetworksDeleted => ['unused-net'] },
+    'the daemon response is returned unwrapped');
+  is_deeply($params->{filters}, { until => ['24h'] },
+    'the filters reached the query string, shape-normalised');
 };
 
 done_testing;

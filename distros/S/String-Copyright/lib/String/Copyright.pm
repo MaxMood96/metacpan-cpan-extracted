@@ -1,14 +1,21 @@
-use 5.008001;
-use strict;
-use warnings;
+use v5.40;
 use utf8;
 use re (qw/eval/);
 
-my $CAN_RE2;
+use builtin qw(load_module);
+no warnings 'experimental::builtin';
+
+my $CAN_RE2 = false;
 
 BEGIN {
-	eval { require re::engine::RE2 };
-	$CAN_RE2 = $@ ? '' : 1;
+	try {
+		load_module('re::engine::RE2');
+		$CAN_RE2 = true;
+	}
+	catch ($e) {
+
+		# module not compiled in / not installed
+	}
 }
 
 package String::Copyright;
@@ -21,16 +28,15 @@ String::Copyright - Representation of text-based copyright statements
 
 =head1 VERSION
 
-Version 0.003014
+Version v0.4.0
 
 =cut
 
-our $VERSION = '0.003014';
+our $VERSION = "v0.4.0";
 
-# Dependencies
 use parent 'Exporter::Tiny';
-use Carp ();
-use Set::IntSpan;
+use Carp     ();
+use Log::Any qw($log);
 
 our @EXPORT = qw/copyright/;
 
@@ -101,11 +107,12 @@ see the L<Exporter::Tiny> documentation for details.
 
 =cut
 
+my $html_xml_tags_re = qr/<\/?(?:p|br|ref)(?:\s[^>]*)?>/i;
+
 # OR'ed strings have regular variable name and are already grouped
 # AND'ed strings have name ending in underscore: must be grouped if repeated
 my $blank           = '[ \t]';
 my $blank_or_break_ = "$blank*\\n?$blank*";
-my $dash            = '[-˗‐‑‒–—―⁃−﹣－]';
 my $colons_         = "$blank?:{1,2}";
 my $strictlabel     = 'SPDX-FileCopyrightText:';
 my $label           = '(?i:copyright(?:-holders?)?\b|copr\.)';
@@ -115,9 +122,45 @@ my $pseudo_sign_    = '[({][Cc][})]';
 my $vague_sign_     = '-[Cc]-';
 my $broken_sign_    = "\\?$blank*";
 
+my @dash_codepoints = (
+	'002D',    # U+002D HYPHEN-MINUS
+	'02D7',    # U+02D7 MODIFIER LETTER MINUS SIGN
+	'2010',    # U+2010 HYPHEN
+	'2011',    # U+2011 NON-BREAKING HYPHEN
+	'2012',    # U+2012 FIGURE DASH
+	'2013',    # U+2013 EN DASH
+	'2014',    # U+2014 EM DASH
+	'2015',    # U+2015 HORIZONTAL BAR
+	'2043',    # U+2043 HYPHEN BULLET
+	'2212',    # U+2212 MINUS SIGN
+	'FE63',    # U+FE63 SMALL HYPHEN-MINUS
+	'FF0D',    # U+FF0D FULLWIDTH HYPHEN-MINUS
+);
+
+my $dash = '[' . join( '', map { chr( hex($_) ) } @dash_codepoints ) . '-]';
+
+my %soup_patterns = (
+	"\xC2\xA9" => 'UTF-8 © (C2 A9) mis-read as two latin1 chars "Â©"',
+	"\xA1\xA4" =>
+		'EUC-JP © (JIS X 0208 row 01 col 01), read as latin1 as "¡¤"',
+	"\x81\x98" => 'Shift-JIS / CP932 ©, read as latin1 as two C1 controls',
+	"\xA2\xA9" => 'GBK © (Chinese, code page 936), read as latin1 as "¢©"',
+);
+
+my $sign_soup_ = do {
+	my @alt;
+	for my $pat ( sort { length $b <=> length $a } keys %soup_patterns ) {
+		my $esc = join '',
+			map { '\x{' . sprintf( '%X', ord ) . '}' } split //, $pat;
+		push @alt, $esc;
+	}
+	join '|', @alt;
+};
+
 # high-bit © noise, caused by misparsing UTF-8 as latin1
-# except \xAE (latin1 ©), \xAE (MacRoman ©), \xE2 (latin1 © lowercased after misparse)
-my $nonsign_ = '[\x80-\xAB\xAD-\xC1\xC3-\xE1\xE3-\xFF]\xA9';
+# except \xA2 (GBK © lead byte ¢©), \xAE (latin1 ©), \xAE (MacRoman ©)
+# and \xE2 (latin1 © lowercased after misparse)
+my $nonsign_ = '[\x80-\xA1\xA3-\xAB\xAD-\xC1\xC3-\xE1\xE3-\xFF]\xA9';
 my $nonidentifier_
 	= "(?:no |_|$dash)copyright|copyright-[^h]|(?:Digital Millennium|U.S.|US|United States) Copyright Act|\\b(?:for|we) copyright\\b";
 
@@ -161,6 +204,7 @@ my $owner_initial = '[^\s!"#$%&\'()*+,./:;<=>?@[\\\\\]^_`{|}~-]';
 
 my $signs
 	= "(?m:$strictlabel$blank*|(?:$label|$sign|$nroff_sign_|(?:^|$blank)$pseudo_sign_)(?:$colon_or_dash?$blank*(?:$label|$sign|$pseudo_sign_))*)";
+
 my $yearspan_ = "$year_(?:$dash_spacy_$year_)?";
 my $years_    = "$yearspan_(?:$comma_spacy$yearspan_)*";
 my $owners_
@@ -180,6 +224,23 @@ my ($dash_spacy_re, $owner_intro_A_re, $boilerplate_X_re,
 		= qr/$chatter|$signs(?:$blank$vague_sign_)?$delimiter(?:$broken_sign_)?(?:$nonyears_|((?:$years_$delimiter)?(?:(?:$owner_intro_)?$owners_)?))|\n/;
 }
 
+sub _merge_ranges
+{
+	my @ranges = map { ref $_ ? [@$_] : [ $_, $_ ] } @_;
+	@ranges = sort { $a->[0] <=> $b->[0] || $a->[1] <=> $b->[1] } @ranges;
+
+	my @merged;
+	for my $r (@ranges) {
+		if ( @merged && $r->[0] <= $merged[-1][1] + 1 ) {
+			$merged[-1][1] = $r->[1] if $r->[1] > $merged[-1][1];
+		}
+		else {
+			push @merged, [@$r];
+		}
+	}
+	return @merged;
+}
+
 sub _generate_copyright
 {
 	my ( $class, $name, $args, $globals ) = @_;
@@ -191,17 +252,38 @@ sub _generate_copyright
 			unless 1 + @_ == grep {defined} $copyright, @_;
 
 	   # String::Copyright objects are effectively immutable and can be reused
-		if ( !@_ && ref($copyright) eq __PACKAGE__ ) {
+		if ( !@_ && blessed($copyright) ) {
 			return $copyright;
 		}
 
 		# stringify objects
 		$copyright = "$copyright";
 
+		$copyright =~ s{$html_xml_tags_re}{}g;
+
+		if ( $copyright =~ /(?:$sign)|(?i:copyright\b)/ ) {
+			my $before = $log->is_debug ? $copyright : undef;
+			if ( $copyright =~ s/$sign_soup_/©/g ) {
+				$log->warn('String::Copyright normalized sign-soup input');
+				$log->debug(
+					sub { 'sign-soup detail: ' . _soup_detail($before) } );
+			}
+		}
+
+		if ( $copyright =~ /$dash/ ) {
+			my $before = $log->is_debug ? $copyright : undef;
+			for my $cp (@dash_codepoints) {
+				my $d = chr( hex($cp) );
+				$copyright =~ s/\Q$d\E/-/g;
+			}
+			$log->debug( sub { 'dash-normalized input: ' . $before } );
+		}
+
 		# TODO: also parse @_ - but each separately!
 		my @block;
 		my $skipped = 0;
 		while ( $copyright =~ /$signs_and_more_re/g ) {
+
 			my $owners = $1;
 			if ( $globals->{threshold_before} || $globals->{threshold} ) {
 				last
@@ -237,21 +319,15 @@ sub _generate_copyright
 				my @ranges;
 				for (@span) {
 					my ( $y1, $y2 ) = split /$dash_spacy_re/;
-					if ( !$y2 ) {
-						push @ranges, $y1;
-					}
-					elsif ( $y1 > $y2 ) {
-						push @ranges, [ $y2, $y1 ];
-					}
-					else {
-						push @ranges, [ $y1, $y2 ];
-					}
+					if    ( !$y2 )      { push @ranges, $y1; }
+					elsif ( $y1 > $y2 ) { push @ranges, [ $y2, $y1 ]; }
+					else                { push @ranges, [ $y1, $y2 ]; }
 				}
 
 				# normalize
 				$years = join ', ',
 					map { $_->[0] == $_->[1] ? $_->[0] : "$_->[0]-$_->[1]" }
-					Set::IntSpan->new( \@ranges )->spans;
+					_merge_ranges(@ranges);
 			}
 			if ($owners) {
 				$owners =~ s/$owner_intro_A_re//;
@@ -265,7 +341,7 @@ sub _generate_copyright
 			push @block, [ $years || undef, $owners || undef ];
 		}
 
-# TODO: save $skipped_lines to indicate how dirty parsing was
+# TODO: save $skipped to indicate how dirty parsing was
 
 		my $ext_format = $globals->{format};
 		my $format
@@ -274,7 +350,7 @@ sub _generate_copyright
 			: sub { join ' ', '©', $_->[0] || (), $_->[1] || () };
 
 		bless [ $copyright, \@block, $format ], __PACKAGE__;
-	}
+	};
 }
 
 sub new
@@ -284,13 +360,13 @@ sub new
 		unless 1 + @_ == grep { defined && length } @data;
 
 	# String::Copyright objects are simply stripped of their string part
-	if ( !@_ && ref($self) eq __PACKAGE__ ) {
+	if ( !@_ && blessed($self) ) {
 		return bless [ undef, $data[1] ], __PACKAGE__;
 	}
 
 	# FIXME: properly validate data
 	Carp::croak("String::Copyright blocks must be an array of strings")
-		unless @_ == grep { ref eq 'ARRAY' } @data;
+		unless @_ == grep { reftype($_) eq 'ARRAY' } @data;
 
 	bless [ undef, \@data ], __PACKAGE__;
 }
@@ -328,6 +404,10 @@ Only ASCII characters and B<©> (copyright sign) are directly processed.
 If copyright sign is not detected
 or accents or multi-byte characters display wrong,
 then most likely the data was not decoded into a string.
+
+Some common mis-decoded forms of the copyright sign are recognized and
+normalized to B<©> (e.g. UTF-8 read as Latin1, EUC-JP, Shift-JIS/CP932,
+and GBK). When this happens a warning is emitted via L<Log::Any>.
 
 If ranges or lists of years are not tidied,
 then maybe it contained non-ASCII whitespace or digits.

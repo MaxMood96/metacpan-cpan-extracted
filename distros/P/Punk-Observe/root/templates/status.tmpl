@@ -1,3 +1,9 @@
+{% if error %}
+
+<div class="warnbox"><strong>{% error %}</strong>
+  {% if hint %}{% hint %}{% end %}</div>
+{% end %}
+
 <dl class="stats">
   <div><dt>accepted</dt><dd>{% accepted %}</dd></div>
   <div><dt>records</dt><dd>{% ingest_rate %}</dd></div>
@@ -11,9 +17,26 @@
   <div><dt>unsummarised</dt><dd>{% compaction_lag %}</dd></div>
   <div><dt>rate rejected</dt><dd>{% rate_rejected %}</dd></div>
   <div><dt>accepted bytes</dt><dd>{% accepted_bytes %}</dd></div>
-  <div><dt>deleted but mapped</dt><dd>{% mapped_deleted %}</dd></div>
+
   <div><dt>on disk</dt><dd>{% store_bytes %}</dd></div>
+
+  <div><dt>active metric series</dt>
+       <dd>{% series_used %}{% if series_cap %} of {% series_cap %}{% end %}</dd></div>
+  <div><dt>metric series dropped by the cap</dt><dd>{% series_rejected %}</dd></div>
+
+  <div><dt>records rewritten onto the overflow series</dt>
+       <dd>{% overflow_records %}</dd></div>
+  <div><dt>index sidecars missing a segment</dt><dd>{% orphan_index %}</dd></div>
+  <div><dt>live tail lines lost</dt><dd>{% live_gaps %}</dd></div>
 </dl>
+
+{% if series_dropping %}
+<div class="warnbox">The series cap is dropping new metric series. A metric
+  that appears to have stopped reporting may in fact be one whose new label
+  sets were refused - raise <code>limits.series</code>, or lower the
+  cardinality of the metric labels being sent. Log and span attributes are
+  not gated and are not the cause.</div>
+{% end %}
 
 {% if counters_shared %}{% else %}
 <p class="note">The shared counters are unavailable on this platform, so the
@@ -21,15 +44,32 @@
   stored totals are unaffected.</p>
 {% end %}
 
-{% if ingest_plot %}
 <div class="panel">
   <h2>Logs and spans arriving</h2>
   <p class="note">Metric points are not counted here: a metric query names
     the metric, so there is no total across all of them.</p>
+  {% if ingest_html %}
+  {% raw ingest_html %}
+  {% else %}
+  <div class="deferwrap"
+       data-defer="{% prefix %}/status.slow{% range_qs %}"
+       data-defer-poll="30">
+    <p class="empty">Loading&hellip;</p>
+    <noscript><p class="note">This panel loads after the page, which needs
+      JavaScript - or
+      <a href="{% prefix %}/status?full=1{% range_amp %}">render everything
+      with the page</a>.</p></noscript>
+  </div>
+  {% end %}
+</div>
+
+{% if series_gauge_plot %}
+<div class="panel">
+  <h3>Series against the cap</h3>
   <div class="chartwrap" data-chart>
-    <script type="application/json" data-plot>{% raw ingest_plot %}</script>
-    <noscript><p class="note">This chart needs JavaScript. The totals it
-      summarises are above.</p></noscript>
+    <script type="application/json" data-plot>{% raw series_gauge_plot %}</script>
+    <noscript><p class="note">The dial needs JavaScript. The numbers are in
+      the table above.</p></noscript>
   </div>
 </div>
 {% end %}

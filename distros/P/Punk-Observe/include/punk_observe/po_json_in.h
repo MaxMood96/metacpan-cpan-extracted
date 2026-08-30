@@ -372,6 +372,35 @@ static void po_j_log(pTHX_ HV *h, po_batch *b, po_attrs *inherited) {
     if (rec->attr_off == PO_ARENA_ERR) b->err = 1;
 }
 
+/* The first exemplar carrying a trace id, out of a point's `exemplars` array.
+ * The protobuf decoder's rule, in the other spelling: one exemplar reaches
+ * the record because the record has one slot, and an exemplar with no trace
+ * id points nowhere. See po_otlp_in.h for why this field is the whole
+ * cross-signal jump. */
+static void po_j_exemplar(pTHX_ SV *exs, po_rec *rec) {
+    AV *av = po_j_av(exs);
+    SSize_t i, n;
+    if (!av) return;
+    n = av_len(av) + 1;
+    for (i = 0; i < n; i++) {
+        SV **e = av_fetch(av, i, 0);
+        HV *x = e ? po_j_hv(*e) : NULL;
+        uint8_t tid[16], sid[8];
+        size_t tn, sn;
+        po_u64 hi = 0, lo = 0;
+        if (!x) continue;
+        tn = po_j_id(aTHX_ po_j_get(aTHX_ x, "traceId"), tid, 16);
+        if (tn != 16) continue;
+        po_id16(tid, tn, &hi, &lo);
+        if (!po_trace_id_valid(hi, lo)) continue;
+        sn = po_j_id(aTHX_ po_j_get(aTHX_ x, "spanId"), sid, 8);
+        rec->trace_id_hi = hi;
+        rec->trace_id_lo = lo;
+        rec->span_id     = sn == 8 ? po_id8(sid, sn) : 0;
+        return;
+    }
+}
+
 static void po_j_points(pTHX_ SV *pts, po_batch *b, po_attrs *inherited,
                         const char *name, size_t namelen, uint16_t mflags) {
     AV *av = po_j_av(pts);
@@ -401,6 +430,8 @@ static void po_j_points(pTHX_ SV *pts, po_batch *b, po_attrs *inherited,
             memcpy(&rec->value, &u, 8);
         }
         else rec->value = SvNV(dv);
+
+        po_j_exemplar(aTHX_ po_j_get(aTHX_ p, "exemplars"), rec);
 
         if (name) {
             rec->body_off = po_arena_put(&b->arena, name, namelen);

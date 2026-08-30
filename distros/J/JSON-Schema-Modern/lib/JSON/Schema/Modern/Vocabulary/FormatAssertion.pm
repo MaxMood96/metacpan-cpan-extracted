@@ -4,7 +4,7 @@ package JSON::Schema::Modern::Vocabulary::FormatAssertion;
 # vim: set ts=8 sts=2 sw=2 tw=100 et :
 # ABSTRACT: Implementation of the JSON Schema Format-Assertion vocabulary
 
-our $VERSION = '0.645';
+our $VERSION = '0.647';
 
 use 5.020;
 use Moo;
@@ -171,7 +171,7 @@ sub keywords ($class, $spec_version) {
     ipv4 => $is_ipv4,
     ipv6 => sub {
       ($_[0] =~ /^(?:[[:xdigit:]]{0,4}:){0,8}[[:xdigit:]]{0,4}\z/
-        || $_[0] =~ /^(?:[[:xdigit:]]{0,4}:){1,6}((?:[0-9]{1,3}\.){3}[0-9]{1,3})\z/
+          || $_[0] =~ /^(?:[[:xdigit:]]{0,4}:){1,7}((?:[0-9]{1,3}\.){3}[0-9]{1,3})\z/
             && $is_ipv4->($1))
         && $_[0] !~ /:::/
         && $_[0] !~ /^:[^:]/
@@ -317,7 +317,7 @@ JSON::Schema::Modern::Vocabulary::FormatAssertion - Implementation of the JSON S
 
 =head1 VERSION
 
-version 0.645
+version 0.647
 
 I use a linearly-increasing version numbering scheme. No meaning should be
 presumed or inferred from the version being less than 1.0.

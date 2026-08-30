@@ -6,6 +6,10 @@ use Test::API::Docker::Mock;
 
 check_live_access();
 
+# Captured 2026-08-28 (karr k101) against Docker Engine Community 29.7.2
+# (API 1.55): GET /info on this host's real engine. The one edit is the
+# "Name" field (the daemon's hostname), redacted to "docker-host" so a real
+# machine name does not ship in the tarball; every other value is verbatim.
 subtest 'system info' => sub {
   my $docker = test_docker(
     'GET /info' => load_fixture('system_info'),
@@ -20,20 +24,23 @@ subtest 'system info' => sub {
   ok($info->{Architecture}, 'has Architecture');
 
   unless (is_live()) {
-    is($info->{Containers}, 14, 'container count');
-    is($info->{ContainersRunning}, 3, 'running containers');
-    is($info->{ContainersPaused}, 1, 'paused containers');
-    is($info->{ContainersStopped}, 10, 'stopped containers');
-    is($info->{Images}, 25, 'image count');
-    is($info->{Driver}, 'overlay2', 'storage driver');
-    is($info->{Name}, 'test-host', 'hostname');
-    is($info->{ServerVersion}, '27.4.1', 'server version');
-    is($info->{OperatingSystem}, 'Debian GNU/Linux 12 (bookworm)', 'os');
+    is($info->{Containers}, 0, 'container count');
+    is($info->{ContainersRunning}, 0, 'running containers');
+    is($info->{ContainersPaused}, 0, 'paused containers');
+    is($info->{ContainersStopped}, 0, 'stopped containers');
+    is($info->{Images}, 2, 'image count');
+    is($info->{Driver}, 'overlayfs', 'storage driver');
+    is($info->{Name}, 'docker-host', 'hostname');
+    is($info->{ServerVersion}, '29.7.2', 'server version');
+    is($info->{OperatingSystem}, 'Debian GNU/Linux 13 (trixie)', 'os');
     is($info->{Architecture}, 'x86_64', 'architecture');
     is($info->{NCPU}, 4, 'cpu count');
   }
 };
 
+# Captured 2026-08-28 (karr k101) against Docker Engine Community 29.7.2
+# (API 1.55): GET /version, unversioned as the client itself sends it,
+# unmodified.
 subtest 'system version' => sub {
   my $docker = test_docker(
     'GET /version' => load_fixture('system_version'),
@@ -47,9 +54,9 @@ subtest 'system version' => sub {
   ok($version->{Arch}, 'has Arch');
 
   unless (is_live()) {
-    is($version->{Version}, '27.4.1', 'docker version');
-    is($version->{ApiVersion}, '1.47', 'api version');
-    is($version->{MinAPIVersion}, '1.24', 'min api version');
+    is($version->{Version}, '29.7.2', 'docker version');
+    is($version->{ApiVersion}, '1.55', 'api version');
+    is($version->{MinAPIVersion}, '1.40', 'min api version');
     is($version->{Os}, 'linux', 'os');
     is($version->{Arch}, 'amd64', 'arch');
   }
@@ -111,8 +118,9 @@ subtest 'events' => sub {
 
   if (is_live()) {
     # A real daemon may legitimately have no events in the requested
-    # window, in which case the body is empty and _request returns
-    # undef rather than an arrayref.
+    # window, in which case the body is empty and _request's ndjson
+    # branch returns [] for it, not undef -- the assertion below still
+    # tolerates undef too, a shape this call no longer produces.
     ok(!defined($events) || ref($events) eq 'ARRAY',
       'events is array or undef (empty window is a valid live response)');
   }

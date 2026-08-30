@@ -314,6 +314,16 @@ body {
 }
 
 a { color: var(--info); text-decoration: none; }
+
+/* A button that reads as a link, for the one-word actions inside a table
+   cell - silence, revoke - where a full button is furniture. Still a BUTTON,
+   because these are POSTs and a link that writes is a crawler away from an
+   incident. */
+.linklike {
+    background: none; border: 0; padding: 0; cursor: pointer;
+    color: var(--info); font: inherit; font-size: var(--fs-sm);
+}
+.linklike:hover { text-decoration: underline; }
 a:hover { text-decoration: underline; }
 
 code, pre, .mono { font-family: var(--mono); font-size: var(--fs-sm); }
@@ -412,7 +422,17 @@ code, pre, .mono { font-family: var(--mono); font-size: var(--fs-sm); }
 
 /* NOT OPTIONAL. A trace attribute table or a log line will always be wider
  * than a phone. */
-.tablewrap { overflow-x: auto; max-width: 100%; }
+/* A TABLE SCROLLS ITSELF, IN BOTH DIRECTIONS.
+ *
+ * Horizontally because the page body must not: a wide table pushing the whole
+ * layout sideways moves the nav and the toolbar with it.
+ *
+ * Vertically because these tables are long by design - five hundred buckets,
+ * a page of log lines - and a panel that grows to fit them puts everything
+ * below it off the screen. The chart a table belongs under is the thing
+ * somebody came to look at, and it should not be scrolled past to reach the
+ * next panel. */
+.tablewrap { max-height: 450px; overflow: scroll; max-width: 100%; }
 .tablewrap table { border-collapse: collapse; width: 100%; font-size: var(--fs-sm); }
 .tablewrap th, .tablewrap td {
     text-align: left;
@@ -678,6 +698,20 @@ code, pre, .mono { font-family: var(--mono); font-size: var(--fs-sm); }
 .row-firing { font-weight: 600; box-shadow: inset 2px 0 0 var(--err); }
 .row-error  { box-shadow: inset 2px 0 0 var(--warn); }
 
+/* The WHY under a broken rule's name. Small and muted because it is an
+   annotation, but present - "error" with no reason is a red word whose next
+   action is guessing. */
+.al-reason  { color: var(--muted); font-size: var(--fs-xs);
+              max-width: 40em; overflow-wrap: anywhere; }
+
+/* Service health: a target and the checks that belong to it, in one table.
+   The checks are SUBORDINATE and have to look it - rendered the same they
+   read as more targets, and a check named for the service it polls appears
+   to be that service listed twice. */
+.hz-target > td:first-child { font-weight: 600; }
+.hz-check   > td { color: var(--muted); }
+.hz-check   > .hz-name { padding-left: var(--s4); font-family: var(--mono); }
+
 .grid { display: grid; gap: var(--s4); grid-template-columns: 1fr; }
 @media (min-width: 60rem) {
     .cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -685,9 +719,16 @@ code, pre, .mono { font-family: var(--mono); font-size: var(--fs-sm); }
     .cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
     .cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    /* Up to 6, because that is what the schema's CHECK permits and what
+       PO_PANEL_COLS_MAX clamps to. Stopping at 4 meant a panel saved with
+       span 5 rendered with a class the stylesheet did not recognise and
+       silently occupied one column - a layout that is wrong with nothing on
+       the page to say so. */
     .span-2 { grid-column: span 2; }
     .span-3 { grid-column: span 3; }
     .span-4 { grid-column: span 4; }
+    .span-5 { grid-column: span 5; }
+    .span-6 { grid-column: span 6; }
 }
 /* min-width:0 on every grid child, or one wide table pushes the whole grid
    sideways and defeats the overflow-x rule. */
@@ -790,3 +831,203 @@ code, pre, .mono { font-family: var(--mono); font-size: var(--fs-sm); }
 .daterangepicker .ranges li:hover { background: var(--sunken); color: var(--ink); }
 .daterangepicker .ranges li.active { background: var(--info); color: var(--on-accent); }
 .daterangepicker.show-ranges .drp-calendar.left { border-left: 1px solid var(--line); }
+
+/* --- the dashboard editor ---------------------------------------------------
+ *
+ * A form, deliberately. Phase 14 argued that an arrangement most people set
+ * once does not need a drag grid, and the grid that 06 adds sits over this
+ * rather than replacing it - so this has to be usable on its own, on a phone,
+ * and with scripting off.
+ */
+.field { margin-bottom: var(--s4); }
+.field label {
+    display: block;
+    font-size: var(--fs-sm);
+    color: var(--muted);
+    margin-bottom: var(--s1);
+}
+.field input[type=text],
+.field input[type=number],
+.field select {
+    font: var(--fs-md) var(--stack);
+    padding: var(--s1) var(--s2);
+    border: 1px solid var(--line-firm);
+    border-radius: var(--radius-sm);
+    background: var(--raised);
+    color: var(--ink);
+    max-width: 100%;
+}
+.field input[type=text] { width: 32em; }
+.field input.mono { font-family: var(--mono); }
+.field .note { margin: var(--s1) 0 0; }
+
+/* THE REASON, AGAINST THE BOX IT IS ABOUT. The same words at the top of the
+   form are a hunt; here they are an instruction. */
+.fielderr {
+    color: var(--err);
+    font-size: var(--fs-sm);
+    margin: var(--s1) 0 0;
+}
+
+/* One panel per row, its fields on one line, wrapping rather than
+   overflowing - a query is long and the row it sits in is not. */
+.panelform {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    align-items: center;
+    margin-right: var(--s2);
+}
+.panelform input[type=text] {
+    font: var(--fs-sm) var(--stack);
+    padding: 2px var(--s2);
+    border: 1px solid var(--line-firm);
+    border-radius: var(--radius-sm);
+    background: var(--raised);
+    color: var(--ink);
+}
+.panelform input.mono { font-family: var(--mono); min-width: 22em; flex: 1; }
+.panelform input[type=number] { width: 4em; }
+.panelform select {
+    font: var(--fs-sm) var(--stack);
+    background: var(--raised);
+    color: var(--ink);
+    border: 1px solid var(--line-firm);
+    border-radius: var(--radius-sm);
+}
+
+/* The panels table proper: one form around the whole table, each input in
+   its own cell under its own header, so the columns actually align - the
+   old one-cell-per-row layout put the headers over nothing. The query
+   column takes the slack; the numbers take what a number needs. */
+.paneltable td { vertical-align: middle; }
+.paneltable input[type=text],
+.paneltable input[type=number],
+.paneltable select {
+    font: var(--fs-sm) var(--stack);
+    padding: 2px var(--s2);
+    border: 1px solid var(--line-firm);
+    border-radius: var(--radius-sm);
+    background: var(--raised);
+    color: var(--ink);
+}
+.paneltable input[type=text],
+.paneltable select { width: 100%; box-sizing: border-box; }
+.paneltable input.mono { font-family: var(--mono); }
+.paneltable .pt-title { width: 22%; }
+.paneltable .pt-query { width: 48%; }
+.paneltable .pt-viz   { width: 8%; }
+.paneltable .pt-num input[type=number] { width: 4.5em; }
+
+/* Destructive actions are marked by more than colour: a border and a word. */
+button.danger {
+    color: var(--err);
+    border-color: var(--err);
+    background: var(--raised);
+}
+button[disabled] { opacity: .5; cursor: not-allowed; }
+
+/* One number, large. A `stat` panel is the one somebody glances at, so it is
+   markup rather than a chart: no library to load, and it is still there with
+   scripting off. */
+.stat {
+    font: 600 var(--fs-2xl) var(--stack);
+    color: var(--ink);
+    margin: var(--s4) 0;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+/* --- saved views ------------------------------------------------------------
+ *
+ * A name on a URL, sitting beside the box the URL came from. The window is
+ * shown on the chip rather than hidden in a tooltip: "errors, last hour" and
+ * "errors between 03:00 and 04:00 last Tuesday" are different questions, and
+ * a frozen view read as a live one is the wrong answer at the worst moment.
+ */
+.views { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; }
+.viewlink {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--s1);
+    font-size: var(--fs-sm);
+    padding: 2px var(--s2);
+    border: 1px solid var(--line-firm);
+    border-radius: var(--radius-sm);
+    background: var(--raised);
+    color: var(--ink);
+    text-decoration: none;
+}
+.viewlink:hover { border-color: var(--info); }
+.viewwin { color: var(--faint); font-size: var(--fs-xs); }
+
+.savebar { display: inline-flex; gap: var(--s2); align-items: center;
+           margin-left: auto; }
+.savebar input[type=text] {
+    font: var(--fs-sm) var(--stack);
+    padding: 2px var(--s2);
+    border: 1px solid var(--line-firm);
+    border-radius: var(--radius-sm);
+    background: var(--raised);
+    color: var(--ink);
+}
+
+/* The help affordance, beside the box it is about. A question mark rather
+   than the word "help": it sits in a row of controls and has to be small,
+   and the accessible name carries the meaning. */
+.helpicon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5em; height: 1.5em;
+    border: 1px solid var(--line-firm);
+    border-radius: 50%;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: var(--fs-sm);
+}
+.helpicon:hover { color: var(--ink); border-color: var(--info); }
+
+/* --- what you can filter on -------------------------------------------------
+ *
+ * The list is the answer to a question the UI could not answer at all: what
+ * columns and labels does MY data have. The `label` marker is the useful part
+ * - it says which filters prune the scan and which are read and discarded.
+ */
+.discover .keys {
+    list-style: none;
+    margin: var(--s3) 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+}
+.discover .keys li {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--s1);
+    padding: 2px var(--s2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--sunken);
+}
+.discover .keys a { text-decoration: none; color: var(--ink); }
+.discover .keys a:hover { color: var(--info); }
+.keycount { color: var(--faint); font-size: var(--fs-xs);
+            font-variant-numeric: tabular-nums; }
+.keylabel {
+    font-size: var(--fs-xs);
+    color: var(--ok);
+    border: 1px solid var(--ok);
+    border-radius: var(--radius-sm);
+    padding: 0 var(--s1);
+}
+
+/* Paging. Links, not buttons: a page of results is a URL, so the next page
+   is one too, and both can be pasted into a chat window mid-incident. */
+.pager { display: flex; gap: var(--s4); }
+.pager a { color: var(--info); }
+
+/* A deferred panel's placeholder. Sized near what will replace it, so the
+   swap does not shove the rest of the page around mid-read. */
+.deferwrap { min-height: 6rem; }

@@ -11,8 +11,10 @@ use Punk::Observe::Store ();
 use Punk::Observe::View ();
 use Punk::Observe::Live ();
 use Punk::Observe::Plot ();
-use Punk::Observe::Segment ();   # the shared counter arena
+use Punk::Observe::Segment ();
 use Punk::Observe::Tenant ();
+use Punk::Observe::Config ();
+use Punk::Observe::Query ();
 use File::Raw::JSON ();
 use File::Basename ();
 use File::Spec ();
@@ -21,12 +23,17 @@ our $VERSION = $Punk::Observe::VERSION;
 
 our $INSECURE_ENV = 'PUNK_OBSERVE_INSECURE';
 
+my %STATE;
+sub state_for { return $STATE{ $_[1] } }
+
 my %ASSET_TYPE = (
     'observe.css'   => 'text/css',
     'brush.js'      => 'application/javascript',
     'waterfall.js'  => 'application/javascript',
     'flamegraph.js' => 'application/javascript',
     'livetail.js'   => 'application/javascript',
+    'discover.js'   => 'application/javascript',
+    'defer.js'      => 'application/javascript',
     'nsmath.js'     => 'application/javascript',
     'plot.js'       => 'application/javascript',
     'plotly.min.js' => 'application/javascript',
@@ -63,13 +70,163 @@ sub register {
         stores  => {},
     };
     $st->{arena} = _arena($st);
+    $st->{retain_opts} = _retain($opts);
+    $st->{db}    = _backend($st);
+    $st->{seam}  = { map { $_ => _seam($opts->{$_}) } qw(alerts dashboards) };
+    $st->{alerts_opts} = _alerts_opts($opts);
+
+    $st->{writable} = _writable($st);
 
     _register_ui($st);
     _register_ingest($st);
+    _register_jobs($st);
+
+    my $key = ref($app) || $app;
+    $STATE{$key} = $st if defined $key && length $key;
     return $st;
 }
 
-# ---------------------------------------------------------------------------
+sub _alerts_opts {
+    my ($opts) = @_;
+    my $a = ref $opts->{alerts} eq 'HASH' && !exists $opts->{alerts}{read}
+          ? $opts->{alerts} : {};
+    my %out = ( group_wait_ns => 30_000_000_000, repeat_ns => 0,
+                every => '@every 30s' );
+    if (defined $a->{group_wait} && length $a->{group_wait}) {
+        my ($ns) = Punk::Observe::View::min_duration($a->{group_wait});
+        $out{group_wait_ns} = $ns if defined $ns;
+    }
+    if (defined $a->{repeat_interval} && length $a->{repeat_interval}) {
+        my ($ns) = Punk::Observe::View::min_duration($a->{repeat_interval});
+        $out{repeat_ns} = $ns if defined $ns;
+    }
+    $out{every} = $a->{every} if defined $a->{every} && length $a->{every};
+    return \%out;
+}
+
+sub _register_jobs {
+    my ($st) = @_;
+    return unless $st->{db};
+    my $own_alerts = $st->{seam}{alerts} && $st->{seam}{alerts}{read};
+
+    my $app   = $st->{app};
+    my $class = ref($app) || $app;
+    my $kw    = ($app->can('caller_class') && $app->caller_class) || $class;
+    my $task  = $kw->can('task');
+    my $cron  = $kw->can('cron');
+    Carp::croak(
+        "plugin 'Observe': alerting needs plugin 'Queue' - "
+      . "`use Punk::Plugin::Queue` and register plugin 'Queue' before "
+      . "plugin 'Observe', or pass an `alerts` seam to keep your own "
+      . "evaluator.") unless $task && $cron || $own_alerts;
+    if ($own_alerts && !($task && $cron)) {
+        Carp::croak("plugin 'Observe': retain is configured but there is no "
+                  . "queue to schedule it on - register plugin 'Queue', or "
+                  . "run retention yourself and drop the option")
+            if $st->{retain_opts};
+        return;
+    }
+
+    unless ($own_alerts) {
+    $task->('observe.evaluate', '+Punk::Observe::Evaluate#evaluate_job');
+    $task->('observe.notify',   '+Punk::Observe::Evaluate#notify_job',
+            { attempts => 5 });
+
+    $cron->($st->{alerts_opts}{every}, 'observe.evaluate',
+            { name => 'observe-evaluate', args => [ $class ] });
+    }
+
+    $task->('observe.health', '+Punk::Observe::Health#health_job');
+    $cron->('* * * * *', 'observe.health',
+            { name => 'observe-health', args => [ $class ] });
+
+    if ($st->{retain_opts}) {
+        $task->('observe.retain', '+Punk::Observe::Retain#retain_job');
+        $cron->($st->{retain_opts}{at}, 'observe.retain',
+                { name => 'observe-retain', args => [ $class ] });
+    }
+    return 1;
+}
+
+sub _backend {
+    my ($st) = @_;
+    my $db = $st->{opts}{db};
+    return undef if defined $db && !$db;
+
+    my %arg;
+    if (ref $db eq 'HASH')  { %arg = %$db }
+    elsif (ref $db)         { return $db }
+    elsif (defined $db && length $db) { $arg{dsn} = $db }
+    else {
+        return undef unless defined $st->{store} && length $st->{store};
+        require File::Spec;
+        $arg{dsn} = 'dbi:SQLite:dbname='
+                  . File::Spec->catfile($st->{store}, 'config.db');
+    }
+
+    my $b = eval {
+        require Punk::Observe::Backend;
+        my $o = Punk::Observe::Backend->new(%arg);
+        $o->migrate;
+        $o->disconnect;
+        $o;
+    };
+    if (!$b) {
+        my $why = $@ || 'unknown error';
+        $why =~ s/\s+\z//;
+        Carp::carp("Punk::Plugin::Observe: the configuration store is "
+                 . "unavailable, so editing is off - $why");
+        return undef;
+    }
+    return $b;
+}
+
+sub _identity {
+    my ($st, $c) = @_;
+    my $cb = $st->{opts}{identity} or return undef;
+    my $id = eval { $cb->($c) };
+    if ($@) {
+        my $why = $@; $why =~ s/\s+\z//;
+        Carp::carp("Punk::Plugin::Observe: the identity seam died - $why");
+        return undef;
+    }
+    return undef unless defined $id && length $id;
+    return substr $id, 0, 200;
+}
+
+sub _seam {
+    my ($v) = @_;
+    return undef unless $v;
+    return { read => $v } if ref $v eq 'CODE';
+    return $v if ref $v eq 'HASH' && ($v->{read} || $v->{write} || $v->{delete});
+    return { read => $v };
+}
+
+sub _reader {
+    my ($st, $kind) = @_;
+    return sub {
+        my @a = @_;
+        my $req = ref $a[-1] eq 'HASH' ? $a[-1] : {};
+        my $t = _request_tenant($st, $req->{c});
+        return $kind eq 'dashboards'
+             ? Punk::Observe::Config::dashboards($st->{db}, $t, $a[0])
+             : Punk::Observe::Config::alerts($st->{db}, $t, $req);
+    };
+}
+
+sub _writable {
+    my ($st) = @_;
+    my $want = $st->{opts}{writable};
+    return 0 if defined $want && !$want;
+    return 0 unless $st->{db} || ($st->{seam}{dashboards}
+                                  && $st->{seam}{dashboards}{write});
+
+    my $app = $st->{app};
+    my $csrf = eval { ref $app eq 'HASH' ? $app->{csrf} : $app->{csrf} };
+    return 1 if $csrf;
+    return 1 if $ENV{$INSECURE_ENV};
+    return 0;
+}
 
 sub _tenant {
     my ($opts) = @_;
@@ -96,11 +253,19 @@ sub _ingest {
     $prefix = '/v1' unless defined $prefix && length $prefix;
     $prefix =~ s{/\z}{};
 
-    return {
-        prefix => $prefix,
-        keys   => $i->{keys},
-        scope  => 'ingest',
-    };
+    my %out = (prefix => $prefix, keys => $i->{keys});
+    $out{$_} = $i->{$_} for grep { defined $i->{$_} }
+                            qw(max_body max_ratio max_records grpc);
+
+    my %known = map { $_ => 1 }
+                qw(prefix keys max_body max_ratio max_records grpc);
+    my @bad = sort grep { !$known{$_} } keys %$i;
+    Carp::croak("Punk::Plugin::Observe: unknown ingest option"
+              . (@bad > 1 ? 's' : '') . ": " . join(', ', @bad)
+              . ". Accepted: " . join(', ', sort keys %known))
+        if @bad;
+
+    return \%out;
 }
 
 sub _limits {
@@ -111,25 +276,67 @@ sub _limits {
         rate_records => $l->{rate_records} || 0,
         rate_bytes   => $l->{rate_bytes}   || 0,
         series       => defined $l->{series} ? $l->{series} : 1_000_000,
+        series_window => $l->{series_window},
         storage      => $l->{storage} || 0,
         attributes   => $l->{attributes},
     };
+}
+
+sub _retain {
+    my ($opts) = @_;
+    my $r = $opts->{retain};
+    return undef unless $r;
+    $r = { keep => $r } unless ref $r;
+    Carp::croak("Punk::Plugin::Observe: retain needs keep => '7d' (or 30d, "
+              . "12h ...)") unless defined $r->{keep};
+    require Punk::Observe::Retain;
+    my $ns = Punk::Observe::Retain::parse_keep($r->{keep});
+    Carp::croak("Punk::Plugin::Observe: retain keep '$r->{keep}' is not a "
+              . "window - a number and a unit, as in 7d")
+        unless defined $ns;
+    my $at = defined $r->{at} ? $r->{at} : '17 * * * *';
+    {
+        local $@;
+        eval { require Punk::Queue::Cron;
+               Punk::Queue::Cron->check($at); 1 }
+            or Carp::croak("Punk::Plugin::Observe: retain at '$at' is not "
+                         . "a cron expression: $@");
+    }
+    my $bytes;
+    if (defined $r->{bytes}) {
+        my %mult = (k => 1024, m => 1024**2, g => 1024**3, t => 1024**4);
+        if ($r->{bytes} =~ /\A\s*(\d+(?:\.\d+)?)\s*(?:([kmgt])i?b?|b)?\s*\z/i) {
+            my ($n, $u) = ($1, $2);
+            $bytes = sprintf '%.0f', $n * ($u ? $mult{lc $u} : 1);
+        }
+        Carp::croak("Punk::Plugin::Observe: retain bytes '$r->{bytes}' is "
+                  . "not a size - a number and a unit, as in 500M or 2G")
+            unless defined $bytes && $bytes > 0;
+    }
+
+    return { keep => $r->{keep}, keep_ns => $ns, at => $at,
+             (defined $bytes ? (bytes => $bytes) : ()) };
 }
 
 sub _arena {
     my ($st) = @_;
     my $h = eval { Punk::Observe::Segment::shm_new($st->{limits}{series} || 0) };
     return undef unless defined $h;
+    if (my $w = $st->{limits}{series_window}) {
+        require Punk::Observe::Retain;
+        my $ns = $w =~ /\A\d+\z/ ? $w : Punk::Observe::Retain::parse_keep($w);
+        Carp::croak("Punk::Plugin::Observe: limits.series_window '$w' is not "
+                  . "a window - a number and a unit, as in 24h") unless $ns;
+        Punk::Observe::Segment::shm_window($h, $ns);
+    }
     my $ok = eval { Punk::Observe::Segment::shm_stats($h) };
     return { handle => $h, shared => ($ok && $ok->{shared}) ? 1 : 0 };
 }
 
-# ---------------------------------------------------------------------------
-
 sub _resolve_guard {
     my ($st) = @_;
     my $g = $st->{opts}{guard};
-    return sub { return } unless $g;              # the documented escape
+    return sub { return } unless $g;
     return $g if ref $g eq 'CODE';
     my ($ctrl, $action) = split /#/, $g, 2;
     Carp::croak("Punk::Plugin::Observe: guard '$g' is not Controller#action")
@@ -154,11 +361,80 @@ sub _register_ui {
     $scope->get('/traces'  => sub { _page($st, 'trace',     $_[0]) });
     $scope->get('/explore' => sub { _page($st, 'explore',   $_[0]) });
     $scope->get('/alerts'  => sub { _page($st, 'alerts',    $_[0]) });
+    $scope->get('/help'    => sub { _page($st, 'help',      $_[0]) });
+    $scope->get('/alerts/new' => sub {
+        _page($st, 'alerts', $_[0], { template => 'alertedit', editing => 1,
+                                      creating => 1,
+                                      _alert_form_vars({}) });
+    });
     $scope->get('/alerts/:id'     => sub { _page($st, 'alerts',    $_[0]) });
+    $scope->get('/alerts/:id/edit' => sub {
+        my ($c) = @_;
+        my $rule = $st->{db}
+            ? Punk::Observe::Config::alert($st->{db},
+                  _request_tenant($st, $c), scalar eval { $c->param('id') })
+            : undef;
+        return $c->status(404)->text("no such rule\n") unless $rule;
+        _page($st, 'alerts', $c, { template => 'alertedit', editing => 1,
+                                   _alert_form_vars($rule) });
+    });
     $scope->get('/dashboards'     => sub { _page($st, 'dashboard', $_[0]) });
+    $scope->get('/dashboards/new' => sub {
+        _page($st, 'dashboard', $_[0], { template => 'dashedit', editing => 1,
+                                         creating => 1 });
+    });
     $scope->get('/dashboards/:slug' => sub { _page($st, 'dashboard', $_[0]) });
-    $scope->get('/dashboards/:slug/edit'
-                                  => sub { _page($st, 'dashboard', $_[0]) });
+    $scope->get('/health' => sub {
+        _page($st, 'status', $_[0], { template => 'health',
+                                      heading => 'Health',
+                                      here_status => 0, here_home => 0,
+                                      here_health => 1 });
+    });
+    $scope->get('/status.slow' => sub { _slow_panel($st, $_[0], 'status') });
+    $scope->get('/health.slow' => sub { _slow_panel($st, $_[0], 'health') });
+    $scope->get('/dashboards/:slug/panels/:key/slow' => sub {
+        _dash_panel($st, $_[0]);
+    });
+    $scope->get('/health-targets/edit' => sub {
+        _page($st, 'status', $_[0], { template => 'healthedit',
+                                      heading  => 'Health targets',
+                                      here_status => 0, here_home => 0,
+                                      here_health => 1 });
+    });
+    $scope->get('/dashboards/:slug/edit' => sub {
+        _page($st, 'dashboard', $_[0], { template => 'dashedit', editing => 1 });
+    });
+    if ($st->{writable}) {
+        $scope->post('/dashboards' => sub { _write($st, 'dashboard', $_[0]) });
+        $scope->post('/dashboards/:slug'
+                     => sub { _write($st, 'dashboard', $_[0]) });
+        $scope->post('/dashboards/:slug/delete'
+                     => sub { _write($st, 'dashboard_delete', $_[0]) });
+        $scope->post('/dashboards/:slug/panels'
+                     => sub { _write($st, 'panel', $_[0]) });
+        $scope->post('/dashboards/:slug/panels/save'
+                     => sub { _write($st, 'panels_save', $_[0]) });
+        $scope->post('/dashboards/:slug/panels/:id'
+                     => sub { _write($st, 'panel', $_[0]) });
+        $scope->post('/dashboards/:slug/panels/:id/delete'
+                     => sub { _write($st, 'panel_delete', $_[0]) });
+
+        $scope->post('/views'            => sub { _write($st, 'view', $_[0]) });
+        $scope->post('/views/:id/delete' => sub { _write($st, 'view_delete', $_[0]) });
+
+        $scope->post('/alerts'             => sub { _write($st, 'alert', $_[0]) });
+        $scope->post('/alerts/:id'         => sub { _write($st, 'alert', $_[0]) });
+        $scope->post('/alerts/:id/delete'  => sub { _write($st, 'alert_delete', $_[0]) });
+        $scope->post('/alerts/:id/silence' => sub { _write($st, 'silence', $_[0]) });
+        $scope->post('/alerts/silences/:id/delete'
+                     => sub { _write($st, 'silence_delete', $_[0]) });
+
+        $scope->post('/health-targets'
+                     => sub { _write($st, 'health_target', $_[0]) });
+        $scope->post('/health-targets/:name/delete'
+                     => sub { _write($st, 'health_target_delete', $_[0]) });
+    }
+
     $scope->get('/logs/stream' => sub { _stream($st, $_[0]) });
     $scope->get('/logs/:id'      => sub { _page($st, 'record', $_[0]) });
     $scope->get('/traces/:trace' => sub { _page($st, 'trace',  $_[0]) });
@@ -168,7 +444,6 @@ sub _register_ui {
     $scope->get('/assets/favicon.svg' => sub { _favicon($st, $_[0]) });
     return $scope;
 }
-
 
 sub _root_dir {
     my $pm = $INC{'Punk/Plugin/Observe.pm'} or return undef;
@@ -195,7 +470,124 @@ sub _build_views {
         template_dir => File::Spec->catdir($root, 'templates'),
         wrapper      => 'layout.tmpl',
     });
+    $st->{fragment} = Template::Stencil->new({
+        template_dir => File::Spec->catdir($root, 'templates'),
+    });
     return $st->{stencil};
+}
+
+sub _fragment_html {
+    my ($st, $tmpl, $vars) = @_;
+    return undef unless $st->{fragment};
+    my $html = eval { $st->{fragment}->render($tmpl, $vars) };
+    return undef if $@;
+    return undef if defined $html && $html =~ /\A\s*\Q$tmpl\E\s*\z/;
+    utf8::decode($html) if defined $html;
+    return $html;
+}
+
+sub _ingest_vars {
+    my ($store, $from, $to) = @_;
+    my $fig = eval { Punk::Observe::Plot::ingest_figure($store, $from, $to) };
+    return $fig ? (ingest_plot => $fig) : ();
+}
+
+sub _health_vars {
+    my ($st, $store, $from, $to) = @_;
+    return () unless $st->{db};
+    my $h = eval {
+        require Punk::Observe::Health;
+        Punk::Observe::Health::page_vars(
+            db => $st->{db}, store => $store,
+            tenant => $st->{tenant}{fixed});
+    };
+    return () unless ref $h eq 'ARRAY' && @$h;
+
+    my $dur = sub {
+        my ($ns, $capped) = @_;
+        my $s = Punk::Observe::View::fmt_dur($ns || 0);
+        return $capped ? "over $s" : $s;
+    };
+    for my $t (@$h) {
+        $t->{held_s} = $dur->($t->{held}, $t->{held_min});
+        $t->{row_class} = $t->{ok} ? '' : 'row-error';
+        for my $c (@{ $t->{checks} }) {
+            $c->{held_s} = $dur->($c->{held}, $c->{held_min});
+            $c->{row_class} = $c->{ok} ? '' : 'row-error';
+        }
+    }
+    my %out = (health => $h);
+
+    if (defined $from && defined $to && $store) {
+        my $ev = eval { Punk::Observe::Health::uptime_events(
+                            store => $store, from => $from, to => $to) };
+        if (ref $ev eq 'ARRAY' && @$ev) {
+            my $j = eval { Punk::Observe::Plot::timeline_figure(
+                               { events => $ev, to => $to }) };
+            if (defined $j && length $j) {
+                utf8::decode($j);
+                $out{health_up_plot} = $j;
+            }
+        }
+    }
+    return %out;
+}
+
+sub _status_window {
+    my ($req) = @_;
+    my ($from, $to) = Punk::Observe::View::window($req);
+    if (!defined $from || !defined $to) {
+        my $now = Punk::Observe::now_ns();
+        $from = Punk::Observe::Store::nsub($now, 3_600 * 1_000_000_000);
+        $to   = $now;
+    }
+    return ($from, $to);
+}
+
+sub _dash_panel {
+    my ($st, $c) = @_;
+    my $store = store_for($st, _request_tenant($st, $c));
+    my $req   = _params($st, $c);
+    $req->{panel} = eval { $c->param('key') };
+
+    my $panel = eval { Punk::Observe::View->_panel($store, $req) };
+    return $c->status(500)->text("panel build failed: $@") if $@;
+    return $c->status(404)->text("that panel is not on this dashboard\n")
+        unless ref $panel eq 'HASH';
+
+    my ($w_from, $w_to) = _status_window($req);
+    my $html = _fragment_html($st, q{panelslow.tmpl},
+        { p => $panel, prefix => $st->{prefix},
+          from => $w_from, to => $w_to,
+          range_amp => _range_qs($req, q{&}) });
+    return $c->status(500)->text('fragment render failed')
+        unless defined $html;
+    $c->header('Cache-Control' => 'no-cache');
+    return $c->html($html);
+}
+
+sub _slow_panel {
+    my ($st, $c, $which) = @_;
+    my $store = store_for($st, _request_tenant($st, $c));
+    my $req   = _params($st, $c);
+    my %vars  = (prefix    => $st->{prefix},
+                 writable  => $st->{writable},
+                 range_qs  => _range_qs($req, '?'),
+                 range_amp => _range_qs($req, '&'));
+    if ($which eq 'status') {
+        my ($from, $to) = _status_window($req);
+        %vars = (%vars, _ingest_vars($store, $from, $to));
+    }
+    else {
+        my ($from, $to) = _status_window($req);
+        %vars = (%vars, _health_vars($st, $store, $from, $to));
+    }
+    my $html = _fragment_html($st, "${which}slow.tmpl", \%vars);
+    return $c->status(500)->text('fragment render failed')
+        unless defined $html;
+    $c->header('Cache-Control' => 'no-cache');
+    utf8::encode($html) if utf8::is_utf8($html);
+    return $c->html($html);
 }
 
 sub _empty {
@@ -211,14 +603,13 @@ sub _empty {
         rules => [], silences => [], broken => 0, panels => [], cols => 2,
         slug => '',
         ingest_rate => 0, wal_depth => 0, segments => 0, compaction_lag => 0,
+        series_used => 0, series_dropping => 0, overflow_records => 0,
+        live_gaps => 0, older_cursor => '', paged => 0, next_cursor => '',
         series_cap => $st->{limits}{series} || 0,
-        mapped_deleted => 0,
+        health => [],
         accepted => '0', accepted_bytes => '0 B',
         rate_rejected => '0', counters_shared => 1,
 
-        # The read path's own empty state. Every one of these is a key some
-        # template reads, and a template that dies on a missing key turns a
-        # page with no data into a 500.
         groups => [], names => [], examples => [], traces => [], flame => [],
         attrs => [], context => [], services => [], columns => [],
         record => {}, found => 0, empty => 0, degraded => 0, exact => 1,
@@ -227,10 +618,18 @@ sub _empty {
         errors_only => 0, min_ms => '', trace => '', flame_height => 0,
         logs => 0, metrics => 0, traces_seen => 0, store_bytes => '0 B',
         here_home => 0, here_map => 0, here_traces => 0, here_logs => 0,
+        here_dashboard => 0,
         here_metrics => 0, here_explore => 0, here_alerts => 0,
         here_status => 0,
         range => '1h', range_all => 0, range_custom => 0, ranges => [],
         wants_range => 0, range_qs => '', range_amp => '',
+        writable => 0, csrf_field => '', editing => 0, creating => 0,
+        saved_views => [], save_page => '', save_path => '',
+        sources => [], aggregates => [], severities => [], units => [],
+        attr_keys => [], attrs_truncated => 0, attrs_sampled => 0,
+        columns_source => '',
+        operators => [],
+        field => '', configured => 0, can_edit => 0, list => [],
     );
 }
 
@@ -243,7 +642,43 @@ sub store_for {
         tenant     => $tenant,
         seal_bytes => $st->{opts}{seal_bytes},
         max_rows   => $st->{opts}{max_rows},
+        cache      => _query_cache($st),
     );
+}
+
+# THE CHUNK CACHE, BUILT ONCE PER WORKER AND SHARED BY EVERY TENANT'S STORE.
+#
+# A file store, because the point is that five workers rendering the same
+# dashboard compute a chunk once between them - a per-worker memory cache
+# would compute it five times and hold five copies. `compute` gives the
+# single-flight on top of that.
+#
+# It lives beside the data it summarises rather than in a system temp
+# directory: a cache of one store's history has no meaning next to another's,
+# and an operator moving the store expects its derived files to go too.
+#
+# ON UNLESS TURNED OFF. A cache that has to be discovered is a cache nobody
+# has, and every path through it falls back to the plain query - a store
+# without Punk::Cache installed, an unwritable directory or a full disk all
+# come out as a slower answer rather than a broken page.
+sub _query_cache {
+    my ($st) = @_;
+    return $st->{query_cache} if exists $st->{query_cache};
+
+    my $opt = $st->{opts}{cache};
+    $opt = {} unless defined $opt;
+    return $st->{query_cache} = undef unless $opt;      # cache => 0
+    $opt = {} unless ref $opt eq 'HASH';
+
+    $st->{query_cache} = eval {
+        require Punk::Cache;
+        require File::Spec;
+        my $dir = $opt->{dir}
+               || File::Spec->catdir($st->{store}, 'cache');
+        Punk::Cache->new('file', dir => $dir,
+                         max_bytes => $opt->{max_bytes} || '256M');
+    };
+    return $st->{query_cache};
 }
 
 sub _request_tenant {
@@ -255,16 +690,20 @@ sub _request_tenant {
     return ($t && $t->{ok}) ? $t->{tenant} : 'default';
 }
 
-
 sub _params {
     my ($st, $c) = @_;
     my %p;
-    for my $k (qw(q from to range errors min_ms service id trace slug)) {
+    for my $k (qw(q from to range errors min_ms service id trace slug
+                  before after)) {
         my $v = eval { $c->param($k) };
         $p{$k} = $v if defined $v && length $v;
     }
-    $p{alerts}     = $st->{opts}{alerts}     if $st->{opts}{alerts};
-    $p{dashboards} = $st->{opts}{dashboards} if $st->{opts}{dashboards};
+    for my $k (qw(alerts dashboards)) {
+        my $seam = $st->{seam}{$k};
+        $p{$k} = $seam->{read} if $seam && $seam->{read};
+        $p{$k} = _reader($st, $k) if !$p{$k} && $st->{db};
+    }
+    $p{writable} = $st->{writable};
     return \%p;
 }
 
@@ -288,14 +727,310 @@ sub _uri_esc {
     return $v;
 }
 
+sub _discover {
+    my ($st, $c, $name, $vars, $store, $req) = @_;
+
+    my %src = (logs => 'log', metrics => 'metric', trace => 'trace',
+               explore => '');
+    my $source = $src{$name};
+
+    if (!length $source && defined $req->{q} && $req->{q} =~ /\A\s*(\w+)/) {
+        my %alias = (logs => 'log', traces => 'trace', span => 'spans');
+        my $w = lc $1;
+        $source = $alias{$w} || $w;
+    }
+    $source = 'log' unless length $source;
+
+    my $g = Punk::Observe::Query::grammar();
+    my $cols = $g->{columns}{$source} or return;
+
+    $vars->{columns} = [ map { { name => $_, kind => 'column' } } @$cols ];
+    $vars->{columns_source} = $source;
+
+    my $q = defined $req->{q} && $req->{q} =~ /\S/ ? $req->{q} : '';
+    $q =~ s/\A\s+|[\s|]+\z//g;
+    my $base = $q;
+    if (!length $base) {
+        if ($source eq 'metric') {
+            my $first = eval { $vars->{names}[0]{name} };
+            $base = defined $first && length $first ? "metric $first" : '';
+        }
+        else { $base = $source }
+    }
+    return unless length $base;
+
+    (my $stem = $base) =~ s/\s*\|.*\z//s;
+    my %page = (logs => 'logs', metrics => 'metrics', trace => 'traces',
+                explore => 'explore');
+    $vars->{discover_page} = $page{$name} || 'explore';
+
+    my $where_base = $base;
+
+    return unless $store;
+    return if $vars->{error};
+
+    my %kind = (metric => 1, log => 2, trace => 3, spans => 3);
+
+    my $LOOK = 2000;
+    my %seen;
+    my $sampled;
+    my $gen  = eval { $store->can('generation') ? $store->generation : '' };
+    $gen = '' unless defined $gen;
+    my $ckey = join "\0", ($store->{tenant} // 'default'), $source,
+                          map { $_ // '' } @{$req}{qw(range from to)};
+    my $hit = $st->{discover}{$ckey};
+    if ($hit && $hit->{gen} eq $gen && time - $hit->{at} < 60) {
+        %seen    = %{ $hit->{seen} };
+        $sampled = $hit->{sampled};
+    }
+    else {
+        my $recs = eval {
+            my ($r) = $store->records(from => $vars->{from},
+                                      to => $vars->{to},
+                                      limit => $LOOK,
+                                      ($kind{$source}
+                                         ? (kind => $kind{$source}) : ()));
+            $r;
+        };
+        return unless ref $recs eq 'ARRAY';
+
+        for my $rec (@$recs) {
+            my $a = $rec->{attrs} or next;
+            $seen{$_}++ for keys %$a;
+        }
+        $sampled = scalar @$recs;
+
+        my $d = $st->{discover} ||= {};
+        delete @$d{ grep { time - $d->{$_}{at} >= 60 } keys %$d };
+        $d->{$ckey} = { gen => $gen, at => time,
+                        seen => {%seen}, sampled => $sampled };
+    }
+    return unless %seen;
+
+    my $allow = $st->{limits}{attributes};
+    my %indexed = map { $_ => 1 }
+                  ref $allow eq 'ARRAY' ? @$allow
+                  : qw(service.name severity host.name deployment.environment);
+
+    my @keys = sort { $seen{$b} <=> $seen{$a} || $a cmp $b } keys %seen;
+    my $cap = 40;
+    $vars->{attrs_truncated} = @keys > $cap ? 1 : 0;
+    @keys = @keys[0 .. $cap - 1] if @keys > $cap;
+
+    $vars->{attr_keys} = [ map {
+        { name => $_, count => $seen{$_}, indexed => ($indexed{$_} ? 1 : 0),
+          query => _uri_esc("$stem | by $_ | count"),
+          where => "$where_base | where $_ = " }
+    } @keys ];
+    $vars->{attrs_sampled} = $sampled;
+}
+
+sub _dur_text {
+    my ($ns) = @_;
+    return '' unless defined $ns && $ns > 0;
+    return Punk::Observe::View::fmt_dur($ns) if $ns % 1_000_000_000;
+    my $s = $ns / 1_000_000_000;
+    for my $u ([ 604_800 => 'w' ], [ 86_400 => 'd' ], [ 3_600 => 'h' ],
+               [ 60 => 'm' ]) {
+        return ($s / $u->[0]) . $u->[1] unless $s % $u->[0];
+    }
+    return "${s}s";
+}
+
+sub _alert_form_vars {
+    my ($rule) = @_;
+    my %r = %{ $rule || {} };
+    for my $f (qw(for every)) {
+        next if defined $r{$f};
+        $r{$f} = _dur_text($r{"${f}_ns"});
+    }
+    my $cur = defined $r{op} ? $r{op} : '>';
+    return (rule => \%r,
+            op_options => [ map { { name => $_,
+                                    current => ($_ eq $cur ? 1 : 0) } }
+                            qw(> >= < <= == !=) ]);
+}
+
+sub _write {
+    my ($st, $what, $c) = @_;
+
+    return $c->status(503)->text("no configuration store\n") unless $st->{db};
+
+    my $tenant = _request_tenant($st, $c);
+    my $slug   = eval { $c->param('slug') };
+    my $id     = eval { $c->param('id') };
+    my %in     = map { $_ => scalar eval { $c->param($_) } }
+                 qw(slug title cols query viz span position);
+
+    my $r;
+    if    ($what eq 'dashboard') {
+        $in{slug} = $slug if defined $slug && length $slug;
+        $r = Punk::Observe::Config::save_dashboard($st->{db}, $tenant, \%in);
+    }
+    elsif ($what eq 'dashboard_delete') {
+        $r = Punk::Observe::Config::delete_dashboard($st->{db}, $tenant, $slug);
+    }
+    elsif ($what eq 'panel') {
+        $in{id} = $id;
+        $r = Punk::Observe::Config::save_panel($st->{db}, $tenant, $slug, \%in);
+    }
+    elsif ($what eq 'panel_delete') {
+        $r = Punk::Observe::Config::delete_panel($st->{db}, $tenant, $slug, $id);
+    }
+    elsif ($what eq 'panels_save') {
+        my $d = Punk::Observe::Config::dashboards($st->{db}, $tenant, $slug);
+        my @rows;
+        for my $p (@{ $d->{panels} || [] }) {
+            my %row = map { $_ => scalar eval { $c->param("p$p->{id}_$_") } }
+                      qw(title query viz span position);
+            next unless grep { defined } values %row;
+            $row{id} = $p->{id};
+            push @rows, \%row;
+        }
+        $r = Punk::Observe::Config::save_panels($st->{db}, $tenant, $slug,
+                                                \@rows);
+    }
+    elsif ($what eq 'view') {
+        my %v = map { $_ => scalar eval { $c->param($_) } }
+                qw(name page q from to range errors min_ms service);
+        $r = Punk::Observe::Config::save_view($st->{db}, $tenant, \%v);
+        if ($r->{ok}) {
+            my $page = $v{page} || 'logs';
+            $page = 'traces' if $page eq 'trace';
+            my $qs = join '&', map { "$_=" . _uri_esc($v{$_}) }
+                     grep { defined $v{$_} && length $v{$_} }
+                     qw(q from to range errors min_ms service);
+            return $c->redirect($st->{prefix} . "/$page"
+                                . (length $qs ? "?$qs" : ''), 303);
+        }
+    }
+    elsif ($what eq 'view_delete') {
+        $r = Punk::Observe::Config::delete_view($st->{db}, $tenant, $id);
+        if ($r->{ok}) {
+            my $page = eval { $c->param('page') } || 'logs';
+            $page = 'traces' if $page eq 'trace';
+            return $c->redirect($st->{prefix} . "/$page", 303);
+        }
+    }
+    elsif ($what eq 'alert') {
+        my %a = map { $_ => scalar eval { $c->param($_) } }
+                qw(name query op threshold for every enabled);
+        $a{id} = $id if defined $id && length $id;
+        $a{enabled} = 0 unless defined $a{enabled} && $a{enabled};
+        $r = Punk::Observe::Config::save_alert($st->{db}, $tenant, \%a);
+        return $c->redirect($st->{prefix} . '/alerts', 303) if $r->{ok};
+        return _page($st, 'alerts', $c, {
+            template => 'alertedit', editing => 1,
+            creating => (defined $id && length $id) ? 0 : 1,
+            _alert_form_vars({ %a, id => $id }),
+            error    => $r->{error}, field => $r->{field} || '',
+            hint     => $r->{refused}
+                      ? 'Correct it and submit again.'
+                      : 'The configuration store could not be written to.',
+            status   => $r->{refused} ? 400 : 500,
+        });
+    }
+    elsif ($what eq 'alert_delete') {
+        $r = Punk::Observe::Config::delete_alert($st->{db}, $tenant, $id);
+        return $c->redirect($st->{prefix} . '/alerts', 303) if $r->{ok};
+    }
+    elsif ($what eq 'silence') {
+        my %s = map { $_ => scalar eval { $c->param($_) } }
+                qw(pattern until reason);
+        unless (defined $s{pattern} && length $s{pattern}) {
+            my $rule = Punk::Observe::Config::alert($st->{db}, $tenant, $id);
+            $s{pattern} = $rule ? "$rule->{name}/" : '';
+        }
+        $s{by} = eval { $c->current_user } || eval { $c->auth_id } || undef;
+        $r = Punk::Observe::Config::save_silence($st->{db}, $tenant, \%s);
+        return $c->redirect($st->{prefix} . '/alerts', 303) if $r->{ok};
+    }
+    elsif ($what eq 'silence_delete') {
+        $r = Punk::Observe::Config::delete_silence($st->{db}, $tenant, $id);
+        return $c->redirect($st->{prefix} . '/alerts', 303) if $r->{ok};
+    }
+    elsif ($what eq 'health_target') {
+        my %t = map { $_ => scalar eval { $c->param($_) } }
+                qw(name url every_s timeout_ms);
+        $t{every_ns} = int($t{every_s} * 1_000_000_000)
+            if defined $t{every_s} && length $t{every_s};
+        delete $t{every_s};
+        delete $t{$_} for grep { !defined $t{$_} } keys %t;
+        $r = Punk::Observe::Config::save_health_target(
+                 $st->{db}, $tenant, \%t, $st->{opts}{health_allow});
+        return $c->redirect($st->{prefix} . '/health-targets/edit', 303)
+            if $r->{ok};
+    }
+    elsif ($what eq 'health_target_delete') {
+        my $name = eval { $c->param('name') };
+        $r = Punk::Observe::Config::delete_health_target(
+                 $st->{db}, $tenant, $name);
+        return $c->redirect($st->{prefix} . '/health-targets/edit', 303)
+            if $r->{ok};
+    }
+    else { $r = { ok => 0, error => "unknown write '$what'" } }
+
+    if ($what =~ /\A(?:alert_delete|silence)/ && !$r->{ok}) {
+        return _page($st, 'alerts', $c, {
+            error  => $r->{error},
+            hint   => $r->{refused}
+                    ? 'Correct it and submit again.'
+                    : 'The configuration store could not be written to.',
+            status => $r->{refused} ? 400 : 500,
+        });
+    }
+
+    if ($what =~ /\Ahealth_target/ && !$r->{ok}) {
+        return _page($st, 'status', $c, {
+            template => 'healthedit',
+            heading  => 'Health targets',
+            here_status => 0, here_home => 0, here_health => 1,
+            error    => $r->{error},
+            hint     => $r->{refused}
+                      ? 'Correct it and submit again.'
+                      : 'The configuration store could not be written to.',
+            status   => $r->{refused} ? 400 : 500,
+        });
+    }
+
+    my $back = $st->{prefix} . '/dashboards';
+    if ($r->{ok}) {
+        $back .= '/' . _uri_esc($slug)
+            if defined $slug && length $slug && $what ne 'dashboard_delete';
+        return $c->redirect($back, 303);
+    }
+
+    my $status = $r->{refused} ? 400 : 500;
+    return _page($st, 'dashboard', $c, {
+        template => 'dashedit',
+        editing  => 1,
+        creating => ($what eq 'dashboard' && !(defined $slug && length $slug)) ? 1 : 0,
+        error    => $r->{error},
+        field    => $r->{field} || '',
+        hint     => $r->{refused}
+                  ? 'Correct it and submit again.'
+                  : 'The configuration store could not be written to.',
+        status   => $status,
+    });
+}
+
 sub _page {
-    my ($st, $name, $c) = @_;
+    my ($st, $name, $c, $over) = @_;
     return $c->status(501)->text("Template::Stencil is not installed\n")
         unless $st->{stencil};
 
     my %vars = _empty($st, $c);
     my $req  = _params($st, $c);
     my $store = store_for($st, _request_tenant($st, $c));
+
+    my $dash_full = 0;
+    if ($name eq 'dashboard'
+        && (ref $over ne 'HASH' || ($over->{template} || '') ne 'dashedit')) {
+        $dash_full = ($c && eval { $c->param('full') }) || !$st->{fragment}
+                   ? 1 : 0;
+        $req->{panels_inline} = 1 if $dash_full;
+    }
+
     my $built = eval { Punk::Observe::View->page($store, $name, $req) };
     if ($@) {
         $vars{error} = 'That screen could not be built from the store.';
@@ -304,21 +1039,87 @@ sub _page {
     elsif (ref $built eq 'HASH') {
         %vars = (%vars, %$built);
     }
+
+    if ($dash_full) {
+        for my $p (@{ $vars{panels} || [] }) {
+            my $html = _fragment_html($st, q{panelslow.tmpl},
+                { p => $p, prefix => $st->{prefix},
+                  from => $vars{from}, to => $vars{to},
+                  range_amp => _range_qs($req, q{&}) });
+            $p->{body_html} = $html if defined $html;
+        }
+    }
+
     $vars{heading} = ucfirst $name unless length($vars{heading} || '');
+    $vars{writable}   = $st->{writable} ? 1 : 0;
+    $vars{csrf_field} = ($st->{writable} && $c && $c->can('csrf_field'))
+                      ? (eval { $c->csrf_field } || '') : '';
+
+    if ($name eq 'help') {
+        my $g = Punk::Observe::Query::grammar();
+        $vars{$_} = $g->{$_} for qw(aggregates severities units operators);
+        $vars{sources} = [ map {
+            { %$_, alias => ($_->{alias} // ''),
+              cols => join ', ', @{ $g->{columns}{ $_->{name} } || [] } }
+        } @{ $g->{sources} } ];
+        $vars{heading} = 'The query language';
+        $vars{title}   = 'The query language';
+    }
+
+    if ($st->{db} || $store) {
+        if ($name =~ /\A(?:explore|logs|metrics|trace)\z/) {
+            _discover($st, $c, $name, \%vars, $store, $req);
+        }
+    }
+
+    if ($st->{db} && $name =~ /\A(?:logs|metrics|trace|explore)\z/) {
+        my $vs = eval { Punk::Observe::Config::saved_views($st->{db},
+                                                           _request_tenant($st, $c),
+                                                           $name) };
+        $vars{saved_views} = (ref $vs eq 'ARRAY') ? $vs : [];
+        $vars{save_page}   = $name;
+        $vars{save_path}   = $name eq 'trace' ? 'traces' : $name;
+    }
+
     $vars{range_qs}  = _range_qs($req, '?');
     $vars{range_amp} = _range_qs($req, '&');
 
     if ($name eq 'status' && $store) {
-        my $s = eval { $store->stats } || {};
+        my $s = delete $vars{_stats};
+        $s = eval { $store->stats } || {} unless ref $s eq 'HASH';
+
         my $fig = Punk::Observe::Plot::gauge(
             value => $s->{bytes} || 0,
             max   => $st->{limits}{storage} || 0,
             title => 'bytes on disk');
         $vars{storage_gauge_plot} = Punk::Observe::Plot::encode($fig) if $fig;
 
-        my $now = Punk::Observe::now_ns();
-        $vars{ingest_plot} = Punk::Observe::Plot::ingest_figure(
-            $store, Punk::Observe::Store::nsub($now, 3_600 * 1_000_000_000), $now);
+        my $tname = (ref $over eq 'HASH' && $over->{template})
+                  || $vars{template} || 'status';
+        my $full  = $c ? (eval { $c->param('full') } ? 1 : 0) : 0;
+        my %fvars = (prefix    => $st->{prefix},
+                     writable  => $st->{writable},
+                     range_qs  => _range_qs($req, '?'),
+                     range_amp => _range_qs($req, '&'));
+
+        if ($tname eq 'status') {
+            if ($full || !$st->{fragment}) {
+                my ($from, $to) = _status_window($req);
+                $vars{ingest_html} = _fragment_html($st, 'statusslow.tmpl',
+                    { %fvars, _ingest_vars($store, $from, $to) });
+            }
+        }
+        elsif ($tname eq 'health') {
+            if ($full || !$st->{fragment}) {
+                my ($hf, $ht) = _status_window($req);
+                $vars{health_html} = _fragment_html($st, "healthslow.tmpl",
+                    { %fvars, _health_vars($st, $store, $hf, $ht) });
+            }
+        }
+        elsif ($tname eq 'healthedit') {
+            my %h = _health_vars($st, $store);
+            @vars{keys %h} = values %h;
+        }
 
         my $c = $st->{arena}
               ? eval { Punk::Observe::Segment::shm_stats($st->{arena}{handle}) }
@@ -328,21 +1129,76 @@ sub _page {
             $vars{accepted_bytes} = Punk::Observe::View::fmt_bytes($c->{bytes});
             $vars{rate_rejected}  = Punk::Observe::View::fmt_count($c->{rate_rejected});
             $vars{counters_shared} = $c->{shared} ? 1 : 0;
+
+            $vars{series_used}     = Punk::Observe::View::fmt_count($c->{series});
+            $vars{series_cap}      = $c->{series_cap}
+                                   ? Punk::Observe::View::fmt_count($c->{series_cap}) : '';
+            $vars{series_rejected} = Punk::Observe::View::fmt_count($c->{rejected});
+            $vars{series_dropping} = ($c->{rejected} || 0) > 0 ? 1 : 0;
+            $vars{overflow_records} = Punk::Observe::View::fmt_count($c->{overflow});
+
+            $vars{live_gaps} = Punk::Observe::View::fmt_count($c->{live_gaps});
+
+            if ($c->{series_cap}) {
+                my $g = Punk::Observe::Plot::gauge(
+                    value => $c->{series} || 0,
+                    max   => $c->{series_cap},
+                    title => 'active series');
+                $vars{series_gauge_plot} = Punk::Observe::Plot::encode($g) if $g;
+            }
         }
     }
 
-
     $vars{wants_plot} = (grep { /_plot\z/ && defined $vars{$_} && length $vars{$_} }
                          keys %vars) ? 1 : 0;
+    $vars{wants_plot} ||= (grep {
+        my $p = $_;
+        ref $p eq 'HASH'
+            && grep { /_plot\z/ && defined $p->{$_} && length $p->{$_} } keys %$p;
+    } @{ $vars{panels} || [] }) ? 1 : 0;
+    $vars{wants_plot} ||= ($name eq 'dashboard' && !$dash_full
+                           && (ref $over ne 'HASH'
+                               || ($over->{template} || '') ne 'dashedit')
+                           && @{ $vars{panels} || [] }) ? 1 : 0;
 
     if (my $cb = $st->{opts}{stats}) {
         my $extra = eval { $cb->($c, $name, $store) };
+        if ($@) {
+            my $why = $@; $why =~ s/\s+\z//;
+            Carp::carp("Punk::Plugin::Observe: the stats callback died on "
+                     . "the $name screen - $why");
+        }
         %vars = (%vars, %$extra) if ref $extra eq 'HASH';
     }
 
-    my $tmpl = "$name.tmpl";
+    my ($status, $use);
+    if (ref $over eq 'HASH') {
+        $status = delete $over->{status};
+        $use    = delete $over->{template};
+        %vars = (%vars, %$over);
+    }
+
+    if ($vars{editing}) {
+        my @viz = Punk::Observe::Dashboard::viz_names();
+        $vars{viz_options} = [ map { { name => $_ } } @viz ];
+        for my $p (@{ $vars{panels} || [] }) {
+            my $cur = $p->{viz} || 'line';
+            $p->{viz_options} = [ map { { name => $_,
+                                          current => ($_ eq $cur ? 1 : 0) } } @viz ];
+        }
+    }
+
+    if (my $f = $vars{field}) { $vars{"field_$f"} = 1 }
+
+    my $tmpl = ($use || $name) . '.tmpl';
     my $html = eval { $st->{stencil}->render($tmpl, \%vars) };
     return $c->status(500)->text("render failed: $@") if $@;
+    # The name-or-source guess: a template name that transiently fails to
+    # resolve renders AS SOURCE - a 200 whose whole body is the file name.
+    # See _fragment_html; a page five words long is a 500, not an answer.
+    return $c->status(500)->text("template '$tmpl' did not resolve\n")
+        if defined $html && $html =~ /\A\s*\Q$tmpl\E\s*\z/;
+    $c->status($status) if $status;
     return $c->html($html);
 }
 
@@ -352,7 +1208,7 @@ sub _stream {
 
     $c->header('Content-Type'      => 'text/event-stream');
     $c->header('Cache-Control'     => 'no-cache');
-    $c->header('X-Accel-Buffering' => 'no');   # or a proxy buffers the stream
+    $c->header('X-Accel-Buffering' => 'no');
 
     my $req = _params($st, $c);
     my $q = $req->{q};
@@ -500,7 +1356,7 @@ sub _keyring {
 
 sub _key_ok {
     my ($keys, $env) = @_;
-    return 1 unless $keys && @$keys;      # configured open, deliberately
+    return 1 unless $keys && @$keys;
     my $r = Punk::Observe::Key::check($keys, $env->{HTTP_AUTHORIZATION}, undef);
     return $r->{ok} ? 1 : 0;
 }
@@ -674,12 +1530,125 @@ The store cannot report the first. Refused data never reaches it, so a
 receiver throwing every batch away and a receiver being sent nothing have
 identical stored totals.
 
+=item C<cache>
+
+    cache => 0                                    # off
+    cache => { dir => '/var/cache/observe',
+               max_bytes => '1G' }
+
+The dashboard chunk cache, B<on unless turned off>. A panel over twenty-four
+hours re-scans twenty-four hours on every refresh, of which all but the last
+few minutes has settled: this keeps the settled chunks so only the live tail
+is computed. Measured on the demo's two-panel dashboard at C<range=24h>, a
+refresh went from 9.6 seconds to 1.6.
+
+A L<Punk::Cache> file store, because the point is that the workers share it -
+a per-worker memory cache would compute every chunk once per worker and hold
+as many copies. It lives in C<cache/> beside the data it summarises unless
+C<dir> says otherwise, so moving a store takes its derived files with it, and
+defaults to 256MB.
+
+Every path through it degrades to the plain query: L<Punk::Cache> not
+installed, an unwritable directory, a full disk and a corrupt entry all come
+out as a slower answer rather than a broken panel. L<Punk::Observe::Cache>
+carries what cannot be chunked and why.
+
+=item C<retain>
+
+    retain => { keep => '7d' }              # hourly, at :17
+    retain => { keep => '30d', at => '40 2 * * *' }
+    retain => { keep => '48h', bytes => '2G' }
+    retain => { keep => '7y' }              # what a production store keeps
+
+Schedules retention on the host's queue. B<There is no default window>: absent
+this option nothing is ever deleted, because a retention job with a silently
+defaulted window is a deletion job. A C<keep> that does not parse is a boot
+failure - the alternative is an operator who believes deletion is running
+when nothing is.
+
+C<keep> takes any duration the query language takes, up to and including
+years: C<y> is exactly 365 days. A window past the last representable
+instant - beyond roughly 584 years - is refused rather than wrapped, because
+a wrapped window is a cutoff of I<now> and deletes the store.
+
+C<bytes> is an optional budget over and above the window ('500M', '2G', or a
+plain byte count): a store still past it after the time sweep loses its
+oldest segments even inside the window, because a full disk loses everything
+rather than the oldest hour. A size that does not parse is a boot failure,
+for the same reason C<keep> is.
+
+What it does when it runs: B<deletes>, never archives. Whole sealed segments
+whose newest record is older than C<now - keep> are C<unlink>ed with their
+index sidecars; the live log and any segment still holding one record inside
+the window survive untouched, so C<keep> is a floor rather than an exact
+edge. Nothing is copied anywhere first. A reader already holding a deleted
+segment keeps reading it to the end - the primitive is C<unlink>, never
+C<truncate>, and L<Punk::Observe::Retain> carries the reasons.
+
+=item C<health_allow>
+
+Hosts the outbound-URL policy should admit when a health target is saved and
+when it is polled, as an arrayref. The policy refuses loopback, link-local
+and private ranges by default - correct for a URL a stranger typed, and
+exactly wrong for a self-hosted install watching services on its own network,
+which is what the allowlist is for.
+
+=item C<on_alert>
+
+    on_alert => sub {
+        my ($event) = @_;
+        # app           the application class
+        # tenant
+        # rule          { id, name, query, op, threshold, for_ns, every_ns }
+        # kind          firing | resolved | vanished | error
+        # series        [ { series, kind, value, at, fired_at }, ... ]
+        #               one entry, or many when a group delivered together
+        # count
+        # at            when this delivery became due (ns string)
+        # path          "/observe/alerts/<id>" - the host owns its origin
+        # delivery_key  idempotency token, per group per send
+    },
+
+The delivery seam, and the host's whole contribution to alerting: rules are
+edited on the screen, evaluated by the cron this plugin registers on the
+host's queue, and every notification arrives here. Webhook, email, pager -
+delivery is the one thing the core cannot know, so the core does no outbound
+HTTP at all; L<Punk::Observe::Target> is available for hosts that send to
+URLs.
+
+Values are B<raw> - nanoseconds where the query measured time - because
+formatting belongs to the host. A C<die> is retried by the queue, five
+attempts with backoff, and the terminal failure is a dead letter on the
+group, visible, never dropped. Delivery is B<at least once>; C<delivery_key>
+is the token for a host that wants exactly-once on its own side.
+
+Absent, notifications are still recorded and marked; there is simply nobody
+to tell.
+
+B<The ordering rule>: alerting runs on the host's queue, so C<use
+Punk::Plugin::Queue> and C<plugin 'Queue'> must come B<before> this plugin -
+the same rule Punk-Mailer enforces, with the same loud boot failure when it
+is missing. The registered cron is C<observe-evaluate>; pausing it through
+the queue's controls survives deploys, because cron reconcile never resets
+C<enabled>.
+
 =item C<alerts>
 
-A reader for the alert rules, as a hashref or a coderef returning one. Rules
-are configuration with an owner, a review and a history, so they live in the
-application's database rather than in a telemetry store that retention deletes
-from. F<sqitch/> ships the schema.
+Policy for the built-in alerting path, all optional:
+
+    alerts => {
+        every           => '@every 30s',  # the cron cadence - the resolution
+        group_wait      => '30s',  # a group holds this long before its first
+                                   # send: one bad deploy, one message
+        repeat_interval => '15m',  # re-page a STILL-firing group; off absent
+    };
+
+Or the escape: a B<reader seam> - a coderef or hashref, as below - for a host
+that keeps rules somewhere of its own. A host that supplies one keeps its own
+evaluator too: no cron is registered for it, and C<on_alert> does not apply.
+Rules are configuration with an owner, a review and a history, so they live
+in the configuration database rather than in a telemetry store that retention
+deletes from; F<sqitch/> is the schema.
 
     alerts => sub {
         # ONE argument, and it is the request - not ($id, $req). The
@@ -726,6 +1695,116 @@ band runs to it, because a state nobody has left is still in force.
 The same shape for dashboards: a hashref or a coderef taking a slug, returning
 C<title>, C<cols>, C<panels> and a C<list> of the others. A panel is an OQL
 string with a title, validated at save time by the parser that will run it.
+
+B<Panel bodies are deferred.> The page ships each panel's title and a
+placeholder; the browser fetches every body - chart or table - from its own
+fragment route, in parallel, and refreshes it every thirty seconds.
+C<?full=1> renders everything with the page instead, which is also the
+no-JavaScript path. A panel is addressed by its id, or by its position for a
+reader whose panels carry none - give panels ids if reordering while a page
+is open matters to you. The editor runs no panel queries at all: it renders
+forms.
+
+B<The argument order differs from C<alerts>, and always has.> A dashboard
+reader is called as C<< ($slug, $req) >> - the slug first, because a
+dashboard page is a request for one particular dashboard - while an alerts
+reader takes only C<< ($req) >>. Getting them the same way round would mean
+either passing a slug nothing uses or digging one out of the request, and
+both are worse than the asymmetry.
+
+B<Both seams are now overrides.> Absent, they read from the configuration
+store this distribution ships - see C<db> - rather than meaning there are no
+dashboards. To write as well as read, give a hashref instead of a coderef:
+
+    dashboards => { read => \&r, write => \&w, delete => \&d }
+
+A bare coderef is still a reader and still means what it did.
+
+=item C<db>
+
+Where the configuration lives: dashboards, panels, alert rules, silences. A
+dsn, a hashref of L<Punk::Observe::Backend> options, an object answering to
+C<dbh> and C<migrate>, or C<0> to have none.
+
+Absent, it is SQLite in a file called F<config.db> beside C<store> - so a
+self-hosted installation has dashboards without deciding anything. With no
+C<store> either there is nowhere obvious to put it and there is no default,
+because guessing a path in the working directory is worse than having none.
+
+The schema is migrated at registration, in every worker. That is idempotent
+and locked, so it is a version check that occasionally does work.
+
+=item C<identity>
+
+A coderef given the request, returning a stable opaque string for whoever is
+looking, or undef. Optional, and there is no user model here - the guard
+decides who may look and this only says who they are, for the state that is
+per viewer rather than per installation.
+
+Whatever it returns is used as a key and never rendered, so an application
+keying on an email address does not put one on a page. Absent, per-viewer
+state lives in the browser and is per browser.
+
+=item C<editing>
+
+Not an option. The editor is at C<< <prefix>/dashboards/:slug/edit >> and
+C<< <prefix>/dashboards/new >>, and both are the ordinary dashboard page's
+data rendered through a different template - so a panel shown on one is the
+same panel the other saved, and there is no second reader for them to
+disagree through.
+
+The forms C<POST> to six routes, all registered only when C<writable>:
+
+    POST <prefix>/dashboards                       create
+    POST <prefix>/dashboards/:slug                 update
+    POST <prefix>/dashboards/:slug/delete
+    POST <prefix>/dashboards/:slug/panels          add a panel
+    POST <prefix>/dashboards/:slug/panels/save     save the whole table
+    POST <prefix>/dashboards/:slug/panels/:id      update one
+    POST <prefix>/dashboards/:slug/panels/:id/delete
+
+A successful write answers C<303> to the reader's own page, so a reload
+cannot re-submit and the editor shows what happened rather than what it hoped
+would. A refused one comes back as the form, C<400>, with the reason against
+the field it is about.
+
+=item C<writable>
+
+C<0> to mount read-only. Editing is otherwise on when there is somewhere to
+write and the application has turned on L<Punk::CSRF> - a write route without
+a token is forgeable from another origin, and this plugin cannot enable CSRF
+for the host because the token needs a session only the application can hold.
+When it is off the write routes are B<not registered at all>, and the screens
+say why rather than showing a button that does not work.
+
+=item C<stats>
+
+B<Discouraged.> It predates the built-in configuration store and the health
+targets, which between them cover what it was for - a number of your own on
+the status page is better expressed as a health check or a dashboard panel,
+both of which have history and neither of which can overwrite C<error>.
+It keeps working; a callback that dies now warns instead of vanishing.
+
+A coderef called as C<< ($c, $page_name, $store) >> on B<every> screen, whose
+returned hashref is merged over the template variables. It is a blunt
+instrument: the merge is flat and last-writer-wins, so it can overwrite
+C<error> or C<rows> as easily as add a number, and it runs after the decision
+about whether to load the charting library, so a C<*_plot> key it returns
+will not draw.
+
+=item C<root>
+
+The template and asset directory, if you are shipping your own.
+
+=item C<seal_bytes> / C<max_rows>
+
+Passed to L<Punk::Observe::Store> as given.
+
+=item C<on_records>
+
+A coderef called as C<< ($tenant, $signal, $records) >> after a batch is
+persisted. Materialising the records costs something, so this is off unless
+asked for.
 
 =back
 

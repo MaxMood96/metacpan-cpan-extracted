@@ -1,0 +1,81 @@
+#!/usr/bin/env perl
+# Run one retention pass, by hand.
+#
+# WHAT AN OPERATOR WANTS AT 3AM, and what the tests use. The scheduled version
+# is a Punk::Queue cron task under the leader lease
+# (Punk::Observe::Retain::cron_task); this is the same pass with no scheduler,
+# no lease and no worker around it, so "why is the disk full" is one command.
+#
+#   punk-observe-retain --store var/store --keep 30d
+#   punk-observe-retain --store var/store --keep 30d --dry-run
+#
+# --dry-run runs the real mark - every footer read, every decision taken - and
+# skips only the unlink, so the numbers it prints are the numbers the real run
+# would act on rather than an estimate produced by different code.
+#
+# There is no default for --keep. A retention job with a silently defaulted
+# window is a deletion job, and deletion is the one thing here that cannot be
+# taken back.
+use 5.010;
+use strict;
+use warnings;
+use Getopt::Long qw(GetOptions);
+
+use Punk::Observe ();
+use Punk::Observe::Retain ();
+use Punk::Observe::Store ();
+use Punk::Observe::View ();     # fmt_bytes
+
+my ($store_dir, $tenant, $keep, $dry, $help) = (undef, 'default', undef, 0, 0);
+GetOptions(
+    'store=s'  => \$store_dir,
+    'tenant=s' => \$tenant,
+    'keep=s'   => \$keep,
+    'dry-run'  => \$dry,
+    'help'     => \$help,
+) or usage(1);
+usage(0) if $help;
+usage(1, 'a --store directory is required') unless $store_dir;
+usage(1, 'a --keep window is required - there is no default, because a '
+       . 'silently defaulted window deletes data') unless defined $keep;
+
+my $keep_ns = Punk::Observe::Retain::parse_keep($keep);
+usage(1, "'$keep' is not a window. A number and a unit: 30d, 12h, 90m. "
+       . 'The units are the query language\'s own, and there is no month.')
+    unless defined $keep_ns;
+
+sub usage {
+    my ($rc, $why) = @_;
+    print STDERR "$why\n\n" if $why;
+    print STDERR <<'USAGE';
+usage: punk-observe-retain --store DIR --keep WINDOW [options]
+
+  --store DIR     the telemetry store
+  --keep WINDOW   how much history stays: 30d, 12h, 90m (no default)
+  --tenant NAME   default: default
+  --dry-run       mark and report; unlink nothing
+USAGE
+    exit $rc;
+}
+
+my $store = Punk::Observe::Store->new(dir => $store_dir, tenant => $tenant);
+my $out = Punk::Observe::Retain::pass(
+    store => $store, keep_ns => $keep_ns, dry_run => $dry);
+
+printf "%s: %d segment%s considered, %d expired, %d unlinked, %d kept\n",
+    ($dry ? 'dry run' : 'retention'),
+    $out->{considered}, $out->{considered} == 1 ? '' : 's',
+    $out->{marked}, $out->{unlinked}, $out->{kept};
+printf "freed %s%s\n",
+    Punk::Observe::View::fmt_bytes($out->{bytes_freed}),
+    ($dry ? ' (would have)' : '');
+printf "orphaned index sidecars removed: %d\n", $out->{orphan_idx_removed}
+    unless $dry;
+
+# MUST be zero: ftruncate on a mapped segment is SIGBUS for its readers.
+if ($out->{truncate_calls}) {
+    print STDERR "truncate_calls=$out->{truncate_calls} - THIS IS A BUG, "
+               . "report it\n";
+    exit 2;
+}
+exit 0;

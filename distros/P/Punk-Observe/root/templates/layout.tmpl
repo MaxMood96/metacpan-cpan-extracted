@@ -39,13 +39,15 @@
 
   <nav class="nav" aria-label="Sections">
     <a href="{% prefix %}/{% range_qs %}"          {% if here_home %}aria-current="page"{% end %}>Overview</a>
-    <a href="{% prefix %}/map{% range_qs %}"       {% if here_map %}aria-current="page"{% end %}>Service map</a>
+    <a href="{% prefix %}/dashboards{% range_qs %}" {% if here_dashboard %}aria-current="page"{% end %}>Dashboards</a>
+    <a href="{% prefix %}/explore{% range_qs %}"   {% if here_explore %}aria-current="page"{% end %}>Explore</a>
+    <a href="{% prefix %}/health{% range_qs %}"    {% if here_health %}aria-current="page"{% end %}>Health</a>
+    <a href="{% prefix %}/metrics{% range_qs %}"   {% if here_metrics %}aria-current="page"{% end %}>Metrics</a>
     <a href="{% prefix %}/traces{% range_qs %}"    {% if here_traces %}aria-current="page"{% end %}>Traces</a>
     <a href="{% prefix %}/logs{% range_qs %}"      {% if here_logs %}aria-current="page"{% end %}>Logs</a>
-    <a href="{% prefix %}/metrics{% range_qs %}"   {% if here_metrics %}aria-current="page"{% end %}>Metrics</a>
-    <a href="{% prefix %}/explore{% range_qs %}"   {% if here_explore %}aria-current="page"{% end %}>Explore</a>
     <a href="{% prefix %}/alerts{% range_qs %}"    {% if here_alerts %}aria-current="page"{% end %}>Alerts</a>
-    <a href="{% prefix %}/status{% range_qs %}"    {% if here_status %}aria-current="page"{% end %}>Status</a>
+    <a href="{% prefix %}/map{% range_qs %}"       {% if here_map %}aria-current="page"{% end %}>Service map</a>
+    <a href="{% prefix %}/help{% range_qs %}"      {% if here_help %}aria-current="page"{% end %}>Help</a>
   </nav>
 
   <main class="main">
@@ -59,9 +61,11 @@
 <script src="{% prefix %}/assets/waterfall.js" defer></script>
 <script src="{% prefix %}/assets/flamegraph.js" defer></script>
 <script src="{% prefix %}/assets/livetail.js" defer></script>
+<script src="{% prefix %}/assets/discover.js" defer></script>
 {% if wants_plot %}
 <script src="{% prefix %}/assets/plotly.min.js" defer></script>
 <script src="{% prefix %}/assets/plot.js" defer></script>
+<script src="{% prefix %}/assets/defer.js" defer></script>
 {% end %}
 {% if wants_range %}
 <script src="{% prefix %}/assets/moment.min.js" defer></script>

@@ -310,6 +310,97 @@ static int po_logrec_read(po_pbr *r, po_batch *b, po_attrs *inherited) {
 
 /* ---- metrics ------------------------------------------------------------- */
 
+/* ---- exemplars ------------------------------------------------------------
+ *
+ * THE WHOLE CROSS-SIGNAL JUMP IS THIS FIELD. An exemplar is the (trace id,
+ * span id) recorded alongside a metric point, and it is the only thing that
+ * ties "the p99 went up at 14:05" to a request anybody can read. Dropped, the
+ * `| exemplars | traces | logs` pipeline has nothing to re-key on and cannot
+ * be executed at all - which is exactly why it could not be, until this.
+ *
+ * ONE EXEMPLAR PER POINT REACHES THE RECORD, and the record has one slot for
+ * it: `po_rec` carries a single trace id on every kind. A wire point may
+ * carry several (the SDK next door keeps a reservoir of four), so the FIRST
+ * one bearing a valid trace id wins and the rest are counted, never silently
+ * discarded. One trace per point is the jump; four would be four slots on
+ * eighty-eight bytes for a rounding of the same answer.
+ */
+static int po_exemplar_read(po_pbr *r, po_u64 *hi, po_u64 *lo, po_u64 *span,
+                            double *value) {
+    uint32_t f, w;
+    while (po_pbr_next(r, &f, &w)) {
+        switch (f) {
+            /* The VALUE is read only where it decides something: a histogram
+             * exemplar belongs to the bucket its value falls in, and there is
+             * no bucket index on the wire to say which. */
+            case PB_EXEMPLAR_AS_DOUBLE: {
+                double dv = 0;
+                if (w != PO_PB_FIXED64) { if (!po_pbr_skip(r, w)) return 0; break; }
+                if (!po_pbr_double(r, &dv)) return 0;
+                if (value) *value = dv;
+                break;
+            }
+            case PB_EXEMPLAR_AS_INT: {
+                po_u64 iv = 0;
+                if (w != PO_PB_VARINT) { if (!po_pbr_skip(r, w)) return 0; break; }
+                if (!po_pbr_varint(r, &iv)) return 0;
+                if (value) *value = (double)iv;
+                break;
+            }
+            case PB_EXEMPLAR_TRACE_ID: {
+                const uint8_t *p; size_t n;
+                if (w != PO_PB_BYTES) { if (!po_pbr_skip(r, w)) return 0; break; }
+                if (!po_pbr_bytes(r, &p, &n)) return 0;
+                po_id16(p, n, hi, lo);
+                break;
+            }
+            case PB_EXEMPLAR_SPAN_ID: {
+                const uint8_t *p; size_t n;
+                if (w != PO_PB_BYTES) { if (!po_pbr_skip(r, w)) return 0; break; }
+                if (!po_pbr_bytes(r, &p, &n)) return 0;
+                *span = po_id8(p, n);
+                break;
+            }
+            /* The value and the timestamp are the point's own, and the
+             * filtered attributes are the ones the aggregation dropped -
+             * none of the three tells us which trace to open, so all three
+             * are skipped rather than stored twice. */
+            default:
+                if (!po_pbr_skip(r, w)) return 0;
+        }
+    }
+    return !r->err;
+}
+
+/* Reads one exemplar submessage into the caller's locals, if it has no trace
+ * id yet. The point's record does not exist until its field loop has finished
+ * - the name can follow the value on the wire - so the ids are collected here
+ * and attached when the record is made. Returns 1 when the field was
+ * consumed; the caller's switch has already decided this is the exemplars
+ * field. */
+static int po_exemplar_take(po_pbr *r, uint32_t w,
+                            po_u64 *hi, po_u64 *lo, po_u64 *span) {
+    const uint8_t *p; size_t n;
+    po_pbr sub;
+    po_u64 h = 0, l = 0, s = 0;
+
+    if (w != PO_PB_BYTES) return po_pbr_skip(r, w);
+    if (!po_pbr_bytes(r, &p, &n)) return 0;
+    /* Already carrying one: the first valid exemplar is the point's, and
+     * this one is read past rather than parsed. */
+    if (po_trace_id_valid(*hi, *lo)) return 1;
+
+    po_pbr_init(&sub, p, n);
+    if (!po_exemplar_read(&sub, &h, &l, &s, NULL)) return 1;  /* a bad one is not fatal */
+    /* AN EXEMPLAR WITH NO TRACE ID POINTS NOWHERE. OTLP allows one - the
+     * value and timestamp alone are legal - and storing it would give a
+     * metric point a trace id of zero, which `po_trace_id_valid` already
+     * treats as the broken-propagator case everywhere else. */
+    if (!po_trace_id_valid(h, l)) return 1;
+    *hi = h; *lo = l; *span = s;
+    return 1;
+}
+
 /* One NumberDataPoint. `flags` carries the temporality and monotonic bits
  * already resolved by the caller, because they live on the wrapper message
  * rather than on the point. */
@@ -343,11 +434,21 @@ static int po_logrec_read(po_pbr *r, po_batch *b, po_attrs *inherited) {
 
 /* One derived series from a histogram point: the name gains a suffix and,
  * for a bucket, one more attribute. */
+/* The exemplars one histogram point carried, kept until the buckets are
+ * emitted: an exemplar belongs to the bucket its VALUE falls in, and the
+ * buckets are not built until the whole point has been read. */
+#define PO_HIST_EX_MAX 8
+typedef struct {
+    double value;
+    po_u64 hi, lo, span;
+} po_hist_ex;
+
 static int po_hist_emit(po_batch *b, const po_attrs *base,
                         const uint8_t *namep, size_t namen,
                         const char *suffix, size_t suflen,
                         const char *lekey, const char *leval, size_t levlen,
-                        double value, po_u64 t, uint16_t mflags) {
+                        double value, po_u64 t, uint16_t mflags,
+                        const po_hist_ex *ex) {
     po_rec *rec;
     po_attrs at = *base;
     char nm[PO_ATTR_KEYMAX];
@@ -370,6 +471,11 @@ static int po_hist_emit(po_batch *b, const po_attrs *base,
     rec->t_unix_nano = t;
     rec->flags       = mflags;
     rec->value       = value;
+    if (ex) {
+        rec->trace_id_hi = ex->hi;
+        rec->trace_id_lo = ex->lo;
+        rec->span_id     = ex->span;
+    }
 
     nl = namen < sizeof(nm) - suflen - 1 ? namen : sizeof(nm) - suflen - 1;
     if (namep && nl) memcpy(nm, namep, nl); else nl = 0;
@@ -439,6 +545,8 @@ static int po_hdp_read(po_pbr *r, po_batch *b, po_attrs *inherited,
     uint32_t ncounts = 0, nbounds = 0;
     uint32_t i;
     po_u64 cumulative = 0;
+    po_hist_ex exs[PO_HIST_EX_MAX];
+    uint32_t nex = 0;
 
     while (po_pbr_next(r, &f, &w)) {
         switch (f) {
@@ -503,6 +611,21 @@ static int po_hdp_read(po_pbr *r, po_batch *b, po_attrs *inherited,
                 if (w != PO_PB_BYTES) { if (!po_pbr_skip(r, w)) return 0; break; }
                 if (!po_attrs_read(r, &at)) return 0;
                 break;
+            case PB_HDP_EXEMPLARS: {
+                const uint8_t *p; size_t n;
+                po_pbr sub;
+                po_hist_ex e;
+                if (w != PO_PB_BYTES) { if (!po_pbr_skip(r, w)) return 0; break; }
+                if (!po_pbr_bytes(r, &p, &n)) return 0;
+                if (nex >= PO_HIST_EX_MAX) break;   /* kept bounded, not grown */
+                memset(&e, 0, sizeof(e));
+                po_pbr_init(&sub, p, n);
+                if (!po_exemplar_read(&sub, &e.hi, &e.lo, &e.span, &e.value))
+                    break;                          /* a bad one is not fatal */
+                if (!po_trace_id_valid(e.hi, e.lo)) break;
+                exs[nex++] = e;
+                break;
+            }
             default:
                 if (!po_pbr_skip(r, w)) return 0;
         }
@@ -518,24 +641,47 @@ static int po_hdp_read(po_pbr *r, po_batch *b, po_attrs *inherited,
     for (i = 0; i < ncounts; i++) {
         char le[32];
         size_t len;
+        const po_hist_ex *mine = NULL;
+        uint32_t k;
+
         /* CUMULATIVE counts, not per-bucket. That is what makes a percentile
          * a search rather than a sum, and what lets two points merge. */
         cumulative += counts[i];
         len = i < nbounds ? po_le_str(bounds[i], le)
                           : (memcpy(le, "+Inf", 4), 4);
+
+        /* THE EXEMPLAR BELONGS TO ONE BUCKET, NOT TO ALL OF THEM. One wire
+         * point becomes a record per bucket here, and copying the trace id
+         * onto every one would claim the request was observed at fifteen
+         * different latencies. The wire carries no bucket index, so the
+         * bucket is the one the exemplar's own VALUE falls in - the first
+         * bound at or above it, and the +Inf bucket for anything over the
+         * top. Cumulative counts do not change that: the value fell where it
+         * fell. */
+        for (k = 0; k < nex; k++) {
+            int in_bucket = (i < nbounds)
+                          ? (exs[k].value <= bounds[i]
+                             && (i == 0 || exs[k].value > bounds[i - 1]))
+                          : (nbounds == 0 || exs[k].value > bounds[nbounds - 1]);
+            if (in_bucket) { mine = &exs[k]; break; }
+        }
+
         if (!po_hist_emit(b, &at, namep, namen, "_bucket", 7,
-                          "le", le, len, (double)cumulative, t, mflags))
+                          "le", le, len, (double)cumulative, t, mflags, mine))
             return 0;
     }
 
+    /* The derived aggregates carry no exemplar: `_sum` and `_count` are not
+     * observations, they are arithmetic over all of them, and a trace id on
+     * one would name a single request as the source of the total. */
     if (have_sum && !po_hist_emit(b, &at, namep, namen, "_sum", 4,
-                                  NULL, NULL, 0, sum, t, mflags)) return 0;
+                                  NULL, NULL, 0, sum, t, mflags, NULL)) return 0;
     if (!po_hist_emit(b, &at, namep, namen, "_count", 6,
-                      NULL, NULL, 0, (double)count, t, mflags)) return 0;
+                      NULL, NULL, 0, (double)count, t, mflags, NULL)) return 0;
     if (have_min && !po_hist_emit(b, &at, namep, namen, "_min", 4,
-                                  NULL, NULL, 0, mn, t, mflags)) return 0;
+                                  NULL, NULL, 0, mn, t, mflags, NULL)) return 0;
     if (have_max && !po_hist_emit(b, &at, namep, namen, "_max", 4,
-                                  NULL, NULL, 0, mx, t, mflags)) return 0;
+                                  NULL, NULL, 0, mx, t, mflags, NULL)) return 0;
     return 1;
 }
 
@@ -546,6 +692,7 @@ static int po_ndp_read(po_pbr *r, po_batch *b, po_attrs *inherited,
     uint32_t f, w;
     po_u64 t = 0;
     double dv = 0; po_u64 iv = 0;
+    po_u64 ex_hi = 0, ex_lo = 0, ex_span = 0;
     int is_int = 0, have_val = 0;
 
     while (po_pbr_next(r, &f, &w)) {
@@ -572,6 +719,9 @@ static int po_ndp_read(po_pbr *r, po_batch *b, po_attrs *inherited,
                 if (w != PO_PB_BYTES) { if (!po_pbr_skip(r, w)) return 0; break; }
                 if (!po_attrs_read(r, &at)) return 0;
                 break;
+            case PB_NDP_EXEMPLARS:
+                if (!po_exemplar_take(r, w, &ex_hi, &ex_lo, &ex_span)) return 0;
+                break;
             default:
                 if (!po_pbr_skip(r, w)) return 0;
         }
@@ -583,6 +733,9 @@ static int po_ndp_read(po_pbr *r, po_batch *b, po_attrs *inherited,
     rec->kind        = PO_METRIC;
     rec->t_unix_nano = t;
     rec->flags      |= mflags;
+    rec->trace_id_hi = ex_hi;
+    rec->trace_id_lo = ex_lo;
+    rec->span_id     = ex_span;
     if (is_int) {
         rec->flags |= PO_F_VALUE_IS_INT;
         /* The int is kept exactly, as a bit pattern in the double slot. A

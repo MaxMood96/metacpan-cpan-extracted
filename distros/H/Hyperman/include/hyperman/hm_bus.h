@@ -323,15 +323,20 @@ static uint64_t hm_bus_seq(void) {
 
 /* ---- the wakeup ---------------------------------------------------------- */
 
-#if HM_BUS_HAVE_ATOMICS
 /* Make `n` wakers. MUST run in the supervisor, before it forks: a descriptor
  * created in a worker is invisible to its siblings, and the failure that
  * produces is the worst kind - delivery that works to SOME workers.
  *
  * A pipe rather than an eventfd, deliberately. eventfd is Linux-only and the
  * saving is one descriptor per worker; a pipe is the same three lines
- * everywhere this runs, and the wakeup path is one byte either way. */
+ * everywhere this runs, and the wakeup path is one byte either way.
+ *
+ * Guarded on the inside, like hm_bus_arena_init and unlike the rest of the
+ * wakeup below: the server core calls this on the way up on every platform,
+ * including the ones with no arena to wake anybody about. Sitting inside the
+ * block instead is what broke the Windows build. */
 static void hm_bus_wakers_init(uint32_t n) {
+#if HM_BUS_HAVE_ATOMICS
     hm_bus_arena *a = hm_bus;
     uint32_t i;
     if (!a || a->nwakers) return;
@@ -355,8 +360,12 @@ static void hm_bus_wakers_init(uint32_t n) {
         hm_at_store32_rel(&a->wakers[i].live, 1);
     }
     a->nwakers = i;
+#else
+    (void)n;
+#endif
 }
 
+#if HM_BUS_HAVE_ATOMICS
 /* Claim a waker slot for this process and return its read end, or -1.
  * Called from a worker after the fork, which is when it knows it is one.
  *

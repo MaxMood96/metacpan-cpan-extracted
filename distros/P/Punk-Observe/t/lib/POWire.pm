@@ -198,12 +198,27 @@ sub log_request {
     return msg(1, ($a{resource} // '') . $scope_logs);
 }
 
+# An Exemplar: the (trace id, span id) recorded alongside a point, and the
+# whole basis of the cross-signal pipeline. Field numbers from the SDK's
+# otel_proto.h:210-215 - time 2, as_double 3, span_id 4, trace_id 5, as_int 6.
+sub exemplar {
+    my (%a) = @_;
+    my $s = '';
+    $s .= fixed64(2, $a{time})                          if defined $a{time};
+    $s .= dbl(3, $a{as_double})                         if defined $a{as_double};
+    $s .= bytes(4, $a{span_id})                         if defined $a{span_id};
+    $s .= bytes(5, $a{trace_id})                        if defined $a{trace_id};
+    $s .= vint(6, $a{as_int})                           if defined $a{as_int};
+    return $s;
+}
+
 sub number_point {
     my (%a) = @_;
     my $s = '';
     $s .= fixed64(3, $a{time})                          if defined $a{time};
     $s .= dbl(4, $a{as_double})                         if defined $a{as_double};
     $s .= vint(6, $a{as_int})                           if defined $a{as_int};
+    $s .= join '', map { msg(5, $_) } @{ $a{exemplars} || [] };
     $s .= join '', map { msg(7, $_) } @{ $a{attributes} || [] };
     return $s;
 }

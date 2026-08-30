@@ -1,0 +1,32 @@
+{% if columns %}
+<div class="panel discover">
+  <h3>What you can filter on</h3>
+
+  <p class="note">Columns of <code>{% columns_source %}</code>:
+    {% for c in columns %}<code>{% c.name %}</code> {% end %}</p>
+
+  {% if attr_keys %}
+  <p class="note">Attributes your exporters actually sent. A
+    <strong>label</strong> is indexed and narrows the scan; anything else is
+    read and then discarded, so it filters correctly and costs more.
+    Clicking one adds it to your query.</p>
+
+  <ul class="keys">
+    {% for k in attr_keys %}
+    <li>
+      <a href="{% prefix %}/{% discover_page %}?q={% k.query %}{% range_amp %}"
+         data-qappend="{% k.where %}"
+         title="add to the query"><code>{% k.name %}</code></a>
+      <span class="keycount">{% k.count %}</span>
+      {% if k.indexed %}<span class="keylabel">label</span>{% end %}
+    </li>
+    {% end %}
+  </ul>
+
+  <p class="note">Seen in the most recent {% attrs_sampled %} records of this
+    window{% if attrs_truncated %}, and this is the most common 40 of
+    them{% end %}. A key that appears once in a hundred thousand records is
+    not on this list.</p>
+  {% end %}
+</div>
+{% end %}

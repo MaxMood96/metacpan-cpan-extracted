@@ -13,7 +13,7 @@
 	cpan-uri:x_help_wanted <http://usefulinc.com/ns/doap#documenter>, <http://usefulinc.com/ns/doap#tester>;
 	dc:contributor       <http://purl.org/NET/cpan-uri/person/jonass>;
 	doap-deps:runtime-recommendation [ doap-deps:on "re::engine::RE2"^^doap-deps:CpanId ];
-	doap-deps:runtime-requirement [ doap-deps:on "constant 0"^^doap-deps:CpanId ], [ doap-deps:on "Exporter::Tiny 0"^^doap-deps:CpanId ], [ doap-deps:on "perl 5.008001"^^doap-deps:CpanId ], [ doap-deps:on "Set::IntSpan 1.12"^^doap-deps:CpanId ];
+	doap-deps:runtime-requirement [ doap-deps:on "constant 0"^^doap-deps:CpanId ], [ doap-deps:on "Exporter::Tiny 0"^^doap-deps:CpanId ], [ doap-deps:on "perl 5.040001"^^doap-deps:CpanId ];
 	doap-deps:test-requirement [
 		doap-deps:on "Test::Without::Module"^^doap-deps:CpanId;
 	], [ doap-deps:on "Test2::V0"^^doap-deps:CpanId ], [ doap-deps:on "utf8 0"^^doap-deps:CpanId ];
@@ -27,7 +27,7 @@
 	doap:maintainer      <http://purl.org/NET/cpan-uri/person/jonass>;
 	doap:name            "String-Copyright";
 	doap:programming-language "Perl";
-	doap:release         <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001001>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001002>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001003>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001004>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001005>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-002000>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-002001>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003000>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003001>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003002>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003003>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003004>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003005>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003006>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003007>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003008>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003009>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003010>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003011>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003012>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003013>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003014>;
+	doap:release         <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001001>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001002>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001003>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001004>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001005>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-002000>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-002001>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003000>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003001>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003002>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003003>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003004>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003005>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003006>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003007>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003008>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003009>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003010>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003011>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003012>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003013>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003014>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_v0-4-0>;
 	doap:repository      [
 		a doap:GitRepository;
 		doap:browse <https://anonscm.debian.org/cgit/build-common/string-copyright.git>;
@@ -658,12 +658,50 @@
 			rdfs:label "check spelling of PODs with tidyall";
 		], [
 			a doap-changeset:Change;
-			rdfs:label "detect SPDX-FileCopyrightText: as stricl label";
+			rdfs:label "detect SPDX-FileCopyrightText: as strict label";
 		];
 	];
 	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/jonass>;
 	doap:file-release    <http://backpan.cpan.org/authors/id/J/JO/JONASS/String-Copyright-0.003014.tar.gz>;
 	doap:revision        "0.003014"^^xsd:string.
+
+<http://purl.org/NET/cpan-uri/dist/String-Copyright/v_v0-4-0>
+	a                    doap:Version;
+	dc:identifier        "String-Copyright-v0.4.0"^^xsd:string;
+	dc:issued            "2026-08-30"^^xsd:date;
+	doap-changeset:changeset [
+		doap-changeset:item [
+			a doap-changeset:Documentation;
+			rdfs:label "fix typo in changelog";
+		], [
+			a doap-changeset:Tests;
+			rdfs:label "add test checking that RE2 module is enabled by default";
+		], [
+			a doap-changeset:Change;
+			rdfs:label "use perl v5.40";
+		], [
+			a doap-changeset:Change;
+			rdfs:label "stop use Set::IntSpan";
+		], [
+			a doap-changeset:Change;
+			rdfs:label "cover more copyright sign mojibake";
+		], [
+			a doap-changeset:Tests;
+			rdfs:label "update wordlist in author test pod-spell";
+		], [
+			a doap-changeset:Documentation;
+			rdfs:label "clarify dash normalization";
+		], [
+			a doap-changeset:Packaging;
+			rdfs:label "bump version; use Version object";
+		], [
+			a doap-changeset:Addition;
+			rdfs:label "clean cruft";
+		];
+	];
+	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/jonass>;
+	doap:file-release    <http://backpan.cpan.org/authors/id/J/JO/JONASS/String-Copyright-v0.4.0.tar.gz>;
+	doap:revision        "v0.4.0"^^xsd:string.
 
 <http://purl.org/NET/cpan-uri/person/jonass>
 	a                    foaf:Person;

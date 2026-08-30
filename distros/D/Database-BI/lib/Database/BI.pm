@@ -8,7 +8,7 @@ use Readonly;
 
 use Database::BI::Model::DataSource;
 
-our $VERSION = '0.004.0';
+our $VERSION = '0.005.0';
 
 # Default config values used by the Config plugin and referenced explicitly
 # in startup() so callers always get a resolved value.
@@ -19,7 +19,8 @@ Readonly my $DEFAULT_LANGUAGE => 'en';
 # Transport-layer upload size cap (bytes).  Mojolicious enforces this before
 # the request body is read into memory, so an oversized upload never reaches
 # the controller.  Must match $MAX_UPLOAD_BYTES in Dashboard.pm.
-Readonly my $MAX_REQUEST_SIZE => 50 * 1_048_576;	# 50 MiB
+Readonly my $MAX_REQUEST_SIZE  => 50 * 1_048_576;	# 50 MiB
+Readonly my $UPLOAD_MAX_AGE_S  => 24 * 3600;		# evict uploads older than 24 h
 
 =head1 NAME
 
@@ -27,7 +28,7 @@ Database::BI - Web-based Business Intelligence viewer for flat data files
 
 =head1 VERSION
 
-0.004.0
+0.005.0
 
 =head1 SYNOPSIS
 
@@ -298,8 +299,11 @@ C<Database::Join> instance (Phase 2) without changing the controller.
 
 =item *
 
-The C<.uploads/> directory grows indefinitely; no automatic eviction is
-performed.  Users may delete C<.uploads/> at any time to reclaim space.
+On startup, C<Database::BI> automatically evicts upload subdirectories whose
+modification time is older than 24 hours.  Uploads created during the current
+or recent server sessions are preserved.  Users may also trigger an immediate
+full purge (regardless of age) via the "Clear upload cache" button, which
+posts to C<POST /uploads/clear>.
 
 =item *
 
@@ -394,6 +398,37 @@ sub startup ($self) {
 	$r->post('/upload')->to('Dashboard#upload_file');
 	$r->post('/uploads/clear')->to('Dashboard#clear_uploads');
 	$r->get('/graph')->to('Dashboard#graph_view');
+
+	# Evict stale upload subdirectories on every startup so the cache cannot
+	# grow unboundedly across server restarts.  Only entries whose mtime is
+	# older than $UPLOAD_MAX_AGE_S seconds are removed; recent uploads that
+	# were made while the previous server process was running are preserved.
+	_evict_old_uploads($self->home->child('.uploads'), $UPLOAD_MAX_AGE_S);
+}
+
+# _evict_old_uploads( $uploads_dir, $max_age_s ) -> void
+#
+# Purpose: Remove upload subdirectory trees whose mtime is older than $max_age_s
+#          seconds.  Runs at startup and is also called by clear_uploads (via the
+#          Dashboard controller) when the user explicitly requests a purge.
+# Entry:   $uploads_dir is a Mojo::File.  $max_age_s is a positive integer.
+# Exit:    Silent on success.  Individual remove_tree failures are non-fatal.
+sub _evict_old_uploads {
+	my ($uploads_dir, $max_age_s) = @_;
+	return unless -d $uploads_dir;
+
+	my $cutoff = time() - $max_age_s;
+
+	$uploads_dir->list({ dir => 1 })->each(sub {
+		my ($entry) = @_;
+		my $mtime = (stat $entry)[9] // 0;
+		return if $mtime >= $cutoff;	# still fresh — keep it
+		if (-d $entry) {
+			$entry->remove_tree;
+		} elsif (-f $entry) {
+			unlink $entry->to_string;
+		}
+	});
 }
 
 =head1 SEE ALSO

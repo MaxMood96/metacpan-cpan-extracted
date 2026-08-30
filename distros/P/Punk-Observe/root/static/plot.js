@@ -289,12 +289,30 @@
     for (var i = 0; i < charts.length; i++) draw(charts[i].node, charts[i].fig);
   }
 
-  function init() {
+  /* Mount every chart under `root` that is not already mounted. Public -
+   * defer.js injects server-rendered fragments after load, and their charts
+   * need exactly the treatment the page's own charts got. A wrap replaced
+   * by a fresh fragment is dropped from the registry by its isConnected
+   * check at the next retheme. */
+  function scan(root) {
     if (typeof window.Plotly === 'undefined') return;   /* nothing to draw with */
-    var nodes = document.querySelectorAll('[data-chart]'), i;
-    for (i = 0; i < nodes.length; i++) mount(nodes[i]);
-    if (!charts.length) return;
+    var nodes = (root || document).querySelectorAll('[data-chart]'), i;
+    for (i = 0; i < nodes.length; i++) {
+      if (nodes[i].getAttribute('data-plot-mounted')) continue;
+      nodes[i].setAttribute('data-plot-mounted', '1');
+      mount(nodes[i]);
+    }
+    for (i = charts.length - 1; i >= 0; i--) {
+      if (charts[i].node.isConnected === false) charts.splice(i, 1);
+    }
+  }
 
+  function init() {
+    scan(document);
+
+    /* The observers attach even when the first scan found nothing: a page
+     * that defers its charts has zero at load and all of them a fetch
+     * later, and a theme change in between must still reach them. */
     if (typeof MutationObserver === 'function') {
       new MutationObserver(retheme).observe(document.documentElement,
         { attributes: true, attributeFilter: ['data-theme'] });
@@ -306,6 +324,10 @@
       if (mq.addEventListener) mq.addEventListener('change', retheme);
       else if (mq.addListener) mq.addListener(retheme);
     }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.PunkPlot = { scan: scan };
   }
 
   /* Exported so the pure parts can be EXECUTED by a test rather than grepped.

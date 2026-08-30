@@ -1,5 +1,17 @@
 Revision history for Hyperman
 
+0.38    2026-08-30
+        - Windows Fixes
+        - XSUB.h rewrites the plain CRT and socket names under PERL_IMPLICIT_SYS
+        - psgi.input is a temp file at every size on Windows. PerlIO_openn
+          is not exported from perl5xx.dll, so :scalar is unreachable there.
+        - A body temp file honours TEMP and TMP, not only TMPDIR.
+
+0.37    2026-08-29
+        - t/32-body-spill.t takes a port from the kernel instead of the pid.
+        - Every forked test server drops the TAP pipe and self-destructs on
+          an alarm, so an unreaped one cannot hang the harness.
+
 0.36    2026-08-27
         - FIXES: hm_bus.h and hm_atomic.h are now installed and published, so
           a consumer with Hyperman installed can build the cross-worker bus.

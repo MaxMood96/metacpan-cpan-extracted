@@ -44,16 +44,32 @@ BEGIN {
                                           cb => $cb };
         return $self;
     }
+    # THE WRITE ROUTES ARE ROUTES TOO. This stand-in had no `post`, so every
+    # path a form posts to was outside the inventory below - and the plugin
+    # only registers them when editing is on, so the omission was invisible.
+    sub post {
+        my ($self, $path, $cb) = @_;
+        push @{ $self->{app}{routes} }, { method => 'POST', path => $path,
+                                          cb => $cb };
+        return $self;
+    }
 }
 
 my $P = 'Punk::Plugin::Observe';
 
 my $app = T::App->new;
+
+# EDITING ON, so the write routes are registered and therefore checked. The
+# plugin decides that from the application having CSRF and somewhere to write;
+# both are faked here, because what is under test is the route table.
+$app->{csrf} = { field => '_csrf' };
+
 my $st  = $P->register($app, {
     guard  => sub { return },
     prefix => '/observe',
     store  => undef,
     ingest => { prefix => '/v1' },
+    dashboards => { read => sub { {} }, write => sub { { ok => 1 } } },
 });
 
 # --- the scope, not a mount --------------------------------------------------
@@ -74,6 +90,17 @@ my %route = map { $_->{path} => 1 } @{ $app->{routes} };
 
 for my $p (qw(/ /status /logs /metrics /map /traces /explore /alerts)) {
     ok($route{$p}, "the screen $p is routed");
+}
+
+# And every form the templates post to answers a POST, not only a GET. A
+# write path that resolves to a read route is a 405 nobody sees until they
+# press the button.
+{
+    my %post = map { $_->{path} => 1 }
+               grep { $_->{method} eq 'POST' } @{ $app->{routes} };
+    ok(scalar keys %post, 'the write routes are registered when editing is on');
+    ok($post{'/views'}, '  including saving a view');
+    ok($post{'/dashboards'}, '  and creating a dashboard');
 }
 
 # --- every detail screen a row links to --------------------------------------

@@ -1,43 +1,43 @@
 package API::Docker::Volume;
-# ABSTRACT: Docker volume entity
-our $VERSION = '0.003';
-use Moo;
-use namespace::clean;
+# ABSTRACT: Removed in 0.004 -- replaced by API::Docker::Type::Volume
+our $VERSION = '0.004';
+use strict;
+use warnings;
+use Carp qw( croak );
 
+# A removed class, kept as a stub on purpose (karr k92). A module that
+# disappears from a distribution does not disappear from the disks it was
+# installed on: the old file stays behind and keeps loading, so deleting it
+# here would leave a working API::Docker::Volume shadowing this release for
+# everyone who ever installed the last one. Shipping a file overwrites it;
+# shipping nothing does not.
+#
+# It refuses instead of working, and it refuses at load rather than at the
+# first method call, because that is the earliest point at which the caller
+# can be told -- and because @Author::GETTY generates no compile-all author
+# test that a dying module would fail. Measured on 2026-08-28: the bundle
+# generates exactly xt/author/pod-syntax.t, which parses POD without loading
+# anything, and xt/release/changes_has_content.t, which only reads Changes.
+my $REFUSED =
+  __PACKAGE__ . ' was removed in API::Docker 0.004 and this file is a stub'
+  . ' with nothing in it: it ships only so that installing this'
+  . ' release overwrites the working copy an earlier one left on'
+  . ' disk. You have not hit a fault in the distribution. The'
+  . ' volumes the daemon answers with are'
+  . ' API::Docker::Type::Volume (volumes->list, volumes->inspect'
+  . ' and volumes->create), with the field names the swagger\'s own'
+  . ' in snake_case, and inspect and remove are unchanged on them,'
+  . ' composed in from API::Docker::Role::Entity::Volume. This'
+  . ' stub refuses';
 
-has client => (
-  is       => 'ro',
-  weak_ref => 1,
-);
+# The croak below is what a caller normally hits. AUTOLOAD is for the one who
+# swallowed it -- eval { require API::Docker::Volume } and then called a
+# method anyway; the answer has to be the same one, not a bare "Can't locate
+# object method". DESTROY is defined so it does not reach AUTOLOAD.
+sub AUTOLOAD { croak $REFUSED }
+sub DESTROY  { }
 
-
-has Name       => (is => 'ro');
-
-
-has Driver     => (is => 'ro');
-
-
-has Mountpoint => (is => 'ro');
-
-
-has CreatedAt  => (is => 'ro');
-has Status     => (is => 'ro');
-has Labels     => (is => 'ro');
-has Scope      => (is => 'ro');
-has Options    => (is => 'ro');
-has UsageData  => (is => 'ro');
-
-sub inspect {
-  my ($self) = @_;
-  return $self->client->volumes->inspect($self->Name);
-}
-
-
-sub remove {
-  my ($self, %opts) = @_;
-  return $self->client->volumes->remove($self->Name, %opts);
-}
-
+croak $REFUSED;
 
 
 1;
@@ -50,64 +50,43 @@ __END__
 
 =head1 NAME
 
-API::Docker::Volume - Docker volume entity
+API::Docker::Volume - Removed in 0.004 -- replaced by API::Docker::Type::Volume
 
 =head1 VERSION
 
-version 0.003
-
-=head1 SYNOPSIS
-
-    my $docker = API::Docker->new;
-    my $volumes = $docker->volumes->list;
-    my $volume = $volumes->[0];
-
-    say $volume->Name;
-    say $volume->Driver;
-    say $volume->Mountpoint;
-
-    $volume->remove;
+version 0.004
 
 =head1 DESCRIPTION
 
-This class represents a Docker volume. Instances are returned by
-L<API::Docker::API::Volumes> methods.
+B<This class is gone.> It has been replaced by the generated type model, and
+this file is a stub: loading it croaks, and so does every method call on it.
 
-=head2 client
+This class was released in 0.003 and removed in 0.004. Installing 0.004
+over it replaces the working copy with this stub, which is the only reason
+the file is still in the distribution.
 
-Reference to L<API::Docker> client.
+What to reach for instead:
 
-=head2 Name
+=over
 
-Volume name.
+=item * L<API::Docker::Type::Volume> -- what C<< volumes->list >>, C<< volumes->inspect >> and C<< volumes->create >> return
 
-=head2 Driver
+=item * L<API::Docker::Role::Entity::Volume> -- inspect and remove,
+unchanged, composed into the above at load time
 
-Volume driver (usually C<local>).
+=back
 
-=head2 Mountpoint
-
-Filesystem path where the volume is mounted on the host.
-
-=head2 inspect
-
-    my $updated = $volume->inspect;
-
-Get fresh volume information.
-
-=head2 remove
-
-    $volume->remove(force => 1);
-
-Remove the volume.
+Where this class mirrored the daemon's CamelCase verbatim, the generated
+classes carry the swagger's own names in snake_case.
+L<API::Docker::API::Volumes> documents the shape each method returns.
 
 =head1 SEE ALSO
 
 =over
 
-=item * L<API::Docker::API::Volumes> - Volume API operations
+=item * L<API::Docker::API::Volumes> - the resource class these objects come from
 
-=item * L<API::Docker> - Main Docker client
+=item * L<API::Docker::Role::Entity> - why the methods live in a role
 
 =back
 

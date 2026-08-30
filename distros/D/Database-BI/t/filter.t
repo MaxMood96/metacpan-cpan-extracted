@@ -243,18 +243,28 @@ subtest 'GET /api/stat?path= (empty string -> 400)' => sub {
 # ---------------------------------------------------------------------------
 
 subtest 'import_url: non-numeric table_index is sanitized to 0' => sub {
-	test_needs 'LWP::UserAgent', 'HTML::TableExtract';
+	# Database::Abstraction fetches URLs via LWP::UserAgent::Cached (a subclass
+	# of LWP::UserAgent that overrides simple_request for caching).  All three
+	# must be installed for this subtest to run.
+	test_needs 'LWP::UserAgent', 'LWP::UserAgent::Cached', 'HTML::TableExtract';
 	require LWP::UserAgent;
+	require LWP::UserAgent::Cached;
 	require HTTP::Response;
+	require HTTP::Headers;
 
 	my $html = '<table><tr><th>sku</th><th>qty</th></tr>'
 	         . '<tr><td>BOLT</td><td>10</td></tr></table>';
 
+	# Mock simple_request (the method LWP::UserAgent::Cached overrides) so the
+	# fake response is returned without any real network I/O, regardless of which
+	# LWP subclass Database::Abstraction instantiates.
 	{
 		no warnings 'redefine';
 		# Proof: table_index=abc fails /\A[0-9]+\z/ and is reset to 0.
 		# Index 0 is valid for this single-table page, so the dashboard renders.
-		local *LWP::UserAgent::get = sub { HTTP::Response->new(200, 'OK', [], $html) };
+		local *LWP::UserAgent::simple_request = sub {
+			HTTP::Response->new(200, 'OK', HTTP::Headers->new, $html);
+		};
 		$t->get_ok('/import?url=' . url_escape('http://example.com/t') . '&table_index=abc')
 		  ->status_is(200)->content_like(qr/BOLT/);
 	}

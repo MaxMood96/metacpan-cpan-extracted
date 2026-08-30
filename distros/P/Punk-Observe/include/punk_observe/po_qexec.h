@@ -36,11 +36,24 @@ typedef struct {
     po_u64 rows_available;  /* what the store says is in range */
 } po_budget;
 
+#define PO_PLAN_MAX_WHERE 8
+
 typedef struct {
     const po_query *q;
 
-    /* pushed-down predicates, in evaluation order */
+    /* pushed-down predicates, in evaluation order.
+     *
+     * EVERY where, not the first one. The selector and each `| where` stage
+     * land here and a row must pass ALL of them - they read as a pipeline
+     * of filters, so they are a conjunction. The single-slot version kept
+     * the first and SILENTLY DROPPED the rest, so
+     * `log {service="api"} | where severity >= error` answered with every
+     * severity - a wrong answer in the right shape, from the two spellings
+     * an idiomatic query combines. `where` stays as the first entry for
+     * the pushdown walk; wheres[] is what the executor evaluates. */
     const po_expr *where;
+    const po_expr *wheres[PO_PLAN_MAX_WHERE];
+    int nwhere;
     const char    *search; size_t search_len;
 
     int  agg, has_agg;
@@ -68,6 +81,7 @@ typedef struct {
     int    bucket_rate;         /* divide by the window: rate(), not bucket() */
     po_u64 limit;
     po_u64 slowest;
+    po_u64 topn;            /* `top N by <agg>`: 0 when the stage is absent */
     int  sort_desc;
     const char *sort_field; size_t sort_field_len;
     int  rekey;             /* the last re-keying stage seen */
@@ -93,15 +107,26 @@ static int po_plan_build(po_plan *p, const po_query *q, const po_budget *b) {
 
     memset(p, 0, sizeof(*p));
     p->q = q;
-    p->where = q->selector;      /* the selector is a leading where */
+    if (q->selector) {           /* the selector is a leading where */
+        p->where = q->selector;
+        p->wheres[p->nwhere++] = q->selector;
+    }
 
     for (s = q->stages; s; s = s->next) {
         switch (s->kind) {
             case PO_ST_WHERE:
-                /* Several `where` stages: the planner keeps the first and the
-                 * executor evaluates the rest in order. Kept simple because
-                 * they are a conjunction either way. */
+                /* ALL of them - see the struct comment. More than the array
+                 * holds is refused by name, never silently dropped: a
+                 * dropped filter is a wrong answer in the right shape. */
+                if (p->nwhere >= PO_PLAN_MAX_WHERE) {
+                    po_plan_refuse(p,
+                        "too many where stages",
+                        "combine them with `and` - eight filters is the "
+                        "most one query carries");
+                    return 0;
+                }
                 if (!p->where) p->where = s->expr;
+                p->wheres[p->nwhere++] = s->expr;
                 break;
             case PO_ST_SEARCH:
                 p->search = s->str; p->search_len = s->str_len;
@@ -153,6 +178,25 @@ static int po_plan_build(po_plan *p, const po_query *q, const po_budget *b) {
             }
             case PO_ST_LIMIT:   p->limit = s->num; break;
             case PO_ST_SLOWEST: p->slowest = s->num; break;
+            /* `top N by <agg>` PLANNED TO NOTHING until now: the stage was
+             * parsed, validated and named, and had no case here - so the
+             * query was accepted and then neither ranked nor limited, and the
+             * answer came back with the right shape and the wrong contents.
+             *
+             * The grouping comes from a preceding `| by`; this stage supplies
+             * the aggregate to rank on and how many to keep. Its aggregate
+             * wins, as `by`'s does, so `by service | top 5 by count` ranks on
+             * count whatever came before it. */
+            case PO_ST_TOPN:
+                p->topn = s->num;
+                /* AN AGGREGATING STAGE, which is what makes the answer a set
+                 * of groups rather than rows. Setting p->agg without this
+                 * leaves has_agg clear, the shape stays ROWS, and `by service
+                 * | top 5 by count` comes back as every matching span. */
+                p->has_agg = 1;
+                if (s->agg) p->agg = s->agg;
+                else if (!p->agg) p->agg = PO_AGG_COUNT;
+                break;
             case PO_ST_SORT:
                 p->sort_field = s->fields[0];
                 p->sort_field_len = s->field_lens[0];
@@ -168,23 +212,43 @@ static int po_plan_build(po_plan *p, const po_query *q, const po_budget *b) {
         }
     }
 
-    /* A pattern the matcher cannot honour is refused, not approximated. */
+    /* THE CROSS-SIGNAL STAGES ARE EXECUTED IN A SECOND PASS, in `post_query`
+     * - the join needs to read the store again, and the executor is handed
+     * rows and cannot. `p->rekey` records that the pass is owed; the store
+     * walks the stage list itself to run the chain in order.
+     *
+     * They were refused here for a release, and the refusal was right while
+     * it stood: the stages parsed, the planner recorded the re-key and
+     * nothing consumed it, so the answer was the metric stream unchanged -
+     * the wrong rows, silently, on the query this project's overview calls
+     * its differentiator. */
+
+    /* A pattern the matcher cannot honour is refused, not approximated -
+     * in ANY of the wheres, because each one runs. */
     {
-        const po_expr *bad = po_expr_bad_pattern(p->where);
-        if (bad) {
-            po_plan_refuse(p,
-                "that pattern needs a full regular expression engine",
-                "an anchored prefix like \"^api-\", a suffix, or a plain substring");
-            return 0;
+        int i;
+        for (i = 0; i < p->nwhere; i++) {
+            if (po_expr_bad_pattern(p->wheres[i])) {
+                po_plan_refuse(p,
+                    "that pattern needs a full regular expression engine",
+                    "an anchored prefix like \"^api-\", a suffix, or a plain substring");
+                return 0;
+            }
         }
     }
 
-    /* THE COST REFUSAL. Over budget, say what to ADD. */
+    /* THE COST REFUSAL. Over budget, say what to ADD. The wheres are a
+     * conjunction, so a bound from any one of them bounds the query. */
     if (b && b->max_rows && b->rows_available > b->max_rows) {
-        if (!po_expr_time_bounded(p->where))
+        int i, bounded = 0, selective = 0;
+        for (i = 0; i < p->nwhere; i++) {
+            if (po_expr_time_bounded(p->wheres[i])) bounded = 1;
+            if (po_expr_selective(p->wheres[i]))    selective = 1;
+        }
+        if (!bounded)
             po_plan_refuse(p, "this query would scan too much",
                            "narrowing the time range, as in | where t > ...");
-        else if (!po_expr_selective(p->where))
+        else if (!selective)
             po_plan_refuse(p, "this query would scan too much",
                            "an equality filter, as in | where service = \"...\"");
         else
@@ -295,7 +359,33 @@ static int po_qexec_step(po_qexec *x) {
         x->res->scanned_rows++;
         x->res->scanned_bytes += (po_u64)(r->body_len + r->service_len + 64);
 
-        if (p->where && !po_eval(p->where, r)) continue;
+        /* THE METRIC NAME SELECTS THE SERIES, and until now it did not.
+         *
+         * `metric http.server.duration` parsed, stored the name in the AST at
+         * po_parse.h:619, and no planner or executor code ever read it - so
+         * the source verb chose the SIGNAL and nothing chose the metric. Every
+         * metric query returned every metric point in the store: a chart of
+         * one metric drawn from all of them, and `metric nosuch` answering
+         * with somebody else's data rather than with nothing.
+         *
+         * It stayed invisible because a store with one metric name in it
+         * cannot show the difference, which is what a demo has and what a
+         * production store never does.
+         *
+         * The name lives in the row's `body`, which for a metric record is
+         * the metric name. Compared exactly: a prefix match would make
+         * `punk.health.ok` also answer for `punk.health.ok_total`. */
+        if (p->q && p->q->name_len && r->kind == PO_METRIC) {
+            if (r->body_len != p->q->name_len
+                || memcmp(r->body, p->q->name, p->q->name_len) != 0) continue;
+        }
+
+        {   /* Every where, in order: they are a conjunction (see po_plan). */
+            int wi, drop = 0;
+            for (wi = 0; wi < p->nwhere; wi++)
+                if (!po_eval(p->wheres[wi], r)) { drop = 1; break; }
+            if (drop) continue;
+        }
 
         if (p->search_len) {
             /* The bloom prunes blocks; here the survivor is matched EXACTLY,
@@ -303,6 +393,13 @@ static int po_qexec_step(po_qexec *x) {
             if (!r->body || !po_memfind(r->body, r->body_len,
                                         p->search, p->search_len)) continue;
         }
+
+        /* THE ROW HAS SURVIVED EVERY FILTER, and this is the only moment the
+         * cross-signal jump can see it: an aggregate consumes the row a line
+         * below, so a jump that waited for the result would find buckets and
+         * no ids at all. Collected only when a re-key was asked for. */
+        if (p->rekey && !po_result_exemplar(x->res, r->trace_hi, r->trace_lo))
+            return PO_Q_ERR;
 
         if (p->has_agg) {
             char key[128];
@@ -409,6 +506,29 @@ static int po_qexec_step(po_qexec *x) {
          * it is a latency, and dividing it by three hundred would report a
          * service as getting faster because somebody widened the bucket.
          */
+        /* THE RANKING, and it has to be here rather than earlier: the
+         * aggregate is not final until the loop above has run, so ordering
+         * on it before that would rank on a running count. */
+        if (p->topn && x->res->ng > 1) {
+            /* An insertion sort on the group array. The group count is
+             * bounded by the cardinality cap long before it is large, and
+             * this keeps the comparison in one readable place. Descending by
+             * value; ties keep the order they arrived in, so the answer is
+             * at least stable between two runs over the same segments. */
+            uint32_t a;
+            for (a = 1; a < x->res->ng; a++) {
+                po_group k = x->res->g[a];
+                uint32_t b = a;
+                while (b > 0 && x->res->g[b - 1].value < k.value) {
+                    x->res->g[b] = x->res->g[b - 1];
+                    b--;
+                }
+                x->res->g[b] = k;
+            }
+        }
+        if (p->topn && x->res->ng > (uint32_t)p->topn)
+            x->res->ng = (uint32_t)p->topn;
+
         if (p->bucket_rate
             && (p->agg == PO_AGG_COUNT || p->agg == PO_AGG_SUM)) {
             const double secs = (double)p->bucket_ns / 1e9;

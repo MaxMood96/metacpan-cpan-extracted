@@ -1,7 +1,7 @@
 package Cron::Toolkit;
 
 # VERSION
-$VERSION = 1.03;
+$VERSION = 1.04;
 
 use strict;
 use warnings;
@@ -300,18 +300,20 @@ sub new {
          die "Invalid dow value: 0, must be [1-7] in Quartz";
       }
 
-      # Map Quartz DOW names
+      # Map Quartz DOW names. Allow trailing L/# and cron punctuation so
+      # MONL → nL and MON#3 → n#3 without matching inside MONDAY.
       while ( my ( $name, $num ) = each %DOW_MAP_QUARTZ ) {
-         $fields[5] =~ s/\b\Q$name\E\b/$num/gi;
+         $fields[5] =~ s/\b\Q$name\E(?=L\b|[#,\-\/?\s]|$)/$num/gi;
       }
 
       # Normalize Quartz DOW 1-7 to 0-6, skip nth and step
       $fields[5] =~ s/(?<![#\/])(\b[1-7]\b)(?![#\/])/$1-1/ge;
    }
    else {
-      # convert dow names to unix numerical equivalent
+      # convert dow names to unix numerical equivalent. Allow trailing L/#
+      # and cron punctuation so MONL → 1L and MON#3 → 1#3; MON-FRI still works.
       while ( my ( $name, $num ) = each %DOW_MAP_UNIX ) {
-         $fields[5] =~ s/\b\Q$name\E\b/$num/gi;
+         $fields[5] =~ s/\b\Q$name\E(?=L\b|[#,\-\/?\s]|$)/$num/gi;
       }
    }
 

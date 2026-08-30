@@ -50,5 +50,7 @@ t/15-PerlOMP_2D_AoA_TO_2D_FLOAT_ARRAY_r.t
 t/16-PerlOMP_2D_AoA_TO_2D_INT_ARRAY.t
 t/17-PerlOMP_2D_AoA_TO_2D_STRING_ARRAY.t
 t/17-PerlOMP_2D_AoA_TO_2D_STRING_ARRAY_r.t
+t/lib/OpenMP/Simple/TestCompat.pm
 t/release-kwalitee.t
+test-runner.pl
 test-runner.sh

@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use lib "t/lib";
 use Test::More;
-use HMTest qw(free_ports);
+use HMTest qw(free_ports quiet_child);
 use IO::Socket::INET;
 use Time::HiRes ();
 use File::Temp ();
@@ -20,7 +20,7 @@ plan skip_all => "no free loopback port" unless $port;
 my $sup = fork;
 die "fork: $!" unless defined $sup;
 if ($sup == 0) {
-    open STDERR, '>', '/dev/null';
+    quiet_child();
     require Hyperman;
     Hyperman->run(
         app => sub {

@@ -246,8 +246,31 @@ SKIP: {
         $st = eval { $P->register(undef,
             { guard => sub { 1 }, ingest => {} }) };
         is($st->{ingest}{prefix}, '/v1', 'the ingest prefix defaults to /v1');
-        is($st->{ingest}{scope}, 'ingest',
-           'and an ingest key is scoped to ingest, with no option to widen it');
+    }
+
+    # AN INGEST KEY DOES NOT ADMIT YOU TO THE UI, asserted where the property
+    # actually lives.
+    #
+    # This used to read `$st->{ingest}{scope} eq 'ingest'` - a constant
+    # compared against itself, which no change to the code could have broken.
+    # The real guarantee is that the keyring is consulted on the ingest
+    # application and nowhere else, so a bearer token cannot reach a screen.
+    # Read from the source for the same reason the constant-time check above
+    # is: the alternative is standing up a whole application to prove a
+    # negative.
+    {
+        my $src = do {
+            open my $fh, '<', 'lib/Punk/Plugin/Observe.pm' or die $!;
+            local $/; <$fh>;
+        };
+        my ($ui) = $src =~ /sub _register_ui \{(.*?)
+\}/s;
+        my ($in) = $src =~ /sub _register_ingest \{(.*?)
+\}/s;
+        ok($in && $in =~ /_key_ok/,
+           'the ingest application checks the keyring');
+        ok($ui && $ui !~ /_key_ok/,
+           '  and the UI scope does not, so a key cannot widen into a screen');
     }
 
     # The rate limit is OFF unconfigured; cardinality HAS a default.

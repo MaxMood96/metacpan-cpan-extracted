@@ -311,6 +311,62 @@ poi_decode_append(SV *path, SV *buf, SV *signal, SV *encoding, SV *policy, SV *i
                 }
             }
 
+            /* THE CARDINALITY GATE, BEFORE THE APPEND.
+             *
+             * Each metric record's series id is the hash of its canonical
+             * attribute block - the same bytes the segment writer interns at
+             * seal. An
+             * existing series passes untouched; a NEW one past the cap is
+             * not dropped and not stored as itself: its record is rewritten
+             * onto the named overflow series, so the volume survives, the
+             * cardinality stops, and the data says "you exceeded the cap"
+             * rather than going quietly missing. The exporter is NOT told
+             * these were rejected - they were kept, and a partial success
+             * naming them would invite a resend that duplicates them. */
+            if (ok && b.n && items > 7 && SvOK(ST(7)) && SvIV(ST(7))) {
+                po_shared *shc = INT2PTR(po_shared *, SvIV(ST(7)));
+                uint32_t ov_off = 0, ov_len = 0;
+                po_u64 overflowed = 0;
+                size_t ri;
+                for (ri = 0; ri < b.n; ri++) {
+                    po_h128 h;
+                    /* METRICS ONLY. The cap bounds per-series ONGOING state -
+                     * rollups, exemplar sidecars, compression streams - and
+                     * only metrics have any. A log line or span with a unique
+                     * attribute block is bytes in a sealed segment, paid once
+                     * and aged out by retention; its bound is the rate
+                     * limiter. Gating those too meant a payment id logged as
+                     * a field cost a series per checkout, and "log any data"
+                     * is a requirement. */
+                    if (b.rec[ri].kind != PO_METRIC) continue;
+                    h = po_murmur3_128(
+                        b.arena.base + b.rec[ri].attr_off,
+                        (size_t)b.rec[ri].attr_len, 0);
+                    if (po_shared_series_admit(shc, h.hi, h.lo)) continue;
+                    if (!ov_len) {
+                        po_attrs ov;
+                        po_attr *oa;
+                        po_h128 ovid;
+                        po_attrs_init(&ov);
+                        oa = po_attrs_push(&ov, "otel.overflow", 13);
+                        if (oa) { oa->tag = PO_AV_STRING;
+                                  oa->sp = (const uint8_t *)"cap"; oa->slen = 3; }
+                        ov_off = po_attrs_encode(&ov, &b.arena, &ov_len);
+                        if (ov_off == PO_ARENA_ERR) { ov_len = 0; continue; }
+                        /* The overflow series is itself a series, admitted
+                         * outside the cap or attributing to it would loop. */
+                        ovid = po_murmur3_128(b.arena.base + ov_off,
+                                              (size_t)ov_len, 0);
+                        po_shared_series_force(shc, ovid.hi, ovid.lo);
+                    }
+                    b.rec[ri].attr_off = ov_off;
+                    b.rec[ri].attr_len = ov_len;
+                    overflowed++;
+                }
+                if (overflowed)
+                    hv_stores(res, "overflowed", po_u64_to_sv(overflowed));
+            }
+
             /* An empty batch is a success that writes nothing. Opening the log
              * for it would create an empty file per exporter that had nothing
              * to say. */

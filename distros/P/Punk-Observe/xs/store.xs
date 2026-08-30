@@ -45,6 +45,25 @@ post_nsub(SV *a, SV *b)
     OUTPUT:
         RETVAL
 
+# An instant rounded DOWN to a multiple, which is where a bucket or a chunk
+# begins.
+#
+# In u64, because the arithmetic is the thing that has to be exact: an instant
+# is past 2^53, so `int($t / $w) * $w` in Perl rounds the product and lands on
+# an edge that is close to the right one and is not it. The same division the
+# executor buckets with, in the same width.
+SV *
+post_nfloor(SV *a, SV *b)
+    CODE:
+    {
+        po_u64 x = 0, w = 0;
+        (void)po_sv_to_u64(aTHX_ a, &x);
+        (void)po_sv_to_u64(aTHX_ b, &w);
+        RETVAL = po_u64_to_sv(w ? (x / w) * w : x);
+    }
+    OUTPUT:
+        RETVAL
+
 # Replay one log, filter it, and hand back what survives - NEWEST FIRST.
 #
 # This is the whole of what the Perl scan loop used to do, and the reason it
@@ -650,105 +669,101 @@ void
 post_stats(SV *self)
     PPCODE:
     {
-        po_dir d;
         char dpbuf[PO_PATHMAX];
         const char *dp = dpbuf;
-        const char *name;
         HV *out = newHV();
         HV *svc = newHV();
-        int have_dir;
-        AV *segs = newAV(), *idxs = newAV();
+        HV *snap = NULL;
+        AV *segs = NULL, *wals = NULL;
         SSize_t i, n;
         IV segments = 0, wal_depth = 0, unindexed = 0, orphan = 0;
         po_u64 records = 0, bytes = 0, logs = 0, spans = 0,
                metrics = 0, errors = 0, traces = 0;
 
-        have_dir = po_store_waldir(aTHX_ self, dpbuf, sizeof(dpbuf)) ? 1 : 0;
-        if (have_dir && po_opendir(&d, dp)) {
-            while ((name = po_readdir(&d))) {
-                size_t nl = strlen(name);
-                if (nl > 4 && memcmp(name + nl - 4, ".seg", 4) == 0)
-                    av_push(segs, newSVpv(name, 0));
-                else if (nl > 4 && memcmp(name + nl - 4, ".wal", 4) == 0)
-                    av_push(segs, newSVpv(name, 0));
-                else if (nl > 4 && memcmp(name + nl - 4, ".idx", 4) == 0)
-                    av_push(idxs, newSVpv(name, 0));
-            }
-            po_closedir(&d);
+        /* Everything about the sealed segments - counts, sizes, services,
+         * even the orphaned-index tally - comes out of the snapshot, so the
+         * page this feeds can be left open without re-reading a sidecar per
+         * segment per refresh. Only the LIVE logs are walked per call: their
+         * numbers change with every append and nothing about them is cached. */
+        if (po_store_waldir(aTHX_ self, dpbuf, sizeof(dpbuf)))
+            snap = po_snap_get(aTHX_ self, dp);
+        if (snap) {
+            SV **f = hv_fetchs(snap, "segs", 0);
+            if (f && SvROK(*f)) segs = (AV *)SvRV(*f);
+            f = hv_fetchs(snap, "wals", 0);
+            if (f && SvROK(*f)) wals = (AV *)SvRV(*f);
+            f = hv_fetchs(snap, "orphan", 0);
+            if (f && SvOK(*f)) orphan = SvIV(*f);
         }
 
-        /* An index with no segment is the other half of an interrupted
-         * retention pass: a few hundred bytes rather than a few megabytes,
-         * and a sign that something unlinked one of the pair and not the
-         * other. Counted, because a store that quietly accumulates them is a
-         * store nobody notices leaking. */
-        n = av_len(idxs) + 1;
-        for (i = 0; i < n; i++) {
-            SV **e = av_fetch(idxs, i, 0);
-            char path[PO_PATHMAX];
-            size_t pl;
-            if (!e) continue;
-            if (!po_path_join(path, sizeof(path), dp, SvPV_nolen(*e))) continue;
-            pl = strlen(path);
-            memcpy(path + pl - 4, ".seg", 5);
-            if (!po_file_size(path, NULL)) orphan++;
-        }
-
-        n = av_len(segs) + 1;
+        n = segs ? av_len(segs) + 1 : 0;
         for (i = 0; i < n; i++) {
             SV **e = av_fetch(segs, i, 0);
-            char path[PO_PATHMAX], idx[PO_PATHMAX];
-            size_t pl, nl;
-            po_u64 sz = 0;
-            po_idx_nums ix;
-            const char *np;
+            AV *ea;
+            SV **f;
 
-            if (!e) continue;
-            {
-                STRLEN el;
-                np = SvPV(*e, el);
-                nl = (size_t)el;
-            }
-            if (!po_path_join(path, sizeof(path), dp, np)) continue;
-            po_file_size(path, &sz);
-            bytes += sz;
-
-            /* A LIVE LOG IS COUNTED TOO, from its own frames. Counting only
-             * the sealed segments made a receiver that had accepted ten
-             * thousand records and not yet reached its seal threshold report
-             * nothing at all - which reads as "no telemetry is arriving"
-             * while every other screen shows it arriving. */
-            if (nl > 4 && memcmp(np + nl - 4, ".wal", 4) == 0) {
-                wal_depth++;
-                if (po_wal_nums(path, &ix, svc)) {
-                    records += ix.records;
-                    logs    += ix.logs;
-                    spans   += ix.spans;
-                    metrics += ix.metrics;
-                    errors  += ix.errors;
-                }
-                continue;
-            }
+            if (!e || !SvROK(*e)) continue;
+            ea = (AV *)SvRV(*e);
             segments++;
-
-            pl = strlen(path);
-            memcpy(idx, path, pl + 1);
-            memcpy(idx + pl - 4, ".idx", 5);
+            bytes += po_snap_u64(aTHX_ ea, PO_SNAP_SIZE);
 
             /* A sealed segment with no summary is a seal that was
              * interrupted. It is still readable and still counted, and saying
              * so is the difference between a number that is low and a number
              * that is wrong. */
-            if (!po_index_nums(idx, &ix, svc)) { unindexed++; continue; }
-            records += ix.records;
-            logs    += ix.logs;
-            spans   += ix.spans;
-            metrics += ix.metrics;
-            errors  += ix.errors;
-            traces  += ix.traces;
+            if (!(po_snap_flags(aTHX_ ea) & PO_SNAP_HAS_IDX)) {
+                unindexed++;
+                continue;
+            }
+            records += po_snap_u64(aTHX_ ea, PO_SNAP_RECORDS);
+            logs    += po_snap_u64(aTHX_ ea, PO_SNAP_LOGS);
+            spans   += po_snap_u64(aTHX_ ea, PO_SNAP_SPANS);
+            metrics += po_snap_u64(aTHX_ ea, PO_SNAP_METRICS);
+            errors  += po_snap_u64(aTHX_ ea, PO_SNAP_ERRORS);
+            traces  += po_snap_u64(aTHX_ ea, PO_SNAP_TRACES);
+
+            f = av_fetch(ea, PO_SNAP_SVC, 0);
+            if (f && SvROK(*f) && SvTYPE(SvRV(*f)) == SVt_PVHV) {
+                HV *sh = (HV *)SvRV(*f);
+                HE *he;
+                hv_iterinit(sh);
+                while ((he = hv_iternext(sh))) {
+                    STRLEN kl;
+                    const char *kp = HePV(he, kl);
+                    SV **slot = hv_fetch(svc, kp, (I32)kl, 1);
+                    if (slot)
+                        sv_setiv(*slot, (SvOK(*slot) ? SvIV(*slot) : 0)
+                                        + SvIV(HeVAL(he)));
+                }
+            }
         }
-        SvREFCNT_dec((SV *)segs);
-        SvREFCNT_dec((SV *)idxs);
+
+        /* A LIVE LOG IS COUNTED TOO, from its own frames. Counting only
+         * the sealed segments made a receiver that had accepted ten
+         * thousand records and not yet reached its seal threshold report
+         * nothing at all - which reads as "no telemetry is arriving"
+         * while every other screen shows it arriving. */
+        n = wals ? av_len(wals) + 1 : 0;
+        for (i = 0; i < n; i++) {
+            SV **e = av_fetch(wals, i, 0);
+            char path[PO_PATHMAX];
+            po_u64 sz = 0;
+            po_idx_nums ix;
+
+            if (!e) continue;
+            if (!po_path_join(path, sizeof(path), dp, SvPV_nolen(*e)))
+                continue;
+            po_file_size(path, &sz);
+            bytes += sz;
+            wal_depth++;
+            if (po_wal_nums(path, &ix, svc)) {
+                records += ix.records;
+                logs    += ix.logs;
+                spans   += ix.spans;
+                metrics += ix.metrics;
+                errors  += ix.errors;
+            }
+        }
 
         hv_stores(out, "segments",     newSViv(segments));
         hv_stores(out, "wal_depth",    newSViv(wal_depth));
@@ -775,6 +790,120 @@ post_stats(SV *self)
                       newSViv(md && SvOK(*md) ? SvIV(*md) : 0));
         }
         mXPUSHs(newRV_noinc((SV *)out));
+    }
+
+# The store's read generation: an opaque token that changes whenever the
+# SET of files changes - a seal, a new live log, a retention unlink. One
+# stat. An append to an existing live log does NOT move it, which is the
+# advertised meaning: "the sealed data is as it was", not "nothing arrived".
+void
+post_generation(SV *self)
+    PPCODE:
+    {
+        char dpbuf[PO_PATHMAX];
+        struct stat st;
+        if (!po_store_waldir(aTHX_ self, dpbuf, sizeof(dpbuf))
+            || stat(dpbuf, &st) != 0)
+            XSRETURN_PV("");
+        mXPUSHs(newSVpvf("%" IVdf, (IV)st.st_mtime));
+    }
+
+# The distinct metric names in a window, with how often each was seen.
+#
+# The metrics landing page's question, answered without building a row for
+# every point: the walk prunes segments by span and by per-kind count from
+# the snapshot, and tallies names straight out of the frame arenas. The cap
+# is `max_rows` metric records; a capped answer says so in `truncated`.
+void
+post_metric_names(SV *self, ...)
+    PPCODE:
+    {
+        char dpbuf[PO_PATHMAX];
+        const char *dp = dpbuf;
+        po_u64 from = 0, to = PO_U64_MAX, cap = 0, tallied = 0;
+        int have_from = 0, have_to = 0;
+        IV ai, files = 0, skipped = 0, degraded = 0;
+        HV *seen = newHV();
+        HV *meta = newHV();
+        HV *snap = NULL;
+        AV *segs = NULL, *wals = NULL;
+        SSize_t i, n;
+        int stopped = 0;
+
+        for (ai = 1; ai + 1 < items; ai += 2) {
+            const char *k = SvPV_nolen(ST(ai));
+            SV *v = ST(ai + 1);
+            if      (strEQ(k, "from") && SvOK(v))
+                have_from = po_sv_to_u64(aTHX_ v, &from);
+            else if (strEQ(k, "to") && SvOK(v))
+                have_to = po_sv_to_u64(aTHX_ v, &to);
+        }
+        {
+            SV **f = hv_fetchs((HV *)SvRV(self), "max_rows", 0);
+            cap = (f && SvOK(*f)) ? (po_u64)SvUV(*f) : 500000;
+        }
+
+        if (po_store_waldir(aTHX_ self, dpbuf, sizeof(dpbuf)))
+            snap = po_snap_get(aTHX_ self, dp);
+        if (snap) {
+            SV **f = hv_fetchs(snap, "segs", 0);
+            if (f && SvROK(*f)) segs = (AV *)SvRV(*f);
+            f = hv_fetchs(snap, "wals", 0);
+            if (f && SvROK(*f)) wals = (AV *)SvRV(*f);
+        }
+
+        n = wals ? av_len(wals) + 1 : 0;
+        for (i = 0; i < n && !stopped; i++) {
+            SV **e = av_fetch(wals, i, 0);
+            char path[PO_PATHMAX];
+            if (!e) continue;
+            if (!po_path_join(path, sizeof(path), dp, SvPV_nolen(*e)))
+                continue;
+            tallied += po_metric_names_file(aTHX_ path, from, have_from,
+                                            to, have_to, seen,
+                                            &files, &degraded);
+            if (tallied >= cap) stopped = 1;
+        }
+
+        n = segs ? av_len(segs) + 1 : 0;
+        for (i = 0; i < n && !stopped; i++) {
+            SV **e = av_fetch(segs, i, 0);
+            AV *ea;
+            SV **nm;
+            char path[PO_PATHMAX];
+
+            if (!e || !SvROK(*e)) continue;
+            ea = (AV *)SvRV(*e);
+
+            if ((have_from || have_to)
+                && (po_snap_flags(aTHX_ ea) & PO_SNAP_SPAN_SEEN)) {
+                po_u64 ix_min = po_snap_u64(aTHX_ ea, PO_SNAP_TMIN);
+                po_u64 ix_max = po_snap_u64(aTHX_ ea, PO_SNAP_TMAX);
+                if ((have_from && ix_max < from)
+                    || (have_to && ix_min > to)) { skipped++; continue; }
+            }
+            if (po_snap_kind_absent(aTHX_ ea, PO_METRIC)) {
+                skipped++;
+                continue;
+            }
+
+            nm = av_fetch(ea, PO_SNAP_NAME, 0);
+            if (!nm) continue;
+            if (!po_path_join(path, sizeof(path), dp, SvPV_nolen(*nm)))
+                continue;
+            tallied += po_metric_names_file(aTHX_ path, from, have_from,
+                                            to, have_to, seen,
+                                            &files, &degraded);
+            if (tallied >= cap) stopped = 1;
+        }
+
+        hv_stores(meta, "scanned",   po_u64_to_sv(tallied));
+        hv_stores(meta, "files",     newSViv(files));
+        hv_stores(meta, "skipped",   newSViv(skipped));
+        hv_stores(meta, "degraded",  newSViv(degraded));
+        hv_stores(meta, "truncated", newSViv(stopped ? 1 : 0));
+        mXPUSHs(newRV_noinc((SV *)seen));
+        mXPUSHs(newRV_noinc((SV *)meta));
     }
 
 # The service graph, merged across every segment.
@@ -809,10 +938,8 @@ post_graph(SV *self, ...)
         IV ai;
         HV *edges = newHV(), *svc = newHV();
         po_span_gather all;
-        po_dir d;
-        const char *name;
-        AV *names = newAV();
         SSize_t i, n;
+        IV gfiles = 0, gskipped = 0;
         HV *out = newHV();
 
         for (ai = 1; ai + 1 < items; ai += 2) {
@@ -825,7 +952,6 @@ post_graph(SV *self, ...)
             hv_stores(out, "edges",    newRV_noinc((SV *)newAV()));
             hv_stores(out, "services", newRV_noinc((SV *)svc));
             SvREFCNT_dec((SV *)edges);
-            SvREFCNT_dec((SV *)names);
             mXPUSHs(newRV_noinc((SV *)out));
             XSRETURN(1);
         }
@@ -834,64 +960,103 @@ post_graph(SV *self, ...)
             hv_stores(out, "edges",    newRV_noinc((SV *)newAV()));
             hv_stores(out, "services", newRV_noinc((SV *)svc));
             SvREFCNT_dec((SV *)edges);
-            SvREFCNT_dec((SV *)names);
             mXPUSHs(newRV_noinc((SV *)out));
             XSRETURN(1);
         }
 
-        if (po_opendir(&d, dp)) {
-            while ((name = po_readdir(&d))) {
-                size_t nl = strlen(name);
-                if (nl > 4 && (memcmp(name + nl - 4, ".seg", 4) == 0
-                            || memcmp(name + nl - 4, ".wal", 4) == 0))
-                    av_push(names, newSVpv(name, 0));
-            }
-            po_closedir(&d);
-        }
-        sortsv(AvARRAY(names), (SSize_t)(av_len(names) + 1), Perl_sv_cmp);
-        n = av_len(names) + 1;
-
-        for (i = 0; i < n; i++) {
-            SV **e = av_fetch(names, i, 0);
-            const char *np;
-            STRLEN nl;
-            char path[PO_PATHMAX];
-            int sealed;
-
-            if (!e) continue;
-            np = SvPV(*e, nl);
-            sealed = (nl > 4 && memcmp(np + nl - 4, ".seg", 4) == 0);
-            (void)sealed;                 /* sealed or live, both are read */
-            if (!po_path_join(path, sizeof(path), dp, np)) continue;
-
-            {   /* THE SERVICE COUNTS ARE PER RECORD, not per span - a log
-                 * line counts too - so they never come from the span set.
-                 * A sealed file has them tallied in its sidecar; a live one
-                 * is walked for them. Counting them from the spans as well
-                 * is how a service with two records reported three. */
-                if (sealed) {
-                    char idx[PO_PATHMAX];
-                    size_t pl = strlen(path);
-                    memcpy(idx, path, pl + 1);
-                    memcpy(idx + pl - 4, ".idx", 5);
-                    po_graph_merge_services(aTHX_ idx, svc);
-                }
-                else {
-                    po_idx_nums nums;
-                    (void)po_wal_nums(path, &nums, svc);
-                }
+        {   /* The snapshot drives both halves of this walk.
+             *
+             * THE SERVICE COUNTS ARE PER RECORD, not per span - a log line
+             * counts too - so they never come from the span set. A sealed
+             * file has them tallied in its snapshot entry (parsed from its
+             * sidecar once, ever); a live one is walked for them. And they
+             * are merged for EVERY segment, windowed or not, as they always
+             * were: the services table is the store's, the window is the
+             * spans'.
+             *
+             * The span gather is the expensive half and the window prunes
+             * it: a sealed segment outside [from,to], or one whose sidecar
+             * proves it holds no spans, is never slurped. Every span INSIDE
+             * the window still lands in one set - see the invariant above -
+             * because pruning picks files, never how spans merge. */
+            HV *snap = po_snap_get(aTHX_ self, dp);
+            AV *segs = NULL, *wals = NULL;
+            if (snap) {
+                SV **f = hv_fetchs(snap, "segs", 0);
+                if (f && SvROK(*f)) segs = (AV *)SvRV(*f);
+                f = hv_fetchs(snap, "wals", 0);
+                if (f && SvROK(*f)) wals = (AV *)SvRV(*f);
             }
 
-            {   /* Every span into ONE set, so a parent in another file is
-                 * still a parent. */
+            n = segs ? av_len(segs) + 1 : 0;
+            for (i = 0; i < n; i++) {
+                SV **e = av_fetch(segs, i, 0);
+                AV *ea;
+                SV **f, **nm;
+                char path[PO_PATHMAX];
                 size_t blen = 0;
-                char *bytes = po_slurp(path, &blen);
+                char *bytes;
+
+                if (!e || !SvROK(*e)) continue;
+                ea = (AV *)SvRV(*e);
+
+                f = av_fetch(ea, PO_SNAP_SVC, 0);
+                if (f && SvROK(*f) && SvTYPE(SvRV(*f)) == SVt_PVHV) {
+                    HV *sh = (HV *)SvRV(*f);
+                    HE *he;
+                    hv_iterinit(sh);
+                    while ((he = hv_iternext(sh))) {
+                        STRLEN kl;
+                        const char *kp = HePV(he, kl);
+                        SV **slot = hv_fetch(svc, kp, (I32)kl, 1);
+                        if (slot)
+                            sv_setiv(*slot,
+                                     (SvOK(*slot) ? SvIV(*slot) : 0)
+                                     + SvIV(HeVAL(he)));
+                    }
+                }
+
+                if ((have_from || have_to)
+                    && (po_snap_flags(aTHX_ ea) & PO_SNAP_SPAN_SEEN)) {
+                    po_u64 ix_min = po_snap_u64(aTHX_ ea, PO_SNAP_TMIN);
+                    po_u64 ix_max = po_snap_u64(aTHX_ ea, PO_SNAP_TMAX);
+                    if ((have_from && ix_max < from)
+                        || (have_to && ix_min > to)) { gskipped++; continue; }
+                }
+                if (po_snap_kind_absent(aTHX_ ea, PO_SPAN)) {
+                    gskipped++;
+                    continue;
+                }
+
+                nm = av_fetch(ea, PO_SNAP_NAME, 0);
+                if (!nm) continue;
+                if (!po_path_join(path, sizeof(path), dp, SvPV_nolen(*nm)))
+                    continue;
+                bytes = po_slurp(path, &blen);
                 if (!bytes) continue;
+                gfiles++;
+                po_gather_wal(&all, bytes, blen, have_from, from, have_to, to);
+                free(bytes);
+            }
+
+            n = wals ? av_len(wals) + 1 : 0;
+            for (i = 0; i < n; i++) {
+                SV **e = av_fetch(wals, i, 0);
+                char path[PO_PATHMAX];
+                size_t blen = 0;
+                char *bytes;
+                po_idx_nums nums;
+                if (!e) continue;
+                if (!po_path_join(path, sizeof(path), dp, SvPV_nolen(*e)))
+                    continue;
+                (void)po_wal_nums(path, &nums, svc);
+                bytes = po_slurp(path, &blen);
+                if (!bytes) continue;
+                gfiles++;
                 po_gather_wal(&all, bytes, blen, have_from, from, have_to, to);
                 free(bytes);
             }
         }
-        SvREFCNT_dec((SV *)names);
 
         {   /* The graph, built once over everything that was gathered. */
             po_sgraph sg;
@@ -928,6 +1093,8 @@ post_graph(SV *self, ...)
             hv_stores(out, "edges", newRV_noinc((SV *)out_edges));
         }
         hv_stores(out, "services", newRV_noinc((SV *)svc));
+        hv_stores(out, "files",    newSViv(gfiles));
+        hv_stores(out, "skipped",  newSViv(gskipped));
         SvREFCNT_dec((SV *)edges);
         mXPUSHs(newRV_noinc((SV *)out));
     }
@@ -942,7 +1109,9 @@ post_traces(SV *self, ...)
         po_tsum_set sums;
         char dpbuf[PO_PATHMAX];
         po_u64 from = 0, to = PO_U64_MAX, min_dur = 0, max_dur = 0;
+        po_u64 after_dur = 0, after_hi = 0, after_lo = 0;
         int have_from = 0, have_to = 0, errors_only = 0, have_max = 0;
+        int have_after = 0;
         IV limit = 50, ai;
         const char *want_svc = NULL;
         STRLEN want_len = 0;
@@ -952,6 +1121,7 @@ post_traces(SV *self, ...)
         HV *res = newHV();
         uint32_t k;
         IV kept = 0;
+        IV gfiles = 0, gskipped = 0;
 
         for (ai = 1; ai + 1 < items; ai += 2) {
             const char *k = SvPV_nolen(ST(ai));
@@ -964,6 +1134,16 @@ post_traces(SV *self, ...)
              * its own "unset", the way a zero minimum can. */
             else if (strEQ(k, "max_duration") && SvOK(v))
                 have_max = po_sv_to_u64(aTHX_ v, &max_dur);
+            /* THE PAGE CURSOR: the (duration, trace) triple of the last row
+             * shown. by_dur's tie-break on the trace id is what makes this a
+             * total order, which is what makes "the next fifty" a fixed set
+             * rather than one that shifts when two traces share a duration. */
+            else if (strEQ(k, "after_dur") && SvOK(v))
+                have_after = po_sv_to_u64(aTHX_ v, &after_dur);
+            else if (strEQ(k, "after_hi") && SvOK(v))
+                (void)po_sv_to_u64(aTHX_ v, &after_hi);
+            else if (strEQ(k, "after_lo") && SvOK(v))
+                (void)po_sv_to_u64(aTHX_ v, &after_lo);
             else if (strEQ(k, "errors_only"))  errors_only = SvTRUE(v);
             else if (strEQ(k, "limit"))        limit = SvIV(v);
             else if (strEQ(k, "service") && SvOK(v)) want_svc = SvPV(v, want_len);
@@ -976,9 +1156,12 @@ post_traces(SV *self, ...)
 
         if (!po_gather_init(&g)) croak("oom");
         if (po_store_waldir(aTHX_ self, dpbuf, sizeof(dpbuf)))
-            po_gather_dir(aTHX_ dpbuf, &g, have_from, from, have_to, to);
+            po_gather_dir(aTHX_ self, dpbuf, &g, have_from, from, have_to, to,
+                          &gfiles, &gskipped);
         po_span_w_seal(&g.w);
 
+        hv_stores(res, "files",   newSViv(gfiles));
+        hv_stores(res, "skipped", newSViv(gskipped));
         if (!g.w.n || !po_tsum_init(&sums)) {
             po_gather_free(&g);
             hv_stores(res, "traces", newRV_noinc((SV *)out));
@@ -1012,6 +1195,26 @@ post_traces(SV *self, ...)
 
             if (min_dur && t->dur_ns < min_dur) continue;
             if (have_max && t->dur_ns > max_dur) continue;
+
+            /* Skip everything at or before the cursor IN WALK ORDER. The
+             * default walk is slowest first, so "past the cursor" means
+             * strictly faster, or the same duration with a smaller trace id;
+             * a max_duration walk runs the other way and mirrors. Positional
+             * rather than find-the-exact-entry, so a cursor whose trace has
+             * aged out of the window still lands on the right next page. */
+            if (have_after) {
+                int past;
+                if (t->dur_ns != after_dur)
+                    past = have_max ? (t->dur_ns > after_dur)
+                                    : (t->dur_ns < after_dur);
+                else if (t->trace_hi != after_hi)
+                    past = have_max ? (t->trace_hi > after_hi)
+                                    : (t->trace_hi < after_hi);
+                else
+                    past = have_max ? (t->trace_lo > after_lo)
+                                    : (t->trace_lo < after_lo);
+                if (!past) continue;
+            }
             if (errors_only && !t->errors) continue;
             if (want_svc) {
                 uint32_t sl = 0;
@@ -1089,7 +1292,8 @@ post_trace(SV *self, SV *hi_sv, SV *lo_sv, ...)
 
         if (!po_gather_init(&g)) croak("oom");
         if (po_store_waldir(aTHX_ self, dpbuf, sizeof(dpbuf)))
-            po_gather_dir(aTHX_ dpbuf, &g, have_from, from, have_to, to);
+            po_gather_dir(aTHX_ self, dpbuf, &g, have_from, from, have_to, to,
+                          NULL, NULL);
         po_span_w_seal(&g.w);
 
         /* The spans of one trace are CONTIGUOUS after the seal, because the
@@ -1212,7 +1416,7 @@ post_segments(SV *self)
 # an index over. After the rename the file never changes again, so its index
 # can never be stale.
 void
-post_seal(SV *self)
+post_seal(SV *self, ...)
     PPCODE:
     {
         char dir[PO_PATHMAX], live[PO_PATHMAX], seg[PO_PATHMAX], idx[PO_PATHMAX];
@@ -1224,11 +1428,42 @@ post_seal(SV *self)
         SV **f;
         IV counter = 0;
         int n;
+        long owner_pid = (long)po_getpid();
 
         if (!SvROK(self) || SvTYPE(SvRV(self)) != SVt_PVHV) XSRETURN_UNDEF;
         h = (HV *)SvRV(self);
         if (!po_store_waldir(aTHX_ self, dir, sizeof(dir))) XSRETURN_UNDEF;
-        {
+
+        /* ADOPTING ANOTHER WORKER'S LOG, when one is named.
+         *
+         * A worker seals its own log and owns the descriptor while it does,
+         * which is what makes the rename safe. A log left behind by a worker
+         * that DIED has no such owner, and without this it is never sealed,
+         * never indexed and never expired - so its bytes sit on the disk for
+         * ever while retention reports success. The caller is responsible for
+         * proving the owner is gone; see Punk::Observe::Retain::adopt_orphans,
+         * which is the only caller that passes a path.
+         *
+         * The ORIGINAL worker's pid stays in the segment name. It is only
+         * needed for uniqueness, but a segment named for the process that
+         * wrote it is a segment somebody can trace back. */
+        if (items > 1 && SvOK(ST(1))) {
+            STRLEN pl = 0;
+            const char *pp = SvPV(ST(1), pl);
+            const char *slash;
+            if (pl >= sizeof(live)) XSRETURN_UNDEF;
+            memcpy(live, pp, pl);
+            live[pl] = '\0';
+            slash = strrchr(live, '/');
+            {
+                const char *base = slash ? slash + 1 : live;
+                if (*base == 'w') {
+                    long got = atol(base + 1);
+                    if (got > 0) owner_pid = got;
+                }
+            }
+        }
+        else {
             char wn[64];
             int wl = snprintf(wn, sizeof(wn), "w%ld.wal", (long)po_getpid());
             if (wl <= 0) XSRETURN_UNDEF;
@@ -1262,7 +1497,7 @@ post_seal(SV *self)
         f = hv_fetchs(h, "sealed", 0);
         if (f && SvOK(*f)) counter = SvIV(*f);
         n = snprintf(name, sizeof(name), "s%ld-%ld-%ld",
-                     (long)time(NULL), (long)po_getpid(), (long)counter);
+                     (long)time(NULL), owner_pid, (long)counter);
         if (n <= 0 || (size_t)n + 5 >= sizeof(name)) { free(bytes); XSRETURN_UNDEF; }
         hv_stores(h, "sealed", newSViv(counter + 1));
 
@@ -1339,7 +1574,8 @@ post_records(SV *self, ...)
 
         po_records_run(aTHX_ self, from, have_from, to, have_to,
                        kind, limit, as_rows, trace_hi, trace_lo, have_trace,
-                       out, meta);
+                       NULL,
+                       NULL, 0, NULL, 0, out, meta);
         mXPUSHs(newRV_noinc((SV *)out));
         mXPUSHs(newRV_noinc((SV *)meta));
     }
@@ -1419,6 +1655,7 @@ post_new(SV *class, ...)
         STRLEN tlen = 7;
         po_u64 seal_bytes = 8 * 1024 * 1024, max_rows = 500000;
         SV *dir = NULL;
+        SV *cache = NULL;
 
         for (ai = 1; ai + 1 < items; ai += 2) {
             const char *k = SvPV_nolen(ST(ai));
@@ -1430,12 +1667,17 @@ post_new(SV *class, ...)
                 (void)po_sv_to_u64(aTHX_ v, &seal_bytes);
             else if (strEQ(k, "max_rows") && SvTRUE(v))
                 (void)po_sv_to_u64(aTHX_ v, &max_rows);
+            /* The chunk cache, kept as it was given. Unrecognised keys are
+             * dropped here, so a store built with one and asked for a
+             * `cached_query` would quietly have answered without it. */
+            else if (strEQ(k, "cache") && SvTRUE(v)) cache = v;
         }
 
         hv_stores(self, "dir",        dir ? newSVsv(dir) : newSV(0));
         hv_stores(self, "tenant",     newSVpvn(tenant, tlen));
         hv_stores(self, "seal_bytes", po_u64_to_sv(seal_bytes));
         hv_stores(self, "max_rows",   po_u64_to_sv(max_rows));
+        if (cache) hv_stores(self, "cache", newSVsv(cache));
         /* undef, not zero: a worker that restarts inherits whatever its
          * predecessor left on disk, and the first seal_if_full is what reads
          * it. Zero here would seal a full log one batch late, every restart. */
@@ -1550,7 +1792,8 @@ post_rows(SV *self, ...)
         /* The same scan with the row shape asked for, not a second pass. */
         po_records_run(aTHX_ self, from, have_from, to, have_to,
                        kind, limit, 1, trace_hi, trace_lo, have_trace,
-                       out, meta);
+                       NULL,
+                       NULL, 0, NULL, 0, out, meta);
         mXPUSHs(newRV_noinc((SV *)out));
         mXPUSHs(newRV_noinc((SV *)meta));
     }
@@ -1571,7 +1814,9 @@ post_query(SV *self, SV *q, ...)
         const char *qp = SvPV(q, qlen);
         po_u64 from = 0, to = PO_U64_MAX, limit = 0, hard_max = 0,
                step = 0, max_rows = 0, dflt = 500000;
-        int have_from = 0, have_to = 0, kind = 0;
+        char vizbuf[8]; size_t viz_len = 0;
+        int have_from = 0, have_to = 0, kind = 0, have_pd = 0;
+        int rekeys[8]; int nrekey = 0;
         IV ai;
         AV *rows = newAV();
         HV *meta = newHV();
@@ -1605,6 +1850,15 @@ post_query(SV *self, SV *q, ...)
             XSRETURN(1);
         }
 
+        /* The chart kind, copied out NOW: pq is freed on one exit path
+         * before the result is assembled, and a pointer into a freed bump is
+         * the quiet kind of wrong. Eight bytes covers the longest name. */
+        {
+            viz_len = pq.viz_len < sizeof(vizbuf) - 1
+                    ? pq.viz_len : 0;
+            if (pq.viz && viz_len) memcpy(vizbuf, pq.viz, viz_len);
+        }
+
         /* The source decides which records to read. `trace` and `spans` are
          * two views of the same records - one assembled, one not. */
         switch (pq.source) {
@@ -1633,6 +1887,8 @@ post_query(SV *self, SV *q, ...)
                 hv_stores(st, "truncated", newSViv(0));
                 hv_stores(st, "empty",   newSViv(1));
                 hv_stores(res, "ok",     newSViv(1));
+                if (viz_len)
+                    hv_stores(res, "viz", newSVpvn(vizbuf, viz_len));
                 hv_stores(res, "shape",  newSVpvs("rows"));
                 hv_stores(res, "rows",   newRV_noinc((SV *)rows));
                 hv_stores(res, "groups", newRV_noinc((SV *)newAV()));
@@ -1647,11 +1903,37 @@ post_query(SV *self, SV *q, ...)
                 if (!have_from || pd.from > from) { from = pd.from; have_from = 1; }
                 if (!have_to   || pd.to   < to)   { to   = pd.to;   have_to   = 1; }
             }
+            have_pd = 1;
+        }
+
+        /* pq stays alive across the scan: the needles below point into its
+         * bump allocator, and the free moved past the read the day the scan
+         * learned to use them. The executor re-applies both filters row by
+         * row - the needle is only ever a "nothing here" proof (see
+         * po_records_scan_file). */
+        po_records_run(aTHX_ self, from, have_from, to, have_to,
+                       kind, limit, 1, 0, 0, 0, NULL,
+                       have_pd ? pd.search : NULL,
+                       have_pd ? pd.search_len : 0,
+                       (kind == PO_METRIC && pq.name_len) ? pq.name : NULL,
+                       (kind == PO_METRIC) ? pq.name_len : 0,
+                       rows, meta);
+
+        /* THE RE-KEY CHAIN, COPIED OUT BEFORE `pq` GOES. The second pass
+         * needs to know which cross-signal stages were asked for and in what
+         * order, and it runs after the executor - long past the bump
+         * allocator's life. Four ints outlive it; a pointer into the bump
+         * would be the quiet kind of wrong the `viz` copy above exists to
+         * avoid. */
+        {
+            po_stage *s;
+            for (s = pq.stages; s; s = s->next) {
+                if (s->kind < PO_ST_EXEMPLARS || s->kind > PO_ST_SPANS) continue;
+                if (nrekey < (int)(sizeof(rekeys) / sizeof(rekeys[0])))
+                    rekeys[nrekey++] = s->kind;
+            }
         }
         po_query_free(&pq);
-
-        po_records_run(aTHX_ self, from, have_from, to, have_to,
-                       kind, limit, 1, 0, 0, 0, rows, meta);
 
         {   /* the executor, over the rows just read */
             SV *rv = NULL;
@@ -1691,7 +1973,150 @@ post_query(SV *self, SV *q, ...)
                 XSRETURN(1);
             }
             res = (HV *)SvRV(rv);
+
+            /* ---- THE CROSS-SIGNAL SECOND PASS -------------------------
+             *
+             * `| exemplars | traces | logs` is a JOIN, and this is it: take
+             * the trace ids the surviving rows carried, then read the target
+             * signal filtered to that set. Each re-key stage is the same
+             * operation, which is why a chain of them is a loop and not
+             * three cases.
+             *
+             * It runs HERE rather than inside the executor because the
+             * executor is handed rows and cannot read more; the store is
+             * what knows how to scan, and it is holding both.
+             */
+            if (nrekey) {
+                int ri;
+                for (ri = 0; ri < nrekey; ri++) {
+                    po_traceset tset;
+                    AV *out, *kh = NULL, *kl = NULL;
+                    HV *m2 = newHV();
+                    SSize_t j, sn = 0;
+                    int want_kind, over = 0;
+                    SV **a = hv_fetchs(res, "rekey_hi", 0);
+                    SV **b = hv_fetchs(res, "rekey_lo", 0);
+                    SV **ov = hv_fetchs(res, "rekey_overflow", 0);
+
+                    /* THE IDS COME FROM THE EXECUTOR, not from the result's
+                     * rows: after `| bucket(5m) p99` the rows are gone and
+                     * only buckets remain, so a join reading rows would find
+                     * nothing and report success. The executor collects them
+                     * where each row passes the filters instead. */
+                    if (a && SvROK(*a) && SvTYPE(SvRV(*a)) == SVt_PVAV)
+                        kh = (AV *)SvRV(*a);
+                    if (b && SvROK(*b) && SvTYPE(SvRV(*b)) == SVt_PVAV)
+                        kl = (AV *)SvRV(*b);
+                    if (ov && SvTRUE(*ov)) over = 1;
+
+                    if (!po_traceset_init(&tset)) { SvREFCNT_dec((SV *)m2); break; }
+                    sn = kh ? av_len(kh) + 1 : 0;
+                    for (j = 0; j < sn; j++) {
+                        SV **h = av_fetch(kh, j, 0);
+                        SV **l = kl ? av_fetch(kl, j, 0) : NULL;
+                        po_u64 hi = 0, lo = 0;
+                        if (h && SvOK(*h)) (void)po_sv_to_u64(aTHX_ *h, &hi);
+                        if (l && SvOK(*l)) (void)po_sv_to_u64(aTHX_ *l, &lo);
+                        if (!po_traceset_add(&tset, hi, lo)) break;
+                    }
+
+                    /* THE SET IS THE ANSWER'S SIZE, AND IT IS CAPPED. Over
+                     * the cap the join is refused rather than trimmed: a
+                     * truncated join is a wrong answer that looks like a
+                     * complete one, and the row it dropped is the row
+                     * somebody was looking for. */
+                    if (over || tset.overflowed) {
+                        po_traceset_free(&tset);
+                        SvREFCNT_dec((SV *)m2);
+                        hv_stores(res, "ok", newSViv(0));
+                        hv_stores(res, "stage", newSVpvs("plan"));
+                        /* A refusal carries NO ROWS. Leaving the left side's
+                         * rows behind a false `ok` is how a refusal gets
+                         * rendered as an answer. */
+                        hv_stores(res, "rows", newRV_noinc((SV *)newAV()));
+                        hv_stores(res, "error", newSVpvf(
+                            "that join covers more than %d traces",
+                            (int)PO_TRACESET_MAX));
+                        hv_stores(res, "hint", newSVpvs(
+                            "narrowing the range, or aggregating before the "
+                            "jump - as in | bucket(5m) p99 | exemplars"));
+                        break;
+                    }
+                    po_traceset_seal(&tset);
+
+                    /* `exemplars` re-keys the stream onto its trace ids
+                     * without changing signal: the answer is the points that
+                     * carried one. The others are dropped here, which is
+                     * what makes the stage mean something rather than being
+                     * a no-op the planner recorded. */
+                    if (rekeys[ri] == PO_ST_EXEMPLARS) {
+                        /* Over rows, the stage MEANS something on its own:
+                         * keep the points that carry an id and drop the rest.
+                         * Over an aggregate there are no rows to filter - the
+                         * ids are carried to the next stage and the buckets
+                         * are left exactly as the aggregate drew them, because
+                         * silently replacing a chart with a row list is not
+                         * what `| exemplars` was asked to do. */
+                        SV **rf = hv_fetchs(res, "rows", 0);
+                        if (rf && SvROK(*rf) && SvTYPE(SvRV(*rf)) == SVt_PVAV) {
+                            AV *cur = (AV *)SvRV(*rf);
+                            AV *keep = newAV();
+                            SSize_t k, cn = av_len(cur) + 1;
+                            for (k = 0; k < cn; k++) {
+                                SV **e = av_fetch(cur, k, 0);
+                                SV **x1, **x2;
+                                po_u64 hi = 0, lo = 0;
+                                if (!e || !SvROK(*e)) continue;
+                                x1 = hv_fetchs((HV *)SvRV(*e), "trace_hi", 0);
+                                x2 = hv_fetchs((HV *)SvRV(*e), "trace_lo", 0);
+                                if (x1 && SvOK(*x1)) (void)po_sv_to_u64(aTHX_ *x1, &hi);
+                                if (x2 && SvOK(*x2)) (void)po_sv_to_u64(aTHX_ *x2, &lo);
+                                if (!po_trace_id_valid(hi, lo)) continue;
+                                av_push(keep, SvREFCNT_inc(*e));
+                            }
+                            hv_stores(res, "rows", newRV_noinc((SV *)keep));
+                        }
+                        po_traceset_free(&tset);
+                        SvREFCNT_dec((SV *)m2);
+                        continue;
+                    }
+
+                    want_kind = rekeys[ri] == PO_ST_LOGS ? PO_LOG : PO_SPAN;
+                    out = newAV();
+                    /* Nothing to join to is an EMPTY answer, not the whole
+                     * store: an empty set must never read as "no filter". */
+                    if (tset.n)
+                        po_records_run(aTHX_ self, from, have_from, to, have_to,
+                                       want_kind, limit, 1, 0, 0, 0, &tset,
+                                       NULL, 0, NULL, 0, out, m2);
+                    po_traceset_free(&tset);
+
+                    hv_stores(res, "rows",   newRV_noinc((SV *)out));
+                    hv_stores(res, "shape",  newSVpvs("rows"));
+                    hv_stores(res, "groups", newRV_noinc((SV *)newAV()));
+
+                    /* TRUNCATION SURVIVES THE JOIN. A short left side makes a
+                     * short right side, and the page has to be able to say
+                     * so - the second scan's own ceiling counts too. */
+                    {
+                        SV **rm = hv_fetchs(res, "meta", 0);
+                        if (rm && SvROK(*rm) && SvTYPE(SvRV(*rm)) == SVt_PVHV) {
+                            HV *m = (HV *)SvRV(*rm);
+                            SV **t2 = hv_fetchs(m2, "truncated", 0);
+                            SV **d2 = hv_fetchs(m2, "degraded", 0);
+                            if (t2 && SvTRUE(*t2))
+                                hv_stores(m, "truncated", newSViv(1));
+                            if (d2 && SvTRUE(*d2))
+                                hv_stores(m, "degraded", newSViv(1));
+                        }
+                    }
+                    SvREFCNT_dec((SV *)m2);
+                }
+            }
+
             hv_stores(res, "store", newRV_inc((SV *)meta));
+            if (viz_len)
+                hv_stores(res, "viz", newSVpvn(vizbuf, viz_len));
 
             /* A range that skipped a segment and a scan that hit its ceiling
              * are both reasons an answer is short, and the page says so

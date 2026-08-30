@@ -1,3 +1,5 @@
+use v5.40;
+
 use Test2::V0;
 
 plan 71;

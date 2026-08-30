@@ -1,19 +1,30 @@
 Change log for Sys::OsRelease
 
-0.5.0 2026-08-22T21:14:49-07:00 America/Los_Angeles
+0.5.1 2026-08-29T22:44:40-07:00 America/Los_Angeles
  [MAJOR]
  [API CHANGE]
  [MINOR]
  [ENHANCEMENTS]
+ [SECURITY]
+ [REVISION]
+ - as a precaution, create empty _config hash when no instance parameters
+   are provided
+
+ [BUG FIXES]
+ - fix semantic versioning to prevent bumping to x.y.00 when previous had
+   patch level >=10
+
+ [DOCS]
+ - document existing behavior on systems without os-release: does not fail,
+   platform() reports OS from Config
+
+0.5.0 2026-08-22T21:14:49-07:00 America/Los_Angeles
+ [ENHANCEMENTS]
  - export osrelease() into caller namespace to streamline access to
    instance from Sys::OsRelease or ::Lite
 
- [SECURITY]
  [REVISION]
  - add version to "provides" metadata, simplify version in source filter
-
- [BUG FIXES]
- [DOCS]
 
 0.4.10 2026-08-21T23:44:20-07:00 America/Los_Angeles
  [BUG FIXES]

@@ -179,6 +179,28 @@ my %PM;
     }
 }
 
+# THE CHANGE SCRIPTS ARE THE SCHEMA, so they have to be installed with it.
+#
+# sqitch/ shipped in the tarball and was copied nowhere, which is the same
+# bug root/ had: a checkout finds it at the top of the distribution and an
+# installed copy has no DDL at all - so a host that installed this could not
+# create the configuration store it needs.
+#
+# $(INST_LIB)/Punk/Observe/sqitch is where Backend::_project_dir looks first.
+{
+    my @todo = ('sqitch');
+    while (my $dir = shift @todo) {
+        opendir my $dh, $dir or next;
+        for my $e (sort readdir $dh) {
+            next if $e eq '.' || $e eq '..';
+            my $p = "$dir/$e";
+            if (-d $p) { push @todo, $p; next }
+            (my $to = $p) =~ s{\Asqitch/}{\$(INST_LIB)/Punk/Observe/sqitch/};
+            $PM{$p} = $to;
+        }
+    }
+}
+
 my %WriteMakefileArgs = (
     NAME             => 'Punk::Observe',
     PM               => \%PM,
@@ -201,7 +223,26 @@ my %WriteMakefileArgs = (
         'File::Raw::JSON'     => '0.06',   # the OTLP/JSON parse
         'IO::Uncompress::Gunzip' => '0',   # gzip request bodies
         'Hyperman' => '0.36',
+        # THE SCHEDULER FOR THE PERIODIC WORK. Compaction, retention, alert
+        # evaluation and health polling are four cron tasks under one leader
+        # lease, so they inherit election, restart, backoff and the admin UI
+        # rather than reinventing four things. A host that would rather run
+        # bin/punk-observe-health from system cron can - the binary exists for
+        # exactly that - but the scheduled path is the supported one.
+        'Punk::Queue' => '0.04',
+        # The configuration store: dashboards, alert rules, check targets.
+        # SQLite is the default because a self-hosted single node should not
+        # have to stand up a server for a few dozen rows; DBD::Pg is NOT a
+        # prerequisite and is loaded only by a dbi:Pg: dsn.
+        'DBI'         => '1.614',   # AutoInactiveDestroy
+        'DBD::SQLite' => '1.60',    # 3.8+ for partial indexes
+        # The dashboard chunk cache. Optional in effect - every path
+        # through it falls back to the plain query - but a dashboard
+        # without it re-scans a settled day on every refresh.
+        'Punk::Cache' => '0.34',
     },
+    EXE_FILES        => [ 'bin/punk-observe-health',
+                          'bin/punk-observe-retain' ],
     INC              => $INC,
     (length $LIBS ? (LIBS => [$LIBS]) : ()),
     macro => { TARFLAGS => "--format=ustar -c -v -f" },

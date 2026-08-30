@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use lib "t/lib";
 use Test::More;
-use HMTest qw(free_ports);
+use HMTest qw(free_ports quiet_child);
 use Time::HiRes ();
 use File::Temp ();
 use Hyperman;
@@ -61,7 +61,7 @@ plan skip_all => "no free loopback port" unless $port;
 my $pid = fork;
 die "fork: $!" unless defined $pid;
 if ($pid == 0) {
-    open STDERR, '>', '/dev/null';
+    quiet_child();
     Hyperman->run(
         app => sub {
             my $env = shift;

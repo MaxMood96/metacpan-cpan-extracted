@@ -49,7 +49,7 @@
             "Test::Exception" : "0",
             "Test::Mockingbird" : "0",
             "Test::Most" : "0",
-            "Test::Returns" : "0",
+            "Test::Returns" : "0.04",
             "Test::Without::Module" : "0"
          }
       }
@@ -69,6 +69,6 @@
          "x_repository" : "https://github.com/nigelhorne/App-GHGen"
       }
    },
-   "version" : "0.09",
+   "version" : "0.10",
    "x_serialization_backend" : "JSON::PP version 4.18"
 }

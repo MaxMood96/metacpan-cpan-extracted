@@ -4,7 +4,7 @@ use 5.010;
 use strict;
 use warnings;
 
-our $VERSION = '0.36';
+our $VERSION = '0.38';
 
 require XSLoader;
 XSLoader::load('Hyperman', $VERSION);
@@ -206,14 +206,15 @@ filesystem.
 The temp file is unlinked the moment it is created, so the handle is its only
 reference. It goes away when the request ends, when a handler dies, or when
 the worker is killed - there is nothing to clean up and nothing on disk for
-another process to find. C<TMPDIR> chooses where it lives.
+another process to find. C<TMPDIR> chooses where it lives, or C<TEMP> then
+C<TMP> on Windows.
 
 Two limits, stated plainly:
 
 =over 4
 
 =item * The threshold is a build-time constant (C<HM_SPILL_BODY>), not yet a
-run-time option.
+run-time option. B<On Windows every body takes the file>, whatever its size.
 
 =item * B<Chunked bodies are not spilled.> There is no C<Content-Length> to
 divert on and the decoder wants the octets contiguous, so a

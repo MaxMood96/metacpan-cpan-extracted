@@ -326,4 +326,22 @@ static void *hm_memmem(const void *hay, size_t hlen, const void *ndl, size_t nle
 #define hm_memmem memmem
 #endif
 
+/* localtime_r is POSIX and absent from both Windows CRTs. The Windows
+ * spelling is localtime_s, whose arguments are the other way round and which
+ * MinGW only declares under the secure-API macros - so this uses localtime()
+ * and copies, which needs no feature test. That is safe here for the reason
+ * it is not on POSIX: the Windows CRT keeps its struct tm in thread-local
+ * storage. */
+#include <time.h>
+#if defined(_WIN32)
+static struct tm *hm_localtime_r(const time_t *t, struct tm *out) {
+    struct tm *p = localtime(t);
+    if (!p) return NULL;
+    *out = *p;
+    return out;
+}
+#else
+#define hm_localtime_r localtime_r
+#endif
+
 #endif /* HM_WIN_H */

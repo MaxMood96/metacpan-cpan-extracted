@@ -42,15 +42,17 @@ It combines the Aho-Corasick algorithm with the Boyer-Moore algorithm, and is si
 
 # RECENT CHANGES
 
-Changes for version v0.1.4 (2026-08-29)
+Changes for version v0.1.5 (2026-08-30)
 
-- Bug Fixes
-    - Throw an error when the patterns are empty or contain an empty string.
+- Enhancements
+    - Improved performance by memoising the shift function.
 - Documentation
-    - Documented the patterns parameter.
-    - Updated SYNOPSIS.
+    - Documented KNOWN ISSUES with the order of results.
+    - Added AI\_POLICY.md.
+    - Updated Changes for v0.1.3 to indicate that the bugs were identified by Claude.
 - Tests
-    - Added tests for bugs that were fixed in v0.1.3.
+    - Added more tests for bugs that were fixed in v0.1.3.
+    - Commits were retroactively updated to note that the test cases were assisted-by Claude.
 
 See the `Changes` file for more details.
 

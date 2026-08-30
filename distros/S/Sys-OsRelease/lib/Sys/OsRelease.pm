@@ -14,7 +14,7 @@ use utf8;
 ## use critic (Modules::RequireExplicitPackage)
 
 package Sys::OsRelease;
-$Sys::OsRelease::VERSION = '0.5.0';
+$Sys::OsRelease::VERSION = '0.5.1';
 use if $] >= 5.016, "feature", "fc";  # retain even though 5.22 is minimum Perl, same code in ...::Lite
 use feature qw(say);
 use Config;
@@ -251,6 +251,11 @@ sub _new_instance
         }
     }
 
+    # add empty _config entry if needed
+    if ( not exists $obj{_config}) {
+        $obj{_config} = {};
+    }
+
     # bless instance and load file
     my $obj_ref = bless \%obj, $class;
     $obj_ref->_load_file();
@@ -461,7 +466,7 @@ Sys::OsRelease - read operating system details from standard /etc/os-release fil
 
 =head1 VERSION
 
-version 0.5.0
+version 0.5.1
 
 =head1 SYNOPSIS
 
@@ -474,7 +479,7 @@ object-oriented
   sub get_like_distro
   {
     my $info = osrelease();
-    my @ids = ( $info->id(), $info->id_like() // () );
+    my @ids = ( $info->id(), split( ' ', $info->id_like() // "" ));
     return @ids;
   }
   say join " ", get_like_distro();
@@ -486,7 +491,7 @@ non-object-oriented (Perl 5.22 and later):
   my $id = Sys::OsRelease->id();
   my $id_like = Sys::OsRelease->id_like();
 
-non-object-oriented (Perl 5.10.1 to 5.21):
+non-object-oriented (Perl 5.10 to 5.21):
 
   use Sys::OsRelease::Lite;
 
@@ -527,6 +532,15 @@ Current attributes recognized by Sys::OsRelease and Sys::OsRelease::Lite are:
 If other attributes are found in the os-release file, they will be accepted.
 Folded to lower case, the attribute names are used as keys in an internal hash structure.
 
+=head3 Operating systems without os-release
+
+On operating systems that do not have os-release, which are most non-Linux and non-BSD systems,
+Sys::OsRelease and Sys::OsRelease::Lite do not return an error.
+Instead, all attributes are empty.
+The status can be detected by the osrelease_path() method returning a path when the file was found
+or undef when it was not found.
+On systems without os-release, the platform() method returns the operating system name from Config.
+
 =head2 Sys::OsRelease or Sys::OsRelease::Lite?
 
 Due to restrictions of the Dist::Zilla build environment and its dependencies,
@@ -536,6 +550,11 @@ which repackages Sys::OsRelease without the Dist::Zilla version limitation
 in order to retain support for legacy Perl installations.
 
 Sys::OsRelease::Lite is the same module in all but name. A release script filters the source code of Sys::OsRelease to change its name. Then Sys::OsRelease::Lite is built with ExtUtils::MakeMaker to maintain compatibility back to Perl 5.10. The two are released in parallel with the same version number.
+
+For scripts and modules which use Perl versions of 5.22 or later, Sys::OsRelease is recommended.
+For modules which maintain support for Perl versions back to 5.10,
+the need to select a single module dependency means Sys::OsRelease::Lite must be used.
+It also works through current Perl releases.
 
 =head1 METHODS
 
@@ -661,7 +680,11 @@ returns the path where os-release was found.
 
 The default search path is /etc, /usr/lib and /run/host as defined by the standard.
 The search path can be replaced by providing a "search_path" parameter to instance()/new() with an arrayref
-containing the directories to search. This feature is currently only used for testing purposes.
+containing the directories to search.
+
+If no os-release file was found, for example on systems other than Linux or BSD, it returns undef.
+So osrelease_path() returning defined or undef may be used to detect whether os-release was found on the system.
+When not found, all attributes are undef and the platform() method returns the operating system name from Config.
 
 =item found_attrs()
 
@@ -714,6 +737,8 @@ which includes descriptions of each attribute.
 =item id_like()
 
 =item pretty_name()
+
+=item fancy_name()
 
 =item cpe_name()
 
@@ -789,6 +814,20 @@ Related modules:
 
 =over 1
 
+=item L<Sys::OsRelease> / L<Sys::OsRelease::Lite>
+
+This is the same documentation for both.
+Sys::OsRelease::Lite is a repackaging of Sys::OsRelease for older versions of Perl before 5.22.
+Sys::OsRelease::Lite was made because dependencies of Dist::Zilla forced it to bump its minimum Perl version to 5.22,
+which in turn forced Sys::OsRelease to follow.
+Sys::OsRelease::Lite provides Sys::OsRelease with the same source code,
+implemented with a filter on the source code changing the name of the module.
+The name change is just to prevent a namespace collision in CPAN, but is otherwise the same module.
+Sys::OsRelease::Lite is packaged with L<ExtUtils::MakeMaker> to maintain availability back to Perl 5.10.
+Compatibility was at the time still being maintained via CPAN testing back to 5.10.
+The use case was systems with RHEL 6 on Perl 5.10 and RHEL 7 on Perl 5.16,
+or similar variations on enterprise or other infrastructure installations.
+
 =item L<Sys::OsPackage>
 
 installs Perl modules, for example as dependencies of a script, via OS packages if available or otherwise via CPAN -
@@ -797,19 +836,6 @@ uses Sys::OsRelease to determine OS type
 =item L<System::Info>
 
 system information collected from multiple sources including system architecture, hardware, OS release data
-
-=item L<Sys::OsRelease::Lite>
-
-This is a repackaging of Sys::OsRelease for older versions of Perl before 5.22.
-This was made because dependencies of Dist::Zilla forced it to bump its minimum Perl version to 5.22,
-which in turn forced Sys::OsRelease to follow.
-Sys::OsRelease::Lite provides Sys::OsRelease with the same source code,
-implemented with a filter on the source code changing the name of the module.
-The name change is just to prevent a namespace collision in CPAN, but is otherwise the same module.
-It is packaged with L<ExtUtils::MakeMaker> to maintain availability back to Perl 5.10.
-Compatibility was at the time still being maintained via CPAN testing back to 5.10.
-The use case was systems with RHEL 6 on Perl 5.10.1 and RHEL 7 on Perl 5.16,
-or similar variations on enterprise or other infrastructure installations.
 
 =back
 

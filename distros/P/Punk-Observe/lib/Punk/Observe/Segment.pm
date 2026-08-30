@@ -207,6 +207,25 @@ which case the counters are per-process and the cap is not being enforced
 across workers. An operator finding the cap did not hold, with no explanation
 available, is the failure this flag exists to prevent.
 
+=head2 shm_rotate
+
+    Punk::Observe::Segment::shm_rotate($shm);
+
+Turn the admitted-series window now, as the clock otherwise does every
+C<series_window>. The previous generation becomes consultable history, the
+refused set is cleared, and the active count restarts - an alive series
+re-registers itself with its next record; a dead one's slot frees. For tests
+and for an operator who has just fixed a cardinality explosion and does not
+want to wait a day for the slots to clear.
+
+=head2 shm_window
+
+    Punk::Observe::Segment::shm_window($shm, $ns);
+
+Set the rotation interval, in nanoseconds. Zero disables rotation, which
+restores the old behaviour: an append-only admitted set that only a restart
+clears. The plugin exposes this as C<< limits => { series_window => '24h' } >>.
+
 =head2 shm_free
 
     Punk::Observe::Segment::shm_free($shm);

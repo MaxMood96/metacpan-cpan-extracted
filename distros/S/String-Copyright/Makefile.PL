@@ -20,19 +20,14 @@ my $meta = {
                           configure => { requires => { "ExtUtils::MakeMaker" => 6.17 } },
                           runtime => {
                             recommends => { "re::engine::RE2" => 0 },
-                            requires   => {
-                                            "constant" => 0,
-                                            "Exporter::Tiny" => 0,
-                                            "perl" => 5.008001,
-                                            "Set::IntSpan" => 1.12,
-                                          },
+                            requires   => { "constant" => 0, "Exporter::Tiny" => 0, "perl" => 5.040001 },
                           },
                           test => {
                             requires => { "Test2::V0" => 0, "Test::Without::Module" => 0, "utf8" => 0 },
                           },
                         },
   "provides"         => {
-                          "String::Copyright" => { file => "lib/String/Copyright.pm", version => 0.003014 },
+                          "String::Copyright" => { file => "lib/String/Copyright.pm", version => "v0.4.0" },
                         },
   "release_status"   => "stable",
   "resources"        => {
@@ -47,8 +42,8 @@ my $meta = {
                                           },
                           x_identifier => "http://purl.org/NET/cpan-uri/dist/String-Copyright/project",
                         },
-  "version"          => 0.003014,
-  "x_help_wanted"    => ["tester", "documenter"],
+  "version"          => "v0.4.0",
+  "x_help_wanted"    => ["documenter", "tester"],
   "x_static_install" => 1,
 };
 

@@ -14,13 +14,10 @@ __DATA__
 Aaron
 Alders
 Alders'
-Client
-Endpoint
 Johnson
 Lamere
 OAuth
 Olaf
-Response
 Spotify
 WWW
 aaronjjohnson

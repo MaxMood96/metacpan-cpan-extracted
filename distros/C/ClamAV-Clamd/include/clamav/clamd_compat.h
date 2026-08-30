@@ -33,7 +33,26 @@
 #  define CC_INVALID_SOCK   (-1)
 #  define cc_close_sock(s)  close(s)
 #  define cc_sock_errno()   errno
-#  define CC_HAVE_FD_PASSING 1
+   /* Descriptor passing is a fact about the headers in front of us, not
+    * about the operating system. Solaris and illumos keep the 4.3BSD
+    * msghdr - the one with msg_accrights and no msg_control - and hide
+    * the CMSG_* macros until _XPG4_2 is defined, and perl.h has already
+    * included <sys/socket.h> by the time this file is read, so the define
+    * has to arrive on the command line. Makefile.PL probes for the
+    * spelling that works there.
+    *
+    * Where the macros stay hidden, SCM_RIGHTS cannot be spoken at all:
+    * FILDES compiles out and cc_scan_fd falls back to INSTREAM, which is
+    * slower and correct. Testing the macros rather than the platform is
+    * also what catches the case where the probe never ran.
+    */
+#  if defined(CC_NO_FD_PASSING) || !defined(SCM_RIGHTS) \
+   || !defined(CMSG_SPACE) || !defined(CMSG_LEN) \
+   || !defined(CMSG_FIRSTHDR) || !defined(CMSG_DATA)
+#    define CC_HAVE_FD_PASSING 0
+#  else
+#    define CC_HAVE_FD_PASSING 1
+#  endif
 #endif
 
 #include <string.h>

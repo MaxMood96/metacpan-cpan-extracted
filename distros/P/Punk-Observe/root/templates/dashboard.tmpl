@@ -1,8 +1,14 @@
 <div class="toolbar">
   <h2 style="margin:0">{% title %}</h2>
   <div style="flex:1"></div>
-  {% if can_edit %}
-  <a class="btn" href="{% prefix %}/dashboards/{% slug %}/edit">Edit</a>
+  <form method="get"
+        action="{% prefix %}/dashboards{% if slug %}/{% slug %}{% end %}"
+        style="display:contents">
+    {% include _range.tmpl %}
+  </form>
+  {% if writable %}
+  <a class="btn" href="{% prefix %}/dashboards/new">New</a>
+  {% if slug %}<a class="btn" href="{% prefix %}/dashboards/{% slug %}/edit">Edit</a>{% end %}
   {% end %}
 </div>
 
@@ -17,7 +23,7 @@
     <table class="rows">
       <tbody>
       {% for d in list %}
-      <tr><td><a href="{% prefix %}/dashboards/{% d.slug %}">{% d.title %}</a></td></tr>
+      <tr><td><a href="{% prefix %}/dashboards/{% d.slug %}{% range_qs %}">{% d.title %}</a></td></tr>
       {% end %}
       </tbody>
     </table>
@@ -29,34 +35,18 @@
   {% for p in panels %}
   <div class="panel span-{% p.span %}">
     <h3>{% p.title %}</h3>
-    {% if p.refusal %}
-    <div class="warnbox"><strong>Cannot answer that from this range.</strong>
-      {% p.refusal %}</div>
+    {% if p.body_html %}
+    {% raw p.body_html %}
     {% else %}
-    {% if p.series %}
-    <div class="chartwrap" data-brush data-from="{% from %}" data-to="{% to %}">
-      <svg class="chart" viewBox="0 0 720 220" role="img" aria-label="{% p.title %}">
-        {% for t in p.yticks %}
-        <line class="axis" x1="0" y1="{% t.y %}" x2="720" y2="{% t.y %}"/>
-        <text class="label" x="2" y="{% t.label_y %}">{% t.label %}</text>
-        {% end %}
-        {% for s in p.series %}
-        <g class="{% s.class %}"><path class="line" d="{% s.path %}"/></g>
-        {% end %}
-      </svg>
+    <div class="deferwrap"
+         data-defer="{% prefix %}/dashboards/{% slug %}/panels/{% p.key %}/slow{% range_qs %}"
+         data-defer-poll="30">
+      <p class="empty">Loading&hellip;</p>
+      <noscript><p class="note">This panel loads after the page, which needs
+        JavaScript - or
+        <a href="{% prefix %}/dashboards/{% slug %}?full=1{% range_amp %}">render
+        everything with the page</a>.</p></noscript>
     </div>
-    {% end %}
-    {% if p.groups %}
-    <div class="tablewrap">
-      <table class="rows">
-        <tbody>
-        {% for g in p.groups %}
-        <tr><td>{% g.key %}</td><td class="num mono">{% g.value %}</td></tr>
-        {% end %}
-        </tbody>
-      </table>
-    </div>
-    {% end %}
     {% end %}
     <p class="note"><a href="{% prefix %}/explore?q={% p.query_esc %}{% range_amp %}">
       open in the explorer</a></p>

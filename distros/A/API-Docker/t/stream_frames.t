@@ -8,7 +8,7 @@ use Test::API::Docker::Mock;
 use JSON::MaybeXS;
 use API::Docker;
 
-# Regression coverage for karr #7: containers->logs and exec->start used to
+# Regression coverage for karr k7: containers->logs and exec->start used to
 # hand the caller the raw Docker stream, so the 8-byte frame headers ended up
 # inside the log text. Every fixture below is bytes captured from the rootless
 # Podman socket (5.4.2, API 1.41) with a container running

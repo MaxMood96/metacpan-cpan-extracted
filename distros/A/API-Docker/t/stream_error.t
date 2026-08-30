@@ -9,7 +9,7 @@ use JSON::MaybeXS qw( encode_json );
 use API::Docker;
 use API::Docker::Error::Stream;
 
-# Regression coverage for karr #4: build, pull and push returned the event
+# Regression coverage for karr k4: build, pull and push returned the event
 # list and left failure detection to the caller, while the daemon had already
 # answered HTTP 200 -- so a broken build was indistinguishable from a good one
 # unless the caller knew to scan for errorDetail. They now croak with an
@@ -216,25 +216,101 @@ SKIP: {
 
   subtest 'live: a build that fails croaks against a real engine' => sub {
     # Measured, not assumed: the engine answers 200 and reports the failure
-    # inside the stream. Nothing is left behind -- the build never commits an
-    # image, and rm=1 (the default) drops the intermediate container.
+    # inside the stream, and the build never commits an image. But rm=1 (the
+    # default) only removes the intermediate container on a *successful*
+    # build -- a failing RUN step leaves it behind, under an engine-chosen
+    # name (Docker: priceless_driscoll, ...) or, on Podman, as a buildah
+    # "working container" that GET /containers/json never lists at all
+    # (measured against 5.8.4). karr k63: a day of live runs stranded 14 such
+    # containers, on both engines, invisible to register_cleanup because none
+    # of them are named by the test -- the daemon creates them, not us.
+    #
+    # forcerm=1 is the engine's own answer to exactly this case ("always
+    # remove intermediate containers, even upon failure"). The build stream
+    # was checked first, as the ticket suggested: Docker's classic builder
+    # does put the id in a "Running in <id>" stream line, but Podman's
+    # buildah backend never mentions an id anywhere in the stream or the
+    # response headers, so scraping the stream cannot be the general fix.
+    # forcerm=1 was then measured directly (raw curl probes against both
+    # sockets, karr k63) to close the leak on both: Docker's stream gains a
+    # "Removed intermediate container" line and containers->list stays
+    # unchanged; Podman leaves no new buildah storage container (checked via
+    # `buildah containers`, since the compat API cannot see them either way).
     my $docker = API::Docker->new(host => $ENV{API_DOCKER_TEST_HOST});
+    my $tag    = 'apidocker-56-stream-error:test';
+
+    # Defensive: the build is expected to fail and tag nothing, but a broken
+    # rm=1/tag interaction should still not leave an image behind untidied.
+    register_cleanup(sub { eval { $docker->images->remove($tag, force => 1) } });
+
+    # Docker's compat /containers/json is what forcerm=1 is supposed to keep
+    # empty of anything new, so a before/after diff there is a real,
+    # mutation-testable check for that engine: drop forcerm=1 and it fails
+    # (measured). Podman's leak lives in buildah's storage layer, which that
+    # same endpoint never lists even with a leaked container present
+    # (measured: GET /containers/json?all=true stays [] regardless) -- there
+    # is no API surface left on that engine to assert against, so the check
+    # below is Docker-only rather than silently passing there too.
+    #
+    # Registered before the build call, and recomputing the diff itself at
+    # cleanup time rather than closing over a precomputed list, so this still
+    # runs -- and still finds the right containers -- even if an assertion
+    # below fails or something after this point dies unexpectedly.
+    my @before = live_engine() eq 'docker'
+      ? map { $_->id } @{ $docker->containers->list(all => 1) }
+      : ();
+    if (live_engine() eq 'docker') {
+      my %seen_before = map { $_ => 1 } @before;
+      register_cleanup(sub {
+        my $after = eval { $docker->containers->list(all => 1) } || [];
+        eval { $docker->containers->remove($_->id, force => 1) }
+          for grep { !$seen_before{ $_->id } } @$after;
+      });
+    }
 
     my $dockerfile = "FROM alpine:3\nRUN exit 7\n";
     my $tar = _tar_context($dockerfile);
 
     my $events = eval {
-      $docker->images->build(context => $tar, t => 'apidocker-stream-error:test')
+      $docker->images->build(context => $tar, t => $tag, forcerm => 1)
     };
     my $err = $@;
 
     ok !defined $events, 'no return value from the failed build';
     isa_ok $err, 'API::Docker::Error::Stream';
-    like "$err", qr/exit status 7/, 'the engine reported the RUN exit status';
     ok scalar @{ $err->events } > 1, 'the build output came with it';
 
-    my $tagged = eval { $docker->images->inspect('apidocker-stream-error:test') };
+    my ($error_event) = grep { ref $_ eq 'HASH' && $_->{errorDetail} } @{ $err->events };
+    ok $error_event, 'one of the carried events is the one that triggered the croak';
+
+    # The claim is that the RUN step's exit code reaches the caller -- not
+    # any particular sentence about it, which karr k50 already ruled out as
+    # a stable interface. Measured 2026-08-27: Docker 29.7.2/API 1.55 puts it
+    # in errorDetail structurally --
+    # {"code":7,"message":"...returned a non-zero code: 7"} -- while Podman
+    # 5.4.2/API 1.41 sends only {"message":"...exit status 7\n"}, no `code`
+    # key at all. So the exit code is genuinely only prose on Podman; assert
+    # the strongest form each engine actually offers rather than a wording
+    # that happens to appear on both (there isn't one).
+    if (live_engine() eq 'docker') {
+      is $error_event->{errorDetail}{code}, 7,
+        'Docker carries the RUN exit status structurally, in errorDetail.code';
+    }
+    else {
+      like "$err", qr/exit status 7/,
+        'Podman carries the RUN exit status only in the message text';
+    }
+
+    my $tagged = eval { $docker->images->inspect($tag) };
     ok !$tagged, 'the failed build left no tagged image behind';
+
+    if (live_engine() eq 'docker') {
+      my %seen_before = map { $_ => 1 } @before;
+      my @leaked = grep { !$seen_before{$_} }
+        map { $_->id } @{ $docker->containers->list(all => 1) };
+      is_deeply [ sort @leaked ], [],
+        'forcerm=1 left no intermediate container behind (karr k63)';
+    }
   };
 }
 

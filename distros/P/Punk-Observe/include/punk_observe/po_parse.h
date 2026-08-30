@@ -93,6 +93,32 @@ static const char *po_intern_tok(po_parser *p, const po_tok *t, size_t *len) {
     return d;
 }
 
+/* A STRING token's text, with its QUOTING escapes resolved. The lexer skips
+ * `\"` without ending the string, and copying the bytes raw after that
+ * stored `he said \"hi\"` as the comparison value - a filter that parsed
+ * cleanly and could never match the body it plainly named. The two halves
+ * agree now.
+ *
+ * ONLY the quoting escapes: `\"`, `\'` and `\\`. Anything else keeps its
+ * backslash, because `=~ "a\db"` is somebody reaching for a regex class,
+ * and resolving it to `adb` would turn the plan's honest refusal into a
+ * silent substring match for a string they never wrote. */
+static const char *po_intern_str(po_parser *p, const po_tok *t, size_t *len) {
+    char *d = (char *)po_bump_alloc(&p->q->bump, t->len + 1);
+    size_t i, n = 0;
+    if (!d) return NULL;
+    for (i = 0; i < t->len; i++) {
+        if (t->p[i] == '\\' && i + 1 < t->len
+            && (t->p[i + 1] == '"' || t->p[i + 1] == '\''
+                || t->p[i + 1] == '\\'))
+            i++;
+        d[n++] = t->p[i];
+    }
+    d[n] = '\0';
+    *len = n;
+    return d;
+}
+
 static po_expr *po_parse_or(po_parser *p);
 
 /* field op value */
@@ -123,7 +149,7 @@ static po_expr *po_parse_cmp(po_parser *p) {
     switch (p->lex.cur.kind) {
         case PO_T_STRING:
             e->vkind = PO_V_STRING;
-            e->sval  = po_intern_tok(p, &p->lex.cur, &e->sval_len);
+            e->sval  = po_intern_str(p, &p->lex.cur, &e->sval_len);
             break;
         case PO_T_NUMBER:
             e->vkind = PO_V_NUMBER;
@@ -143,7 +169,35 @@ static po_expr *po_parse_cmp(po_parser *p) {
              * make a typo in a column name silently become a string
              * comparison that never matches. */
             po_u64 sev;
-            if (po_severity_value(p->lex.cur.p, p->lex.cur.len, &sev)) {
+            /* WHICH VOCABULARY depends on the column. `error` is a severity
+             * name AND a status name, and they are different numbers - 17 and
+             * 2 - so the field decides. Without this, `status = error` either
+             * compared against 17 and matched nothing, or went down the
+             * string path where `status` is not resolvable and matched
+             * nothing: the documented SYNOPSIS example returned an empty
+             * table on data that contained exactly what it asked for. */
+            int is_status = (e->field_len == 6
+                             && memcmp(e->field, "status", 6) == 0);
+            if (p->lex.cur.len == 4
+                && memcmp(p->lex.cur.p, "null", 4) == 0) {
+                /* The absence test reads naturally only two ways round. An
+                 * ordering against nothing would have to invent a meaning,
+                 * and inventing meanings is how absent stopped being absent
+                 * in every store that treats it as zero. */
+                if (e->op != PO_OP_EQ && e->op != PO_OP_NE) {
+                    po_perr(p, p->lex.cur.off,
+                            "null only compares with = and !=", NULL);
+                    return NULL;
+                }
+                e->vkind = PO_V_NULL;
+            }
+            else if (is_status
+                && po_status_value(p->lex.cur.p, p->lex.cur.len, &sev)) {
+                e->vkind = PO_V_SEVERITY;   /* a name that became a number */
+                e->uval  = sev;
+            }
+            else if (!is_status
+                     && po_severity_value(p->lex.cur.p, p->lex.cur.len, &sev)) {
                 e->vkind = PO_V_SEVERITY;
                 e->uval  = sev;
             }
@@ -347,7 +401,7 @@ static po_stage *po_parse_stage(po_parser *p, int *src) {
             po_perr(p, p->lex.cur.off, "search takes a quoted string", NULL);
             return NULL;
         }
-        st->str = po_intern_tok(p, &p->lex.cur, &st->str_len);
+        st->str = po_intern_str(p, &p->lex.cur, &st->str_len);
         po_lex_next(&p->lex);
         if (*src == PO_SRC_METRIC) {
             po_perr(p, 0,
@@ -531,6 +585,18 @@ static po_stage *po_parse_stage(po_parser *p, int *src) {
         return st;
     }
 
+    /* NAMED, because this message now travels: it is written onto a broken
+     * alert rule's state row and read days later, where "unknown stage" with
+     * nothing to say which one is a red word whose next action is guessing. */
+    if (p->lex.cur.kind == PO_T_IDENT && p->lex.cur.len) {
+        char w[48];
+        size_t n = p->lex.cur.len < sizeof(w) - 1 ? p->lex.cur.len
+                                                  : sizeof(w) - 1;
+        memcpy(w, p->lex.cur.p, n);
+        w[n] = '\0';
+        po_perr(p, p->lex.cur.off, "unknown stage '%s'", w);
+        return NULL;
+    }
     po_perr(p, p->lex.cur.off, "unknown stage", NULL);
     return NULL;
 }
@@ -613,6 +679,47 @@ static int po_parse(po_query *q, const char *src, size_t len) {
     while (p.lex.cur.kind == PO_T_PIPE) {
         po_stage *st;
         po_lex_next(&p.lex);
+
+        /* `viz` is consumed HERE, before the stage parser, so it never
+         * enters the stage list: presentation is a property of the query,
+         * not a transform of its rows. Validated strictly against the five
+         * the panel renderer knows - po_viz_from's fall-back-to-table is
+         * right for a parser reading a stored row and wrong for a person
+         * typing, where an unknown name is a typo to name, not a table to
+         * silently draw. t/0912 asserts this list against viz_names(). */
+        if (po_tok_is(&p.lex.cur, "viz")) {
+            static const char *const VZ[] =
+                { "line", "area", "bar", "stat", "table", NULL };
+            const char *vp; size_t vl; int ok = 0, vi;
+            if (q->viz) {
+                po_perr(&p, p.lex.cur.off,
+                        "viz appears twice; one chart per answer", NULL);
+                return 0;
+            }
+            po_lex_next(&p.lex);
+            if (p.lex.cur.kind != PO_T_IDENT
+                && p.lex.cur.kind != PO_T_STRING) {
+                po_perr(&p, p.lex.cur.off,
+                    "viz takes a chart kind: line, area, bar, stat or table",
+                    NULL);
+                return 0;
+            }
+            vp = po_intern_tok(&p, &p.lex.cur, &vl);
+            if (!vp) return 0;
+            for (vi = 0; VZ[vi]; vi++)
+                if (strlen(VZ[vi]) == vl && memcmp(VZ[vi], vp, vl) == 0)
+                    { ok = 1; break; }
+            if (!ok) {
+                po_perr(&p, p.lex.cur.off,
+                    "that is not a chart kind - viz takes line, area, bar, "
+                    "stat or table", NULL);
+                return 0;
+            }
+            q->viz = vp; q->viz_len = vl;
+            po_lex_next(&p.lex);
+            continue;
+        }
+
         st = po_parse_stage(&p, &q->source);
         if (!st) return 0;
 

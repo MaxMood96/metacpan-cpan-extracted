@@ -4,7 +4,7 @@ package JSON::Schema::Modern::Document;
 # vim: set ts=8 sts=2 sw=2 tw=100 et :
 # ABSTRACT: One JSON Schema document
 
-our $VERSION = '0.645';
+our $VERSION = '0.647';
 
 use 5.020;
 use Moo;
@@ -23,7 +23,7 @@ use Carp 'croak';
 use List::Util 1.29 'pairs';
 use builtin::compat qw(refaddr blessed);
 use MooX::TypeTiny;
-use Types::Standard 1.016003 qw(InstanceOf HashRef Str Map Dict ArrayRef Enum ClassName Undef Slurpy Optional Bool);
+use Types::Standard 1.016003 qw(InstanceOf HashRef Str Map Dict Tuple ArrayRef Enum ClassName Undef Slurpy Optional Bool);
 use Types::Common::Numeric 'PositiveOrZeroInt';
 use JSON::Schema::Modern::Utilities qw(json_pointer_type canonical_uri_type E);
 use namespace::clean;
@@ -106,7 +106,9 @@ has errors => (
 
 sub errors { ($_[0]->{errors}//[])->@* }
 sub has_errors { scalar(($_[0]->{errors}//[])->@*) }
+sub _push_errors { push((shift->{errors}//=[])->@*, @_) }
 
+# an entity is defined as a type of location that can be addressed by a $ref in a document
 # json pointer => entity name (indexed by integer)
 has _entities => (
   is => 'ro',
@@ -140,6 +142,23 @@ sub get_entity_locations ($self, $entity) {
   my $index = $self->__entity_index($entity);
   grep $self->{_entities}{$_} == $index, keys $self->{_entities}->%*;
 }
+
+# references to a location in an unknown document are not considered to be errors at document
+# loading time, but might be checked later on by some other mechanism
+has _deferred_references => (
+  is => 'rwp',
+  isa => ArrayRef[
+    my $reference_type = Tuple[
+      Str,                      # keyword
+      json_pointer_type,        # path location
+      InstanceOf['Mojo::URL'],  # absolute target
+      Str,                      # expected entity (should actually be __entity_type)
+    ],
+  ],
+  init_arg => undef,
+  lazy => 1,
+  default => sub { [] },
+);
 
 # shims for Mojo::JSON::Pointer
 sub data { shift->schema(@_) }
@@ -186,30 +205,64 @@ sub BUILD ($self, $args) {
     })
   if not $seen_root;
 
-  foreach my $ref (($state->{references}//[])->@*) {
+  $self->_set_errors($state->{errors}) if $state->{errors}->@*;
+
+  # set aside unverified references, perhaps to be checked later when new documents are added to the
+  # resource index; updates 'errors' and '_deferred_references'
+  $self->verify_references($args->{evaluator}, $state, $state->{references});
+}
+
+# checks a list of references for validity, returning those to unknown documents that cannot be
+# verified yet; will update errors automatically
+sub verify_references ($self, $evaluator, $state = undef, $references = undef) {
+  $state //= {  # minimum needed for E()
+    initial_schema_uri => $self->canonical_uri,
+    traversed_keyword_path => '',
+    traverse => 1,
+  };
+
+  $references //= $self->_deferred_references;
+
+  $state->{errors} = [];
+  my @deferred_references;
+
+  foreach my $ref ($references->@*) {
+    $reference_type->($ref);
+    $self->__entity_type->($ref->[3]);
+
     my ($keyword, $path_location, $abs_target, $expected_entity) = @$ref;
 
     # look for resource locally; fall back to the evaluator's index
-    my $resource = $self->_get_resource(my $uri = $abs_target->clone->fragment(undef));
+    my $resource = $self->_get_resource(my $base_uri = $abs_target->clone->fragment(undef));
     my $document = $self;
 
     if (not $resource) {
-      $resource = $args->{evaluator}->_get_resource($uri) if $args->{evaluator};
-      next if not $resource;
+      $resource = $evaluator->_get_resource($base_uri) if $evaluator;
+
+      if (not $resource) {
+        push @deferred_references, [ $keyword, $path_location, $abs_target, $expected_entity ];
+        next;
+      };
       $document = $resource->{document};
     }
 
     my $fragment = $abs_target->fragment;
     my $target_path;
-    if (not length $fragment or $fragment =~ m{^/}) {
+    if (not length $fragment) {
+      $target_path = $resource->{path};
+    }
+    elsif ($fragment =~ m{^/}) {
+      # json pointer fragment
       ()= E({ %$state, keyword_path => $path_location, keyword => $keyword },
           '%s target "%s" is a non-existent location', $keyword, $abs_target), next
-        if not $document->contains($target_path = $resource->{path}.($fragment//''));
+        if not $document->contains($target_path = $resource->{path}.$fragment);
     }
     elsif (my $subresource = ($resource->{anchors}//{})->{$fragment}) {
+      # valid anchor
       $target_path = $subresource->{path};
     }
     else {
+      # invalid anchor
       ()= E({ %$state, keyword_path => $path_location, keyword => $keyword },
         '%s target "%s" is a non-existent location', $keyword, $abs_target);
       next;
@@ -226,7 +279,8 @@ sub BUILD ($self, $args) {
       if $entity ne $expected_entity;
   }
 
-  $self->_set_errors($state->{errors}) if $state->{errors}->@*;
+  $self->_push_errors($state->{errors}->@*);
+  $self->_set__deferred_references(\@deferred_references);
 }
 
 # a subclass's method will override this one
@@ -311,7 +365,7 @@ JSON::Schema::Modern::Document - One JSON Schema document
 
 =head1 VERSION
 
-version 0.645
+version 0.647
 
 I use a linearly-increasing version numbering scheme. No meaning should be
 presumed or inferred from the version being less than 1.0.
@@ -475,6 +529,15 @@ Returns a L<JSON::Schema::Modern::Result> object containing the final result.
 
 See also L<JSON::Schema::Modern/validate_schema>, which is nearly equivalent but only works for
 JSON Schemas, not any potential subclass of JSON::Schema::Modern::Document.
+
+=head2 verify_references
+
+  my @deferred_references = $doc->verify_references($evaluator);
+
+Checks the internal list of references that had been deferred due to being in unknown documents;
+updates the internal list and also returns them; new document errors may be generated.
+
+Primarily for internal use.
 
 =head2 TO_JSON
 

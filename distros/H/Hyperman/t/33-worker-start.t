@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use lib "t/lib";
 use Test::More;
-use HMTest qw(free_ports);
+use HMTest qw(free_ports quiet_child);
 use IO::Socket::INET;
 use Time::HiRes ();
 use Hyperman;
@@ -33,11 +33,7 @@ plan skip_all => 'no free loopback port' unless $port;
 
 my $pid = fork // die "fork: $!";
 if (!$pid) {
-    # Both handles, not just STDERR: the child inherits the TAP pipe on
-    # STDOUT, and a server writing into it makes the harness see a corrupt
-    # stream and the smoker report a SIGKILL after every test has passed.
-    open STDOUT, '>', '/dev/null';
-    open STDERR, '>', '/dev/null';
+    quiet_child();
     Hyperman->run(
         app => sub {
             my ($n, $loop_ok) = Hyperman::_abi_worker_hook_state();

@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use XSLoader ();
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 XSLoader::load('ClamAV::Clamd', $VERSION);
 
@@ -420,8 +420,11 @@ text.
 
 =head2 have_fd_passing
 
-Whether this platform can pass file descriptors over a socket. False on
-Windows, which has C<AF_UNIX> but no C<SCM_RIGHTS>.
+Whether this build can pass file descriptors over a socket. False on
+Windows, which has C<AF_UNIX> but no C<SCM_RIGHTS>, and false anywhere the
+headers this was compiled against did not offer the control-message
+interface. Everything still works where it is false; C<scan_fd> and
+C<scan_path> stream instead, and L</transport> says C<instream>.
 
 =head1 FAILURE IS NEVER SUCCESS
 

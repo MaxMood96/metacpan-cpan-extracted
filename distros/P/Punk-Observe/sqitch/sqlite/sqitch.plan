@@ -1,0 +1,6 @@
+%syntax-version=1.0.0
+%project=punk-observe
+
+alerts 2026-08-25T00:00:00Z LNATION <email@lnation.org> # dashboards, rules, per-series state, routing and the outbox
+notify_outbox [alerts] 2026-08-28T14:10:00Z LNATION <email@lnation.org> # persistent notification groups and outbox; instants become BIGINT on pg
+alert_reason [notify_outbox] 2026-08-29T09:00:00Z LNATION <email@lnation.org> # why a rule could not be evaluated, on the state row

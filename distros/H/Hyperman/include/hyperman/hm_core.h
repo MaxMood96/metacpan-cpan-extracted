@@ -367,17 +367,38 @@ static SV *hm_input_from_fd(pTHX_ int fd) {
  * is killed, and there is no cleanup path anywhere to forget. Nothing is
  * inherited across a fork either, which is the failure this workspace keeps
  * meeting from the other direction. */
+/* Where a body temp file goes. TMPDIR is the POSIX spelling of the question
+ * and TEMP the Windows one - asking only the first left Windows falling back
+ * to a "/tmp" that is not there, which is a failed mkstemp on every request
+ * carrying a body. */
+static const char *hm_tmpdir(void) {
+    const char *d = getenv("TMPDIR");
+    if (d && *d) return d;
+#ifdef _WIN32
+    if ((d = getenv("TEMP")) && *d) return d;
+    if ((d = getenv("TMP"))  && *d) return d;
+    return ".";
+#else
+    return "/tmp";
+#endif
+}
+
+/* dir + "/hm-body-XXXXXX" into buf, or 0 if the directory will not fit. */
+static int hm_body_tmppath(char *buf, size_t cap) {
+    const char *dir = hm_tmpdir();
+    size_t dl = strlen(dir);
+    if (dl + sizeof("/hm-body-XXXXXX") > cap) return 0;
+    my_strlcpy(buf, dir, cap);
+    if (dl && dir[dl - 1] != '/' && dir[dl - 1] != '\\')
+        my_strlcat(buf, "/", cap);
+    my_strlcat(buf, "hm-body-XXXXXX", cap);
+    return 1;
+}
+
 static int hm_body_tmpfile(void) {
-    const char *dir = getenv("TMPDIR");
     char path[512];
     int fd;
-    if (dir && *dir && strlen(dir) < sizeof(path) - 20) {
-        size_t dl = strlen(dir);
-        my_strlcpy(path, dir, sizeof path);
-        if (dl && dir[dl - 1] != '/') my_strlcat(path, "/", sizeof path);
-        my_strlcat(path, "hm-body-XXXXXX", sizeof path);
-    }
-    else my_strlcpy(path, "/tmp/hm-body-XXXXXX", sizeof path);
+    if (!hm_body_tmppath(path, sizeof path)) return -1;
     fd = mkstemp(path);
     if (fd < 0) return -1;
     (void)unlink(path);
@@ -404,22 +425,11 @@ static int hm_body_tmpfile(void) {
  * cannot make a temp file should still serve the request.
  */
 static SV *hm_new_input_file(pTHX_ const char *body, STRLEN len) {
-    char tmpl[] = "/tmp/hm-body-XXXXXX";
-    const char *dir = PerlEnv_getenv("TMPDIR");
     char path[512];
     int fd;
-    PerlIO *fp;
-    GV *gv;
-    IO *io;
     STRLEN off = 0;
 
-    if (dir && *dir && strlen(dir) < sizeof(path) - 20) {
-        size_t dl = strlen(dir);
-        my_strlcpy(path, dir, sizeof path);
-        if (dl && dir[dl - 1] != '/') my_strlcat(path, "/", sizeof path);
-        my_strlcat(path, "hm-body-XXXXXX", sizeof path);
-    }
-    else my_strlcpy(path, tmpl, sizeof path);
+    if (!hm_body_tmppath(path, sizeof path)) return NULL;
 
     fd = mkstemp(path);
     if (fd < 0) return NULL;
@@ -436,8 +446,21 @@ static SV *hm_new_input_file(pTHX_ const char *body, STRLEN len) {
 }
 
 /* psgi.input: an in-memory read handle over the request body, via the
- * PerlIO :scalar layer - the C equivalent of open($fh,'<',\$body). */
+ * PerlIO :scalar layer - the C equivalent of open($fh,'<',\$body).
+ *
+ * WINDOWS TAKES THE FILE AT EVERY SIZE. PerlIO_openn is declared in perlio.h
+ * but is not among the symbols perl5xx.dll exports, so the :scalar layer
+ * cannot be reached from XS there at all - it is a link error, which is what
+ * the first Windows build of this core hit. The temp file needs nothing but
+ * PerlIO_fdopen, which IS exported, and it is the path every platform
+ * already runs for a body over HM_SPILL_BODY rather than a second one
+ * written for this. The trade is an inode and three syscalls on a Windows
+ * request that carries a body. */
 static SV *hm_new_input(pTHX_ const char *body, STRLEN len) {
+#ifdef _WIN32
+    SV *f = hm_new_input_file(aTHX_ body, len);
+    return f ? f : &PL_sv_undef;
+#else
     static int layer_loaded = 0;
     SV *bufsv;
     if (len > HM_SPILL_BODY) {
@@ -460,6 +483,7 @@ static SV *hm_new_input(pTHX_ const char *body, STRLEN len) {
     IoIFP(io) = fp;
     IoTYPE(io) = IoTYPE_RDONLY;
     return newRV_noinc((SV *)gv);
+#endif
 }
 
 /* psgix.io: a dup of the client socket, so an app that hijacks it keeps
@@ -1532,7 +1556,7 @@ static const char *hm_log_time(hm_loop *loop) {
     if (loop->now != loop->log_ts_sec) {
         struct tm tm;
         time_t t = loop->now;
-        localtime_r(&t, &tm);
+        hm_localtime_r(&t, &tm);
         strftime(loop->log_ts, sizeof(loop->log_ts), "%d/%b/%Y:%H:%M:%S %z", &tm);
         loop->log_ts_sec = loop->now;
     }

@@ -280,6 +280,8 @@ popl_timeseries(SV *res, ...)
         SV **f;
         SV *width = &PL_sv_undef;
         SV *zero_fill = &PL_sv_undef, *fill = NULL, *unit = NULL, *name = NULL;
+        SV *kind = NULL;
+        int is_bar = 0, is_area = 0;
         int want_log = 0;
         IV a;
         SSize_t i, n = 0;
@@ -292,7 +294,23 @@ popl_timeseries(SV *res, ...)
             else if (strEQ(k, "unit"))      unit = ST(a + 1);
             else if (strEQ(k, "name"))      name = ST(a + 1);
             else if (strEQ(k, "log"))       want_log = SvTRUE(ST(a + 1));
+            /* WHICH SHAPE THE SAME NUMBERS TAKE. A line, the same line with
+             * the area under it filled, or a bar per bucket - one builder,
+             * because they differ in two attributes and duplicating three
+             * hundred lines to change two is how they come to disagree about
+             * the axis, the hover or the gaps. */
+            else if (strEQ(k, "kind"))      kind = ST(a + 1);
         }
+
+        if (kind && SvOK(kind)) {
+            const char *kp = SvPV_nolen(kind);
+            is_bar  = strEQ(kp, "bar");
+            is_area = strEQ(kp, "area");
+        }
+        /* `area` IS a filled, stacked line, which is what `fill` already
+         * meant. Saying it twice would let a caller ask for an area chart
+         * that is not filled. */
+        if (is_area && !fill) fill = sv_2mortal(newSVpvs("tozeroy"));
 
         if (SvROK(res) && SvTYPE(SvRV(res)) == SVt_PVHV) r = (HV *)SvRV(res);
         if (r) {
@@ -329,8 +347,15 @@ popl_timeseries(SV *res, ...)
             SPAGAIN;
 
             trace = newHV();
-            hv_stores(trace, "type", newSVpvs("scatter"));
-            hv_stores(trace, "mode", newSVpvs("lines"));
+            if (is_bar) {
+                /* A bar has no `mode`; plotly ignores one and a reader
+                 * grepping the figure should not find a contradiction. */
+                hv_stores(trace, "type", newSVpvs("bar"));
+            }
+            else {
+                hv_stores(trace, "type", newSVpvs("scatter"));
+                hv_stores(trace, "mode", newSVpvs("lines"));
+            }
             key = hv_fetchs(s, "key", 0);
             hv_stores(trace, "name",
                       (key && SvOK(*key) && SvCUR(*key)) ? newSVsv(*key)
@@ -375,6 +400,10 @@ popl_timeseries(SV *res, ...)
             hv_stores(yaxis, "title", newRV_noinc((SV *)title));
             hv_stores(yaxis, "rangemode", newSVpvs("tozero"));
             if (want_log && logsafe) hv_stores(yaxis, "type", newSVpvs("log"));
+            /* STACKED, NOT OVERLAID. Two series of bars drawn on top of each
+             * other hide one of them completely, and the reader cannot tell
+             * that is what happened. */
+            if (is_bar) hv_stores(layout, "barmode", newSVpvs("stack"));
             hv_stores(layout, "yaxis", newRV_noinc((SV *)yaxis));
             /* One series needs no legend: the heading already names it. */
             hv_stores(layout, "showlegend",
@@ -1256,10 +1285,17 @@ popl_alert_timeline(SV *events, ...)
 
                 trace = newHV();
                 marker = newHV();
+                /* `up` and `down` are HEALTH's words, and they are here so
+                 * that page can use its own vocabulary rather than borrow an
+                 * alert's: a legend reading "firing" over a service-uptime
+                 * band would be describing a rule that does not exist. Same
+                 * two colours, because the reading is the same one. */
                 hv_stores(marker, "color",
                           newSVpv(strEQ(state, "ok")      ? "ok"
+                                : strEQ(state, "up")      ? "ok"
                                 : strEQ(state, "pending") ? "warn"
                                 : strEQ(state, "firing")  ? "err"
+                                : strEQ(state, "down")    ? "err"
                                 : strEQ(state, "stale")   ? "muted"
                                 : strEQ(state, "error")   ? "warn"
                                 :                           "muted", 0));
@@ -1693,21 +1729,44 @@ popl_ingest_figure(SV *store, SV *from, SV *to)
                 || !se || !SvROK(*se) || SvTYPE(SvRV(*se)) != SVt_PVAV) {
                 SvREFCNT_dec(res); continue;
             }
+            /* A SIGNAL THAT RECEIVED NOTHING IS DRAWN AS ZERO, NOT DROPPED.
+             *
+             * The answer succeeded and says none arrived, which is a fact
+             * about the window and belongs on the chart. Omitting the trace
+             * takes its name out of the legend too, so a reader sees a chart
+             * that has only ever had one line on it - and "no spans arrived
+             * in this window" becomes indistinguishable from "the span count
+             * was lost", which is how it gets reported.
+             *
+             * It is the same reasoning the zero-fill below already applies
+             * to a single empty BUCKET, carried to the case where every
+             * bucket is empty. A failed query still skips: that one has not
+             * established anything about the window. */
             sa = (AV *)SvRV(*se);
             first = av_fetch(sa, 0, 0);
-            if (!first || !SvROK(*first) || SvTYPE(SvRV(*first)) != SVt_PVHV) {
-                SvREFCNT_dec(res); continue;
-            }
-            pts = hv_fetchs((HV *)SvRV(*first), "points", 0);
-            if (!pts || !SvROK(*pts) || SvTYPE(SvRV(*pts)) != SVt_PVAV
-                || av_len((AV *)SvRV(*pts)) < 0) {
-                SvREFCNT_dec(res); continue;
-            }
+            pts = (first && SvROK(*first) && SvTYPE(SvRV(*first)) == SVt_PVHV)
+                ? hv_fetchs((HV *)SvRV(*first), "points", 0) : NULL;
+            if (!pts || !SvROK(*pts) || SvTYPE(SvRV(*pts)) != SVt_PVAV)
+                pts = NULL;
 
             /* Zero-filled and bounded to the WINDOW: these are counts, a
              * bucket with nothing in it did genuinely receive nothing, and a
              * window whose traffic all lands in one bucket must still draw
              * the window rather than a millisecond around that bucket. */
+            if (!pts) {
+                /* Flat zero across the window. Two points rather than a
+                 * zero-fill: with no bucket width reported there is nothing
+                 * to step by, and a line from one edge to the other says
+                 * exactly what happened. */
+                AV *zx = newAV(), *zy = newAV();
+                av_push(zx, po_u64_to_sv(po_plot_ms(fp, (size_t)fl)));
+                av_push(zx, po_u64_to_sv(po_plot_ms(tp, (size_t)tl)));
+                av_push(zy, newSViv(0));
+                av_push(zy, newSViv(0));
+                xs = newRV_noinc((SV *)zx);
+                ys = newRV_noinc((SV *)zy);
+            }
+            else {
             ENTER; SAVETMPS; PUSHMARK(SP);
             XPUSHs(sv_2mortal(newSVsv(*pts)));
             XPUSHs(sv_2mortal(bn ? newSVsv(*bn) : newSV(0)));
@@ -1722,6 +1781,7 @@ popl_ingest_figure(SV *store, SV *from, SV *to)
             PUTBACK;
             FREETMPS; LEAVE;
             SPAGAIN;
+            }
             SvREFCNT_dec(res);
 
             trace = newHV();
@@ -1830,8 +1890,66 @@ popl_bucket_vars(SV *vars, SV *res)
 
         {
             SV *fig = NULL, *enc = NULL;
+            /* THE PANEL'S OWN CHART KIND. `vars` is the panel, so the viz it
+             * was saved as is already here - it was simply never read, which
+             * is why a panel saved as a bar drew a line. */
+            SV **vz = hv_fetchs(v, "viz", 0);
+            /* A `viz` MEANS THIS IS A PANEL, and a panel gets exactly the one
+             * answer it asked for. The explorer has no viz and wants both:
+             * the chart, and the numbers behind it under the same heading.
+             * Suppressing on the explorer removed the table it exists to
+             * show. */
+            int has_viz = vz && SvOK(*vz) && SvCUR(*vz);
+            const char *kind = has_viz ? SvPV_nolen(*vz) : "line";
+
+            /* `stat` IS NOT A CHART, so it does not get a figure.
+             *
+             * One number, large, is markup - and markup needs no charting
+             * library, survives scripting being off, and is the panel most
+             * likely to be the one somebody glances at. Building it as a
+             * one-point plotly figure would be the library drawing a label.
+             *
+             * The number is the LAST point of the first series: a stat over a
+             * bucketed answer is "what is it now", and averaging the window
+             * would answer a question nobody asked. */
+            if (strEQ(kind, "stat")) {
+                SV **sv2 = hv_fetchs(r, "series", 0);
+                SV *val = NULL;
+                if (sv2 && SvROK(*sv2) && SvTYPE(SvRV(*sv2)) == SVt_PVAV) {
+                    AV *sa2 = (AV *)SvRV(*sv2);
+                    SV **e0 = av_fetch(sa2, 0, 0);
+                    if (e0 && SvROK(*e0) && SvTYPE(SvRV(*e0)) == SVt_PVHV) {
+                        SV **pts = hv_fetchs((HV *)SvRV(*e0), "points", 0);
+                        if (pts && SvROK(*pts) && SvTYPE(SvRV(*pts)) == SVt_PVAV) {
+                            /* A POINT IS AN ARRAY, not a hash: the executor
+                             * emits [ instant, formatted, value ] and the
+                             * third element is the number. Reading it as a
+                             * hash is how this shipped rendering "-" over
+                             * live data while passing a test written against
+                             * a shape the store never produces. */
+                            AV *pa = (AV *)SvRV(*pts);
+                            SSize_t last = av_len(pa);
+                            if (last >= 0) {
+                                SV **lp = av_fetch(pa, last, 0);
+                                if (lp && SvROK(*lp)
+                                    && SvTYPE(SvRV(*lp)) == SVt_PVAV) {
+                                    AV *pt = (AV *)SvRV(*lp);
+                                    SV **y = av_fetch(pt, 2, 0);
+                                    if (y && SvOK(*y))
+                                        val = newSVpvf("%.4g", (double)SvNV(*y));
+                                }
+                            }
+                        }
+                    }
+                }
+                hv_stores(v, "stat_value", val ? val : newSVpvs("-"));
+                XSRETURN_EMPTY;
+            }
+
             ENTER; SAVETMPS; PUSHMARK(SP);
             XPUSHs(res);
+            XPUSHs(sv_2mortal(newSVpvs("kind")));
+            XPUSHs(sv_2mortal(newSVpv(kind, 0)));
             PUTBACK;
             got = call_pv("Punk::Observe::Plot::timeseries", G_SCALAR);
             SPAGAIN;
@@ -1850,7 +1968,15 @@ popl_bucket_vars(SV *vars, SV *res)
             FREETMPS; LEAVE;
             SPAGAIN;
             if (fig) SvREFCNT_dec(fig);
-            (void)hv_stores(v, "series_plot", enc);
+            /* ONE ANSWER, NOT TWO.
+             *
+             * This used to set both halves and leave the caller to delete the
+             * one it did not want - so the knowledge of what a viz means sat
+             * in two files, and calling this function on its own produced a
+             * panel that was a chart AND a table. The viz is right here; the
+             * decision belongs here with it. */
+            if (has_viz && strEQ(kind, "table")) SvREFCNT_dec(enc);
+            else (void)hv_stores(v, "series_plot", enc);
         }
 
         rows = newAV();
@@ -1965,7 +2091,15 @@ popl_bucket_vars(SV *vars, SV *res)
                 hv_stores(o, "count", c ? newSVsv(*c) : newSV(0));
                 av_push(out, newRV_noinc((SV *)o));
             }
-            (void)hv_stores(v, "bucket_rows", newRV_noinc((SV *)out));
+            {
+                SV **vz3 = hv_fetchs(v, "viz", 0);
+                int hv3 = vz3 && SvOK(*vz3) && SvCUR(*vz3);
+                const char *k3 = hv3 ? SvPV_nolen(*vz3) : "line";
+                if (!hv3 || strEQ(k3, "table"))
+                    (void)hv_stores(v, "bucket_rows", newRV_noinc((SV *)out));
+                else
+                    SvREFCNT_dec((SV *)out);
+            }
         }
         SvREFCNT_dec((SV *)rows);
         (void)hv_stores(v, "has_series", newSViv(has_series));

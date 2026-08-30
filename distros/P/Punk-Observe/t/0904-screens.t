@@ -168,6 +168,70 @@ my %empty_page = (
     ok(!$gone->{found}, 'an id that matches nothing is not found');
 }
 
+# --- the context is centred on the record, not on the window's edge ----------
+
+# `rows` answers newest first and `limit` keeps that end, so the capped call
+# the context used to make kept the newest lines of the ten seconds: on a
+# busy store that was everything AFTER the record and nothing before it, with
+# the record itself pushed off its own context. Sixty lines each side selects
+# that branch on purpose - a quiet fixture can never catch it.
+
+{
+    my $dir2   = tempdir(CLEANUP => 1);
+    my $store2 = Punk::Observe::Store->new(dir => $dir2);
+    my $C0     = at(1_000_000_000);
+    my $ms     = 1_000_000;
+
+    my @recs;
+    push @recs, { kind => 2, t => Punk::Observe::Store::nsub($C0, $_ * $ms),
+                  duration => 0, body => "ctx before $_", severity => 9,
+                  span_kind => 0, status => 0, trace_hi => 0, trace_lo => 0,
+                  span_id => 0, parent_id => 0,
+                  attrs => { 'service.name' => 'shop' } } for reverse 1 .. 60;
+    push @recs, { kind => 2, t => $C0, duration => 0,
+                  body => 'the line itself', severity => 17, span_kind => 0,
+                  status => 0, trace_hi => 0, trace_lo => 0, span_id => 0,
+                  parent_id => 0, attrs => { 'service.name' => 'shop' } },
+                { kind => 2, t => $C0, duration => 0,
+                  body => 'same instant, different line', severity => 9,
+                  span_kind => 0, status => 0, trace_hi => 0, trace_lo => 0,
+                  span_id => 0, parent_id => 0,
+                  attrs => { 'service.name' => 'shop' } };
+    push @recs, { kind => 2, t => at(1_000_000_000 + $_ * $ms),
+                  duration => 0, body => "ctx after $_", severity => 9,
+                  span_kind => 0, status => 0, trace_hi => 0, trace_lo => 0,
+                  span_id => 0, parent_id => 0,
+                  attrs => { 'service.name' => 'shop' } } for 1 .. 60;
+    ok(Punk::Observe::WAL::append($store2->wal_path, \@recs, 0, 0)->{ok},
+       'the busy fixture reaches the log');
+    ok($store2->seal, '  and seals');
+
+    my $logs = $V->page($store2, 'logs',
+                        { %W, q => 'log | search "the line itself"' });
+    my $id = $logs->{rows}[0]{id};
+    ok(length $id, 'the clicked line has an id');
+
+    my $rec = $V->page($store2, 'record', { %W, id => $id });
+    ok($rec->{found}, 'the busy record resolves');
+
+    my @ctx = @{ $rec->{context} };
+    is(scalar @ctx, 41, 'the context is twenty either side of the record');
+
+    # The raw instant is the first half of each row's id, so the sides can
+    # be counted without trusting the formatted time.
+    my @ts     = map { (split /\./, $_->{id})[0] } @ctx;
+    my $after  = grep { Punk::Observe::Store::ncmp($_, $C0) > 0 } @ts;
+    my $at     = grep { "$_" eq "$C0" } @ts;
+    my $before = grep { Punk::Observe::Store::ncmp($_, $C0) < 0 } @ts;
+    is($after,  20, '  twenty lines after it');
+    is($at,      2, '  both lines sharing its nanosecond');
+    is($before, 19, '  and the lines before it fill the rest');
+
+    is(scalar(grep { $_->{current} } @ctx), 1,
+       'one line is current - the same nanosecond is not enough to be it');
+    is((grep { $_->{current} } @ctx)[0]{id}, $id, '  and it is the one asked for');
+}
+
 # --- traces: a search, and a real waterfall ----------------------------------
 
 {
@@ -326,6 +390,54 @@ my %empty_page = (
         is(scalar @exp, 0, '  with values a reader can compare at a glance')
             or diag('exponential: ' . $exp[0]{value});
     }
+}
+
+# --- a severity grouping reads as severities --------------------------------
+#
+# THE ENGINE RETURNS THE NUMBER ON PURPOSE - a query compares severities
+# numerically, and t/0903 pins that. But a column of 13, 17, 5 and 9 is not
+# information to the person reading it, so the name goes on at the point of
+# reading.
+#
+# THE QUERY IS THE ONLY THING THAT KNOWS. A series keyed 13 is a severity or
+# an attempt count depending entirely on what was grouped by, so the guard is
+# `by severity` in the query rather than a guess at the values - which would
+# rename a `by attempt` grouping of 1, 2, 3 into trace and debug.
+{
+    my $v = page('explore', { q => 'log | bucket(1m) count by severity' });
+    my %seen;
+    my @s = grep { !$seen{$_}++ } map { $_->{series} } @{ $v->{bucket_rows} || [] };
+    ok(scalar @s, 'a severity grouping produces series') or return;
+
+    my @numeric = grep { /\A\d+\z/ } @s;
+    is(scalar @numeric, 0, 'none of them is a bare number')
+        or diag("still numeric: @numeric");
+    ok((grep { /\A(?:trace|debug|info|warn|error|fatal)\z/ } @s) == @s,
+       '  every one is a name on the twenty-four point scale')
+        or diag("got: @s");
+
+    # THE CHART AND THE TABLE ARE ONE ANSWER. Naming the table and leaving the
+    # legend reading 13, 17, 5, 9 is two renderings of the same query
+    # disagreeing about what it says - which is why the rename happens on the
+    # result, before either is built, rather than on the table afterwards.
+    my %ly;
+    my @legend = grep { !$ly{$_}++ }
+                 ($v->{series_plot} || '') =~ /"name":"([^"]*)"/g;
+    ok(scalar @legend, 'the figure carries a legend') or return;
+    is(scalar(grep { /\A\d+\z/ } @legend), 0,
+       '  and the chart legend is named too, not just the table')
+        or diag("legend: @legend");
+
+    # The guard is the GROUPING, not the mention. This query talks about
+    # severity and groups by service, and its labels must survive.
+    my $svc = page('explore',
+        { q => 'log | where severity >= error | bucket(1m) count by service' });
+    %seen = ();
+    my @n = grep { !$seen{$_}++ } map { $_->{series} } @{ $svc->{bucket_rows} || [] };
+    ok(scalar @n, 'a query that only mentions severity still groups by service');
+    is(scalar(grep { /\A(?:trace|debug|info|warn|error|fatal)\z/ } @n), 0,
+       '  and its service names are left alone')
+        or diag("renamed: @n");
 }
 
 {
@@ -699,7 +811,9 @@ my %empty_page = (
     my $v = $V->page($store, 'logs', { range => '7d' });
     my $out = render('logs.tmpl',
                      { %empty_page, %$v, range_qs => '?range=7d', range_amp => '&range=7d' });
-    for my $screen (qw(map traces logs metrics explore alerts status)) {
+    # The nav's own roster: Status left it when Health arrived - the status
+    # page still answers at /status, it is just not a section tab.
+    for my $screen (qw(map traces logs metrics explore alerts health)) {
         like($out, qr{href="\Q/observe/$screen?range=7d\E"},
              "the $screen link carries the window");
     }
@@ -818,7 +932,8 @@ my %empty_page = (
               query => 'a b&c' },
             { id => 2, name => 'Alpha',  state => 'firing',  held => 90_000_000_000,
               value => 0, silenced => 1 },
-            { id => 3, name => 'beta',   state => 'error' },
+            { id => 3, name => 'beta',   state => 'error',
+              reason => 'the store refused the query' },
             { id => 4, name => 'gamma',  state => 'pending', value => 12345.678 },
             { id => 5, name => 'Delta',  state => 'weird' },
             { id => 6, name => 'alpha2', state => 'firing' },
@@ -837,10 +952,16 @@ my %empty_page = (
        'beta,Alpha,alpha2,gamma,zeta,Delta',
        '  error, then firing, then pending, then ok, then unknown');
     is($v->{rules}[0]{row_class}, 'row-error', '  error takes the error class');
+    is($v->{rules}[0]{reason}, 'the store refused the query',
+       '  and carries WHY it could not be evaluated');
+    is($v->{rules}[1]{reason}, '', '  a rule with no reason carries none');
     is($v->{rules}[3]{row_class}, '',          '  pending does not');
     is($v->{rules}[1]{held},  '90.00s',        '  held is a duration');
     is($v->{rules}[1]{value}, '0',             '  a zero value is still shown');
-    is($v->{rules}[3]{value}, '1.235e+04',     '  and a big one is %.4g');
+    # Was '1.235e+04': %.4g lost the fifth digit of every count and read
+    # like a chart axis. Large values round to the integer, comma-grouped
+    # like the count columns beside them.
+    is($v->{rules}[3]{value}, '12,346',        '  and a big one is grouped');
     is($v->{rules}[4]{query_esc}, 'a%20b%26c', '  the query is url escaped');
     is($v->{silences}[0]{until}, '2026-03-23 00:00:00Z', '  silences carry a date');
     is($v->{silences}[1]{until}, '', '  a silence with no expiry has no date');

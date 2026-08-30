@@ -1,5 +1,11 @@
 # Changes — Revision history for Cron::Toolkit
 
+1.04  2026-08-29
+    - Accept Quartz-style named last-weekday aliases (MONL, TUEL, …, SUNL)
+      so they normalize like named nth-weekday (MON#3 → 1#3, MONL → 1L)
+    - DOW name rewrite now treats L, #, and cron punctuation as valid
+      followers, not only word boundaries (MONL was rejected as Invalid characters)
+
 1.03  2026-08-20
     - Fixed test data generator so it never emits both tz and utc_offset on the same case
       (resolves seasonal ±3600s failures caused by conflicting timezone/offset data; see #2)

@@ -1,8 +1,11 @@
 use strict;
 use warnings;
 use Test::More;
+use FindBin;
+use lib "$FindBin::Bin/lib";
 use JSON::MaybeXS qw( encode_json decode_json );
 use API::Docker;
+use Test::API::Docker::FakeTransport;
 
 # API::Docker::Role::HTTP sits below _request as far as Test::API::Docker::Mock
 # is concerned -- the mock replaces _request wholesale, so request-line
@@ -10,34 +13,31 @@ use API::Docker;
 # >=400 croak path are exercised by nothing but use_ok in t/basic.t.
 #
 # Nothing here opens a real socket or reaches a daemon: the socket-facing
-# methods (_read_response, _read_chunked) are driven directly over an
-# in-memory filehandle, and _request itself is driven through a subclass
-# that fakes the socket instead of connecting one. So this file needs no
-# is_live()/can_write() gating -- it is unconditionally safe with no Docker
-# installed.
+# methods (_read_response, _read_chunked) are driven directly over a tied
+# filehandle, and _request itself is driven through a subclass that fakes the
+# socket instead of connecting one. So this file needs no is_live()/can_write()
+# gating -- it is unconditionally safe with no Docker installed.
 
 # ---------------------------------------------------------------------------
-# A tied filehandle that hands back only a few bytes per read() call
-# regardless of how much was asked for, so "a chunk arriving in several
-# reads" is a real multi-call scenario for _read_chunked's inner while loop,
-# not just a single read() that happens to satisfy the whole request. An
-# in-memory scalar filehandle (open $fh, '<', \$str) never does this --
-# PerlIO::scalar always returns everything available in one call.
+# A tied filehandle serving a fixed string, with a step: 0 hands over
+# everything that is left in one call, a positive N hands over at most N bytes
+# per call, so "a chunk arriving in several reads" is a real multi-call
+# scenario for _read_chunked's inner while loop rather than one read that
+# happens to satisfy the whole request.
+#
+# This used to be an in-memory scalar filehandle (open $fh, '<', \$str) for
+# everything but the multi-read case. It cannot be one any more: since karr k60
+# the transport reads with sysread, and sysread on a scalar filehandle fails
+# outright -- measured, it returns undef with EBADF, because such a handle has
+# no file descriptor (fileno is -1). A tied handle is the shape that works for
+# both, and it also makes the step explicit rather than inherited from
+# PerlIO::scalar's own behaviour.
 package Test::RoleHTTP::PartialReader;
 
 sub TIEHANDLE {
   my ($class, $data, $step) = @_;
-  return bless { buf => $data, pos => 0, step => $step || 3 }, $class;
-}
-
-sub READLINE {
-  my ($self) = @_;
-  return undef if $self->{pos} >= length $self->{buf};
-  my $idx = index($self->{buf}, "\n", $self->{pos});
-  my $end = $idx == -1 ? length($self->{buf}) : $idx + 1;
-  my $line = substr($self->{buf}, $self->{pos}, $end - $self->{pos});
-  $self->{pos} = $end;
-  return $line;
+  return bless { buf => $data, pos => 0, step => defined $step ? $step : 0 },
+    $class;
 }
 
 sub READ {
@@ -46,7 +46,8 @@ sub READ {
   my $offset = $_[3] || 0;
   my $avail  = length($self->{buf}) - $self->{pos};
   return 0 if $avail <= 0;
-  my $n = $len > $self->{step} ? $self->{step} : $len;
+  my $n = $len;
+  $n = $self->{step} if $self->{step} && $n > $self->{step};
   $n = $avail if $n > $avail;
   my $chunk = substr($self->{buf}, $self->{pos}, $n);
   if ($offset) {
@@ -63,31 +64,22 @@ sub CLOSE { 1 }
 
 package main;
 
-# ---------------------------------------------------------------------------
-# A client whose socket is a captured in-memory sink and whose response is
-# canned, so _request's request-assembly and >=400 handling can be driven
-# without a daemon on the other end. Mirrors the Test::FakeTransport pattern
-# in t/streaming_shape.t, plus capturing what got written to the "socket".
-package Test::RoleHTTP::FakeTransport;
-use Moo;
-extends 'API::Docker';
-
-has canned => (is => 'rw', default => sub { [200, 'OK', {}, ''] });
-has _sink  => (is => 'rw');
-
-sub _build__socket {
-  my ($self) = @_;
-  my $sink = '';
-  $self->_sink(\$sink);
-  open my $fh, '>', \$sink or die "open: $!";
+# A handle over $data. Anonymous, so several can be alive at once and none
+# needs untying.
+sub string_handle {
+  my ($data, $step) = @_;
+  my $fh = \do { no warnings 'once'; local *HANDLE };
+  tie *$fh, 'Test::RoleHTTP::PartialReader', $data, $step;
   return $fh;
 }
 
-sub _read_response { return $_[0]->canned }
-
-sub written { return ${ $_[0]->_sink } }
-
-package main;
+# What the transport has read off a handle but not yet consumed. Since karr k60
+# the read-ahead past a header block lands here instead of in PerlIO's own
+# buffer, which is what makes "these bytes were not swallowed" answerable.
+sub unconsumed {
+  my ($client, $fh) = @_;
+  return ${ $client->_read_buffer($fh) };
+}
 
 my $client = API::Docker->new(
   host        => 'unix:///nonexistent.sock',
@@ -96,7 +88,7 @@ my $client = API::Docker->new(
 
 # ---------------------------------------------------------------------------
 subtest '_read_response: status line parsing' => sub {
-  open my $fh, '<', \"HTTP/1.1 204 No Content\r\n\r\n" or die $!;
+  my $fh = string_handle("HTTP/1.1 204 No Content\r\n\r\n");
   my $resp = $client->_read_response($fh);
   is $resp->[0], 204, 'status code';
   is $resp->[1], 'No Content', 'status text, including the embedded space';
@@ -109,7 +101,7 @@ subtest '_read_response: header collection' => sub {
     . "Content-Length: 2\r\n"
     . "\r\n"
     . "{}";
-  open my $fh, '<', \$raw or die $!;
+  my $fh = string_handle($raw);
   my $resp = $client->_read_response($fh);
   my $headers = $resp->[2];
 
@@ -129,7 +121,7 @@ subtest '_read_response: chunked body' => sub {
     . "5\r\nhello\r\n"
     . "6\r\n world\r\n"
     . "0\r\n\r\n";
-  open my $fh, '<', \$raw or die $!;
+  my $fh = string_handle($raw);
   my $resp = $client->_read_response($fh);
   is $resp->[3], 'hello world', 'chunks concatenated, chunk framing stripped';
 };
@@ -142,7 +134,7 @@ subtest '_read_response: content-length body' => sub {
     . 'Content-Length: ' . length($body) . "\r\n"
     . "\r\n"
     . $body;
-  open my $fh, '<', \$raw or die $!;
+  my $fh = string_handle($raw);
   my $resp = $client->_read_response($fh);
   is $resp->[3], $body,
     'exactly content-length bytes read, embedded CRLF/NUL preserved';
@@ -155,23 +147,100 @@ subtest '_read_response: read-to-EOF fallback' => sub {
     . "Connection: close\r\n"
     . "\r\n"
     . "no length header, read until eof";
-  open my $fh, '<', \$raw or die $!;
+  my $fh = string_handle($raw);
   my $resp = $client->_read_response($fh);
   is $resp->[3], 'no length header, read until eof',
     'falls back to slurping the rest of the socket';
 };
 
 # ---------------------------------------------------------------------------
+# HTTP field values are case-insensitive (RFC 9110 section 5.6.2). A daemon or
+# a proxy in front of it may write Transfer-Encoding in any case; the value is
+# compared with lc() so that a body announced as chunked is dechunked whatever
+# the spelling. Before this, a value that was not exactly 'chunked' fell
+# through to the close-delimited branch and the raw chunk framing came back as
+# the body.
+subtest '_read_response: Transfer-Encoding is matched case-insensitively'
+  => sub {
+  for my $spelling (qw( Chunked CHUNKED chUNKed )) {
+    my $raw = "HTTP/1.1 200 OK\r\n"
+      . "Transfer-Encoding: $spelling\r\n"
+      . "\r\n"
+      . "5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n";
+    my $resp = $client->_read_response(string_handle($raw));
+    is $resp->[3], 'hello world',
+      "Transfer-Encoding: $spelling is dechunked, not returned as framing";
+  }
+};
+
+subtest 'the streaming reader dechunks a case-varied Transfer-Encoding too'
+  => sub {
+  my @got;
+  my $handler = $client->_stream_handler('GET /v1.41/events', 'on_event',
+    sub { push @got, $_[0] }, 0);
+  my $raw = "HTTP/1.1 200 OK\r\n"
+    . "Transfer-Encoding: Chunked\r\n"
+    . "\r\n"
+    . qq(11\r\n{"status":"one"}\n\r\n)
+    . qq(11\r\n{"status":"two"}\n\r\n)
+    . "0\r\n\r\n";
+  $client->_read_streaming_response(string_handle($raw), 'GET', $handler, {});
+  is_deeply [ map { ref $_ eq 'HASH' ? $_->{status} : $_ } @got ],
+    [qw( one two )],
+    'exactly the two events, not the chunk framing decoded line by line';
+};
+
+# ---------------------------------------------------------------------------
+# A 1xx informational response (100 Continue, 103 Early Hints, ...) is a whole
+# head with no body, sent before the real response (RFC 9110 section 15.2). It
+# is read and discarded so the reader continues with the real response rather
+# than taking the 1xx status and reading the real response as its body.
+subtest '_read_response: a 1xx informational response is skipped' => sub {
+  my $raw = "HTTP/1.1 100 Continue\r\n\r\n"
+    . "HTTP/1.1 200 OK\r\n"
+    . "Content-Length: 2\r\n\r\n"
+    . "{}";
+  my $resp = $client->_read_response(string_handle($raw));
+  is $resp->[0], 200, 'the real status is returned, not the 100';
+  is $resp->[1], 'OK', 'and its reason';
+  is $resp->[3], '{}', 'and the real body, not the second response as bytes';
+};
+
+subtest '_read_response: several stacked 1xx heads are all skipped' => sub {
+  my $raw = "HTTP/1.1 100 Continue\r\n\r\n"
+    . "HTTP/1.1 103 Early Hints\r\nLink: </x>; rel=preload\r\n\r\n"
+    . "HTTP/1.1 204 No Content\r\n\r\n";
+  my $resp = $client->_read_response(string_handle($raw));
+  is $resp->[0], 204, 'the first non-1xx status wins';
+};
+
+subtest 'the streaming reader skips a 1xx before the stream too' => sub {
+  my @got;
+  my $handler = $client->_stream_handler('GET /v1.41/events', 'on_event',
+    sub { push @got, $_[0] }, 0);
+  my $raw = "HTTP/1.1 100 Continue\r\n\r\n"
+    . "HTTP/1.1 200 OK\r\n"
+    . "Transfer-Encoding: chunked\r\n\r\n"
+    . qq(11\r\n{"status":"one"}\n\r\n)
+    . "0\r\n\r\n";
+  my $res = $client->_read_streaming_response(
+    string_handle($raw), 'GET', $handler, {});
+  is $res->[0], 200, 'the stream reader also passes the 100 by';
+  is_deeply [ map { $_->{status} } @got ], ['one'],
+    'and the real event reaches the callback';
+};
+
+# ---------------------------------------------------------------------------
 subtest '_read_chunked: hex sizes, upper and lower case' => sub {
   # 'a' and 'A' are both 10 -- hex() is case-insensitive, and so must this be.
   my $raw = "a\r\n0123456789\r\nA\r\nABCDEFGHIJ\r\n0\r\n\r\n";
-  open my $fh, '<', \$raw or die $!;
+  my $fh = string_handle($raw);
   is $client->_read_chunked($fh), '0123456789ABCDEFGHIJ',
     'lowercase and uppercase hex chunk sizes both read correctly';
 };
 
 subtest '_read_chunked: a single zero-size chunk terminates immediately' => sub {
-  open my $fh, '<', \"0\r\n\r\n" or die $!;
+  my $fh = string_handle("0\r\n\r\n");
   is $client->_read_chunked($fh), '', 'empty body, no chunks';
 };
 
@@ -203,11 +272,31 @@ subtest '_uri_encode: what it escapes and what it leaves alone' => sub {
     '? and = are percent-encoded';
   is $encode->('100%'), '100%25', 'a literal percent sign is escaped itself';
   is $encode->("a\nb"), 'a%0Ab', 'control characters are escaped, not passed through';
+
+  # A character string -- what a name/tag/author/comment/search term arrives as
+  # under `use utf8` or through a :utf8 layer -- is escaped by its UTF-8 bytes,
+  # not by its codepoint. The old code took ord() of the character, so 'ü'
+  # became %FC (not even valid UTF-8) and '中' became %4E2D.
+  is $encode->("\x{4E2D}"), '%E4%B8%AD',
+    'a wide character is escaped by its UTF-8 bytes, not its codepoint';
+  {
+    my $u = "\x{00FC}";
+    utf8::upgrade($u); # what a decoded 'ü' is: codepoint 252, the utf8 flag on
+    is $encode->($u), '%C3%BC',
+      'a Latin-1 character with the utf8 flag is UTF-8 encoded before escaping';
+  }
+
+  # The other half, and the reason the encoding is not unconditional: a byte
+  # string is already octets and must be escaped as-is. encode_json hands a
+  # HASH param (filters among them) its UTF-8 bytes, and re-encoding those would
+  # turn %C3%BC into %C3%83%C2%BC -- trading this bug for a broader one.
+  is $encode->("\xC3\xBC"), '%C3%BC',
+    'a byte string of UTF-8 octets is escaped as-is, never double-encoded';
 };
 
 # ---------------------------------------------------------------------------
 subtest '_request: assembles the request line, headers and body' => sub {
-  my $t = Test::RoleHTTP::FakeTransport->new(
+  my $t = Test::API::Docker::FakeTransport->new(
     host        => 'unix:///nonexistent.sock',
     api_version => '1.41',
   );
@@ -271,7 +360,7 @@ subtest '_request: assembles the request line, headers and body' => sub {
 
 # ---------------------------------------------------------------------------
 subtest '_request: a CR/LF in a header value cannot inject a second header' => sub {
-  my $t = Test::RoleHTTP::FakeTransport->new(
+  my $t = Test::API::Docker::FakeTransport->new(
     host        => 'unix:///nonexistent.sock',
     api_version => '1.41',
   );
@@ -288,13 +377,13 @@ subtest '_request: a CR/LF in a header value cannot inject a second header' => s
 };
 
 # ---------------------------------------------------------------------------
-# karr #11: the value above is sanitised, but the *name* used to go on the
+# karr k11: the value above is sanitised, but the *name* used to go on the
 # wire untouched, so a caller-supplied key could open a header line of its
 # own. Names are rejected rather than stripped -- see the reasoning in
 # API::Docker::Role::HTTP under "Header names are rejected, header values are
 # stripped".
 subtest '_request: an invalid header name is refused, not rewritten' => sub {
-  my $t = Test::RoleHTTP::FakeTransport->new(
+  my $t = Test::API::Docker::FakeTransport->new(
     host        => 'unix:///nonexistent.sock',
     api_version => '1.41',
   );
@@ -356,8 +445,92 @@ subtest '_request: an invalid header name is refused, not rewritten' => sub {
 };
 
 # ---------------------------------------------------------------------------
+# karr k102: $path is caller data (a container name, an image reference)
+# spliced straight into the request line, and unlike a header value it was
+# never checked. Measured through the real _request against a fake socket:
+# containers->inspect("x HTTP/1.1\r\nX-Evil: 1\r\n\r\nGET /y") put
+# 'GET /v1.41/containers/x HTTP/1.1\r\nX-Evil: 1\r\n\r\n...' on the wire -- the
+# name ended the request line and opened a header of its own. A path outside
+# the request-target character set is now refused, not written; see
+# API::Docker::Role::HTTP under "A request path is rejected, not sanitised".
+subtest '_request: a path outside the request-target charset is refused' => sub {
+  my $t = Test::API::Docker::FakeTransport->new(
+    host        => 'unix:///nonexistent.sock',
+    api_version => '1.41',
+  );
+
+  subtest 'the measured injection: CRLF in the path croaks and sends nothing' => sub {
+    my $evil = "x HTTP/1.1\r\nX-Evil: 1\r\n\r\nGET /y";
+    eval { $t->_request('GET', "/containers/$evil/json") };
+    like $@, qr/invalid request path/, 'croaked';
+    like $@, qr/\Qx HTTP\E.*\Q\x0D\x0AX-Evil\E/,
+      'the offending path is shown with its control bytes escaped, so the '
+      . 'message stays on one line and names what was actually passed';
+    my $message = "$@";
+    unlike $message, qr/\r/, 'the croak itself carries no raw CR';
+    $message =~ s/\n\z//;
+    unlike $message, qr/\n/,
+      'and no LF beyond the one Carp ends on -- the escaped path cannot open a '
+      . 'line of its own in whatever logs the failure';
+    is $t->_sink, undef,
+      'no socket was even opened -- the path is checked while the request is '
+      . 'assembled, so nothing reached the daemon';
+  };
+
+  subtest 'each separator that would rewrite the request target' => sub {
+    my %bad = (
+      'a space (opens the HTTP-version field)' => 'na me',
+      'a bare CR'                              => "tail\r",
+      'a bare LF'                              => "tail\n",
+      'a ? (opens the query string)'          => 'na?me',
+      'a # (opens the fragment)'              => 'na#me',
+      'a non-ASCII byte'                      => "caf\xE9",
+      'a NUL byte'                            => "na\x00me",
+    );
+    for my $why (sort keys %bad) {
+      my $t2 = Test::API::Docker::FakeTransport->new(
+        host        => 'unix:///nonexistent.sock',
+        api_version => '1.41',
+      );
+      eval { $t2->_request('GET', "/containers/$bad{$why}/json") };
+      like $@, qr/invalid request path/, "$why is rejected";
+      is $t2->_sink, undef, "$why: nothing reached the wire";
+    }
+  };
+
+  subtest 'a legitimate image reference still assembles verbatim' => sub {
+    # ':' tag, '/' path and '@sha256:...' digest all survive -- the charset
+    # that closes the injection is the one image references live in, so the
+    # check must not be a false positive on any of them.
+    $t->_request('POST', '/images/library/nginx:1.25/push');
+    like $t->written,
+      qr{\APOST /v1\.41/images/library/nginx:1\.25/push HTTP/1\.1\r\n},
+      'a tagged, namespaced reference is written, not rejected';
+
+    my $digest = 'nginx@sha256:' . ('a' x 64);
+    $t->_request('GET', "/images/$digest/json");
+    like $t->written,
+      qr{\AGET /v1\.41/images/nginx\@sha256:@{[ 'a' x 64 ]}/json HTTP/1\.1\r\n},
+      'a digest reference (@ and :) is written verbatim too';
+  };
+
+  subtest 'measured end to end through the resource method' => sub {
+    # Exactly the ticket's measurement: the malicious name arrives through
+    # containers->inspect, which builds /containers/$id/json. The injection is
+    # closed at the transport, whatever resource method assembled the path.
+    my $t3 = Test::API::Docker::FakeTransport->new(
+      host        => 'unix:///nonexistent.sock',
+      api_version => '1.41',
+    );
+    eval { $t3->containers->inspect("x HTTP/1.1\r\nX-Evil: 1\r\n\r\nGET /y") };
+    like $@, qr/invalid request path/, 'refused before it reaches the wire';
+    is $t3->_sink, undef, 'and no socket was opened';
+  };
+};
+
+# ---------------------------------------------------------------------------
 subtest '_request: >= 400 croaks' => sub {
-  my $t = Test::RoleHTTP::FakeTransport->new(
+  my $t = Test::API::Docker::FakeTransport->new(
     host        => 'unix:///nonexistent.sock',
     api_version => '1.41',
   );
@@ -393,7 +566,7 @@ subtest '_request: >= 400 croaks' => sub {
       'array-shaped error body is used verbatim, not blamed for a deref error';
   };
 
-  # karr #13: Podman answers a failed push with 500 and the stream-shaped
+  # karr k13: Podman answers a failed push with 500 and the stream-shaped
   # body {"errorDetail":{"message":...},"error":...} -- no `message` key at
   # all -- so the whole JSON object became the croak text.
   subtest 'a JSON error body with errorDetail but no message uses errorDetail.message' => sub {
@@ -423,6 +596,42 @@ subtest '_request: >= 400 croaks' => sub {
       'message is consulted first, errorDetail only fills its absence';
   };
 
+  # karr k50: the croak text is engine-specific prose -- Podman and Docker
+  # word the same 409 differently -- so a caller telling 404 from 409 apart
+  # had to match on it. The status code goes on the exception instead, and
+  # the exception has to stay indistinguishable from the string it replaces.
+  subtest 'the exception carries the status and is still that exact string' => sub {
+    my $body = encode_json({
+      cause    => 'container state improper',
+      message  => 'can only kill running containers. abc is in state stopped',
+      response => 409,
+    });
+    $t->canned([409, 'Conflict', {}, $body]);
+    my $err = do { local $@; eval { $t->_request('POST', '/containers/abc/kill') }; $@ };
+
+    isa_ok $err, 'API::Docker::Error::HTTP';
+    is $err->status, 409, 'the status code, as the thing to branch on';
+    is $err->reason, 'Conflict', 'the reason phrase off the status line';
+    is $err->body, $body, 'the response body verbatim';
+    is $err->data->{cause}, 'container state improper',
+      'and decoded, so an engine-specific extra key is reachable';
+
+    is "$err", $err->message . $err->location,
+      'stringification is the message plus Carp\'s location, nothing else';
+    like "$err", qr/\ADocker API error \(409\): can only kill running containers\. abc is in state stopped at \S+ line \d+\.\n\z/,
+      'which is byte for byte what the plain croak produced before';
+    unlike $err->message, qr/ at \S+ line \d+/,
+      'the message alone carries no location';
+    ok $err, 'and the boolean overload is true even before stringifying';
+  };
+
+  subtest 'a body that could not be decoded leaves data undef' => sub {
+    $t->canned([400, 'Bad Request', {}, '{not actually json']);
+    my $err = do { local $@; eval { $t->_request('POST', '/containers/create') }; $@ };
+    is $err->data, undef, 'nothing is invented where decode_json failed';
+    is $err->body, '{not actually json', 'while the raw body is still there';
+  };
+
   subtest '204 and other success codes still return undef/decode normally' => sub {
     $t->canned([204, 'No Content', {}, '']);
     is $t->_request('POST', '/containers/abc/start'), undef, '204 -> undef';
@@ -431,6 +640,189 @@ subtest '_request: >= 400 croaks' => sub {
     is_deeply $t->_request('GET', '/containers/abc/json'), { Id => 'abc' },
       'a 2xx JSON body still decodes';
   };
+};
+
+# ---------------------------------------------------------------------------
+# karr k16: a HEAD response repeats the header fields the equivalent GET would
+# send -- Content-Length among them -- and then sends no body at all. Reading
+# one waits for bytes that never arrive. The bytes after the blank line below
+# stand in for whatever comes next on the connection: consuming them as a body
+# is exactly the bug, and a handle that simply hit EOF there would hide it (the
+# old code returned '' there too, from a read that failed rather than from one
+# it never made).
+#
+# Where "not consumed" is now read: since karr k60 the read-ahead past the
+# header block sits in the transport's own buffer rather than in PerlIO's, so
+# the question is asked of that buffer. The claim is unchanged -- these bytes
+# were not taken as a body -- and it is now asked somewhere this code owns
+# rather than of a buffer it could not see into.
+subtest '_read_response: a HEAD response has no body, whatever it announces' => sub {
+  subtest 'an announced content-length is not read' => sub {
+    my $raw = "HTTP/1.1 200 OK\r\n"
+      . "Content-Length: 13\r\n"
+      . "X-Docker-Container-Path-Stat: e30=\r\n"
+      . "\r\n"
+      . 'NOT-THE-BODY!';
+    my $fh = string_handle($raw);
+    my $resp = $client->_read_response($fh, 'HEAD');
+
+    is $resp->[3], '', 'body is empty';
+    is $resp->[2]{'content-length'}, '13',
+      'the announced length is still collected as a header';
+    is $resp->[2]{'x-docker-container-path-stat'}, 'e30=',
+      'and so is the header a HEAD response carries its payload in';
+    is unconsumed($client, $fh), 'NOT-THE-BODY!',
+      'the bytes after the headers are still unconsumed, not swallowed as a '
+      . 'body that was never sent';
+  };
+
+  subtest 'a chunked announcement is not read either' => sub {
+    my $raw = "HTTP/1.1 200 OK\r\n"
+      . "Transfer-Encoding: chunked\r\n"
+      . "\r\n"
+      . "5\r\nhello\r\n0\r\n\r\n";
+    my $fh = string_handle($raw);
+    my $resp = $client->_read_response($fh, 'HEAD');
+
+    is $resp->[3], '', 'body is empty';
+    is unconsumed($client, $fh), "5\r\nhello\r\n0\r\n\r\n",
+      'the chunk framing was not consumed';
+  };
+
+  subtest 'every other method still reads its body' => sub {
+    my $raw = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}";
+    my $fh = string_handle($raw);
+    is $client->_read_response($fh, 'GET')->[3], '{}', 'a GET body is read';
+
+    my $fh2 = string_handle($raw);
+    is $client->_read_response($fh2)->[3], '{}',
+      'and so is one read without a method argument at all';
+  };
+};
+
+# ---------------------------------------------------------------------------
+# karr k16: _request used to drop the status line and the response headers, so
+# 304 ("it was already in that state") and 204 ("changed it") were both undef,
+# and a header carrying the whole payload was unreachable.
+subtest '_request: the response out-parameter' => sub {
+  my $t = Test::API::Docker::FakeTransport->new(
+    host        => 'unix:///nonexistent.sock',
+    api_version => '1.41',
+  );
+
+  subtest '204 and 304 are told apart' => sub {
+    $t->canned([204, 'No Content', {}, '']);
+    my %changed;
+    is $t->_request('POST', '/containers/abc/start', response => \%changed), undef,
+      'the return value is unchanged -- an empty body is still undef';
+    is $changed{status}, 204, 'the status code is handed out';
+    is $changed{reason}, 'No Content', 'and the reason phrase with it';
+
+    $t->canned([304, 'Not Modified', {}, '']);
+    my %unchanged;
+    is $t->_request('POST', '/containers/abc/start', response => \%unchanged), undef,
+      'a 304 carries no body either';
+    is $unchanged{status}, 304,
+      '304 is reported as 304 -- the two are indistinguishable by return '
+      . 'value, and this is the only thing that separates them';
+  };
+
+  subtest 'the response headers are handed out, lowercased' => sub {
+    $t->canned([200, 'OK', { 'x-docker-container-path-stat' => 'e30=' }, '']);
+    my %res;
+    $t->_request('HEAD', '/containers/abc/archive', response => \%res);
+    is $res{headers}{'x-docker-container-path-stat'}, 'e30=',
+      'the header a HEAD response carries its payload in is reachable';
+  };
+
+  subtest 'the hash is filled before the >= 400 croak' => sub {
+    $t->canned([404, 'Not Found', {}, encode_json({ message => 'no such container: abc' })]);
+    my %res;
+    eval { $t->_request('GET', '/containers/abc/json', response => \%res) };
+    like $@, qr/\ADocker API error \(404\)/, 'still croaks';
+    is $res{status}, 404,
+      'and the status survives the croak -- an eval-ing caller is not left '
+      . 'with an empty hash';
+  };
+
+  subtest 'the hash is overwritten, not merged' => sub {
+    $t->canned([200, 'OK', {}, '{}']);
+    my %res = (status => 999, stale => 'from an earlier call');
+    $t->_request('GET', '/containers/abc/json', response => \%res);
+    is $res{status}, 200, 'the status of this call, not the previous one';
+    ok !exists $res{stale}, 'nothing of the previous call is left behind';
+  };
+
+  subtest 'anything but a HashRef is a caller bug' => sub {
+    my $t2 = Test::API::Docker::FakeTransport->new(
+      host        => 'unix:///nonexistent.sock',
+      api_version => '1.41',
+    );
+    eval { $t2->_request('GET', '/containers/json', response => []) };
+    like $@, qr/response option must be a HashRef/, 'croaked on an ArrayRef';
+    is $t2->_sink, undef,
+      'no socket was opened -- checked while the request is assembled, like a '
+      . 'header name, so nothing reached the daemon';
+  };
+
+  subtest 'without the option nothing changes' => sub {
+    $t->canned([200, 'OK', {}, '{"Id":"abc"}']);
+    is_deeply $t->_request('GET', '/containers/abc/json'), { Id => 'abc' },
+      'the default return shape is untouched';
+  };
+};
+
+# ---------------------------------------------------------------------------
+subtest 'head: sends HEAD, returns undef, payload comes out of the headers' => sub {
+  my $t = Test::API::Docker::FakeTransport->new(
+    host        => 'unix:///nonexistent.sock',
+    api_version => '1.41',
+  );
+  # Captured from Podman 5.4.2 (API 1.41):
+  # HEAD /v1.41/containers/{id}/archive?path=/etc/hostname
+  my $stat = 'eyJuYW1lIjoiaG9zdG5hbWUiLCJzaXplIjoxMywibW9kZSI6NDIwfQ==';
+  $t->canned([200, 'OK', { 'x-docker-container-path-stat' => $stat }, '']);
+
+  my %res;
+  is $t->head('/containers/abc/archive',
+    params   => { path => '/etc/hostname' },
+    response => \%res,
+  ), undef, 'a HEAD response has no body, so there is nothing to return';
+
+  my ($request_line) = $t->written =~ /\A([^\r\n]+)\r\n/;
+  is $request_line,
+    'HEAD /v1.41/containers/abc/archive?path=/etc/hostname HTTP/1.1',
+    'HEAD on the versioned path, query parameters appended as for any verb';
+  is $res{status}, 200, 'the status line is reachable';
+  is $res{headers}{'x-docker-container-path-stat'}, $stat,
+    'and the header the whole payload rides in';
+};
+
+# ---------------------------------------------------------------------------
+# karr k16, end to end: t/containers.t drives these through the mock, which
+# replaces _request wholesale. This drives the real transport, so a _request
+# that stopped passing the status on would fail here while the mocked test
+# still passed.
+subtest 'containers: 204 means it changed, 304 means it was already so' => sub {
+  my $t = Test::API::Docker::FakeTransport->new(
+    host        => 'unix:///nonexistent.sock',
+    api_version => '1.41',
+  );
+
+  $t->canned([204, 'No Content', {}, '']);
+  is $t->containers->start('abc'), 1, 'start: 204 -> it was started';
+  is $t->containers->stop('abc'), 1, 'stop: 204 -> it was stopped';
+  is $t->containers->restart('abc'), 1, 'restart: 204 -> it was restarted';
+  is $t->containers->pause('abc'), 1, 'pause: 204 -> it was paused';
+  is $t->containers->unpause('abc'), 1, 'unpause: 204 -> it was unpaused';
+
+  $t->canned([304, 'Not Modified', {}, '']);
+  is $t->containers->start('abc'), 0,
+    'start: 304 -> it was already running (this is what used to be undef)';
+  is $t->containers->stop('abc'), 0, 'stop: 304 -> it was already stopped';
+  ok !$t->containers->start('abc'),
+    'and 0 is still false, so a caller that only tests truth or ignores the '
+    . 'value sees exactly what it saw before';
 };
 
 done_testing;

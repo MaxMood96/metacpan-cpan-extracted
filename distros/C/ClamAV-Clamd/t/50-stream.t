@@ -144,7 +144,12 @@ is $c->transport, 'instream', 'scan() reports the instream transport';
     close $fh;
 
     is $c->scan_path($p)->state, 'infected', 'scan_path over a UNIX socket works';
-    is $c->transport, 'fildes', '  and used FILDES';
+    # FILDES where the platform has SCM_RIGHTS, INSTREAM where it does not.
+    # Both are correct answers; asserting the first everywhere fails a build
+    # that is doing exactly what it is supposed to.
+    is $c->transport,
+       (ClamAV::Clamd->have_fd_passing ? 'fildes' : 'instream'),
+       '  and used the best transport this platform has';
 
     my $t = ClamAV::Clamd->new(host => '127.0.0.1', port => 3310);
     my $r = $t->scan_path($p);

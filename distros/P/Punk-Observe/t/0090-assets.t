@@ -148,8 +148,14 @@ for my $t (qw(--wf-scale --wf-offset)) {
 
 # --- the layout rules that are not optional --------------------------------
 
-like($code, qr/\.tablewrap\s*\{[^}]*overflow-x:\s*auto/,
-     '.tablewrap scrolls horizontally, so the page body does not');
+# A TABLE IS ITS OWN SCROLL CONTAINER, which is what keeps a wide one from
+# pushing the layout sideways and a long one from putting every panel below it
+# off the screen. Either spelling of the overflow does that; what must not
+# happen is the rule losing it.
+like($code, qr/\.tablewrap\s*\{[^}]*overflow(?:-x)?:\s*(?:auto|scroll)/,
+     '.tablewrap scrolls itself, so the page body does not');
+like($code, qr/\.tablewrap\s*\{[^}]*max-height:\s*\d/,
+     '  and is bounded, so a five-hundred-row table does not bury the page');
 like($code, qr/body\s*\{[^}]*overflow-x:\s*hidden/,
      'the page body never scrolls horizontally');
 like($code, qr/body\s*\{[^}]*background:\s*var\(--paper\)/,
@@ -302,6 +308,22 @@ like($code, qr/\.flame text\s*\{[^}]*fill:\s*var\(/,
     is_deeply(\@bad, [],
               'every figure variable ends in _plot, which is what loads the library')
         or diag(join "\n", @bad, 'a figure the loader cannot see renders an empty box');
+}
+
+# ...AND THE LOADER HAS TO LOOK WHERE THE FIGURE IS.
+#
+# The naming rule above is half the guarantee. The other half is the scan that
+# reads it, and it read only the TOP level of the variables - so a dashboard,
+# whose figures hang off each panel rather than off the page, got four chart
+# elements and no library. The same empty box, arrived at from the other end.
+{
+    my %vars = (panels => [ { title => 'p', series_plot => '{"data":[]}' } ]);
+    my $found = (grep {
+        my $p = $_;
+        ref $p eq 'HASH'
+            && grep { /_plot\z/ && defined $p->{$_} && length $p->{$_} } keys %$p;
+    } @{ $vars{panels} }) ? 1 : 0;
+    ok($found, 'a figure nested in a panel is still a figure the loader finds');
 }
 
 # --- a figure never carries a null ------------------------------------------

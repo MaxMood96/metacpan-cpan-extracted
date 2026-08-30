@@ -1,0 +1,151 @@
+{% if error %}
+<div class="warnbox"><strong>{% error %}</strong>{% if hint %} {% hint %}{% end %}</div>
+{% end %}
+
+{% if writable %}{% else %}
+<div class="warnbox">This mount is read-only. Editing needs somewhere to write
+  and a CSRF token; see the <code>db</code> and <code>writable</code> options,
+  and turn on <code>csrf</code> in the application.</div>
+{% end %}
+
+<div class="panel">
+  <h2>{% if creating %}New dashboard{% else %}{% title %}{% end %}</h2>
+
+  <form method="post" action="{% prefix %}/dashboards{% if creating %}{% else %}/{% slug %}{% end %}">
+    {% raw csrf_field %}
+
+    <div class="field">
+      <label for="d-slug">Address</label>
+      {% if creating %}
+      <input type="text" id="d-slug" name="slug" value="{% slug %}"
+             spellcheck="false" placeholder="checkout">
+      {% else %}
+      <input type="text" id="d-slug" value="{% slug %}" disabled>
+      {% end %}
+      <p class="note">Letters, digits, dash and underscore. It is the URL, so
+        renaming one breaks every link to it.</p>
+      {% if field_slug %}<p class="fielderr">{% error %}</p>{% end %}
+    </div>
+
+    <div class="field">
+      <label for="d-title">Title</label>
+      <input type="text" id="d-title" name="title" value="{% title %}">
+      {% if field_title %}<p class="fielderr">{% error %}</p>{% end %}
+    </div>
+
+    <div class="field">
+      <label for="d-cols">Columns</label>
+      <input type="number" id="d-cols" name="cols" value="{% cols %}" min="1" max="6">
+      <p class="note">One to six. Below a narrow viewport every panel is full
+        width whatever this says.</p>
+    </div>
+
+    <button type="submit" {% if writable %}{% else %}disabled{% end %}>
+      {% if creating %}Create{% else %}Save{% end %}</button>
+  </form>
+</div>
+
+{% if creating %}{% else %}
+<div class="panel">
+  <h2>Panels</h2>
+
+  {% if panels %}
+
+  <form method="post" action="{% prefix %}/dashboards/{% slug %}/panels/save">
+    {% raw csrf_field %}
+    <div class="tablewrap">
+    <table class="rows paneltable">
+      <thead><tr><th>order</th><th>title</th><th>query</th><th>chart</th>
+                 <th>width</th><th></th></tr></thead>
+      <tbody>
+      {% for p in panels %}
+      <tr>
+        <td class="pt-num"><input type="number" name="p{% p.id %}_position"
+               value="{% p.position %}" min="0" aria-label="order"></td>
+        <td class="pt-title"><input type="text" name="p{% p.id %}_title"
+               value="{% p.title %}" aria-label="title"></td>
+        <td class="pt-query"><input type="text" name="p{% p.id %}_query"
+               value="{% p.query %}" spellcheck="false" class="mono"
+               aria-label="query"></td>
+        <td class="pt-viz">
+          <select name="p{% p.id %}_viz" aria-label="chart">
+            {% if p.viz_unknown %}
+            <option value="{% p.viz %}" selected>{% p.viz %} (unknown)</option>
+            {% end %}
+            {% for v in p.viz_options %}
+            <option value="{% v.name %}"{% if v.current %} selected{% end %}>{% v.name %}</option>
+            {% end %}
+          </select>
+        </td>
+        <td class="pt-num"><input type="number" name="p{% p.id %}_span"
+               value="{% p.span %}" min="1" max="6" aria-label="width"></td>
+        <td><button type="submit" class="danger" form="del-panel-{% p.id %}"
+                {% if writable %}{% else %}disabled{% end %}>Delete</button></td>
+      </tr>
+      {% end %}
+      </tbody>
+    </table>
+    </div>
+    <button type="submit" {% if writable %}{% else %}disabled{% end %}>Save
+      all panels</button>
+  </form>
+  {% for p in panels %}
+  <form method="post"
+        action="{% prefix %}/dashboards/{% slug %}/panels/{% p.id %}/delete"
+        id="del-panel-{% p.id %}">
+    {% raw csrf_field %}
+  </form>
+  {% end %}
+  {% else %}
+  <p class="empty">No panels yet. A panel is a query with a title.</p>
+  {% end %}
+</div>
+
+<div class="panel">
+  <h2>Add a panel</h2>
+  <form method="post" action="{% prefix %}/dashboards/{% slug %}/panels">
+    {% raw csrf_field %}
+
+    <div class="field">
+      <label for="p-title">Title</label>
+      <input type="text" id="p-title" name="title">
+      {% if field_title %}<p class="fielderr">{% error %}</p>{% end %}
+    </div>
+
+    <div class="field">
+      <label for="p-query">Query</label>
+      <input type="text" id="p-query" name="query" class="mono" spellcheck="false"
+             placeholder="spans | where duration > 500ms | bucket(30s) count by service">
+      <p class="note">Checked by the same parser that will run it, so a panel
+        that saves is a panel that draws. See
+        <a href="{% prefix %}/explore{% range_qs %}">the explorer</a> to work
+        one out first.</p>
+      {% if field_query %}<p class="fielderr">{% error %}</p>{% end %}
+    </div>
+
+    <div class="field">
+      <label for="p-viz">Chart</label>
+      <select id="p-viz" name="viz">
+        {% for v in viz_options %}<option value="{% v.name %}">{% v.name %}</option>{% end %}
+      </select>
+      <label for="p-span">Width</label>
+      <input type="number" id="p-span" name="span" value="1" min="1" max="6" size="2">
+    </div>
+
+    <button type="submit" {% if writable %}{% else %}disabled{% end %}>Add</button>
+  </form>
+</div>
+
+<div class="panel">
+  <h2>Delete</h2>
+  <p class="note">The panels go with it.</p>
+  <form method="post" action="{% prefix %}/dashboards/{% slug %}/delete">
+    {% raw csrf_field %}
+    <button type="submit" class="danger"
+            {% if writable %}{% else %}disabled{% end %}>Delete this dashboard</button>
+  </form>
+</div>
+{% end %}
+
+<p><a href="{% prefix %}/dashboards{% if creating %}{% else %}/{% slug %}{% end %}{% range_qs %}">Back
+  to the dashboard</a></p>

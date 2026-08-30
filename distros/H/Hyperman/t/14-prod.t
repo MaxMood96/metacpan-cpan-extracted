@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use lib 't/lib';
 use Test::More;
-use HMTest qw(free_ports server_status server_reap slurp);
+use HMTest qw(free_ports quiet_child server_status server_reap slurp);
 use IO::Socket::INET;
 use Time::HiRes ();
 use File::Temp ();
@@ -28,7 +28,7 @@ my $token = "hm$$-" . time;
 my $sup = fork;
 die "fork: $!" unless defined $sup;
 if ($sup == 0) {
-    open STDERR, '>', $errfile;
+    quiet_child(stderr => $errfile);
     require Hyperman;
     Hyperman->run(
         app => sub {

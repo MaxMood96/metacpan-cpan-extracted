@@ -1,8 +1,20 @@
 Revision history for Punk
 
+0.35    2026-08-29
+        - An SSE heartbeat that finds the client gone no longer re-arms
+          itself on a stream it has just torn down.
+        - Freeing an SSE stream drops its loop watchers before its socket.
+        - t/0733-auth-sqitch.t skips unless `sqitch` is runnable, not
+          merely installed.
+        - t/1020-sse.t polls for the close rather than sleeping on it, and
+          reports what answered and which backend when it does not.
+
 0.34    2026-08-26
-        - ADDS: pk_abi v4 - `on_log_ctx`, a log tap that is handed the
-          CONTEXT the line was logged against.
+        - ADDS: pk_abi v4 - on_log_ctx, a log tap that is handed the context
+          the line was logged against, so a telemetry layer can correlate a
+          record with its request. on_log is unchanged; a consumer registering
+          both receives every record twice.
+        - The logger resolves its context before running its observers.
 
 0.33    2026-08-25
         - Static mounts hold small files in memory per worker, so a hit does

@@ -49,6 +49,17 @@ subtest "missed match" => sub {
 
 };
 
+subtest "missed suffix" => sub {
+
+    my $m = Algorithm::UrataniTakeda->new( patterns => [ "attack", "tack" ] );
+
+    is match_details( $m, "attack" ), as_bag(
+        [ 0, "attack" ],
+        [ 2, "tack" ],
+    );
+
+};
+
 subtest "small strings" => sub {
 
     my $m = Algorithm::UrataniTakeda->new( patterns => [ "a", "ba" ] );

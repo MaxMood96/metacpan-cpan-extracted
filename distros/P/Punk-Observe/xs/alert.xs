@@ -267,6 +267,21 @@ potg_check(SV *url, SV *allow)
 
 MODULE = Punk::Observe   PACKAGE = Punk::Observe::Dashboard   PREFIX = podb_
 
+# The chart kinds a panel may be, in the order po_panel.h declares them.
+#
+# From the C rather than a list in the editor, because the validator and the
+# picker disagreeing is how a panel gets saved as something the renderer will
+# not draw.
+void
+podb_viz_names()
+    PPCODE:
+    {
+        int i;
+        for (i = 0; i <= PO_VIZ_TABLE; i++)
+            mXPUSHs(newSVpv(po_viz_name(i), 0));
+        XSRETURN(PO_VIZ_TABLE + 1);
+    }
+
 void
 podb_check_panel(SV *spec)
     PPCODE:
@@ -276,7 +291,7 @@ podb_check_panel(SV *spec)
             SV **f;
             STRLEN tl = 0, ql = 0, vl = 0;
             const char *title = "", *query = "", *viz = "";
-            IV position = 0, cols = 1;
+            IV position = 0, span = 1;
             int rc;
             HV *res = newHV();
 
@@ -287,15 +302,15 @@ podb_check_panel(SV *spec)
             if ((f = hv_fetchs(h, "query", 0)) && SvOK(*f)) query = SvPV(*f, ql);
             if ((f = hv_fetchs(h, "viz", 0))   && SvOK(*f)) viz   = SvPV(*f, vl);
             if ((f = hv_fetchs(h, "position", 0))) position = SvIV(*f);
-            if ((f = hv_fetchs(h, "cols", 0)))     cols     = SvIV(*f);
+            if ((f = hv_fetchs(h, "span", 0)))     span     = SvIV(*f);
 
             rc = po_panel_check(&p, title, (size_t)tl, query, (size_t)ql,
-                                viz, (size_t)vl, (int)position, (int)cols);
+                                viz, (size_t)vl, (int)position, (int)span);
             hv_stores(res, "ok",       newSViv(rc == PO_PANEL_OK));
             hv_stores(res, "code",     newSViv(rc));
             hv_stores(res, "error",    newSVpv(p.err, 0));
             hv_stores(res, "viz",      newSVpv(po_viz_name(p.viz), 0));
             hv_stores(res, "position", newSViv(p.position));
-            hv_stores(res, "cols",     newSViv(p.cols));
+            hv_stores(res, "span",     newSViv(p.span));
             mXPUSHs(newRV_noinc((SV *)res));
         }

@@ -1,63 +1,76 @@
 [
   {
-    "Id": "abc123def456",
-    "Names": ["/my-container"],
-    "Image": "nginx:latest",
-    "ImageID": "sha256:abc123",
-    "Command": "nginx -g 'daemon off;'",
-    "Created": 1705300000,
-    "State": "running",
-    "Status": "Up 2 hours",
-    "Ports": [
-      {
-        "IP": "0.0.0.0",
-        "PrivatePort": 80,
-        "PublicPort": 8080,
-        "Type": "tcp"
-      }
+    "Id": "b20ac7508d80182ba3cd1cbd006ac10c8a15f4f7590fa89c2078d146caf96555",
+    "Names": [
+      "/apidocker-fixture-probe-39a25e34"
     ],
-    "Labels": {
-      "maintainer": "NGINX"
-    },
-    "SizeRw": 12288,
-    "SizeRootFs": 187654321,
-    "HostConfig": {
-      "NetworkMode": "default"
-    },
-    "NetworkSettings": {
-      "Networks": {
-        "bridge": {
-          "IPAddress": "172.17.0.2",
-          "Gateway": "172.17.0.1"
-        }
+    "Image": "alpine:3",
+    "ImageID": "sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b",
+    "ImageManifestDescriptor": {
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "digest": "sha256:79ff19e9084a00eece421b2523fb93e22d730e2c0e525905de047e848e56d95f",
+      "size": 1022,
+      "annotations": {
+        "com.docker.official-images.bashbrew.arch": "amd64",
+        "org.opencontainers.image.base.name": "scratch",
+        "org.opencontainers.image.created": "2026-06-16T00:01:04Z",
+        "org.opencontainers.image.revision": "398ff0c866d27e9f46f53e48184fe36c674b8897",
+        "org.opencontainers.image.source": "https://github.com/alpinelinux/docker-alpine.git#398ff0c866d27e9f46f53e48184fe36c674b8897:x86_64",
+        "org.opencontainers.image.url": "https://hub.docker.com/_/alpine",
+        "org.opencontainers.image.version": "3.24.1"
+      },
+      "platform": {
+        "architecture": "amd64",
+        "os": "linux"
       }
     },
-    "Mounts": []
-  },
-  {
-    "Id": "def789ghi012",
-    "Names": ["/redis-cache"],
-    "Image": "redis:7",
-    "ImageID": "sha256:def789",
-    "Command": "docker-entrypoint.sh redis-server",
-    "Created": 1705290000,
-    "State": "exited",
-    "Status": "Exited (0) 1 hour ago",
+    "Command": "sleep 300",
+    "Created": 1787972042,
     "Ports": [],
-    "Labels": {},
-    "SizeRw": 0,
-    "SizeRootFs": 130000000,
+    "Labels": {
+      "apidocker-fixture-probe": "1"
+    },
+    "State": "running",
+    "Status": "Up 1 second",
     "HostConfig": {
-      "NetworkMode": "default"
+      "NetworkMode": "bridge"
+    },
+    "Health": {
+      "Status": "none",
+      "FailingStreak": 0
     },
     "NetworkSettings": {
       "Networks": {
         "bridge": {
-          "IPAddress": "",
-          "Gateway": ""
+          "IPAMConfig": null,
+          "Links": null,
+          "Aliases": null,
+          "DriverOpts": null,
+          "GwPriority": 0,
+          "NetworkID": "ef0659ba34e1d997800ca81a4a09e2ec8b3fc74031b2c2c9af56d9dabcad7642",
+          "EndpointID": "bd2ed2263528962dcef310b527254bb580570986f1abc1fa51c07f5e1eab1786",
+          "Gateway": "172.17.0.1",
+          "IPAddress": "172.17.0.2",
+          "MacAddress": "46:b1:65:88:56:f8",
+          "IPPrefixLen": 16,
+          "IPv6Gateway": "",
+          "GlobalIPv6Address": "",
+          "GlobalIPv6PrefixLen": 0,
+          "DNSNames": null
         }
       }
     },
-    "Mounts": []
+    "Mounts": [
+      {
+        "Type": "volume",
+        "Name": "apidocker-fixture-probe-39a25e34",
+        "Source": "/var/lib/docker/volumes/apidocker-fixture-probe-39a25e34/_data",
+        "Destination": "/data",
+        "Driver": "local",
+        "Mode": "z",
+        "RW": true,
+        "Propagation": ""
+      }
+    ]
   }
 ]

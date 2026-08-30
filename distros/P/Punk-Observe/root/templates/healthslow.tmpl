@@ -1,0 +1,64 @@
+
+{% if health %}
+<div class="panel">
+  <h2>Service health
+    {% if writable %}<a class="btn"
+      href="{% prefix %}/health-targets/edit">Edit</a>{% end %}</h2>
+  <div class="tablewrap">
+    <table class="rows">
+      <thead><tr><th>target</th><th>state</th><th class="num">latency</th>
+                 <th class="num">for</th></tr></thead>
+      <tbody>
+      {% for t in health %}
+      <tr class="hz-target {% t.row_class %}">
+        <td><span class="mono">{% t.name %}</span></td>
+        <td>{% t.state %}</td>
+        <td class="num mono">{% if t.ms %}{% t.ms %} ms{% end %}</td>
+        <td class="num mono">{% t.held_s %}</td>
+      </tr>
+      {% for c in t.checks %}
+      <tr class="hz-check {% c.row_class %}">
+        <td class="hz-name">{% t.name %} &rsaquo; {% c.name %}</td>
+        <td>{% c.state %}</td>
+        <td class="num mono">{% if c.ms %}{% c.ms %} ms{% end %}</td>
+        <td class="num mono">{% c.held_s %}</td>
+      </tr>
+      {% end %}
+      {% end %}
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Results are metric points, so the history is in
+    <a href="{% prefix %}/explore?q=metric%20punk.health.ok{% range_amp %}">the
+    explorer</a> and an alert on it needs no new rule type.</p>
+</div>
+
+{% if health_up_plot %}
+<div class="panel">
+  <h2>Up or down</h2>
+  <div class="chartwrap" data-chart>
+    <script type="application/json" data-plot>{% raw health_up_plot %}</script>
+    <noscript><p class="note">The chart needs JavaScript. The current state
+      of each target, and how long it has held, are in the table above -
+      what this adds is when it changed.</p></noscript>
+  </div>
+  <p class="note">A band per target and check across the window, drawn from
+    <a href="{% prefix %}/explore?q=metric%20punk.health.ok{% range_amp %}">punk.health.ok</a>.
+    A bucket counts as down if <em>any</em> poll in it failed, so a single
+    failure is visible rather than averaged away.</p>
+</div>
+{% end %}
+
+{% else %}
+<div class="panel">
+  <h2>Service health</h2>
+  <p class="empty">Nothing is being polled yet.</p>
+  {% if writable %}
+  <p class="note"><a class="btn"
+    href="{% prefix %}/health-targets/edit">Add a target</a></p>
+  {% else %}
+  <p class="note">This mount is read-only, so targets are added where it is
+    writable; see the <code>db</code> and <code>writable</code> options.</p>
+  {% end %}
+</div>
+{% end %}

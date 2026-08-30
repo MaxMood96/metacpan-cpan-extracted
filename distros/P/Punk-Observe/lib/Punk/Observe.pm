@@ -4,7 +4,7 @@ use 5.010;
 use strict;
 use warnings;
 
-our $VERSION = '0.01';
+our $VERSION = '0.04';
 
 require XSLoader;
 XSLoader::load('Punk::Observe', $VERSION);
@@ -19,7 +19,7 @@ Punk::Observe - an OpenTelemetry observability and logging backend
 
 =head1 VERSION
 
-Version 0.01
+Version 0.04
 
 =head1 SYNOPSIS
 
@@ -48,10 +48,9 @@ C<plackup>, or into anything else that speaks PSGI:
 Point any OpenTelemetry SDK at it on C</v1/traces>, C</v1/metrics> and
 C</v1/logs>, and ask one language about all three:
 
-    metric http.server.duration
+    metric http.server.request.count
       | where service = "api" and http.route = "/checkout"
       | rate(5m) by http.response.status_code
-      | p95
 
 =head1 DESCRIPTION
 
@@ -113,11 +112,11 @@ L<Punk::Observe::Limit>, L<Punk::Observe::Tenant>.
 There is no packaged server binary. What ships is the engine, the receiver and
 the plugin, assembled by the host application.
 
-Two things need something the host already has rather than something this
-distribution provides. Alert evaluation is a periodic task, so the host runs it
-on its own scheduler - see L</ALERTING>. Dashboards and alert rules are
-configuration rather than telemetry, so they live in the application's own
-database; F<sqitch/> ships the schema.
+One thing comes from the host rather than from this distribution: the queue.
+Alert evaluation and delivery run as jobs the plugin registers on the host's
+L<Punk::Queue> - see L</ALERTING> - so a queue worker has to exist, which any
+queue-using Punk application already has. Rules and dashboards live in the
+configuration database the plugin migrates; F<sqitch/> is the schema.
 
 Exponential histograms and summaries are decoded past rather than stored. See
 L</WHAT IS NOT SUPPORTED>.
@@ -965,16 +964,22 @@ no alert, because it destroys trust in both.
     every      how often to evaluate
     labels     matched by the routing rules
 
-L<Punk::Observe::Alert> evaluates a rule against a series of ticks and returns
-the state changes; the host drives it from whatever scheduler it already has,
-which for a Punk application is a periodic job. So B<that interval is the
-resolution of every rule on the installation>. The first person who wants
-ten-second alerting needs to know why they cannot have it, which is why it is
-said here rather than discovered.
+B<Nothing is configured outside the screen.> Rules are created, edited,
+silenced and deleted on the alerts page, stored in the configuration
+database; L<Punk::Observe::Evaluate> runs them as a cron the plugin registers
+on the host's L<Punk::Queue> at registration - the host writes no loop, no
+cron entry, no evaluator. Its one contribution is the C<on_alert> callback,
+because delivery - webhook, email, pager - is the one thing the core cannot
+know.
+
+The cron's cadence B<is the resolution of every rule on the installation>;
+each rule's own C<every> is honoured on top of it, inside the pass. The
+first person who wants ten-second alerting needs to know why they cannot
+have it, which is why it is said here rather than discovered.
 
 Rules, dashboards, silences and the outbox are configuration rather than
-telemetry, so they live in the application's database. F<sqitch/> ships the
-schema.
+telemetry, so they live in the configuration database the plugin migrates -
+F<sqitch/> is the schema.
 
 =head2 State is per series
 
@@ -1042,6 +1047,39 @@ operator who needs an internal target adds it to an allowlist explicitly.
 
 See L<Punk::Observe::Target> for what that check does and does not claim.
 
+=head1 THE CONSOLE WATCHES ITSELF
+
+When the application this mounts into also carries L<Punk::OpenTelemetry>,
+browsing the console writes telemetry into the store the console is showing.
+That is B<deliberate, kept, and worth knowing about>: a console whose own
+latency is invisible is a console that cannot explain why it is slow, and
+during an incident "is it them or is it us" is a real question this answers.
+
+Three consequences to be aware of. The numbers on the status page include the
+reader looking at them. The service map has an edge that is the console. And
+on a quiet system the observer can be the dominant workload - the store fills
+with records about the act of looking at the store.
+
+An installation that wants the separation has two clean cuts, in order of
+preference:
+
+=over 4
+
+=item * B<A separate tenant.> Point the console's own exporter at the same
+endpoint with a different ingest key, and resolve that key to its own tenant.
+The console's telemetry stays inspectable - it is telemetry - without mixing
+into what is being observed.
+
+=item * B<Point the exporter elsewhere, or nowhere.> The console is an
+ordinary OTLP client; its exporter goes wherever any exporter goes, including
+off.
+
+=back
+
+What is not offered is a path-prefix exclusion inside the plugin. The mount
+prefix is configuration, the OTLP path is not under it, and a filter keyed on
+either would silently stop matching the day one of them moved.
+
 =head1 MOUNTING IT
 
     plugin 'Observe' => {
@@ -1106,6 +1144,14 @@ Never an eviction. Evicting an existing series to admit a new one converts a
 cardinality problem into data loss on the exact series somebody has open in a
 dashboard, which is the one they are watching because it matters. Admission
 only ever increments, so that is structural rather than a rule to remember.
+
+The cap gates B<metric> records only. A metric series carries ongoing state -
+rollups, exemplar sidecars, compression streams - and that is the cost the
+cap bounds. A log line or span with a unique attribute combination is bytes
+in a sealed segment, paid once and aged out by retention: you can log any
+data, a payment id per checkout included, without consuming a series slot.
+What bounds log and span attributes is the indexed-label allowlist below -
+unlisted attributes filter correctly and cost a scan, never a series.
 
 This limit B<has> a default, because a store with no cardinality limit is a
 store waiting for one bad deploy.

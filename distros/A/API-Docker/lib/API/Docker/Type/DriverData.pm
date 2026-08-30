@@ -1,0 +1,72 @@
+package API::Docker::Type::DriverData;
+# ABSTRACT: Information about the storage driver used to store the container's and image's filesystem
+our $VERSION = '0.004';
+use API::Docker::Type;
+use namespace::clean;
+
+
+docker name => Str, since => '1.51', required => 1;
+
+
+docker data => { Str, Str }, since => '1.51', required => 1;
+
+
+1;
+
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+API::Docker::Type::DriverData - Information about the storage driver used to store the container's and image's filesystem
+
+=head1 VERSION
+
+version 0.004
+
+=head1 DESCRIPTION
+
+Generated from the C<DriverData> definition of C<spec/v1.51.yaml>.
+
+=head2 name
+
+Name of the storage driver. The swagger lists this field as required;
+nothing here enforces that, see L<API::Docker::Type/C<since> is
+documentation>.
+
+=head2 data
+
+Low-level storage metadata, provided as key/value pairs.
+
+This information is driver-specific, and depends on the storage-driver in
+use, and should be used for informational purposes only. B<The keys are the
+caller's data> and are never translated. The swagger lists this field as
+required; nothing here enforces that, see L<API::Docker::Type/C<since> is
+documentation>.
+
+=head1 SUPPORT
+
+=head2 Issues
+
+Please report bugs and feature requests on GitHub at
+L<https://github.com/Getty/p5-api-docker/issues>.
+
+=head1 CONTRIBUTING
+
+Contributions are welcome! Please fork the repository and submit a pull request.
+
+=head1 AUTHOR
+
+Torsten Raudssus <getty@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=cut

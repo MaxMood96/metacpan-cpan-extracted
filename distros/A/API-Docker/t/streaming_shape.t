@@ -8,7 +8,7 @@ use Test::API::Docker::Mock;
 use JSON::MaybeXS;
 use API::Docker;
 
-# Regression coverage for karr #3: _request tried decode_json on the whole
+# Regression coverage for karr k3: _request tried decode_json on the whole
 # body first and only fell back to line-by-line parsing, so a stream carrying
 # exactly one JSON object came back as a HashRef while a multi-event stream
 # came back as an ArrayRef. Every .ndjson fixture below is a stream captured
@@ -65,8 +65,14 @@ subtest 'a multi-object stream is an ArrayRef of every event' => sub {
 };
 
 subtest 'the /events stream decodes to an ArrayRef' => sub {
-  # Captured from podman for one container create/init/start/died/remove
-  # cycle. The whole body is not valid JSON on its own -- only line by line.
+  # Captured from Podman 5.4.2 (API 1.41) for one container
+  # create/init/start/died/remove cycle. karr k62 re-measured the identical
+  # flow live on 5.8.4 (API 1.44) and found a sixth action, "cleanup",
+  # between die and remove -- this fixture predates that and is not
+  # recaptured for it: the point of this subtest is that a multi-line body
+  # decodes to one ArrayRef entry per line, which five lines demonstrate as
+  # well as six would. The whole body is not valid JSON on its own -- only
+  # line by line.
   my $body = load_fixture_raw('system_events_stream.ndjson');
   is eval { JSON::MaybeXS::decode_json($body) }, undef,
     'the body does not decode as a single JSON document';
@@ -169,12 +175,20 @@ SKIP: {
   };
 
   subtest 'the single-object endpoints still return a HashRef' => sub {
+    # images_list (karr k101): a real Podman 5.8.4 (API 1.44) capture, see
+    # t/images.t. container_inspect (karr k101 follow-up): a real Docker
+    # 29.7.2 (API 1.55) capture, see t/containers.t. Neither fact matters
+    # here: this subtest only checks the returned class, not fixture
+    # content -- the route key 'deadbeef' need not match the fixture's own
+    # (real) container id for that.
     my $docker = test_docker(
       'GET /images/nginx/json' => load_fixture('images_list')->[0],
       'GET /containers/deadbeef/json' => load_fixture('container_inspect'),
     );
-    isa_ok $docker->images->inspect('nginx'), 'API::Docker::Image';
-    isa_ok $docker->containers->inspect('deadbeef'), 'API::Docker::Container';
+    isa_ok $docker->images->inspect('nginx'),
+      'API::Docker::Type::ImageInspect';
+    isa_ok $docker->containers->inspect('deadbeef'),
+      'API::Docker::Type::ContainerInspectResponse';
     is ref $docker->system->version, 'HASH', 'version is a HashRef';
   };
 }

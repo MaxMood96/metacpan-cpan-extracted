@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use lib "t/lib";
 use Test::More;
-use HMTest qw(free_ports);
+use HMTest qw(free_ports quiet_child);
 use IO::Socket::INET;
 use Time::HiRes ();
 use Hyperman;
@@ -56,10 +56,7 @@ is(Hyperman->on_worker_start(sub { $RAN++ }), 1,
 
 my $pid = fork // die "fork: $!";
 if (!$pid) {
-    # Both handles: the child inherits the TAP pipe on STDOUT, and a server
-    # writing into it makes the harness see a corrupt stream.
-    open STDOUT, '>', '/dev/null';
-    open STDERR, '>', '/dev/null';
+    quiet_child();
     Hyperman->run(
         app => sub {
             my ($env) = @_;

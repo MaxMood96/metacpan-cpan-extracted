@@ -9,6 +9,12 @@
 use 5.010;
 use strict;
 use warnings;
+
+# UNBUFFERED, because this script's output is a running commentary on what it
+# started and half of it is worthless arriving late. Redirected to a file it
+# is block-buffered, so `./bin/demo > log` showed the servers coming up and
+# then nothing until the process was killed.
+$| = 1;
 use FindBin ();
 use File::Path ();
 use Getopt::Long ();
@@ -98,6 +104,19 @@ $SIG{INT} = $SIG{TERM} = sub { print "\nstopping\n"; shutdown_all(); exit 0 };
 
 # Wait for a port to answer rather than sleeping a guessed amount. A fixed
 # sleep is a coin toss on a loaded machine.
+# punk-queue, found the way plackup is: the script that belongs to THIS perl,
+# not whichever one is first on PATH. The demo runs under a perl that has the
+# Punk family installed and the system one does not.
+sub _punk_queue {
+    require Config;
+    my $s = "$Config::Config{scriptdir}/punk-queue";
+    return $s if -x $s;
+    for my $d (split /:/, ($ENV{PATH} || '')) {
+        return "$d/punk-queue" if -x "$d/punk-queue";
+    }
+    die "punk-queue not found - install Punk::Queue\n";
+}
+
 sub wait_for {
     my ($port, $what) = @_;
     require IO::Socket::INET;
@@ -137,6 +156,19 @@ unlink "$EXAMPLE/cards/var/incident";
       . "  pkill -f 'plackup.*app.psgi'\n" if @busy;
 }
 
+# SEED BEFORE THE FORK. Rules, dashboards and health targets go in through
+# the distribution's own writers, once, from this one process - four workers
+# upserting the same names concurrently is a UNIQUE-constraint race one of
+# them loses at boot.
+{
+    local $ENV{DEMO_STORE} = $STORE;
+    my $rc = system($^X, @INC_ARGS, '-I', "$EXAMPLE/observe/lib", '-e',
+        'require Demo::DB; Demo::DB::seed(); Demo::DB::seed_dashboards(); '
+      . 'Demo::DB::seed_health();');
+    die "seeding failed\n" if $rc;
+    print "  seeded rules, dashboards, health targets\n";
+}
+
 print "starting (server: $SERVER)\n";
 print "  NOTE: Hyperman is not installed, so a slow dependency will block.\n"
     if $SERVER ne 'Hyperman';
@@ -172,25 +204,40 @@ spawn('shop', 'shop', $PORT{shop}, %otel,
 wait_for($PORT{shop}, 'shop');
 printf "  shop     http://127.0.0.1:%d/     service.name=shop\n", $PORT{shop};
 
-# THE ALERT EVALUATOR IS ITS OWN PROCESS, which is the shape a real deployment
-# has: cron, Punk::Queue, or a leader-elected worker. Evaluating on the request
-# that draws the screen would make the states depend on who last looked at
-# them, and would record nothing at all when nobody is watching - which is
-# exactly when an incident happens.
+# THERE IS NO EVALUATOR PROCESS ANY MORE. The distribution registers
+# observe.evaluate as a cron on the queue at plugin registration, and the
+# worker below runs it - which is the point of the exercise: a host writes
+# no loop, and the demo proves it by not having one.
+
+
+# THE QUEUE WORKER, which is what actually runs the health poll.
+#
+# `cron '* * * * *' => ...` in Demo::Observe declares the task and reconciles
+# it into pq_crons when the app compiles - but a declared cron fires only
+# inside a worker pool, and the web servers above are not one. Without this
+# the Service health table sits at "never polled" for ever, with the targets
+# configured and nothing asking them anything.
+#
+# The scheduler runs IN this pool, which is why the task takes the leader
+# lease itself: with more than one worker they would otherwise each fire the
+# same minute, and the check history would be N times the traffic with a
+# meaningless `ms` series.
 {
     my $pid = fork();
     die "fork: $!" unless defined $pid;
     if (!$pid) {
         local $ENV{DEMO_STORE} = $STORE;
-        chdir $EXAMPLE or die "chdir: $!";
-        open STDOUT, '>>', "$EXAMPLE/var/evaluate.log" or die $!;
+        chdir "$EXAMPLE/observe" or die "chdir: $!";
+        open STDOUT, '>>', "$EXAMPLE/var/queue.log" or die $!;
         open STDERR, '>&', \*STDOUT or die $!;
         $| = 1;
-        exec $^X, @INC_ARGS, "$HERE/evaluate", '--every', 15
-            or die "exec evaluate: $!";
+        exec $^X, @INC_ARGS, "-Ilib", _punk_queue(),
+             'worker', '--app', 'Demo::Observe', '-j', '1', '--interval', '0.5'
+            or die "exec punk-queue: $!";
     }
-    push @kids, [ 'evaluate', $pid, 0 ];
-    print "  evaluate every 15s                     var/evaluate.log\n";
+    push @kids, [ 'queue', $pid, 0 ];
+    print "  queue worker (health cron)            var/queue.log\n";
+
 }
 
 print "\n";
@@ -200,6 +247,7 @@ if (!$traffic) {
     print "  drive it:  ./bin/traffic --seconds 60\n";
     print "  break it:  curl -X PUT '127.0.0.1:$PORT{cards}/incident?on=1'\n";
     sleep 1 while 1;
+
 }
 
 # ---- traffic ---------------------------------------------------------------
@@ -213,9 +261,9 @@ print "\n";
 print "what to look at:\n";
 printf "  http://127.0.0.1:%d/observe/alerts   evaluated, and RECORDED\n",
     $PORT{observe};
-printf "  sqlite3 %s/alerts.db 'SELECT * FROM alert_events'\n", $STORE;
+printf "  sqlite3 %s/config.db 'SELECT * FROM alert_events'\n", $STORE;
 printf "  ls %s/default/wal/\n", $STORE;
-print "  var/observe.log, var/shop.log, var/cards.log, var/evaluate.log\n\n";
+print "  var/observe.log, var/shop.log, var/cards.log, var/queue.log\n\n";
 
 print "leaving the servers up. Ctrl-C to stop.\n";
 sleep 1 while 1;

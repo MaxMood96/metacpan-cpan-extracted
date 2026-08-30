@@ -152,6 +152,23 @@ poe_run(SV *query, SV *rows, SV *opts)
                 hv_stores(meta, "steps",         newSViv(res.steps));
                 hv_stores(r, "meta", newRV_noinc((SV *)meta));
 
+                /* THE IDS THE JOIN WILL RE-KEY ON, handed out separately from
+                 * the rows because after an aggregate there are no rows. The
+                 * store runs the second pass; the executor only says which
+                 * traces survived its filters. */
+                if (res.nex || res.ex_overflow) {
+                    AV *xh = newAV(), *xl = newAV();
+                    uint32_t i;
+                    for (i = 0; i < res.nex; i++) {
+                        av_push(xh, po_u64_to_sv(res.ex_hi[i]));
+                        av_push(xl, po_u64_to_sv(res.ex_lo[i]));
+                    }
+                    hv_stores(r, "rekey_hi", newRV_noinc((SV *)xh));
+                    hv_stores(r, "rekey_lo", newRV_noinc((SV *)xl));
+                    if (res.ex_overflow)
+                        hv_stores(r, "rekey_overflow", newSViv(1));
+                }
+
                 mXPUSHs(newRV_noinc((SV *)r));
             }
 

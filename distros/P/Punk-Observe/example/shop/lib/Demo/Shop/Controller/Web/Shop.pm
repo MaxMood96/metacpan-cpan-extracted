@@ -170,7 +170,8 @@ sub checkout {
     # "checkout started" answers nothing during an incident; the same line
     # with the amount, the currency and the payment id on it is the one
     # somebody greps for, and every field here arrives as an attribute on the
-    # exported record.
+    # exported record. Unbounded values are fine on a LOG record - the
+    # cardinality cap gates metric label sets, not log fields.
     my $payment = sprintf('PAY-%06d', int(rand 1_000_000));
     $c->log->info({ message => 'checkout started',
                     'payment.id'       => $payment,

@@ -29,23 +29,22 @@ optional_features: {}
 provides:
   String::Copyright:
     file: lib/String/Copyright.pm
-    version: '0.003014'
+    version: v0.4.0
 recommends:
   re::engine::RE2: '0'
 requires:
   Exporter::Tiny: '0'
-  Set::IntSpan: '1.12'
   constant: '0'
-  perl: '5.008001'
+  perl: '5.040001'
 resources:
   Identifier: http://purl.org/NET/cpan-uri/dist/String-Copyright/project
   bugtracker: https://bugs.debian.org/cgi-bin/pkgreport.cgi?pkg=libstring-copyright-perl
   homepage: https://metacpan.org/pod/String::Copyright
   license: http://www.gnu.org/licenses/agpl-3.0.txt
   repository: https://anonscm.debian.org/cgit/build-common/string-copyright.git
-version: '0.003014'
+version: v0.4.0
 x_help_wanted:
-  - tester
   - documenter
-x_serialization_backend: 'CPAN::Meta::YAML version 0.018'
+  - tester
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'
 x_static_install: 1

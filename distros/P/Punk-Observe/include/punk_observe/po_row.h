@@ -42,6 +42,75 @@ typedef struct {
     int     nattr;
 } po_row;
 
+/* An identifier the way a person typed it, as the two integers a row holds.
+ *
+ * BOTH SPELLINGS, because both are things somebody pastes: 32 hex characters
+ * is the wire form every other tool prints, and `<hi>-<lo>` decimal is what
+ * this UI's own links carry. A span id is a single decimal integer.
+ *
+ * Returns 0 for anything that is not an identifier at all, which the caller
+ * turns into a predicate that matches nothing - the same answer as before,
+ * but now reached because the input was not an id rather than because the
+ * column could not be read.
+ *
+ * The Perl side has the same parse in povw_trace_id_c, on SVs. This one is
+ * plain bytes so that the ROW layer can use it, and so the literal is parsed
+ * ONCE when the query is planned rather than once per row scanned. */
+static int po_parse_id(const char *p, size_t len, po_u64 *hi, po_u64 *lo) {
+    size_t i, start = 0, end;
+
+    *hi = 0; *lo = 0;
+    if (!p) return 0;
+    while (start < len && (p[start] == ' ' || p[start] == '\t')) start++;
+    end = len;
+    while (end > start && (p[end - 1] == ' ' || p[end - 1] == '\t')) end--;
+    p += start;
+    len = end - start;
+    if (!len) return 0;
+
+    if (len == 32) {                       /* the wire form */
+        po_u64 h = 0, l = 0;
+        for (i = 0; i < 32; i++) {
+            int d;
+            char c = p[i];
+            if      (c >= '0' && c <= '9') d = c - '0';
+            else if (c >= 'a' && c <= 'f') d = c - 'a' + 10;
+            else if (c >= 'A' && c <= 'F') d = c - 'A' + 10;
+            else goto decimal;
+            if (i < 16) h = (h << 4) | (po_u64)d;
+            else        l = (l << 4) | (po_u64)d;
+        }
+        *hi = h; *lo = l;
+        return (h || l) ? 1 : 0;           /* an all-zero id is not one */
+    }
+
+decimal:
+    {   /* `<hi>-<lo>`, or a bare integer for a span id */
+        size_t dash = 0;
+        int found = 0;
+        po_u64 a = 0, b = 0;
+        for (i = 0; i < len; i++) if (p[i] == '-') { dash = i; found = 1; break; }
+        for (i = 0; i < len; i++) {
+            if (found && i == dash) continue;
+            if (p[i] < '0' || p[i] > '9') return 0;
+        }
+        if (!found) {
+            for (i = 0; i < len; i++) b = b * 10 + (po_u64)(p[i] - '0');
+            *hi = 0; *lo = b;
+            return 1;
+        }
+        if (!dash || dash + 1 >= len) return 0;
+        for (i = 0; i < dash; i++)    a = a * 10 + (po_u64)(p[i] - '0');
+        for (i = dash + 1; i < len; i++) b = b * 10 + (po_u64)(p[i] - '0');
+        *hi = a; *lo = b;
+        return (a || b) ? 1 : 0;
+    }
+}
+
+/* Does this field name an identifier column? */
+#define PO_IS_TRACE_ID(f, n) ((n) == 8 && memcmp((f), "trace_id", 8) == 0)
+#define PO_IS_SPAN_ID(f, n)  ((n) == 7 && memcmp((f), "span_id",  7) == 0)
+
 static const char *po_row_str(const po_row *r, const char *f, size_t flen,
                               size_t *out_len) {
     int i;

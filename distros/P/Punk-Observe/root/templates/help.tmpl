@@ -1,0 +1,209 @@
+<div class="panel">
+  <h2>A query is a source and a pipeline</h2>
+  <p class="note">One language across traces, metrics and logs. Every query
+    starts by naming which of them it is asking about, and each
+    <code>|</code> after that is another step.</p>
+  <p><code class="q">spans | where duration &gt; 500ms | by service | count</code></p>
+</div>
+
+<div class="panel">
+  <h2>Sources</h2>
+  <table class="rows">
+    <thead><tr><th>write</th><th>also accepted</th>
+               <th>columns you can filter and group on</th></tr></thead>
+    <tbody>
+    {% for s in sources %}
+    <tr><td class="mono">{% s.form %}</td>
+        <td class="mono faint">{% s.alias %}</td>
+        <td class="mono">{% s.cols %}</td></tr>
+    {% end %}
+    </tbody>
+  </table>
+  <p class="note">The aliases <code>logs</code>, <code>traces</code> and
+    <code>span</code> are accepted too. Anything that is not one of these
+    columns is treated as an attribute name, so
+    <code class="q">log | where http.route = "/checkout"</code> works on
+    whatever your exporter attached.</p>
+</div>
+
+<div class="panel">
+  <h2>Filtering</h2>
+  <p><code class="q">log | where severity &gt;= error and service = "shop"</code></p>
+  <p class="note">Operators: {% for o in operators %}<code>{% o %}</code> {% end %}
+    &mdash; with <code>and</code>, <code>or</code>, <code>not</code> and
+    parentheses. There is a shorthand for a run of equalities:
+    <code class="q">spans{service = "cards"} | count</code></p>
+
+  <p class="note"><strong>Absent is not zero.</strong> A comparison against a
+    column this row does not carry is false in <em>both</em> directions, so
+    <code>where duration &gt; 0</code> does not match a log line and
+    <code>where duration &lt; 1</code> does not either. That is deliberate: the
+    alternative is a filter that quietly matches everything with no duration.
+    The one comparison where absence gets to be the answer is
+    <code>null</code>: grouping by an attribute puts every row that lacks it
+    in a <code>(none)</code> group, and
+    <code class="q">log | where risk.outcome != null | by risk.outcome | count</code>
+    drops those rows first. <code>= null</code> selects them instead, and
+    only <code>=</code> and <code>!=</code> compare with it - an ordering
+    against nothing would have to invent a meaning. <code>!= null</code>
+    tests that the attribute exists at all; <code>!= ""</code> tests that its
+    value is non-empty, which is a different question.</p>
+
+  <p class="note"><strong><code>=~</code> is not a regular expression
+    engine.</strong> It takes an anchored prefix
+    <code>"^api-"</code>, an anchored suffix <code>"error$"</code>, both
+    anchors for an exact match, or a plain substring. Anything else is refused
+    before the query runs, with a message saying so.</p>
+
+  <p class="note"><strong>Trace and span ids filter in either spelling.</strong>
+    <code class="q">log | where trace_id = "4bf844f1e2c05a8b9d3e7f6a1b2c3d4e"</code>
+    takes the 32-hex form every tool prints, and the
+    <code>hi-lo</code> decimal pair this UI's own links carry works too. Only
+    <code>=</code> and <code>!=</code> mean anything on an identifier; an
+    ordering comparison matches nothing rather than inventing a meaning.</p>
+
+  <p class="note"><strong><code>status</code> and <code>kind</code> are
+    numbers.</strong> <code class="q">spans | where status == 2</code> finds
+    the failures; <code>status = "error"</code> matches nothing, because the
+    column is numeric and a string comparison against it is false for every
+    row.</p>
+</div>
+
+<div class="panel">
+  <h2>Counting and grouping</h2>
+  <p><code class="q">spans | by service | count</code></p>
+  <p class="note">Aggregates:
+    {% for a in aggregates %}<code>{% a %}</code> {% end %}</p>
+
+  <p class="note"><strong>An aggregate takes no argument</strong> and reads a
+    column decided by what you are asking about: <code>value</code> for a
+    metric, <code>duration</code> for a span, <code>severity</code> for a log
+    line. So <code class="q">spans | p95</code> is the 95th percentile
+    <em>of duration</em>, and there is no way to write
+    <code>p95(some.attribute)</code>. A log source refuses every aggregate but
+    <code>count</code> and <code>distinct</code>, because it has no numeric
+    column worth averaging.</p>
+
+  <p class="note"><code>distinct</code> counts groups, so it means something
+    only with a <code>by</code>.</p>
+</div>
+
+<div class="panel">
+  <h2>Over time</h2>
+  <p><code class="q">log | bucket(5m) count by severity</code></p>
+  <p class="note"><code>bucket(WINDOW)</code> gives one row per window, which
+    is what a chart is drawn from. <code>rate(WINDOW)</code> is the same
+    divided by the window, for a per-second figure.</p>
+  <p><code class="q">metric http.server.request.count | rate(1m) by http.route</code></p>
+</div>
+
+<div class="panel">
+  <h2>Ordering and limiting</h2>
+  <p><code class="q">trace | slowest 20</code></p>
+  <p><code class="q">spans | by service | count | top 5 by count</code></p>
+  <p><code class="q">log | sort t desc | limit 100</code></p>
+</div>
+
+<div class="panel">
+  <h2>Drawing the answer</h2>
+  <p><code class="q">log | by severity | count | viz bar</code></p>
+  <p><code class="q">spans | bucket(30s) p95 | viz area</code></p>
+
+  <p class="note"><code>viz</code> names the chart. It changes nothing about
+    the answer, only how it is drawn, it may appear once, and it travels with
+    the query - a saved view or a pasted link keeps its chart, and in a
+    dashboard panel the query's own <code>viz</code> wins over whatever the
+    panel was saved with.</p>
+
+  <ul class="note">
+    <li><code>line</code> &mdash; one line per series, over time. Needs a
+      bucketed answer.</li>
+    <li><code>area</code> &mdash; the same lines, filled and stacked, so the
+      top edge is the total. Needs a bucketed answer.</li>
+    <li><code>bar</code> &mdash; over a bucketed answer, stacked bars per
+      window; over a plain grouped answer, one bar per group. Stacked rather
+      than overlaid, because two series of bars drawn on top of each other
+      hide one of them and nothing says so.</li>
+    <li><code>stat</code> &mdash; one large number: the latest value of the
+      first series. "What is it now", not an average of the window. Needs a
+      bucketed answer.</li>
+    <li><code>table</code> &mdash; the numbers themselves, no chart.</li>
+  </ul>
+
+  <p class="note">A kind the answer cannot take is refused with the stage
+    that would fix it &mdash; a line over <code>by service | count</code> has
+    nothing to put on the time axis, and the refusal says to add
+    <code>bucket(30s)</code>.</p>
+</div>
+
+<div class="panel">
+  <h2>Across signals</h2>
+  <p class="note">One expression from a metric spike, to the traces behind
+    it, to the log lines those traces wrote:</p>
+  <pre class="mono">metric http.server.request.duration
+  | where http.route = "/checkout"
+  | bucket(5m) p99
+  | exemplars
+  | traces
+  | logs</pre>
+  <p class="note"><code>exemplars</code> re-keys the stream onto the trace
+    ids the metric points carried, keeping only the points that carry one;
+    <code>traces</code>, <code>logs</code> and <code>spans</code> then read
+    that signal for exactly those traces. Each stage is a join, so a chain of
+    them is a chain of joins.</p>
+  <p class="note"><strong>An exemplar has to have been recorded</strong> for
+    any of this to reach anything: it is the trace id an SDK attaches to a
+    metric point, and a point without one joins to nothing rather than to
+    everything. A join covering more than 4,096 traces is refused rather than
+    trimmed - aggregate before the jump.</p>
+  <p class="note">The same walk by hand still works, and is often quicker for
+    one request: every log line that belongs to a trace links to it, the
+    trace's own page shows the log lines it wrote, and the traces search
+    takes an id pasted from anywhere.</p>
+</div>
+
+<div class="panel">
+  <h2>Writing values</h2>
+
+  <p class="note"><strong>Durations</strong> are a number and a unit:
+    {% for u in units %}<code>{% u.name %}</code> {% end %}&mdash;
+    <code>500ms</code>, <code>1.5s</code>, <code>2m</code>. There is no month,
+    deliberately: <code>1m</code> meaning a month somewhere would be a trap
+    nobody recovers from.</p>
+
+  <p class="note"><strong>Severities</strong> can be written by name and
+    resolve to OpenTelemetry's numbers:
+    {% for s in severities %}<code>{% s.name %}</code>={% s.value %} {% end %}</p>
+
+  <p class="note"><strong>Strings</strong> are quoted, single or double. A bare
+    word is refused rather than guessed at, because a bare word is almost
+    always a column name typed where a value belongs.</p>
+
+  <p class="note"><strong>Comments</strong> run from <code>#</code> to the end
+    of the line.</p>
+</div>
+
+<div class="panel">
+  <h2>Keeping a query</h2>
+  <p class="note">Every view here is a URL - the query, the window and the
+    chart all ride the address bar, so sharing a result is pasting a link,
+    and it means the same thing in somebody else's browser. The
+    <strong>Save</strong> box beside the query names one for later: a view
+    saved with a preset like <code>6h</code> stays relative and keeps meaning
+    "the last six hours"; one saved from a picked window keeps its exact
+    instants and says so. The <em>What you can filter on</em> panel under the
+    box lists the columns for your source and the attribute keys your
+    exporters actually sent - the ones marked <strong>label</strong> are
+    indexed, and filtering on them narrows the scan instead of reading past
+    it.</p>
+</div>
+
+<div class="panel">
+  <h2>When a query is refused</h2>
+  <p class="note">Two different things refuse a query and they mean different
+    things. The <strong>parser</strong> refuses what it cannot read, and names
+    the character. The <strong>planner</strong> refuses what it could read and
+    would have to scan too much of &mdash; that one is not a mistake, it is an
+    invitation to narrow the range or add a filter.</p>
+  <p><a href="{% prefix %}/explore{% range_qs %}">Try one in the explorer</a></p>
+</div>

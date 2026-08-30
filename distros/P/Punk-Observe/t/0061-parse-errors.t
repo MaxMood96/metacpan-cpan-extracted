@@ -113,7 +113,9 @@ fails('', qr/starts with metric, log, trace or spans/, 'an empty query');
 fails('wibble', qr/starts with metric/, 'an unknown source');
 fails('metric', qr/metric needs a name/, 'metric with no name');
 fails('log | ', qr/unknown stage/, 'a trailing pipe');
-fails('log | wibble', qr/unknown stage/, 'an unknown stage');
+# NAMED: this message is written onto a broken alert rule's state row and
+# read days later, where "unknown stage" alone says nothing actionable.
+fails('log | wibble', qr/unknown stage 'wibble'/, 'an unknown stage, by name');
 fails('log | where', qr/expected a column/, 'where with nothing after it');
 fails('log | where a', qr/comparison operator/, 'a field with no operator');
 fails('log | where a =', qr/expected a value/, 'an operator with no value');

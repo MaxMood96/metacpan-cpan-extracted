@@ -222,4 +222,47 @@ sub trace_of {
     }
 }
 
+# --- a signal that received nothing is drawn as zero, not dropped -----------
+#
+# The arriving chart omitted a signal whose window held none of it, which
+# takes its name out of the LEGEND as well as its line off the axes. A reader
+# then sees a chart that has only ever had one line on it, and "no spans
+# arrived in this window" is indistinguishable from "the span count was
+# lost" - which is how it was reported after a restart.
+#
+# It is the same reasoning the chart already applies to an empty BUCKET,
+# carried to the case where every bucket is empty.
+
+{
+    require File::Temp;
+    my $dir = File::Temp::tempdir(CLEANUP => 1);
+    my $store = Punk::Observe::Store->new(dir => $dir);
+    my $T = '1774224000000000000';
+    my $to = Punk::Observe::Store::nadd($T, 3_600 * 1_000_000_000);
+
+    # LOGS ONLY. Not a contrived shape: it is every store between the first
+    # log line and the first span.
+    Punk::Observe::WAL::append($store->wal_path, [ map { {
+        kind => 2, t => Punk::Observe::Store::nadd($T, $_ * 60_000_000_000),
+        body => "line $_", severity => 9, span_kind => 0, status => 0,
+        duration => 0, span_id => 0, parent_id => 0,
+        trace_hi => 0, trace_lo => 0, attrs => {} } } 0 .. 9 ], 0, 0);
+    $store->seal;
+
+    my $fig = File::Raw::JSON::file_json_decode(
+        Punk::Observe::Plot::ingest_figure($store, $T, $to));
+
+    my %by = map { ($_->{name} // '') => $_ } @{ $fig->{data} || [] };
+    is_deeply([ sort keys %by ], [ 'logs', 'spans' ],
+              'a signal with nothing in the window still gets a trace, so its '
+            . 'name is still in the legend');
+
+    ok(scalar @{ $by{spans}{x} || [] } >= 2,
+       '  spanning the window rather than being a bare point');
+    is_deeply([ grep { $_ != 0 } @{ $by{spans}{y} || [] } ], [],
+              '  and drawn flat at zero, which is what the answer said');
+    cmp_ok((sort { $b <=> $a } @{ $by{logs}{y} || [0] })[0], '>', 0,
+           '  while the signal that did arrive is unaffected');
+}
+
 done_testing();

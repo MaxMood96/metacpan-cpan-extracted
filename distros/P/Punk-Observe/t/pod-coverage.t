@@ -18,6 +18,11 @@ use Punk::Observe ();
 my @pkg = qw(
     Punk::Observe
     Punk::Observe::Alert
+    Punk::Observe::Backend
+    Punk::Observe::Cache
+    Punk::Observe::Backend::Pg
+    Punk::Observe::Backend::SQLite
+    Punk::Observe::Config
     Punk::Observe::Dashboard
     Punk::Observe::Decode
     Punk::Observe::Exec

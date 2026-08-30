@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use lib 't/lib';
 use Test::More;
-use HMTest qw(free_ports server_reap);
+use HMTest qw(free_ports quiet_child server_reap);
 use IO::Socket::INET;
 use Time::HiRes ();
 use File::Temp ();
@@ -44,8 +44,7 @@ my $gl_len    = length $gl_expect;
 my $sup = fork;
 die "fork: $!" unless defined $sup;
 if ($sup == 0) {
-    open STDERR, '>', "$dir/stderr.log";
-    open STDOUT, '>', '/dev/null';
+    quiet_child(stderr => "$dir/stderr.log");
     require Hyperman;
 
     package FdBody;   # getline + fileno: lifts to the fd source

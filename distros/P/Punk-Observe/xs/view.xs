@@ -441,16 +441,19 @@ povw__page_status(SV *class, SV *store, SV *req)
         s = (stats && SvROK(stats) && SvTYPE(SvRV(stats)) == SVt_PVHV)
             ? (HV *)SvRV(stats) : newHV();
 
+        /* THE RAW ANSWER RIDES ALONG, so the plugin does not ask again.
+         *
+         * _page needs the unformatted bytes for the storage gauge and used to
+         * call $store->stats a second time to get them - the same directory
+         * walk, every sidecar read twice, on every load of this page. The
+         * underscore prefix is the convention for "not a template variable":
+         * the plugin consumes it and deletes it before render. */
+        if (stats)
+            hv_stores(out, "_stats", SvREFCNT_inc(stats));
+
         hv_stores(out, "heading", newSVpvs("Overview"));
         hv_stores(out, "title",   newSVpvs("Overview"));
 
-        /* A deleted segment a reader still holds open is still occupying the
-         * disk, and it is invisible to df, to du and to the operator. This
-         * store cannot accumulate one - a read copies the segment and lets go
-         * of it within the call, so a retention pass never runs while a
-         * mapping is live - and the figure is reported anyway, because a
-         * design property that is never displayed is one nobody can check. */
-        povw_set_iv(aTHX_ out, "mapped_deleted", s, "mapped_deleted");
         povw_set_iv(aTHX_ out, "orphan_index",   s, "orphan_index");
         povw_set_iv(aTHX_ out, "wal_depth",      s, "wal_depth");
         povw_set_iv(aTHX_ out, "segments",       s, "segments");
@@ -574,6 +577,42 @@ povw__page_logs(SV *class, SV *store, SV *req)
 
         povw_window_vars(aTHX_ v, req, &from, &to);
 
+        /* THE CURSOR IS AN INSTANT, so it is stable while new lines arrive -
+         * an offset is not: five hundred new lines shift every offset by five
+         * hundred, and page two repeats page one. `before` narrows the top of
+         * the window to just under the oldest line of the previous page; the
+         * range, the query and everything else stay exactly as they were, so
+         * a page of results is still a link.
+         *
+         * Exclusive by one nanosecond via nsub, because the boundary line was
+         * already shown. Two lines sharing an instant across a page boundary
+         * would be the one loss; at nanosecond resolution that is accepted
+         * and recorded rather than solved with a composite cursor. */
+        {
+            SV **bf = NULL;
+            if (SvROK(req) && SvTYPE(SvRV(req)) == SVt_PVHV)
+                bf = hv_fetchs((HV *)SvRV(req), "before", 0);
+            if (bf && SvOK(*bf)) {
+                STRLEN bl;
+                const char *bp = SvPV(*bf, bl);
+                if (po_ns_plausible(bp, (size_t)bl)) {
+                    ENTER; SAVETMPS; PUSHMARK(SP);
+                    XPUSHs(*bf);
+                    XPUSHs(sv_2mortal(newSVpvs("1")));
+                    PUTBACK;
+                    if (call_pv("Punk::Observe::Store::nsub", G_SCALAR) == 1) {
+                        SPAGAIN;
+                        SvREFCNT_dec(to);
+                        to = SvREFCNT_inc(POPs);
+                        PUTBACK;
+                    }
+                    FREETMPS; LEAVE;
+                    SPAGAIN;
+                    hv_stores(v, "paged", newSViv(1));
+                }
+            }
+        }
+
         if (!SvOK(store) || !SvROK(store)) {
             SvREFCNT_dec(from); SvREFCNT_dec(to);
             goto done;
@@ -620,12 +659,18 @@ povw__page_logs(SV *class, SV *store, SV *req)
             int parse = st && SvOK(*st) && strEQ(SvPV_nolen(*st), "parse");
             hv_stores(v, "error", (e && SvOK(*e)) ? newSVsv(*e)
                       : newSVpvs("that query could not be run"));
-            /* The hint names the NEXT THING TO TRY, and which one depends on
-             * where it failed: a parse error is a typo, and anything else is
-             * a query that ran and asked for too much. */
-            hv_stores(v, "hint", parse
-                      ? newSVpvs("Check the stage after the pipe.")
-                      : newSVpvs("Narrow the range or add a filter."));
+            /* The hint names the NEXT THING TO TRY. The store's own is the
+             * most specific one there is - a refused join says "narrow the
+             * range, or aggregate before the jump" - and swallowing it for
+             * a generic line threw the guidance away. */
+            {
+                SV **ht = hv_fetchs(r, "hint", 0);
+                hv_stores(v, "hint", (ht && SvOK(*ht) && SvCUR(*ht))
+                          ? newSVsv(*ht)
+                          : parse
+                          ? newSVpvs("Check the stage after the pipe.")
+                          : newSVpvs("Narrow the range or add a filter."));
+            }
             SvREFCNT_dec(res);
             goto done;
         }
@@ -634,7 +679,16 @@ povw__page_logs(SV *class, SV *store, SV *req)
             SV **shape = hv_fetchs(r, "shape", 0);
             int is_rows = !shape || !SvOK(*shape)
                         || strEQ(SvPV_nolen(*shape), "rows");
+            int is_buckets = shape && SvOK(*shape)
+                          && strEQ(SvPV_nolen(*shape), "buckets");
             SV **mv = hv_fetchs(r, "meta", 0);
+
+            /* `| viz` works here exactly as it does in the explorer - same
+             * function, same refusals - and the bucketed fill comes with it,
+             * so `log | bucket(30s) count` draws instead of heading an empty
+             * panel. */
+            povw_apply_viz(aTHX_ v, r, res, q, (size_t)ql,
+                           is_rows, is_buckets);
 
             /* THE VOLUME CHART AND THE TABLE ANSWER THE SAME QUESTION.
              *
@@ -673,7 +727,8 @@ povw__page_logs(SV *class, SV *store, SV *req)
                         hv_stores(o, "key", x ? newSVsv(*x) : newSVpvs(""));
                         x = hv_fetchs(g, "value", 0);
                         hv_stores(o, "value",
-                                  x ? newSVpvf("%g", (double)SvNV(*x)) : newSVpvs("0"));
+                                  x ? povw_fmt_value(aTHX_ (double)SvNV(*x))
+                                    : newSVpvs("0"));
                         povw_set_count(aTHX_ o, "count", g, "count");
                         av_push(groups, newRV_noinc((SV *)o));
                     }
@@ -747,6 +802,20 @@ povw__page_logs(SV *class, SV *store, SV *req)
                         hv_stores(o, "id", povw_record_id_sv(aTHX_ *e));
                         av_push(rows, newRV_noinc((SV *)o));
                     }
+
+                    /* THE WAY TO THE 501st LINE. Rows are newest first, so
+                     * when the page is full the oldest line shown is the
+                     * cursor for the next one: `before=<its instant>` narrows
+                     * the window's top and everything else in the URL stays.
+                     * Only when full - a short page IS the end, and an
+                     * "older" link there would page into nothing. */
+                    if (n >= POVW_LOG_PAGE && n > 0) {
+                        SV **le = av_fetch(ra, n - 1, 0);
+                        SV **lt = (le && SvROK(*le))
+                                ? hv_fetchs((HV *)SvRV(*le), "t", 0) : NULL;
+                        if (lt && SvOK(*lt))
+                            hv_stores(v, "older_cursor", newSVsv(*lt));
+                    }
                 }
                 hv_stores(v, "rows", newRV_noinc((SV *)rows));
                 if (meta) povw_set_iv(aTHX_ v, "degraded", meta, "degraded");
@@ -806,11 +875,10 @@ povw__page_dashboard(SV *class, SV *store, SV *req)
         hv_stores(v, "can_edit",   newSViv(0));
         hv_stores(v, "configured", newSViv(0));
         povw_window_vars(aTHX_ v, req, &from, &to);
-        /* The window variables include the range control, which this page
-         * does not show; the bounds are what it wants. */
-        hv_delete(v, "range", 5, G_DISCARD);
-        hv_delete(v, "range_all", 9, G_DISCARD);
-        hv_delete(v, "ranges", 6, G_DISCARD);
+        /* The window variables INCLUDE the range control, and the page shows
+         * it: every panel already runs over the reader's window, and hiding
+         * the picker made the dashboard the one screen where narrowing to
+         * the incident meant editing the URL by hand. */
 
         if (rq) src = (f = hv_fetchs(rq, "dashboards", 0)) && SvOK(*f) ? *f : NULL;
         if (!src) goto done;
@@ -830,7 +898,10 @@ povw__page_dashboard(SV *class, SV *store, SV *req)
             PUTBACK;
             FREETMPS; LEAVE;
             SPAGAIN;
-            if (SvTRUE(ERRSV) && d) { SvREFCNT_dec(d); d = NULL; }
+            if (povw_seam_died(aTHX_ v, "dashboard")) {
+                if (d) SvREFCNT_dec(d);
+                d = NULL;
+            }
         }
         else d = SvREFCNT_inc(src);
 
@@ -849,11 +920,23 @@ povw__page_dashboard(SV *class, SV *store, SV *req)
         }
         {
             SV **c = hv_fetchs(dh, "cols", 0);
-            hv_stores(v, "cols", newSViv((c && SvOK(*c) && SvIV(*c)) ? SvIV(*c) : 2));
+            hv_stores(v, "cols",
+                      newSViv(povw_grid((c && SvOK(*c)) ? SvIV(*c) : 0, 2)));
         }
         {
             SV **e = hv_fetchs(dh, "can_edit", 0);
             hv_stores(v, "can_edit", newSViv(e && SvTRUE(*e) ? 1 : 0));
+        }
+        {
+            /* THE RESOLVED SLUG, when the reader supplies one: with no slug
+             * in the URL the reader falls back to the first dashboard, and
+             * every per-panel fragment URL, the range form and the edit
+             * button must name the dashboard actually shown - an empty
+             * segment in the middle of a deferred URL is a panel that
+             * never loads, on exactly the page a bookmark lands on. */
+            SV **s2 = hv_fetchs(dh, "slug", 0);
+            if (s2 && SvOK(*s2) && SvCUR(*s2))
+                hv_stores(v, "slug", newSVsv(*s2));
         }
         {
             AV *list = newAV();
@@ -892,8 +975,14 @@ povw__page_dashboard(SV *class, SV *store, SV *req)
                 Newx(ord, n ? n : 1, po_sortpair);
                 for (i = 0; i < n; i++) {
                     SV **e = av_fetch(pa, i, 0);
+                    /* `position`, which is the SQL column name. The
+                     * renderer read `order`, check_panel read `position` and
+                     * `cols`, and the schema had `position` and `span`:
+                     * three names for two things, inert only while nothing
+                     * wrote a row. Settled on the names with a schema behind
+                     * them. */
                     SV **o = (e && SvROK(*e))
-                           ? hv_fetchs((HV *)SvRV(*e), "order", 0) : NULL;
+                           ? hv_fetchs((HV *)SvRV(*e), "position", 0) : NULL;
                     /* Descending sort, so the key is negated to get
                      * ascending order out of it. */
                     ord[i].key = (po_u64)(1000000 - ((o && SvOK(*o)) ? SvIV(*o) : 0));
@@ -905,136 +994,22 @@ povw__page_dashboard(SV *class, SV *store, SV *req)
                 for (i = 0; i < n; i++) {
                     HV *p, *panel;
                     SV **x;
-                    SV *chk = NULL;
-                    const char *q = "";
-                    STRLEN qlen = 0;
 
                     if (!SvROK(ord[i].sv)) continue;
                     p = (HV *)SvRV(ord[i].sv);
-                    panel = newHV();
+                    panel = povw_panel_meta(aTHX_ p, i);
 
-                    x = hv_fetchs(p, "title", 0);
-                    hv_stores(panel, "title", x ? newSVsv(*x) : newSV(0));
-                    x = hv_fetchs(p, "span", 0);
-                    hv_stores(panel, "span",
-                              newSViv((x && SvOK(*x) && SvIV(*x)) ? SvIV(*x) : 1));
-                    x = hv_fetchs(p, "query", 0);
-                    if (x && SvOK(*x)) q = SvPV(*x, qlen);
-                    {
-                        char *esc;
-                        size_t en;
-                        Newx(esc, qlen * 3 + 1, char);
-                        en = po_url_esc(q, (size_t)qlen, esc, qlen * 3 + 1);
-                        hv_stores(panel, "query_esc", newSVpvn(esc, en));
-                        Safefree(esc);
-                    }
-                    hv_stores(panel, "body",    newSVpvs(""));
-                    hv_stores(panel, "refusal", newSVpvs(""));
+                    /* THE BODY IS BUILT ONLY WHEN ASKED FOR. The shell
+                     * ships metadata and a deferred placeholder per panel;
+                     * ?full=1 sets `panels_inline` and pays for the queries
+                     * with the page; the editor never sets it - it renders
+                     * forms, and used to run every panel's query for
+                     * nothing. */
+                    if (rq && (x = hv_fetchs(rq, "panels_inline", 0))
+                        && SvTRUE(*x))
+                        povw_panel_fill(aTHX_ panel, ord[i].sv, store,
+                                        from, to);
 
-                    /* THE QUERY IS VALIDATED BY THE PARSER THAT WILL RUN IT.
-                     * A panel saved with a query nothing can execute is a
-                     * dashboard broken for everybody who opens it and for
-                     * nobody who saved it. */
-                    {
-                        int n2;
-                        ENTER; SAVETMPS; PUSHMARK(SP);
-                        XPUSHs(ord[i].sv);
-                        PUTBACK;
-                        n2 = call_pv("Punk::Observe::Dashboard::check_panel",
-                                     G_SCALAR | G_EVAL);
-                        SPAGAIN;
-                        chk = n2 ? SvREFCNT_inc(POPs) : NULL;
-                        PUTBACK;
-                        FREETMPS; LEAVE;
-                        SPAGAIN;
-                    }
-
-                    if (chk && SvROK(chk) && SvTYPE(SvRV(chk)) == SVt_PVHV
-                        && (!(x = hv_fetchs((HV *)SvRV(chk), "ok", 0))
-                            || !SvTRUE(*x))) {
-                        SV **e = hv_fetchs((HV *)SvRV(chk), "error", 0);
-                        hv_stores(panel, "refusal", (e && SvOK(*e))
-                                  ? newSVsv(*e)
-                                  : newSVpvs("that panel query is not valid"));
-                    }
-                    else if (SvOK(store) && SvROK(store)) {
-                        SV *r = NULL;
-                        int n2;
-                        ENTER; SAVETMPS; PUSHMARK(SP);
-                        XPUSHs(store);
-                        XPUSHs(sv_2mortal(newSVpvn(q, qlen)));
-                        XPUSHs(sv_2mortal(newSVpvs("from")));
-                        XPUSHs(sv_2mortal(newSVsv(from)));
-                        XPUSHs(sv_2mortal(newSVpvs("to")));
-                        XPUSHs(sv_2mortal(newSVsv(to)));
-                        PUTBACK;
-                        n2 = call_method("query", G_SCALAR);
-                        SPAGAIN;
-                        r = n2 ? SvREFCNT_inc(POPs) : NULL;
-                        PUTBACK;
-                        FREETMPS; LEAVE;
-                        SPAGAIN;
-
-                        if (r && SvROK(r) && SvTYPE(SvRV(r)) == SVt_PVHV) {
-                            HV *rh = (HV *)SvRV(r);
-                            SV **ok = hv_fetchs(rh, "ok", 0);
-                            if (!ok || !SvTRUE(*ok)) {
-                                SV **e = hv_fetchs(rh, "error", 0);
-                                hv_stores(panel, "refusal", e ? newSVsv(*e) : newSV(0));
-                            }
-                            else {
-                                SV **sh = hv_fetchs(rh, "shape", 0);
-                                int rows = sh && SvOK(*sh)
-                                        && strEQ(SvPV_nolen(*sh), "rows");
-                                if (rows) {
-                                    SV *series = NULL;
-                                    SV **rv = hv_fetchs(rh, "rows", 0);
-                                    int n3;
-                                    ENTER; SAVETMPS; PUSHMARK(SP);
-                                    XPUSHs(rv ? *rv : sv_2mortal(newRV_noinc((SV *)newAV())));
-                                    XPUSHs(sv_2mortal(newSVsv(from)));
-                                    XPUSHs(sv_2mortal(newSVsv(to)));
-                                    XPUSHs(sv_2mortal(newRV_inc((SV *)panel)));
-                                    PUTBACK;
-                                    n3 = call_pv("Punk::Observe::View::_series_paths",
-                                                 G_SCALAR);
-                                    SPAGAIN;
-                                    series = n3 ? SvREFCNT_inc(POPs) : NULL;
-                                    PUTBACK;
-                                    FREETMPS; LEAVE;
-                                    SPAGAIN;
-                                    if (series) hv_stores(panel, "series", series);
-                                }
-                                else {
-                                    AV *groups = newAV();
-                                    SV **gv = hv_fetchs(rh, "groups", 0);
-                                    if (gv && SvROK(*gv)
-                                        && SvTYPE(SvRV(*gv)) == SVt_PVAV) {
-                                        AV *ga = (AV *)SvRV(*gv);
-                                        SSize_t j, m = av_len(ga) + 1;
-                                        for (j = 0; j < m; j++) {
-                                            SV **e = av_fetch(ga, j, 0);
-                                            HV *g, *o;
-                                            SV **y;
-                                            if (!e || !SvROK(*e)) continue;
-                                            g = (HV *)SvRV(*e);
-                                            o = newHV();
-                                            y = hv_fetchs(g, "key", 0);
-                                            hv_stores(o, "key", y ? newSVsv(*y) : newSV(0));
-                                            y = hv_fetchs(g, "value", 0);
-                                            hv_stores(o, "value", y
-                                                ? newSVpvf("%.4g", (double)SvNV(*y))
-                                                : newSVpvs("0"));
-                                            av_push(groups, newRV_noinc((SV *)o));
-                                        }
-                                    }
-                                    hv_stores(panel, "groups", newRV_noinc((SV *)groups));
-                                }
-                            }
-                        }
-                        if (r) SvREFCNT_dec(r);
-                    }
-                    if (chk) SvREFCNT_dec(chk);
                     av_push(panels, newRV_noinc((SV *)panel));
                 }
                 Safefree(ord);
@@ -1047,6 +1022,110 @@ povw__page_dashboard(SV *class, SV *store, SV *req)
         if (from) SvREFCNT_dec(from);
         if (to)   SvREFCNT_dec(to);
         RETVAL = newRV_noinc((SV *)v);
+    }
+    OUTPUT:
+        RETVAL
+
+# One dashboard panel, body and all, for the deferred-fragment route.
+#
+# Resolves the dashboard through the SAME reader seam as the page, sorts
+# the panels the same way (the index fallback key depends on it), finds the
+# one the key names, and builds meta + body. Returns undef when the
+# dashboard or the panel is not there - a deleted panel is a 404, not a
+# broken page.
+SV *
+povw__panel(SV *class, SV *store, SV *req)
+    CODE:
+    {
+        HV *rq = NULL;
+        HV *scratch = newHV();
+        SV *from = NULL, *to = NULL;
+        SV **f;
+        SV *src = NULL, *d = NULL;
+        HV *dh = NULL;
+        HV *out = NULL;
+        const char *slug = "";
+        STRLEN sl = 0;
+        const char *key = "";
+        STRLEN kl = 0;
+
+        PERL_UNUSED_VAR(class);
+        if (SvROK(req) && SvTYPE(SvRV(req)) == SVt_PVHV)
+            rq = (HV *)SvRV(req);
+        if (rq && (f = hv_fetchs(rq, "slug", 0)) && SvOK(*f))
+            slug = SvPV(*f, sl);
+        if (rq && (f = hv_fetchs(rq, "panel", 0)) && SvOK(*f))
+            key = SvPV(*f, kl);
+        povw_window_vars(aTHX_ scratch, req, &from, &to);
+
+        if (rq) src = (f = hv_fetchs(rq, "dashboards", 0)) && SvOK(*f)
+                      ? *f : NULL;
+        if (src && SvROK(src) && SvTYPE(SvRV(src)) == SVt_PVCV) {
+            int n;
+            ENTER; SAVETMPS; PUSHMARK(SP);
+            XPUSHs(sv_2mortal(newSVpvn(slug, sl)));
+            XPUSHs(req);
+            PUTBACK;
+            n = call_sv(src, G_SCALAR | G_EVAL);
+            SPAGAIN;
+            d = n ? SvREFCNT_inc(POPs) : NULL;
+            PUTBACK;
+            FREETMPS; LEAVE;
+            SPAGAIN;
+            if (SvTRUE(ERRSV)) { if (d) SvREFCNT_dec(d); d = NULL; }
+        }
+        else if (src) d = SvREFCNT_inc(src);
+
+        if (d && SvROK(d) && SvTYPE(SvRV(d)) == SVt_PVHV)
+            dh = (HV *)SvRV(d);
+
+        if (dh && kl) {
+            SV **pv = hv_fetchs(dh, "panels", 0);
+            if (pv && SvROK(*pv) && SvTYPE(SvRV(*pv)) == SVt_PVAV) {
+                AV *pa = (AV *)SvRV(*pv);
+                SSize_t i, n = av_len(pa) + 1;
+                po_sortpair *ord;
+
+                /* The page's own ordering, exactly: an index key handed
+                 * out by the shell must land on the same panel here. */
+                Newx(ord, n ? n : 1, po_sortpair);
+                for (i = 0; i < n; i++) {
+                    SV **e = av_fetch(pa, i, 0);
+                    SV **o = (e && SvROK(*e))
+                           ? hv_fetchs((HV *)SvRV(*e), "position", 0) : NULL;
+                    ord[i].key = (po_u64)(1000000
+                                          - ((o && SvOK(*o)) ? SvIV(*o) : 0));
+                    ord[i].sv  = e ? *e : &PL_sv_undef;
+                }
+                if (n > 1) qsort(ord, (size_t)n, sizeof(po_sortpair),
+                                 po_sortpair_desc);
+
+                for (i = 0; i < n && !out; i++) {
+                    HV *p, *panel;
+                    SV **kv;
+                    STRLEN pkl;
+                    const char *pk;
+                    if (!SvROK(ord[i].sv)) continue;
+                    p = (HV *)SvRV(ord[i].sv);
+                    panel = povw_panel_meta(aTHX_ p, i);
+                    kv = hv_fetchs(panel, "key", 0);
+                    pk = (kv && SvOK(*kv)) ? SvPV(*kv, pkl) : "";
+                    if (pkl == (STRLEN)kl && memcmp(pk, key, kl) == 0) {
+                        povw_panel_fill(aTHX_ panel, ord[i].sv, store,
+                                        from, to);
+                        out = panel;
+                    }
+                    else SvREFCNT_dec((SV *)panel);
+                }
+                Safefree(ord);
+            }
+        }
+
+        if (d) SvREFCNT_dec(d);
+        SvREFCNT_dec((SV *)scratch);
+        if (from) SvREFCNT_dec(from);
+        if (to)   SvREFCNT_dec(to);
+        RETVAL = out ? newRV_noinc((SV *)out) : newSV(0);
     }
     OUTPUT:
         RETVAL
@@ -1115,7 +1194,10 @@ povw__page_alerts(SV *class, SV *store, SV *req)
             PUTBACK;
             FREETMPS; LEAVE;
             SPAGAIN;
-            if (SvTRUE(ERRSV) && r) { SvREFCNT_dec(r); r = NULL; }
+            if (povw_seam_died(aTHX_ v, "alert rule")) {
+                if (r) SvREFCNT_dec(r);
+                r = NULL;
+            }
         }
         else r = SvREFCNT_inc(src);
 
@@ -1185,6 +1267,16 @@ povw__page_alerts(SV *class, SV *store, SV *req)
                     x = hv_fetchs(rule, "series", 0);
                     hv_stores(o, "series", x ? newSVsv(*x) : newSV(0));
 
+                    /* WHY, for a rule that could not be evaluated. Counting
+                     * the broken rules without carrying the reason is how
+                     * the screen ended up saying "1 rule(s) could not be
+                     * evaluated" and nothing else. Carried whatever the
+                     * state: a reason on a non-error row is the reader's
+                     * bug to expose, not this table's to hide. */
+                    x = hv_fetchs(rule, "reason", 0);
+                    hv_stores(o, "reason", (x && SvOK(*x) && SvCUR(*x))
+                              ? newSVsv(*x) : newSVpvs(""));
+
                     x = hv_fetchs(rule, "held", 0);
                     if (x && SvTRUE(*x)) {
                         po_u64 h = 0;
@@ -1198,7 +1290,8 @@ povw__page_alerts(SV *class, SV *store, SV *req)
 
                     x = hv_fetchs(rule, "value", 0);
                     hv_stores(o, "value", (x && SvOK(*x))
-                              ? newSVpvf("%.4g", (double)SvNV(*x)) : newSVpvs(""));
+                              ? povw_fmt_value(aTHX_ (double)SvNV(*x))
+                              : newSVpvs(""));
 
                     x = hv_fetchs(rule, "silenced", 0);
                     hv_stores(o, "silenced", newSViv(x && SvTRUE(*x) ? 1 : 0));
@@ -1282,6 +1375,9 @@ povw__page_alerts(SV *class, SV *store, SV *req)
                     if (!e || !SvROK(*e)) continue;
                     s = (HV *)SvRV(*e);
                     o = newHV();
+                    /* The id, or the revoke button has nothing to name. */
+                    x = hv_fetchs(s, "id", 0);
+                    hv_stores(o, "id", x ? newSVsv(*x) : newSV(0));
                     x = hv_fetchs(s, "pattern", 0);
                     hv_stores(o, "pattern", x ? newSVsv(*x) : newSV(0));
                     x = hv_fetchs(s, "until", 0);
@@ -1499,7 +1595,16 @@ povw__page_record(SV *class, SV *store, SV *req)
         }
 
         {   /* The lines either side, which is the question anybody opening one
-             * line asks next. */
+             * line asks next.
+             *
+             * CENTRED ON THE RECORD, NOT ON THE WINDOW'S EDGE. `rows` answers
+             * newest first and `limit` keeps that end, so the capped call this
+             * used to make kept the newest 40 of the ten seconds: on a busy
+             * store that is everything AFTER the record and nothing before
+             * it, with the record itself pushed off its own context. The scan
+             * materialises the whole window before any limit trims it, so
+             * asking for it all costs the same and the centring is a slice
+             * here. */
             AV *ctx = newAV();
             SV **tsv = hv_fetchs(row, "t", 0);
             po_u64 t = 0;
@@ -1514,7 +1619,6 @@ povw__page_record(SV *class, SV *store, SV *req)
             XPUSHs(sv_2mortal(newSVpvs("to")));
             XPUSHs(sv_2mortal(po_u64_to_sv(po_ns_add(t, 5000000000ULL))));
             XPUSHs(sv_2mortal(newSVpvs("kind")));  XPUSHs(sv_2mortal(newSViv(2)));
-            XPUSHs(sv_2mortal(newSVpvs("limit"))); XPUSHs(sv_2mortal(newSViv(40)));
             PUTBACK;
             n = call_method("rows", G_LIST);
             SPAGAIN;
@@ -1530,9 +1634,27 @@ povw__page_record(SV *class, SV *store, SV *req)
             if (near && SvROK(near) && SvTYPE(SvRV(near)) == SVt_PVAV) {
                 AV *na = (AV *)SvRV(near);
                 SSize_t i, cnt = av_len(na) + 1;
-                STRLEN myl = 0;
-                const char *myt = (tsv && SvOK(*tsv)) ? SvPV(*tsv, myl) : "";
+                SSize_t i0 = cnt, lo, hi;
+
+                /* The record's own place in the descending order: the first
+                 * row at or before it. Everything above index i0 is after
+                 * the record, everything from it on is at-or-before. */
                 for (i = 0; i < cnt; i++) {
+                    SV **e = av_fetch(na, i, 0);
+                    SV **x;
+                    po_u64 rt = 0;
+                    if (!e || !SvROK(*e)) continue;
+                    x = hv_fetchs((HV *)SvRV(*e), "t", 0);
+                    if (x && SvOK(*x)) (void)po_sv_to_u64(aTHX_ *x, &rt);
+                    if (rt <= t) { i0 = i; break; }
+                }
+                /* Twenty either side, a contiguous slice of the sorted
+                 * window - so the page shows before, the line itself, and
+                 * after, whatever the traffic rate. */
+                lo = i0 > 20 ? i0 - 20 : 0;
+                hi = i0 + 21 < cnt ? i0 + 21 : cnt;
+
+                for (i = lo; i < hi; i++) {
                     SV **e = av_fetch(na, i, 0);
                     HV *w, *o;
                     SV **x;
@@ -1557,8 +1679,11 @@ povw__page_record(SV *class, SV *store, SV *req)
                     x = hv_fetchs(w, "body", 0);
                     hv_stores(o, "body", x ? newSVsv(*x) : newSV(0));
                     hv_stores(o, "id", povw_record_id_sv(aTHX_ *e));
+                    /* THE WHOLE ID, not the nanosecond: two lines in the
+                     * same ns both carried the highlight, and a context
+                     * with two "current" rows reads as a rendering fault. */
                     hv_stores(o, "current",
-                              newSViv((wl == myl && memcmp(wp, myt, wl) == 0)
+                              newSViv(povw_record_matches_c(aTHX_ *e, id)
                                       ? 1 : 0));
                     av_push(ctx, newRV_noinc((SV *)o));
                 }
@@ -2063,14 +2188,47 @@ povw__page_explore(SV *class, SV *store, SV *req)
         STRLEN ql = 0;
         int has_q = 0;
         SSize_t i;
+        /* THESE ARE THE PAGE when there is nothing else on it, so they are
+         * the language's shop window rather than a hint under the box.
+         *
+         * The first five covered `where`, `search`, `slowest`, `by`+`count`
+         * and `p95 by`, and demonstrated none of `bucket`, `rate`, `sort`,
+         * `limit`, `distinct`, the `{...}` selector, `and`/`or`, `=~` - or
+         * the cross-signal pipeline, which is the one thing this backend does
+         * that a stack of separate tools cannot, and which the overview calls
+         * the differentiator of the whole project.
+         *
+         * Every one of them is parsed by t/0915-discovery.t, so an example
+         * that stopped being valid is a failing build rather than something
+         * teaching the wrong thing from the front page. */
+        /* EVERY ONE OF THESE ANSWERS ON THE DEMO STORE. The first set was
+         * written against an imagined store: it named http.server.duration,
+         * which the SDK never emits (the semconv name is
+         * http.server.request.duration), asked a histogram metric for | p95,
+         * which has no raw points to take a percentile of, and led with the
+         * cross-signal pipeline, which is refused until it is executed.
+         * An example that returns nothing teaches that the tool is broken. */
         static const char *const EX[] = {
             "log | where severity >= error", "every error in the window",
+            "log | bucket(5m) count by severity",
+                                             "log volume over time, by severity",
             "log | search \"refused\"",      "a substring, using the block filter",
+            "log | where body =~ \"^connect\"",
+                                             "an anchored prefix; =~ is not a full regex engine",
             "trace | slowest 20",            "the slowest traces",
-            "spans | where duration > 500ms | by service | count",
-                                             "which service is slow",
-            "metric http.server.duration | p95 by http.route",
-                                             "a percentile per route"
+            "spans | where duration > 500ms and status == 2 | by service | count",
+                                             "failures that were also slow, per service",
+            "spans{service = \"shop\"} | bucket(30s) p95 | viz area",
+                                             "the selector, p95 of duration, and a chart",
+            "spans | by service | count | top 5 by count",
+                                             "the busiest five",
+            "metric http.server.request.count | rate(1m) by http.route",
+                                             "a per-second rate per route",
+            "log | sort t desc | limit 100", "the hundred most recent",
+            "log | by severity | count | viz bar",
+                                             "one bar per group, drawn how you asked",
+            "spans | by http.route | distinct",
+                                             "how many distinct routes there are"
         };
 
         PERL_UNUSED_VAR(class);
@@ -2157,12 +2315,17 @@ povw__page_explore(SV *class, SV *store, SV *req)
             hv_stores(v, "error", (e && SvOK(*e)) ? newSVsv(*e)
                       : newSVpvs("that query could not be run"));
             hv_stores(v, "offset", of ? newSVsv(*of) : newSV(0));
-            /* WHERE it failed is the whole message: the parser stopping is a
-             * typo, and the planner refusing is a query that would have run
-             * and asked for too much. */
-            hv_stores(v, "hint", parse
-                      ? newSVpvs("The parser stopped there.")
-                      : newSVpvs("The planner refused it before it ran."));
+            /* WHERE it failed is the whole message - and the store's own
+             * hint, when it wrote one, is the most specific message there
+             * is. The generic lines are the fallback, not the answer. */
+            {
+                SV **ht = hv_fetchs(r, "hint", 0);
+                hv_stores(v, "hint", (ht && SvOK(*ht) && SvCUR(*ht))
+                          ? newSVsv(*ht)
+                          : parse
+                          ? newSVpvs("The parser stopped there.")
+                          : newSVpvs("The planner refused it before it ran."));
+            }
             SvREFCNT_dec(res);
             goto done;
         }
@@ -2184,9 +2347,14 @@ povw__page_explore(SV *class, SV *store, SV *req)
              * shape an answer will take - and rows-versus-groups was every
              * shape there was until `bucket` added one. A bucketed answer has
              * `series` and no `groups`, so it took the groups branch, found
-             * nothing, and drew a heading over an empty panel. */
-            if (buckets_shape)
-                povw_fill_vars(aTHX_ v, "Punk::Observe::Plot::bucket_vars", res);
+             * nothing, and drew a heading over an empty panel.
+             *
+             * The `| viz` handling and the bucketed fill live in
+             * povw_apply_viz, SHARED with the logs page - one vocabulary, or
+             * a viz that draws here and not in the box it was worked out
+             * in. */
+            povw_apply_viz(aTHX_ v, r, res, q, (size_t)ql,
+                           rows_shape, buckets_shape);
             if (mh) {
                 povw_set_count(aTHX_ v, "scanned", mh, "scanned_rows");
                 f = hv_fetchs(mh, "truncated", 0);
@@ -2253,7 +2421,7 @@ povw__page_explore(SV *class, SV *store, SV *req)
 
                         x = hv_fetchs(row, "value", 0);
                         if (x && SvOK(*x)) {
-                            SV *val = newSVpvf("%.4g", (double)SvNV(*x));
+                            SV *val = povw_fmt_value(aTHX_ (double)SvNV(*x));
                             if (SvCUR(val)) has_val = 1;
                             hv_stores(o, "value", val);
                         }
@@ -2314,7 +2482,7 @@ povw__page_explore(SV *class, SV *store, SV *req)
                                   ? newSVsv(*x) : newSVpvs("(none)"));
                         x = hv_fetchs(gh, "value", 0);
                         d = x ? (double)SvNV(*x) : 0;
-                        hv_stores(o, "value", newSVpvf("%.4g", d));
+                        hv_stores(o, "value", povw_fmt_value(aTHX_ d));
                         x = hv_fetchs(gh, "count", 0);
                         {
                             char b[32];
@@ -2812,6 +2980,7 @@ povw__page_trace(SV *class, SV *store, SV *req)
         hv_stores(v, "spans",   newRV_noinc((SV *)newAV()));
         traces_out = newAV();
         hv_stores(v, "traces",  newRV_noinc((SV *)traces_out));
+
         povw_range_vars(aTHX_ v, req, range);
 
         if (rq && (f = hv_fetchs(rq, "q", 0)) && SvTRUE(*f)) q = SvPV(*f, qlen);
@@ -2877,6 +3046,30 @@ povw__page_trace(SV *class, SV *store, SV *req)
             f = rq ? hv_fetchs(rq, "q", 0) : NULL;
             XPUSHs(sv_2mortal(f ? newSVsv(*f) : newSV(0)));
             XPUSHs(sv_2mortal(newSVpvs("limit"))); XPUSHs(sv_2mortal(newSViv(50)));
+            /* THE PAGE CURSOR: "durns-hi-lo", the triple that gives the
+             * duration walk its total order. Parsed strictly - a mangled
+             * cursor is ignored and the first page answers, which beats a
+             * 500 for a truncated paste. */
+            f = rq ? hv_fetchs(rq, "after", 0) : NULL;
+            if (f && SvOK(*f)) {
+                STRLEN al;
+                const char *ap = SvPV(*f, al);
+                STRLEN d1 = 0, d2 = 0, ix;
+                int digits = 1;
+                for (ix = 0; ix < al; ix++) {
+                    if (ap[ix] == '-') { if (!d1) d1 = ix; else if (!d2) d2 = ix; else digits = 0; }
+                    else if (ap[ix] < '0' || ap[ix] > '9') digits = 0;
+                }
+                if (digits && d1 && d2 > d1 + 1 && d2 + 1 < al) {
+                    XPUSHs(sv_2mortal(newSVpvs("after_dur")));
+                    XPUSHs(sv_2mortal(newSVpvn(ap, d1)));
+                    XPUSHs(sv_2mortal(newSVpvs("after_hi")));
+                    XPUSHs(sv_2mortal(newSVpvn(ap + d1 + 1, d2 - d1 - 1)));
+                    XPUSHs(sv_2mortal(newSVpvs("after_lo")));
+                    XPUSHs(sv_2mortal(newSVpvn(ap + d2 + 1, al - d2 - 1)));
+                    hv_stores(v, "paged", newSViv(1));
+                }
+            }
             PUTBACK;
             n = call_method("traces", G_SCALAR);
             SPAGAIN;
@@ -2995,6 +3188,39 @@ povw__page_trace(SV *class, SV *store, SV *req)
             }
             SvREFCNT_dec((SV *)pts);
 
+            /* MORE BEYOND THIS PAGE. A full page's last trace is the
+             * cursor for the next fifty; a short page IS the end, and a
+             * "next" link there would page into nothing. From the raw result
+             * rather than the formatted rows, because the cursor needs the
+             * exact duration and the row carries "1.3s". The first version
+             * of this block ran before `res` existed, on the store of an
+             * empty placeholder - which is a segfault, and the reminder that
+             * "after the assignment in the source" is not "after it runs". */
+            {
+                SV **tv2 = hv_fetchs(r, "traces", 0);
+                if (tv2 && SvROK(*tv2) && SvTYPE(SvRV(*tv2)) == SVt_PVAV) {
+                    AV *ta2 = (AV *)SvRV(*tv2);
+                    SSize_t n2 = av_len(ta2) + 1;
+                    if (n2 >= 50) {
+                        SV **le = av_fetch(ta2, n2 - 1, 0);
+                        if (le && SvROK(*le)
+                            && SvTYPE(SvRV(*le)) == SVt_PVHV) {
+                            HV *lh = (HV *)SvRV(*le);
+                            SV **du  = hv_fetchs(lh, "duration", 0);
+                            SV **hi2 = hv_fetchs(lh, "trace_hi", 0);
+                            SV **lo2 = hv_fetchs(lh, "trace_lo", 0);
+                            if (du && hi2 && lo2) {
+                                SV *cur = newSVsv(*du);
+                                sv_catpvs(cur, "-");
+                                sv_catsv(cur, *hi2);
+                                sv_catpvs(cur, "-");
+                                sv_catsv(cur, *lo2);
+                                hv_stores(v, "next_cursor", cur);
+                            }
+                        }
+                    }
+                }
+            }
             povw_set_iv(aTHX_ v, "span_count", r, "spans");
             povw_set_iv(aTHX_ v, "total", r, "total");
             hv_stores(v, "root_name", newSVpvs("Traces in this window"));
@@ -3505,46 +3731,41 @@ povw__page_metrics(SV *class, SV *store, SV *req)
         if (!has_q) {
             /* With no query, the page offers what there is. An empty chart
              * and an empty box is a dead end; a list of the metric names the
-             * store has seen is the next click. */
+             * store has seen is the next click.
+             *
+             * `metric_names` tallies the names during the scan - it used to
+             * be a records() call with no limit, which built a Perl hash
+             * for up to half a million points to read one field back out of
+             * each: the single largest read in the UI, for a list of a few
+             * dozen names. */
             HV *seen = newHV();
             AV *out = newAV();
-            SV *recs = NULL;
+            SV *names_rv = NULL;
             int n;
 
             ENTER; SAVETMPS; PUSHMARK(SP);
             XPUSHs(store);
             XPUSHs(sv_2mortal(newSVpvs("from"))); XPUSHs(sv_2mortal(newSVsv(from)));
             XPUSHs(sv_2mortal(newSVpvs("to")));   XPUSHs(sv_2mortal(newSVsv(to)));
-            XPUSHs(sv_2mortal(newSVpvs("kind"))); XPUSHs(sv_2mortal(newSViv(1)));
             PUTBACK;
-            n = call_method("records", G_LIST);
+            n = call_method("metric_names", G_LIST);
             SPAGAIN;
             {
                 SSize_t k;
                 for (k = n - 1; k > 0; k--) (void)POPs;
-                recs = n ? SvREFCNT_inc(POPs) : NULL;
+                names_rv = n ? SvREFCNT_inc(POPs) : NULL;
             }
             PUTBACK;
             FREETMPS; LEAVE;
             SPAGAIN;
 
-            if (recs && SvROK(recs) && SvTYPE(SvRV(recs)) == SVt_PVAV) {
-                AV *ra = (AV *)SvRV(recs);
-                SSize_t k, cnt = av_len(ra) + 1;
-                for (k = 0; k < cnt; k++) {
-                    SV **e = av_fetch(ra, k, 0);
-                    SV **b = (e && SvROK(*e))
-                               ? hv_fetchs((HV *)SvRV(*e), "body", 0) : NULL;
-                    STRLEN bl;
-                    const char *bp;
-                    SV **slot;
-                    if (!b || !SvOK(*b) || !SvCUR(*b)) continue;
-                    bp = SvPV(*b, bl);
-                    slot = hv_fetch(seen, bp, (I32)bl, 1);
-                    if (slot) sv_setiv(*slot, (SvOK(*slot) ? SvIV(*slot) : 0) + 1);
-                }
+            if (names_rv && SvROK(names_rv)
+                && SvTYPE(SvRV(names_rv)) == SVt_PVHV) {
+                SvREFCNT_dec((SV *)seen);
+                seen = (HV *)SvRV(names_rv);
+                (void)SvREFCNT_inc((SV *)seen);
             }
-            if (recs) SvREFCNT_dec(recs);
+            if (names_rv) SvREFCNT_dec(names_rv);
 
             {   /* sorted, so the list does not reshuffle between two loads */
                 SSize_t nk = 0, k;
@@ -3630,9 +3851,14 @@ povw__page_metrics(SV *class, SV *store, SV *req)
             const char *stage = (st && SvOK(*st)) ? SvPV_nolen(*st) : "";
             hv_stores(v, "error", (e && SvOK(*e)) ? newSVsv(*e)
                       : newSVpvs("that query could not be run"));
-            hv_stores(v, "hint", strEQ(stage, "parse")
-                      ? newSVpvs("Check the stage after the pipe.")
-                      : newSVpvs("Narrow the range or add a filter."));
+            {
+                SV **ht = hv_fetchs(r, "hint", 0);
+                hv_stores(v, "hint", (ht && SvOK(*ht) && SvCUR(*ht))
+                          ? newSVsv(*ht)
+                          : strEQ(stage, "parse")
+                          ? newSVpvs("Check the stage after the pipe.")
+                          : newSVpvs("Narrow the range or add a filter."));
+            }
             /* A PLAN refusal is the planner saying no to a query that would
              * have run: it is a different message from a typo, and the page
              * says which one it was. */
@@ -3730,7 +3956,7 @@ povw__page_metrics(SV *class, SV *store, SV *req)
                               ? newSVsv(*x) : newSVpvs("(none)"));
                     x = hv_fetchs(gh, "value", 0);
                     hv_stores(o, "value",
-                              newSVpvf("%.4g", x ? (double)SvNV(*x) : 0));
+                              povw_fmt_value(aTHX_ x ? (double)SvNV(*x) : 0));
                     x = hv_fetchs(gh, "count", 0);
                     cp = (x && SvOK(*x)) ? SvPV(*x, cl) : "";
                     bn = po_fmt_count(cp, (size_t)cl, b, sizeof(b));

@@ -20,9 +20,16 @@ WHAT IS HERE
     Drawing     server-rendered chart primitives, service graph layout and
                 flamegraph folding.
 
-The read interface, dashboards and alerting are not in this release, and
-neither is a packaged server binary: what ships is the engine and the PSGI
-receiver, assembled by the host application.
+    Screens     status, logs, metrics, traces, the service map, explore,
+                dashboards and alerts, mounted into a Punk application by
+                Punk::Plugin::Observe behind a guard the host supplies.
+    Alerting    per-series rule state, grouping, silences and an SSRF-checked
+                webhook target.
+
+There is no packaged server binary: what ships is the engine, the PSGI
+receiver and the plugin, assembled by the host application. Dashboards, alert
+rules and saved views are configuration and live in a database - SQLite beside
+the store by default, PostgreSQL when told.
 
 gRPC ingest is deliberately not offered. It reports failure in HTTP/2
 trailers, PSGI has no trailer channel, and an endpoint answering 200 with no
@@ -40,6 +47,10 @@ DOCUMENTATION
     perldoc Punk::Observe            the system, and why it is shaped this way
     perldoc Punk::Observe::Ingest    the receiver
     perldoc Punk::Observe::Query     the query language
+
+The language also has a reference inside the application itself, at
+<prefix>/help - generated from the parser's own tables, so it says what this
+build actually accepts rather than what a document once claimed.
 
 LICENSE AND COPYRIGHT
 

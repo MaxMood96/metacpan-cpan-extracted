@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use lib "t/lib";
 use Test::More;
-use HMTest qw(free_ports);
+use HMTest qw(free_ports quiet_child server_status server_reap);
 use IO::Socket::INET;
 use Time::HiRes ();
 use Hyperman ();
@@ -52,7 +52,7 @@ sub probe {
     my $kid = fork;
     die "fork: $!" unless defined $kid;
     if ($kid == 0) {
-        open STDERR, '>', '/dev/null';
+        quiet_child();
         require Hyperman;
         Hyperman->run(
             app => sub {
@@ -70,6 +70,7 @@ sub probe {
 
     my $status = 'no-conn';
     for (1 .. 40) {
+        if (my $why = server_status($kid)) { $status = "gone: $why"; last }
         my $s = IO::Socket::INET->new(
             PeerAddr => '127.0.0.1', PeerPort => $port, Proto => 'tcp')
             or (Time::HiRes::sleep(0.1), next);
@@ -97,8 +98,18 @@ sub probe {
                 : 'closed';
         last;
     }
-    kill 'TERM', $kid;
-    waitpid $kid, 0;
+    # TERM, then KILL if it will not go. An unbounded waitpid is the other
+    # half of the inherited-pipe hazard: a server that never exits leaves the
+    # harness blocked forever rather than failing.
+    unless (defined server_status($kid)) {
+        kill 'TERM', $kid;
+        my $reaped = 0;
+        for (1 .. 100) {
+            last if $reaped = defined server_status($kid);
+            Time::HiRes::sleep(0.1);
+        }
+        unless ($reaped) { kill 'KILL', $kid; server_reap($kid) }
+    }
     return $status;
 }
 

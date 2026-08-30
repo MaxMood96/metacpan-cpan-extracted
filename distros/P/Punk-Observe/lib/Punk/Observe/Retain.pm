@@ -8,6 +8,7 @@ use Punk::Observe ();
 
 our $VERSION = $Punk::Observe::VERSION;
 
+
 1;
 
 __END__
@@ -88,6 +89,127 @@ Passed as an integer to L</rollup>:
 Codes 6 to 9 are refused over a downsampled range.
 
 =head1 FUNCTIONS
+
+=head2 adopt_orphans
+
+    my $out = Punk::Observe::Retain::adopt_orphans(
+        store => $store, grace_s => 600, dry_run => 0);
+
+Seals the logs of workers that are no longer running, so they enter the
+ordinary lifecycle. Returns C<seen>, C<adopted>, C<bytes>, C<skipped_live>,
+C<skipped_recent> and C<failed>.
+
+Retention considers B<sealed> segments, and the live log is deliberately never
+touched. A log left behind by a worker that died is neither: not live, because
+nobody is writing it; not sealed, because its owner died first. So it was
+never indexed, never expired and never counted against a byte budget, and
+every restart left another one behind - a store running for a day accumulated
+261MB across 127 such files, none of which C<keep> could reach.
+
+B<Sealed, not deleted.> Its records are usually inside the retention window,
+and deleting them would be retention destroying the data C<keep> promised to
+hold. Sealing gives the log a sidecar, so queries prune it and the next sweep
+expires it on the same C<t_max> rule as everything else.
+
+Adoption needs B<two independent proofs> that nobody owns the file, because
+sealing a log somebody is still appending to renames it under their descriptor
+and lets them write records past the seal trailer:
+
+=over 4
+
+=item * B<the owning process is gone.> The pid is in the file name. C<EPERM>
+from C<kill 0> means the process B<exists> and belongs to somebody else, which
+counts as alive - the mistake to avoid is reading "not mine" as "dead".
+
+=item * B<the file is stale.> A live worker appends constantly, so a log
+untouched for C<grace_s> (ten minutes by default) is unowned. This covers what
+a pid check cannot: a pid that has been recycled and now belongs to something
+unrelated.
+
+=back
+
+Both must hold. A recycled pid makes this B<skip> a log it could have
+reclaimed, which costs disk; the reverse would cost data.
+
+This assumes the store is local to the host writing it, which is what the
+storage design commits to everywhere else - a pid from another machine would
+be meaningless here, and so would the log.
+
+=head2 pass
+
+    my $out = Punk::Observe::Retain::pass(
+        store => $store, keep_ns => $ns, dry_run => 0);
+
+One retention pass. L</adopt_orphans> runs first, so a log reclaimed now can
+be expired by this same pass rather than waiting for the next; then every
+sealed segment whose B<newest> record is older than C<now - keep_ns> is
+unlinked, its index sidecar with it, and any sidecar left orphaned by an
+earlier crash is cleaned up. Returns C<considered>, C<marked>, C<unlinked>,
+C<kept>, C<bytes_freed>, C<orphan_idx_removed>, C<unknown_kept>, C<adopted>,
+C<adopted_bytes> and the C<cutoff> it used.
+
+Expiry is decided from the sidecar summaries - the same C<t_min>/C<t_max> a
+query prunes on - and keyed on C<t_max>: keying on C<t_min> would delete a
+segment still holding data inside the window. A segment whose sidecar cannot
+be read is B<kept> and counted in C<unknown_kept>, because deleting on an
+unknown age is deletion.
+
+There is no default window and no code path that shortens a file. A truncated
+segment is C<SIGBUS> for every reader mapping it; an unlinked one keeps
+reading to the end for anyone already holding it, which L</read_through_unlink>
+proves rather than assumes.
+
+C<bytes> adds a budget over and above the window: after the time sweep, if
+the sealed segments still total more than that many bytes, the oldest are
+deleted - sidecars in pairs - until the store fits. The window answers "how
+far back must I be able to look"; the budget answers "how much disk may that
+cost", and when they disagree the budget wins, because a full disk loses
+everything rather than the oldest hour. The result gains C<budget_deleted>,
+C<budget_freed> and C<bytes> (the sealed total after). Under C<dry_run> the
+budget stage is skipped entirely and says so in C<budget_skipped> - it has
+no rehearsal mode, and a dry run must not delete.
+
+C<dry_run> takes every decision and skips only the unlink, so the numbers it
+reports are the numbers the real run would act on.
+
+=head2 parse_keep
+
+    my $ns = Punk::Observe::Retain::parse_keep('30d');   # undef if not a window
+
+An operator-written window into nanoseconds, using the query language's own
+unit table so the two cannot disagree about what a week is. There is no month,
+for the reason the lexer gives: C<1m> meaning a month somewhere would be a
+trap nobody recovers from.
+
+Years are units here - C<7y> is the window a production store keeps - and
+C<y> is B<exactly 365 days>, which L<Punk::Observe::Query/Durations>
+explains.
+
+A window B<too large to represent> is refused, and this is the refusal that
+matters: the cutoff is C<now - keep> in unsigned nanoseconds, so a keep past
+the last representable instant comes back round as a cutoff of I<now>, which
+marks every segment in the store for deletion. Under that ceiling nothing
+needs clamping - the subtraction floors at zero, so a century-long window on
+a store a week old keeps all of it.
+
+=head2 cron_task
+
+    my $code = Punk::Observe::Retain::cron_task(
+        store => $store, keep_ns => $ns, owner => $$);
+    # cron '17 * * * *' => sub { $code->($queue) };
+
+The scheduled shape, identical to L<Punk::Observe::Health/cron_task> so that
+wiring the second one feels like the first: a coderef taking a L<Punk::Queue>,
+running one pass under the C<leader> lease. Losing the lease race is the
+normal case on a worker pool, not an error - another worker is doing the
+pass. C<owner> must be an integer and defaults to the pid.
+
+=head2 retain_job
+
+The cron target L<Punk::Plugin::Observe> registers when it is given
+C<< retain => { keep => '7d' } >>. Runs one L</pass> under the
+C<observe.retain> lease and reports what it removed. Not called by hand;
+F<punk-queue> calls it.
 
 =head2 merge
 

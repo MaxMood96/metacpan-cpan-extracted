@@ -1,11 +1,11 @@
 package Punk::Plugin::Mailer;
 
-use 5.016;
+use 5.010001;
 use strict;
 use warnings;
 use Punk::Mailer ();    # one dist, one bootstrap: the plugin lives in its bundle
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 1;
 

@@ -1,0 +1,10 @@
+
+{% if ingest_plot %}
+<div class="chartwrap" data-chart>
+  <script type="application/json" data-plot>{% raw ingest_plot %}</script>
+  <noscript><p class="note">This chart needs JavaScript. The totals it
+    summarises are above.</p></noscript>
+</div>
+{% else %}
+<p class="empty">Nothing arrived in this window.</p>
+{% end %}

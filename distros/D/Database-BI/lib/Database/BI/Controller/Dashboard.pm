@@ -1,6 +1,6 @@
 package Database::BI::Controller::Dashboard;
 
-our $VERSION = '0.004.0';
+our $VERSION = '0.005.0';
 
 use Mojo::Base 'Mojolicious::Controller', -strict, -signatures;
 
@@ -52,7 +52,7 @@ Readonly my %MESSAGES => (
 	error_not_found        => 'File or directory not found: %s',
 	error_dir_not_found    => 'Directory not found: %s',
 	error_write_failed     => 'Write failed: %s',
-	error_ext_required     => 'Use a .csv or .sql filename extension',
+	error_ext_required     => 'Use a .csv, .sql, or .json filename extension',
 	error_upload_none      => 'No file received',
 	error_upload_ext       => 'Unsupported file type. Accepted: CSV, PSV, XML, SQLite (.sql)',
 	error_upload_too_large => 'File too large (maximum %s MiB)',
@@ -752,6 +752,17 @@ sub _render_sqlite :Protected ($self, $records, $columns, $name) {
 	$self->render(data => $data);
 }
 
+# _render_json($self, $records, \@columns, $name) -> void (renders response)
+#
+# Purpose: Emit $records as a JSON array download.
+# Entry:   $records is an arrayref of hashrefs; $name is a safe filename stem.
+# Exit:    Renders the Mojolicious response.
+# Side Effects: Writes HTTP response headers and body.
+sub _render_json :Protected ($self, $records, $columns, $name) {
+	$self->res->headers->content_disposition(qq{attachment; filename="${name}.json"});
+	$self->render(json => $records);
+}
+
 # ---------------------------------------------------------------------------
 # Public actions
 # ---------------------------------------------------------------------------
@@ -1247,9 +1258,11 @@ Used by the join UI to populate the right-key dropdown without a page reload.
 
   ?table=  string   Table name from C<data_dir>.
   ?path=   string   Absolute path to a data file.
+  ?spec=   string   Unified spec: C<"table:name"> or C<"path:/abs/path">.
+                    Parsed only when C<table> and C<path> are both absent.
 
-One of C<table> or C<path> must be present; if both are, C<table> takes
-precedence.
+One of C<table>, C<path>, or C<spec> must be present; C<table> takes
+precedence over C<path>, and both take precedence over C<spec>.
 
 =head4 OUTPUT
 
@@ -1263,20 +1276,33 @@ None produced by this action directly; internal errors yield a 404.
 =head3 FORMAL SPECIFICATION
 
   columns_api == lambda self .
-    let src = open_spec(table_param or path_param) in
+    let src = open_spec(table_param or path_param or parse_spec(spec_param)) in
     pre  src /= undef
     post render_json({ columns: get_columns(src) })
 
 =head3 EXAMPLE
 
-  GET /api/columns?table=sales  -> {"columns":["product","region","amount"]}
-  GET /api/columns?table=noexist -> 404
+  GET /api/columns?table=sales            -> {"columns":["product","region","amount"]}
+  GET /api/columns?spec=table:sales       -> {"columns":["product","region","amount"]}
+  GET /api/columns?spec=path:/data/f.csv  -> {"columns":[...]}
+  GET /api/columns?table=noexist          -> 404
 
 =cut
 
 sub columns_api ($self) {
 	my $table_name = $self->param('table');
 	my $path       = $self->param('path');
+
+	# Accept the unified spec format used by /join and /graph:
+	# "table:name" or "path:/abs/path" — mirrors _open_spec's parsing.
+	if (!defined($table_name) && !defined($path)) {
+		my $spec = $self->param('spec') // '';
+		if ($spec =~ /\Atable:([A-Za-z_][A-Za-z0-9_]*)\z/) {
+			$table_name = $1;
+		} elsif ($spec =~ /\Apath:(.+)\z/s) {
+			$path = $1;
+		}
+	}
 
 	my $source;
 	if (defined $table_name && $table_name =~ $TABLE_NAME_RE) {
@@ -1569,30 +1595,30 @@ C<GET /export> -- Stream the current logical view as a browser file download.
   ?l=        string   (required) Left table spec.
   ?j=        string   (repeatable) Join steps.
   ?f=        string   (repeatable) Filter specs.
-  ?format=   string   "csv" (default) or "sqlite".
+  ?format=   string   "csv" (default), "sqlite", or "json".
 
 =head4 DOMAIN CONSTRAINTS: ?format=
 
-The comparison is C<$format eq 'sqlite'> -- case-sensitive, exact match.
+Exact lowercase string match.
 
 =over 4
 
 =item Valid partitions
 
-C<csv> (explicit CSV), C<sqlite> (exact lowercase, SQLite binary),
+C<csv> (explicit CSV), C<sqlite> (SQLite binary), C<json> (JSON array),
 absent/undef (defaults to CSV).
 
 =item Invalid partitions (all fall back to CSV)
 
-C<SQLITE> (uppercase, not equal to C<'sqlite'>), C<Sqlite> (mixed
-case), C<sqlit> (truncated), C<sqlite1> (extra character), C<json>
-(unknown format).
+Any value not in the valid set (e.g. C<SQLITE>, C<Json>, C<tsv>).
 
 =back
 
 =head4 OUTPUT
 
-  200 text/csv                  or application/vnd.sqlite3
+  200 text/csv                  Content-Disposition: attachment; filename=<name>.csv
+  200 application/vnd.sqlite3   Content-Disposition: attachment; filename=<name>.db
+  200 application/json          Content-Disposition: attachment; filename=<name>.json
   404 application/json          { "error": "Table not found" }
 
 =head3 MESSAGES
@@ -1605,12 +1631,14 @@ None beyond the 404 response.
     let (recs, cols, label) = _run_export_pipeline() in
     pre  recs /= undef
     post if format = 'sqlite' then render_sqlite(recs, cols)
+         else if format = 'json' then render_json(recs, cols)
          else render_csv(recs, cols)
 
 =head3 EXAMPLE
 
   GET /export?l=table:sales&format=csv     -> downloads sales.csv
   GET /export?l=table:sales&format=sqlite  -> downloads sales.db
+  GET /export?l=table:sales&format=json    -> downloads sales.json
 
 =cut
 
@@ -1619,12 +1647,11 @@ sub export_data ($self) {
 	return $self->reply->not_found unless $records;
 
 	my $format = $self->param('format') // 'csv';
-	$format    = 'csv' unless $format eq 'sqlite';
 	(my $safe_name = lc $left_label) =~ s/[^a-z0-9_]+/_/g;
 
-	return $format eq 'sqlite'
-		? $self->_render_sqlite($records, $columns, $safe_name)
-		: $self->_render_csv($records, $columns, $safe_name);
+	return $format eq 'sqlite' ? $self->_render_sqlite($records, $columns, $safe_name)
+	     : $format eq 'json'   ? $self->_render_json($records, $columns, $safe_name)
+	     :                       $self->_render_csv($records, $columns, $safe_name);
 }
 
 =head2 export_write
@@ -1711,8 +1738,9 @@ sub export_write ($self) {
 	# Strip any path separators the browser might include.
 	($filename) = $filename =~ m{([^/\\]+)\z};
 	my $format;
-	if    ($filename && $filename =~ /\.csv\z/i) { $format = 'csv';    }
-	elsif ($filename && $filename =~ /\.sql\z/i) { $format = 'sqlite'; }
+	if    ($filename && $filename =~ /\.csv\z/i)  { $format = 'csv';    }
+	elsif ($filename && $filename =~ /\.sql\z/i)  { $format = 'sqlite'; }
+	elsif ($filename && $filename =~ /\.json\z/i) { $format = 'json';   }
 	else {
 		return $self->render(
 			json   => { error => $self->_i18n('error_ext_required') },
@@ -1728,6 +1756,9 @@ sub export_write ($self) {
 	eval {
 		if ($format eq 'csv') {
 			$dest->spurt(_serialize_csv($records, $columns));
+		}
+		elsif ($format eq 'json') {
+			$dest->spurt(encode_json($records));
 		}
 		else {
 			$dest->spurt($self->_write_sqlite_db($records, $columns));
@@ -1999,8 +2030,10 @@ sub clear_uploads ($self) {
 #            x=<column>  -- X-axis column name
 #            y=<column>  -- Y-axis column name (values must be numeric)
 #            back=<url>  -- URL for the "Back to table" link (set by JS)
-# Exit:    Emits a complete HTML page (HTML::D3 output post-processed to
-#          inject a toolbar with a back link and SVG/PNG export buttons).
+# Exit:    Emits a TT-rendered HTML page with a brush-to-zoom HTML::D3 snippet.
+#          Each data point carries an "extra" hash of every column not used
+#          as the X or Y axis; HTML::D3 displays these in the hover tooltip.
+#          A "Reset zoom" button appears after the user brushes to zoom in.
 #          Returns HTTP 400 for missing/invalid column names, 404 if the
 #          data source cannot be opened, 200 with an error message when
 #          no plottable rows exist.
@@ -2030,7 +2063,8 @@ sub graph_view ($self) {
 		next unless length($x) && length($y);
 		(my $y_num = $y) =~ s/[^\d.\-]//g;
 		next unless $y_num =~ /\A-?\d+(?:\.\d+)?\z/;
-		push @pairs, [$x, $y_num + 0];
+		my %extra = map { $_ => $row->{$_} } grep { $_ ne $x_col && $_ ne $y_col } @{$columns};
+		push @pairs, [$x, $y_num + 0, \%extra];
 	}
 
 	return $self->render(
@@ -2041,17 +2075,18 @@ sub graph_view ($self) {
 	require HTML::D3;
 	my $title   = "$y_col vs $x_col";
 	my $snippet = HTML::D3->new(title => $title, width => 1100, height => 580)
-		->render_line_chart_snippet(\@pairs);
+		->render_zoomable_line_chart_snippet(\@pairs);
 
 	my ($platform, $language) = $self->_resolve_template;
 	$self->render(
-		handler    => 'tt',
-		template   => "$platform/$language/graph",
-		format     => 'html',
-		title      => $title,
-		graph_html => $snippet->{html},
-		back_url   => $back,
-		back_label => 'Back to table',
+		handler      => 'tt',
+		template     => "$platform/$language/graph",
+		format       => 'html',
+		title        => $title,
+		graph_html   => $snippet->{html},
+		back_url     => $back,
+		back_label   => 'Back to table',
+		point_count  => scalar @pairs,
 	);
 }
 
@@ -2156,6 +2191,90 @@ B<Upload a data file by dropping it onto the page (multipart form POST):>
   curl -X POST http://localhost:3000/upload \
        -F file=@/home/user/data/sales.csv
   # Returns: {"url":"/open?path=/.../.uploads/.../sales.csv","path":"/.../.uploads/.../sales.csv"}
+
+=head2 graph_view
+
+C<GET /graph> -- Render a D3.js v7 line chart from the current data pipeline.
+
+Accepts the same pipeline parameters as L</join_tables> (C<l=>, C<j=>,
+C<c=>, C<f=>, C<d=>) plus:
+
+=over 4
+
+=item C<x=E<lt>colE<gt>>
+
+Column name to use as the X axis (required).  Any data type is accepted;
+values are displayed as categorical labels.
+
+=item C<y=E<lt>colE<gt>>
+
+Column name to use as the Y axis (required).  Non-numeric characters
+(currency symbols, commas, etc.) are stripped before comparison; rows
+where the value is still non-numeric after stripping are silently skipped.
+
+=item C<back=E<lt>urlE<gt>>
+
+URL for the "Back to table" link rendered in the graph toolbar.  Defaults
+to C</> when absent.  The dashboard JS sets this to the current page URL
+before navigating.
+
+=back
+
+=head3 API SPECIFICATION
+
+=head4 INPUT
+
+  l=<spec>     string   Left-table spec (required).  Same syntax as /join.
+  x=<col>      string   X-axis column name (required).
+  y=<col>      string   Y-axis column name (required; must be numeric).
+  back=<url>   string   Back-link URL (optional; default "/").
+  j=, c=, f=, d=        Pipeline params -- see L</join_tables>.
+
+=head4 OUTPUT
+
+  200 text/html   TT-rendered graph page.  The HTML::D3 snippet embeds a
+                  C<const data = [...]> JSON array where each element has:
+                    { label: <x-value>, value: <y-value>,
+                      extra: { <col>: <val>, ... } }
+                  C<extra> contains every column not used as X or Y, so
+                  the hover tooltip shows the complete row for each point.
+                  The chart supports brush-to-zoom; a "Reset zoom" button
+                  appears after a brush selection.  The toolbar shows the
+                  count of plotted data points.
+
+  400 text/plain  C<x=> or C<y=> absent, or named column not found.
+  404 text/plain  Data source could not be opened.
+
+=head3 MESSAGES
+
+  Missing x or y column parameter          C<x=> or C<y=> query param absent.
+  Column not found: <name>                  Named column absent from result set.
+  Could not open data source                Left-table spec unresolvable or 404.
+  No plottable data: no rows have valid ... All rows lack a numeric Y value.
+
+=head3 EXAMPLE
+
+  GET /graph?l=table:sales&x=product&y=amount
+
+Renders a line chart of C<amount> (Y) against C<product> (X).  Mousing over
+a dot shows a tooltip with the product name, the amount, and every other
+column in that row (e.g. C<region>, C<date>).
+
+=head3 FORMAL SPECIFICATION
+
+  graph_view : Controller × Params → HTML | Error
+
+  let pipeline = run_export_pipeline(l, j, c, f, d)
+  let pairs    = [ [row[x], num(row[y]), row \ {x,y}]
+                   | row ∈ pipeline.records,  num(row[y]) ≠ ⊥ ]
+
+  pre  x ∈ params ∧ y ∈ params           else 400
+  pre  x ∈ pipeline.cols                  else 400
+  pre  y ∈ pipeline.cols                  else 400
+  pre  pairs ≠ []                          else 200 "No plottable data"
+  post HTML::D3->render_line_chart_snippet(pairs) embedded in TT layout
+
+=cut
 
 =head2 clear_uploads
 

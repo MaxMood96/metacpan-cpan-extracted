@@ -1,8 +1,10 @@
 {
-  "Id": "abc123def456789abc123def456789abc123def456789abc123def456789abcd",
-  "Created": "2025-01-15T08:00:00.000000000Z",
-  "Path": "nginx",
-  "Args": ["-g", "daemon off;"],
+  "Id": "b20ac7508d80182ba3cd1cbd006ac10c8a15f4f7590fa89c2078d146caf96555",
+  "Created": "2026-08-29T02:54:02.211842347Z",
+  "Path": "sleep",
+  "Args": [
+    "300"
+  ],
   "State": {
     "Status": "running",
     "Running": true,
@@ -10,53 +12,208 @@
     "Restarting": false,
     "OOMKilled": false,
     "Dead": false,
-    "Pid": 12345,
+    "Pid": 114677,
     "ExitCode": 0,
     "Error": "",
-    "StartedAt": "2025-01-15T08:00:01.000000000Z",
+    "StartedAt": "2026-08-29T02:54:08.985300925Z",
     "FinishedAt": "0001-01-01T00:00:00Z"
   },
-  "Image": "sha256:abc123def456",
-  "Name": "/my-container",
+  "Image": "sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b",
+  "ResolvConfPath": "/var/lib/docker/containers/b20ac7508d80182ba3cd1cbd006ac10c8a15f4f7590fa89c2078d146caf96555/resolv.conf",
+  "HostnamePath": "/var/lib/docker/containers/b20ac7508d80182ba3cd1cbd006ac10c8a15f4f7590fa89c2078d146caf96555/hostname",
+  "HostsPath": "/var/lib/docker/containers/b20ac7508d80182ba3cd1cbd006ac10c8a15f4f7590fa89c2078d146caf96555/hosts",
+  "LogPath": "/var/lib/docker/containers/b20ac7508d80182ba3cd1cbd006ac10c8a15f4f7590fa89c2078d146caf96555/b20ac7508d80182ba3cd1cbd006ac10c8a15f4f7590fa89c2078d146caf96555-json.log",
+  "Name": "/apidocker-fixture-probe-39a25e34",
   "RestartCount": 0,
-  "Driver": "overlay2",
+  "Driver": "overlayfs",
   "Platform": "linux",
+  "MountLabel": "",
+  "ProcessLabel": "",
+  "AppArmorProfile": "docker-default",
+  "ExecIDs": null,
   "HostConfig": {
-    "NetworkMode": "default",
+    "Binds": [
+      "apidocker-fixture-probe-39a25e34:/data"
+    ],
+    "ContainerIDFile": "",
+    "LogConfig": {
+      "Type": "json-file",
+      "Config": {}
+    },
+    "NetworkMode": "bridge",
+    "PortBindings": {},
     "RestartPolicy": {
       "Name": "no",
       "MaximumRetryCount": 0
-    }
-  },
-  "Config": {
-    "Hostname": "abc123def456",
-    "Env": [
-      "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-      "NGINX_VERSION=1.25.3"
-    ],
-    "Cmd": ["nginx", "-g", "daemon off;"],
-    "Image": "nginx:latest",
-    "Labels": {
-      "maintainer": "NGINX"
-    }
-  },
-  "NetworkSettings": {
-    "Bridge": "",
-    "Ports": {
-      "80/tcp": [
-        {
-          "HostIp": "0.0.0.0",
-          "HostPort": "8080"
-        }
-      ]
     },
-    "Networks": {
-      "bridge": {
-        "IPAddress": "172.17.0.2",
-        "Gateway": "172.17.0.1",
-        "MacAddress": "02:42:ac:11:00:02"
+    "AutoRemove": false,
+    "VolumeDriver": "",
+    "VolumesFrom": null,
+    "ConsoleSize": [
+      0,
+      0
+    ],
+    "CapAdd": null,
+    "CapDrop": null,
+    "CgroupnsMode": "private",
+    "Dns": null,
+    "DnsOptions": null,
+    "DnsSearch": null,
+    "ExtraHosts": null,
+    "GroupAdd": null,
+    "IpcMode": "private",
+    "Cgroup": "",
+    "Links": null,
+    "OomScoreAdj": 0,
+    "PidMode": "",
+    "Privileged": false,
+    "PublishAllPorts": false,
+    "ReadonlyRootfs": false,
+    "SecurityOpt": null,
+    "UTSMode": "",
+    "UsernsMode": "",
+    "ShmSize": 67108864,
+    "Runtime": "runc",
+    "Isolation": "",
+    "CpuShares": 0,
+    "Memory": 0,
+    "NanoCpus": 0,
+    "CgroupParent": "",
+    "BlkioWeight": 0,
+    "BlkioWeightDevice": null,
+    "BlkioDeviceReadBps": null,
+    "BlkioDeviceWriteBps": null,
+    "BlkioDeviceReadIOps": null,
+    "BlkioDeviceWriteIOps": null,
+    "CpuPeriod": 0,
+    "CpuQuota": 0,
+    "CpuRealtimePeriod": 0,
+    "CpuRealtimeRuntime": 0,
+    "CpusetCpus": "",
+    "CpusetMems": "",
+    "Devices": null,
+    "DeviceCgroupRules": null,
+    "DeviceRequests": null,
+    "MemoryReservation": 0,
+    "MemorySwap": 0,
+    "MemorySwappiness": null,
+    "OomKillDisable": null,
+    "PidsLimit": null,
+    "Ulimits": null,
+    "CpuCount": 0,
+    "CpuPercent": 0,
+    "IOMaximumIOps": 0,
+    "IOMaximumBandwidth": 0,
+    "MaskedPaths": [
+      "/proc/acpi",
+      "/proc/asound",
+      "/proc/interrupts",
+      "/proc/kcore",
+      "/proc/keys",
+      "/proc/latency_stats",
+      "/proc/sched_debug",
+      "/proc/scsi",
+      "/proc/timer_list",
+      "/proc/timer_stats",
+      "/sys/devices/virtual/powercap",
+      "/sys/firmware",
+      "/sys/devices/system/cpu/cpu0/thermal_throttle",
+      "/sys/devices/system/cpu/cpu1/thermal_throttle",
+      "/sys/devices/system/cpu/cpu2/thermal_throttle",
+      "/sys/devices/system/cpu/cpu3/thermal_throttle"
+    ],
+    "ReadonlyPaths": [
+      "/proc/bus",
+      "/proc/fs",
+      "/proc/irq",
+      "/proc/sys",
+      "/proc/sysrq-trigger"
+    ]
+  },
+  "Storage": {
+    "RootFS": {
+      "Snapshot": {
+        "Name": "overlayfs"
       }
     }
   },
-  "Mounts": []
+  "Mounts": [
+    {
+      "Type": "volume",
+      "Name": "apidocker-fixture-probe-39a25e34",
+      "Source": "/var/lib/docker/volumes/apidocker-fixture-probe-39a25e34/_data",
+      "Destination": "/data",
+      "Driver": "local",
+      "Mode": "z",
+      "RW": true,
+      "Propagation": ""
+    }
+  ],
+  "Config": {
+    "Hostname": "b20ac7508d80",
+    "Domainname": "",
+    "User": "",
+    "AttachStdin": false,
+    "AttachStdout": false,
+    "AttachStderr": false,
+    "Tty": false,
+    "OpenStdin": false,
+    "StdinOnce": false,
+    "Env": [
+      "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    ],
+    "Cmd": [
+      "sleep",
+      "300"
+    ],
+    "Image": "alpine:3",
+    "Volumes": null,
+    "WorkingDir": "/",
+    "Entrypoint": null,
+    "Labels": {
+      "apidocker-fixture-probe": "1"
+    }
+  },
+  "NetworkSettings": {
+    "SandboxID": "670338778a0f54f7c9893e73494213efbc624af855ad022ae7a31c0505703cfb",
+    "SandboxKey": "/var/run/docker/netns/670338778a0f",
+    "Ports": {},
+    "Networks": {
+      "bridge": {
+        "IPAMConfig": null,
+        "Links": null,
+        "Aliases": null,
+        "DriverOpts": null,
+        "GwPriority": 0,
+        "NetworkID": "ef0659ba34e1d997800ca81a4a09e2ec8b3fc74031b2c2c9af56d9dabcad7642",
+        "EndpointID": "bd2ed2263528962dcef310b527254bb580570986f1abc1fa51c07f5e1eab1786",
+        "Gateway": "172.17.0.1",
+        "IPAddress": "172.17.0.2",
+        "MacAddress": "46:b1:65:88:56:f8",
+        "IPPrefixLen": 16,
+        "IPv6Gateway": "",
+        "GlobalIPv6Address": "",
+        "GlobalIPv6PrefixLen": 0,
+        "DNSNames": null
+      }
+    }
+  },
+  "ImageManifestDescriptor": {
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "digest": "sha256:79ff19e9084a00eece421b2523fb93e22d730e2c0e525905de047e848e56d95f",
+    "size": 1022,
+    "annotations": {
+      "com.docker.official-images.bashbrew.arch": "amd64",
+      "org.opencontainers.image.base.name": "scratch",
+      "org.opencontainers.image.created": "2026-06-16T00:01:04Z",
+      "org.opencontainers.image.revision": "398ff0c866d27e9f46f53e48184fe36c674b8897",
+      "org.opencontainers.image.source": "https://github.com/alpinelinux/docker-alpine.git#398ff0c866d27e9f46f53e48184fe36c674b8897:x86_64",
+      "org.opencontainers.image.url": "https://hub.docker.com/_/alpine",
+      "org.opencontainers.image.version": "3.24.1"
+    },
+    "platform": {
+      "architecture": "amd64",
+      "os": "linux"
+    }
+  }
 }

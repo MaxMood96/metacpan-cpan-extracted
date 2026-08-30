@@ -1,3 +1,16 @@
+2.105004 - 2026-08-29
+
+  [ENHANCEMENTS]
+
+  * rebuild MANIFEST and bump Netdisco.pm VERSION automatically in Build
+  * bump SNMP::Info dependency 3.977001, improves Cisco WLC support
+  * drop the history.js library for the browser's own History API
+  * drop the unused natural.js sort plug-in and the IE8 HTML5 shim
+
+  [BUG FIXES]
+
+  * fix netdisco-do dumpconfig printing undef instead of the whole config
+
 2.105003 - 2026-08-24
 
   [BUG FIXES]

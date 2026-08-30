@@ -3,7 +3,7 @@
     <input type="text" name="q" value="{% query %}" placeholder="filter by name or label">
     <button type="submit">Filter</button>
   </form>
-  {% if can_edit %}<a class="btn" href="{% prefix %}/alerts/new">New rule</a>{% end %}
+  {% if writable %}<a class="btn" href="{% prefix %}/alerts/new">New rule</a>{% end %}
 </div>
 
 {% if error %}
@@ -12,7 +12,8 @@
 
 {% if broken %}
 <div class="warnbox"><strong>{% broken %} rule(s) could not be evaluated.</strong>
-  A rule whose query fails is not a rule reporting healthy.</div>
+  A rule whose query fails is not a rule reporting healthy. The reason is
+  shown on the rule's row below.</div>
 {% end %}
 
 {% if timeline_plot %}
@@ -36,11 +37,23 @@
       <tr class="{% r.row_class %}">
         <td><span class="al al-{% r.state %}">{% r.state %}</span>
           {% if r.silenced %}<span class="al al-silenced">silenced</span>{% end %}</td>
-        <td><a href="{% prefix %}/alerts/{% r.id %}">{% r.name %}</a></td>
+        <td><a href="{% prefix %}/alerts/{% r.id %}">{% r.name %}</a>
+
+          {% if r.reason %}<div class="al-reason mono">{% r.reason %}</div>{% end %}</td>
         <td class="mono">{% r.series %}</td>
         <td class="mono">{% r.held %}</td>
         <td class="mono">{% r.value %}</td>
-        <td><a href="{% prefix %}/explore?q={% r.query_esc %}{% range_amp %}">explore</a></td>
+        <td class="nowrap"><a href="{% prefix %}/explore?q={% r.query_esc %}{% range_amp %}">explore</a>
+          {% if writable %}
+          <a href="{% prefix %}/alerts/{% r.id %}/edit">edit</a>
+
+          <form method="post" action="{% prefix %}/alerts/{% r.id %}/silence"
+                style="display:inline">
+            {% raw csrf_field %}
+            <input type="hidden" name="until" value="1h">
+            <button type="submit" class="linklike">silence 1h</button>
+          </form>
+          {% end %}</td>
       </tr>
       {% end %}
       </tbody>
@@ -64,11 +77,19 @@
     It does not page.</p>
   <div class="tablewrap">
     <table>
-      <thead><tr><th>pattern</th><th>until</th><th>by</th><th>reason</th></tr></thead>
+      <thead><tr><th>pattern</th><th>until</th><th>by</th><th>reason</th><th></th></tr></thead>
       <tbody>
       {% for s in silences %}
       <tr><td class="mono">{% s.pattern %}</td><td class="mono">{% s.until %}</td>
-        <td>{% s.by %}</td><td>{% s.reason %}</td></tr>
+        <td>{% s.by %}</td><td>{% s.reason %}</td>
+        <td>{% if writable %}
+
+          <form method="post" action="{% prefix %}/alerts/silences/{% s.id %}/delete"
+                style="display:inline">
+            {% raw csrf_field %}
+            <button type="submit" class="linklike">revoke</button>
+          </form>
+        {% end %}</td></tr>
       {% end %}
       </tbody>
     </table>

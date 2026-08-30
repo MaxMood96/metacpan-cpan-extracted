@@ -2,7 +2,7 @@ do { my $x = {
        'configure' => {
                         'requires' => {
                                         'ExtUtils::MakeMaker' => '0',
-                                        'perl' => '5.012'
+                                        'perl' => '5.010'
                                       }
                       },
        'develop' => {
@@ -14,6 +14,7 @@ do { my $x = {
                                       'Code::TidyAll::Plugin::SortLines::Naturally' => '0.000003',
                                       'Code::TidyAll::Plugin::Test::Vars' => '0.04',
                                       'Code::TidyAll::Plugin::UniqueLines' => '0.000003',
+                                      'HTTP::Daemon' => '0',
                                       'Parallel::ForkManager' => '1.19',
                                       'Perl::Critic' => '1.132',
                                       'Perl::Tidy' => '20180220',
@@ -30,11 +31,14 @@ do { my $x = {
                                       'Test::Spelling' => '0.17',
                                       'Test::Synopsis' => '0',
                                       'Test::Vars' => '0.014',
-                                      'Test::Version' => '1'
+                                      'Test::Version' => '1',
+                                      'strict' => '0',
+                                      'warnings' => '0'
                                     }
                     },
        'runtime' => {
                       'requires' => {
+                                      'Carp' => '0',
                                       'Data::Dumper' => '0',
                                       'HTTP::Status' => '0',
                                       'IO::CaptureOutput' => '0',
@@ -43,13 +47,10 @@ do { my $x = {
                                       'LWP::Protocol::https' => '6.10',
                                       'MIME::Base64' => '0',
                                       'Moo' => '2.002004',
-                                      'Moo::Role' => '0',
                                       'Types::Standard' => '0',
                                       'URI::Escape' => '0',
                                       'WWW::Mechanize' => '0',
-                                      'perl' => '5.012',
-                                      'strict' => '0',
-                                      'warnings' => '0'
+                                      'perl' => '5.024'
                                     }
                     },
        'test' => {
@@ -59,11 +60,15 @@ do { my $x = {
                    'requires' => {
                                    'ExtUtils::MakeMaker' => '0',
                                    'File::Spec' => '0',
+                                   'HTTP::Response' => '0',
                                    'LWP::UserAgent' => '0',
                                    'Test::More' => '0',
                                    'Test::RequiresInternet' => '0',
                                    'Try::Tiny' => '0',
-                                   'perl' => '5.012'
+                                   'parent' => '0',
+                                   'perl' => '5.024',
+                                   'strict' => '0',
+                                   'warnings' => '0'
                                  }
                  }
      };

@@ -1,5 +1,57 @@
 Revision history for Database-BI
 
+0.005.0	Sat Aug 29 02:22:00 PM EDT 2026
+    [ Enhancements ]
+    - The "Line graph..." toolbar button is now greyed out (disabled) when the
+      current view has no numeric column that can serve as the Y axis.
+      Hovering over the disabled button shows the tooltip "Line graphs need a
+      numeric column".  The check runs once at page load using the same
+      isNumericVal / isDateVal logic as the Y-axis column selector, so date
+      columns and fully-text columns both correctly suppress the button.
+    - When a view has exactly one numeric column the Y-axis dropdown is
+      replaced by a read-only "auto-selected" label showing the column name,
+      so the user only needs to choose the X axis before clicking Plot.
+    - Upload subdirectories older than 24 hours are now evicted automatically
+      on every server startup.  Recent uploads (from the current or previous
+      session within the last 24 hours) are preserved.  The explicit
+      "Clear upload cache" button (POST /uploads/clear) continues to remove
+      all entries immediately regardless of age.
+    - Graph hover tooltips now show all columns for the data point, not just
+      the X and Y values.  Mousing over a dot displays every field from that
+      row (excluding the axes columns) as additional key/value lines below the
+      label and value.  Requires HTML::D3 >= 0.09.
+    - Line graph now supports brush-to-zoom: drag across a range on the X axis
+      to zoom in; a "Reset zoom" button returns to the full view.  Uses
+      HTML::D3's render_zoomable_line_chart_snippet.
+    - Line graph toolbar now shows the number of plotted data points
+      (e.g. "Plotting 6 points") so users know immediately how much data
+      is in view, especially after filtering.
+    - GET /export now accepts format=json to download the current view as a
+      JSON array of objects.  CSV and SQLite remain available as before.
+    - GET /api/columns now accepts a ?spec= parameter in the unified
+      "table:name" or "path:/abs/path" format used by /join and /graph,
+      so JavaScript can pass the l= pipeline spec directly without parsing it.
+
+    [ Bug Fixes ]
+    - Graph page correctly returns HTTP 200 with a "No plottable data" message
+      when the chosen Y column contains no numeric values (e.g. a text column),
+      rather than crashing or producing an empty chart.
+    - The first X-axis label on the line graph is no longer cropped.  D3
+      rotates labels -45 degrees with text-anchor:end, so the leftmost
+      label extends to a negative SVG x-coordinate.  The fix widens the
+      SVG via a viewBox that starts at x=-60: the formerly-negative region
+      becomes part of the SVG viewport, so no CSS overflow trick is needed.
+    - t/filter.t subtest "import_url: non-numeric table_index is sanitized to 0"
+      now passes on GitHub Actions.  Database::Abstraction fetches URLs via
+      LWP::UserAgent::Cached (not plain LWP::UserAgent); the test was mocking
+      LWP::UserAgent::get but that mock was bypassed by Cached's override of
+      simple_request.  The mock now targets LWP::UserAgent::simple_request
+      (the base-class method that Cached delegates to after its cache check),
+      which intercepts the call regardless of which LWP subclass D::A uses.
+      LWP::UserAgent::Cached is also added to PREREQ_PM and cpanfile so CI
+      installs it; previously it was absent and the feature silently failed
+      on fresh environments.
+
 0.004.0	Thu Aug 27 09:36:22 PM EDT 2026
     [ Enhancements ]
     - Date columns now sort chronologically when clicking the column header.

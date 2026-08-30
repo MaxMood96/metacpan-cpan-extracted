@@ -1,0 +1,96 @@
+{% if error %}
+<div class="warnbox"><strong>{% error %}</strong>{% if hint %} {% hint %}{% end %}</div>
+{% end %}
+
+{% if writable %}{% else %}
+<div class="warnbox">This mount is read-only. Editing needs somewhere to write
+  and a CSRF token; see the <code>db</code> and <code>writable</code> options,
+  and turn on <code>csrf</code> in the application.</div>
+{% end %}
+
+<div class="panel">
+  <h2>{% if creating %}New rule{% else %}{% rule.name %}{% end %}</h2>
+
+  <form method="post" action="{% prefix %}/alerts{% if creating %}{% else %}/{% rule.id %}{% end %}">
+    {% raw csrf_field %}
+
+    <div class="field">
+      <label for="a-name">Name</label>
+      <input type="text" id="a-name" name="name" value="{% rule.name %}">
+      <p class="note">Silences address a rule by name - <code>{% if rule.name %}{% rule.name %}{% else %}error rate{% end %}/</code>
+        covers every series of it - so renaming one orphans its silences.</p>
+      {% if field_name %}<p class="fielderr">{% error %}</p>{% end %}
+    </div>
+
+    <div class="field">
+      <label for="a-query">Query</label>
+      <input type="text" id="a-query" name="query" class="mono" spellcheck="false"
+             value="{% rule.query %}"
+             placeholder="spans | where status = 2 | bucket(30s) count by service">
+      <p class="note">Checked by the same parser that will run it, and it must
+        be bucketed - the state machine is fed one tick per bucket, and
+        <em>for</em> cannot be measured over a single number. Work it out in
+        <a href="{% prefix %}/explore{% range_qs %}">the explorer</a> first;
+        grouping <code>by</code> a field gives each series its own state.</p>
+      {% if field_query %}<p class="fielderr">{% error %}</p>{% end %}
+    </div>
+
+    <div class="field">
+      <label for="a-op">Fires when the value is</label>
+      <select id="a-op" name="op">
+        {% for o in op_options %}
+        <option value="{% o.name %}"{% if o.current %} selected{% end %}>{% o.name %}</option>
+        {% end %}
+      </select>
+      <input type="text" id="a-threshold" name="threshold"
+             value="{% rule.threshold %}" size="10" aria-label="threshold">
+      <p class="note">The raw number the query returns - nanoseconds where it
+        measured time, so a 500ms p95 threshold is <code>500000000</code>.</p>
+      {% if field_op %}<p class="fielderr">{% error %}</p>{% end %}
+      {% if field_threshold %}<p class="fielderr">{% error %}</p>{% end %}
+    </div>
+
+    <div class="field">
+      <label for="a-for">For</label>
+      <input type="text" id="a-for" name="for" value="{% rule.for %}"
+             size="8" placeholder="30s">
+      <p class="note">How long the condition must hold - continuously - before
+        the rule leaves <em>pending</em>. A breach that clears inside this
+        window pages nobody.</p>
+      {% if field_for %}<p class="fielderr">{% error %}</p>{% end %}
+    </div>
+
+    <div class="field">
+      <label for="a-every">Every</label>
+      <input type="text" id="a-every" name="every" value="{% rule.every %}"
+             size="8" placeholder="30s">
+      <p class="note">How often to evaluate. The installation's cadence is the
+        floor: a rule cannot be judged more often than the pass runs.</p>
+      {% if field_every %}<p class="fielderr">{% error %}</p>{% end %}
+    </div>
+
+    <div class="field">
+      <label class="check"><input type="checkbox" name="enabled" value="1"
+        {% if rule.enabled %}checked{% end %}{% if creating %} checked{% end %}>
+        enabled</label>
+    </div>
+
+    <button type="submit" {% if writable %}{% else %}disabled{% end %}>
+      {% if creating %}Create{% else %}Save{% end %}</button>
+  </form>
+</div>
+
+{% if creating %}{% else %}
+<div class="panel">
+  <h2>Delete</h2>
+  <p class="note">Its state, its history and any pending notifications go with
+    it.</p>
+  <form method="post" action="{% prefix %}/alerts/{% rule.id %}/delete">
+    {% raw csrf_field %}
+    <button type="submit" class="danger"
+            {% if writable %}{% else %}disabled{% end %}>Delete this rule</button>
+  </form>
+</div>
+{% end %}
+
+<p><a href="{% prefix %}/alerts">Back to the alerts</a></p>

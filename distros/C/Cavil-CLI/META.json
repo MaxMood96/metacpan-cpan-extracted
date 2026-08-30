@@ -1,0 +1,66 @@
+{
+   "abstract" : "Check code against known open source and commercial code indexed by Cavil",
+   "author" : [
+      "Sebastian Riedel <sriedel@suse.com>"
+   ],
+   "dynamic_config" : 0,
+   "generated_by" : "ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013",
+   "license" : [
+      "gpl_2"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Cavil-CLI",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "7.12"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Cavil::Matcher" : "1.03",
+            "Cpanel::JSON::XS" : "4.09",
+            "IO::Socket::SSL" : "2.009",
+            "Mojo::SQLite" : "3.000",
+            "Mojolicious" : "9.34",
+            "Text::Glob" : "0.11",
+            "perl" : "5.020"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "Test::More" : "0.98"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/openSUSE/cavil-cli/issues"
+      },
+      "license" : [
+         "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html"
+      ],
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/openSUSE/cavil-cli.git",
+         "web" : "https://github.com/openSUSE/cavil-cli"
+      }
+   },
+   "version" : "0.01",
+   "x_serialization_backend" : "JSON::PP version 4.16"
+}

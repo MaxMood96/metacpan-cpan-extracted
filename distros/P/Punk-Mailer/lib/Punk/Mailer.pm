@@ -1,10 +1,10 @@
 package Punk::Mailer;
 
-use 5.016;
+use 5.010001;
 use strict;
 use warnings;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 require XSLoader;
 XSLoader::load('Punk::Mailer', $VERSION);
@@ -19,7 +19,7 @@ Punk::Mailer - outbound mail: messages, MIME, and the transports that carry them
 
 =head1 VERSION
 
-Version 0.04
+Version 0.05
 
 =head1 SYNOPSIS
 

@@ -34,10 +34,14 @@
       },
       "runtime" : {
          "requires" : {
+            "DBD::SQLite" : "1.60",
+            "DBI" : "1.614",
             "File::Raw::JSON" : "0.06",
             "Hyperman" : "0.36",
             "IO::Uncompress::Gunzip" : "0",
+            "Punk::Cache" : "0.34",
             "Punk::OpenTelemetry" : "0.08",
+            "Punk::Queue" : "0.04",
             "perl" : "5.010000"
          }
       },
@@ -49,6 +53,6 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.01",
+   "version" : "0.04",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

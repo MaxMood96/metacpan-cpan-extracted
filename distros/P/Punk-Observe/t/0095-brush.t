@@ -13,6 +13,7 @@ use Test::More;
 use File::Temp qw(tempdir);
 
 my @JS = qw(root/static/nsmath.js root/static/brush.js root/static/livetail.js
+            root/static/discover.js root/static/defer.js
             root/static/waterfall.js root/static/flamegraph.js
             root/static/plot.js);
 
@@ -66,6 +67,24 @@ SKIP: {
     }
 
     my $B = "var B = require(process.cwd() + '/root/static/brush.js');";
+
+    # The deferred-panel poll interval: garbage never polls, and nothing
+    # polls faster than the queries the deferral exists to keep rare.
+    {
+        my $D = "var D = require(process.cwd() + '/root/static/defer.js');";
+        my @cases = (
+            [ "'30'"    => '30' ],
+            [ "'0'"     => '0'  ],   # zero means do not poll
+            [ "''"      => '0'  ],
+            [ "'soon'"  => '0'  ],
+            [ "null"    => '0'  ],
+            [ "'3'"     => '5'  ],   # a floor, not a suggestion
+        );
+        for my $c (@cases) {
+            my $r = $out->("$D console.log(D.pollSeconds($c->[0]));");
+            is($r, $c->[1], "pollSeconds($c->[0]) is $c->[1]");
+        }
+    }
 
     # THE ARITHMETIC. A Number holding 1.7e18 is off by hundreds of
     # nanoseconds - invisible on a chart, wrong in a URL, and the URL is what

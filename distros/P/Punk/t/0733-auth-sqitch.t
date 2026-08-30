@@ -90,17 +90,41 @@ SKIP: {
 }
 
 # ---- the project deploys ---------------------------------------------------------------
+# App::Sqitch being loadable does not mean its `sqitch` is runnable: it installs
+# into the perl's own script directory, which is not on PATH on every machine
+# (a CPAN Testers box reported the deploy failing with no output at all, which
+# is what backticks give for a command that could not be executed). So the
+# command is located and proved to run before anything is asserted about it.
+my $sqitch = do {
+    require File::Basename;
+    require Config;
+    my @try = ('sqitch');
+    unshift @try, map { "$_/sqitch" }
+                  grep { defined && length }
+                  File::Basename::dirname($^X),
+                  @Config::Config{qw(installsitescript installscript installvendorscript)};
+    my $found;
+    for my $c (@try) {
+        next unless $c eq 'sqitch' || -x $c;
+        my $q = $c =~ /\s/ ? qq{"$c"} : $c;
+        my $v = `$q --version 2>/dev/null`;
+        if (defined $v && $v =~ /sqitch/i) { $found = $q; last }
+    }
+    $found;
+};
 SKIP: {
-    skip 'App::Sqitch, DBD::SQLite and sqlite3 required to deploy the project', 4
-        unless eval { require App::Sqitch; require DBI; require DBD::SQLite; 1 }
+    skip 'a runnable sqitch, DBD::SQLite and sqlite3 required to deploy the project', 4
+        unless $sqitch
+            && eval { require App::Sqitch; require DBI; require DBD::SQLite; 1 }
             && `sqlite3 -version 2>/dev/null` =~ /\A\d/;
     require File::Temp;
     require Cwd;
     my $tmp = File::Temp->newdir;
     my $cwd = Cwd::getcwd();
     chdir $dir or die $!;
-    my $out = `sqitch deploy --target db:sqlite:$tmp/auth.db 2>&1`;
+    my $out = `$sqitch deploy --target db:sqlite:$tmp/auth.db 2>&1`;
     chdir $cwd;
+    $out = '' unless defined $out;
     like($out, qr/\+ users \.+ ok.*\+ auth_tokens \.+ ok/s, 'deploys on SQLite') or diag $out;
     my $dbh = DBI->connect("dbi:SQLite:dbname=$tmp/auth.db", '', '', { RaiseError => 1 });
     my $cols = $dbh->selectcol_arrayref('PRAGMA table_info(users)', { Columns => [2] });

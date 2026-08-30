@@ -45,6 +45,20 @@ typedef int64_t  po_i64;
 
 #define PO_U64_MAX ((po_u64)~(po_u64)0)
 
+/* G_LIST IS PERL 5.36 AND THIS DISTRIBUTION SAYS 5.10.
+ *
+ * It is the modern spelling of G_ARRAY - the same value, renamed - and using
+ * it unguarded made every perl below 5.36 fail to COMPILE, which a smoker
+ * reported before any test could run. The local perl having it is exactly why
+ * that went unnoticed: a name that only has to exist at build time leaves no
+ * trace on a box that has it.
+ *
+ * The new name stays in the code because it is the one the perldoc uses now;
+ * this is what makes it mean something on an older perl. */
+#ifndef G_LIST
+#  define G_LIST G_ARRAY
+#endif
+
 /* Is an po_u64 representable in this perl's IV/UV without loss? */
 #define PO_FITS_UV(v) (UVSIZE >= 8 || (po_u64)(v) <= (po_u64)UV_MAX)
 

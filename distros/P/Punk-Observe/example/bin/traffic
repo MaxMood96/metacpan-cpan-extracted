@@ -51,7 +51,7 @@ my @MIX = (
     ( [ 'GET', '/product/4' ] )   x 1,
     ( [ 'GET', '/cart' ] )        x 2,
     ( [ 'POST', '/checkout' ] )   x 5,
-    ( [ 'GET', '/health' ] )      x 1,
+    ( [ 'GET', '/healthz' ] )     x 1,   # the liveness probe, as a probe
     ( [ 'GET', '/product/99' ] )  x 1,     # a real 404, so 4xx is not always 0
 );
 

@@ -1,5 +1,117 @@
 Revision history for API-Docker
 
+0.004     2026-08-30 03:30:59Z
+
+  - The typed object model: `list` and `inspect` on every resource now
+    return generated `API::Docker::Type::*` objects with snake_case
+    accessors (`$c->id`, `$c->size_root_fs`) instead of hashrefs. An
+    unrecognised field is kept and re-sent unchanged rather than dropped,
+    and `since` is documentation only.
+  - The hand-written entity classes are gone. Their convenience methods
+    (`start`, `stop`, `logs`, ...) keep their signatures and move to
+    `API::Docker::Role::Entity::*`, composed onto the generated classes; the
+    old names (`API::Docker::Container`, `::Image`, `::Network`, `::Volume`,
+    `::Plugin`, `::Secret`, `::Config`) ship as stubs that croak, naming what
+    replaces them.
+  - New streaming options `on_event`, `on_frame` and `on_chunk` on the HTTP
+    verbs, wired into `system->events`, `containers->logs`/`stats`/`attach`,
+    `exec->start`, the `images` build/pull/push/load/get family and the
+    `plugins` install/upgrade/push. A callback receives each event, frame or
+    chunk as it arrives; `$stop->()` ends the stream early. Without one the
+    unbounded endpoints still block.
+  - New `read_timeout` and `connect_timeout`, as client attributes and
+    per-request options, off by default. `read_timeout` is idle time since
+    the last byte; both croak `API::Docker::Error::Timeout`, which carries
+    whatever already arrived. A new `TIMEOUTS` section in `API::Docker`
+    documents what each bounds. `containers->stats` is deliberately not
+    bounded by `read_timeout` -- its stream keeps producing rather than
+    going idle.
+  - New `API::Docker::Role::Using`: `$docker->containers->using(read_timeout
+    => 5)->list` clones a resource class to bound a run of calls. Every
+    request the run makes, version negotiation included, carries the bound;
+    an explicit `0` turns a client-wide default off.
+  - A truncated response is now an exception. A body shorter than its
+    Content-Length, a short or malformed chunk, a missing zero chunk, a
+    malformed status line, a bad `Content-Length` or a stray 1xx all croak
+    `API::Docker::Error::Truncated` instead of being handed back as a whole
+    response.
+  - A status of 400 or above croaks `API::Docker::Error::HTTP` instead of a
+    plain string, carrying `status`, `reason`, `body` and decoded `data`. It
+    stringifies exactly as the old string croak did, so text-matching
+    callers are unaffected.
+  - `tls => 1` now speaks real TLS over `tcp://`. `cert_path` names the
+    `docker` CLI's `ca.pem`/`cert.pem`/`key.pem` layout, `tls_insecure`
+    turns verification off, and `tls` defaults from
+    `$ENV{DOCKER_TLS_VERIFY}`. `IO::Socket::SSL` is a recommended
+    dependency, loaded on the first TLS connection.
+  - New `response => \%h` option fills `status`, `reason` and `headers`,
+    including for a request that croaked. New `head` verb beside
+    `get`/`post`/`put`/`delete_request`, which never waits for a body.
+  - `negotiate_version` croaks, naming `GET /version` and the expected
+    shape, when the body is not a JSON object carrying an `ApiVersion` of the
+    form `N.N`.
+  - New `API::Docker::Role::Filters`, consumed by all eight resource classes
+    and applied at every `filters` call site: a bare value, a boolean or a
+    mis-shaped filter is normalised to the engine's JSON map-of-arrays
+    instead of silently matching nothing.
+  - JSON request bodies send booleans as real `true`/`false`; a caller may
+    pass `1`/`0` or a JSON boolean interchangeably.
+  - `_uri_encode` UTF-8-encodes a decoded character string before
+    percent-escaping, so a name or tag typed as characters (`ü`, `中`) goes
+    out as valid UTF-8.
+  - A request path outside the RFC 3986 origin-form character set is refused
+    before it reaches the daemon, closing a request-line injection through a
+    container name or image reference.
+  - An ArrayRef query parameter expands into one repeated `k=v` pair per
+    element (`names=a&names=b`), which some endpoints require.
+  - A bare JSON scalar body (`null`, `true`, a number, a quoted string) is
+    decoded rather than handed back as raw bytes; `raw` and `ndjson` return
+    `''` and `[]` for a zero-byte body instead of `undef`.
+  - Registry credentials reach `images->pull` (`auth`, sent as
+    `X-Registry-Auth`) and `images->build` (`registry_config`, sent as
+    `X-Registry-Config`), sent only when given. An already-base64 auth value
+    in the standard alphabet is respelled URL-safe, which the engine
+    requires.
+  - `images->pull` no longer appends a default `tag` onto a reference that
+    already carries a `:tag` or `@digest`.
+  - New `images->get`, `->get_all` and `->load`: the image tar roundtrip in
+    and out of a daemon without a registry. New `images->commit`
+    (POST /commit) and `images->build_prune` (POST /build/prune, the
+    BuildKit cache, a different store from the dangling images
+    `images->prune` deletes).
+  - New container endpoints: `get_archive`, `put_archive`, `stat_archive`
+    (the `docker cp` primitives), `changes`, `export`, `resize` and the
+    one-way half of `attach`. `attach` defaults to `stream => 0, logs => 1`
+    (replay and return) and refuses a container that is not running unless
+    `require_running => 0`.
+  - `containers->start`/`stop`/`restart`/`pause`/`unpause` return 1 when the
+    call changed the container's state and 0 when it was already in it (the
+    engine answers a no-op with 304), instead of always undef.
+  - `containers->stats` croaks `API::Docker::Error::HTTP` when Podman reports
+    a failure inside a 200 response, instead of handing the error object back
+    as a reading.
+  - New `API::Docker::API::Plugins` (`$docker->plugins`): `list`,
+    `privileges`, `install`, `inspect`, `remove`, `enable`, `disable`,
+    `upgrade`, `push` and `configure`. Needs a real Docker daemon; Podman
+    serves no `/plugins`.
+  - New `API::Docker::API::Secrets` and `API::Docker::API::Configs`: `list`,
+    `create`, `inspect`, `update` and `remove`. `Data` is base64-encoded for
+    the caller; `update` takes the current `Version.Index` as a mandatory
+    concurrency token.
+  - New `API::Docker::API::System::auth` (POST /auth): check registry
+    credentials without pulling or pushing. A rejected credential croaks.
+  - New `API::Docker::API::Distribution` (`inspect`/`exists`,
+    GET /distribution/{name}/json): ask a registry for a manifest without
+    pulling. `exists` answers `1`/`0` and tells a registry's own 404 apart
+    from an engine that serves no such route.
+  - Declare a minimum Perl of 5.014 (`s///r` in `Role::HTTP`) and add the
+    core modules `Errno`, `IO::Handle`, `Scalar::Util` and `Socket` to
+    `cpanfile`. Stop shipping `spec/` and `maint/` in the built dist.
+  - Swarm (`/swarm`, `/nodes`, `/services`, `/tasks`) is documented as a
+    permanent scope decision, not a gap: Podman implements none of it and no
+    consumer needs it. `secrets` and `configs` stand on their own and stay
+    covered.
+
 0.003     2026-08-27 03:37:00Z
   - t/containers.t: the registered cleanup tolerates the container the
     happy path already removed, so a live run no longer warns "Cleanup

@@ -104,6 +104,18 @@ static int po_eval(const po_expr *e, const po_row *r) {
         default: return 0;
     }
 
+    /* THE ABSENCE TEST. Presence means the row can answer the field at all
+     * - as bytes or as a number - so `risk.outcome != null` keeps the rows
+     * that carry the attribute whatever its value, including empty, which
+     * `!= ""` cannot say. This is the one comparison where absent gets to be
+     * an answer instead of a silent false. */
+    if (e->vkind == PO_V_NULL) {
+        size_t sl; double nv;
+        int present = po_row_str(r, e->field, e->field_len, &sl) != NULL
+                   || po_row_num(r, e->field, e->field_len, &nv);
+        return e->op == PO_OP_NE ? present : !present;
+    }
+
     /* A duration or severity literal is numeric by construction. */
     if (e->vkind == PO_V_DURATION || e->vkind == PO_V_SEVERITY
         || e->vkind == PO_V_NUMBER) {
@@ -111,6 +123,40 @@ static int po_eval(const po_expr *e, const po_row *r) {
         double rhs = (e->vkind == PO_V_NUMBER) ? e->nval : (double)e->uval;
         if (!po_row_num(r, e->field, e->field_len, &lhs)) return 0;  /* absent */
         return po_cmp_num(lhs, e->op, rhs);
+    }
+
+    /* THE IDENTIFIER COLUMNS, which the row holds as integers.
+     *
+     * `trace_id` and `span_id` are declared in PO_COLUMNS for the log, trace
+     * and span sources, so the parser accepts them and the planner builds a
+     * predicate - and neither one was resolvable by po_row_str or po_row_num.
+     * A comparison against a field the row cannot answer is false in both
+     * directions, so `log | where trace_id = "4bf8..."` matched nothing on a
+     * trace that had logs, and the page said "no log lines matched": the same
+     * words it uses when the trace genuinely had none.
+     *
+     * This is the identical defect po_row.h documents for `status` and
+     * `kind`. Those two were fixed; these two were missed in the same sweep
+     * and shipped, because every test on them was a parse test.
+     *
+     * Compared as INTEGERS against the parsed literal, not as text: the row
+     * has no string form of either without formatting one per row, and
+     * equality on a trace id has to hold across the two spellings a person
+     * might paste. Only = and != mean anything on an identifier; an ordering
+     * comparison is refused by matching nothing rather than inventing one. */
+    if (PO_IS_TRACE_ID(e->field, e->field_len)
+        || PO_IS_SPAN_ID(e->field, e->field_len)) {
+        po_u64 qhi = 0, qlo = 0;
+        int is_trace = PO_IS_TRACE_ID(e->field, e->field_len);
+        int same;
+
+        if (e->op != PO_OP_EQ && e->op != PO_OP_NE) return 0;
+        if (e->vkind == PO_V_NUMBER) { qhi = 0; qlo = (po_u64)e->nval; }
+        else if (!po_parse_id(e->sval, e->sval_len, &qhi, &qlo)) return 0;
+
+        same = is_trace ? (r->trace_hi == qhi && r->trace_lo == qlo)
+                        : (r->span_id == qlo);
+        return (e->op == PO_OP_EQ) ? same : !same;
     }
 
     {

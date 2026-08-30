@@ -16,7 +16,7 @@ force-loaded via `briefing.skills` — this file is for the orchestrating agent.
    the other for cleanup. Don't blend.
 6. **Read before you write** — `Role::HTTP` is the single seam every resource API and
    entity class hangs off. A change to `_request`'s options, return shape or error
-   handling reaches all twelve modules and the mock harness at once.
+   handling reaches every module in `lib/` and the mock harness at once.
 7. **Tests verify intent, not just behavior** — a test that can't fail when the logic
    changes is wrong, and a helper that normalises its input before asserting is that
    test. Reproduce a bug before fixing it; leave the regression behind.
@@ -44,6 +44,7 @@ This rule depends on whether the Agent/Task tool is available to you.
   | Anything turning on what the daemon does or expects — endpoints, wire formats, filters, registry auth, version gating | `api-docker-engine-worker` |
   | The Perl side — Moo, transport internals, entity classes, refactoring, cpanfile | `api-docker-worker` (default) |
   | Write/extend tests, add fixtures | `api-docker-test-writer` |
+  | The generated type model, the `API::Docker::Type` DSL, the drift checker, `spec/` | `api-docker-type-writer` |
   | Pre-release audit | `api-docker-release-checker` |
   | POD and README | `api-docker-doc-writer` |
 
@@ -58,6 +59,28 @@ This rule depends on whether the Agent/Task tool is available to you.
 Behavior-relevant = the HTTP transport and everything it returns, the resource API method
 surface, entity wrappers, request/response encoding, error handling, `cpanfile`, and
 tests. Pure prose docs and `Changes` notes are not.
+
+## Parallel fan-out — isolate the working tree
+
+Subagents share one working tree with the orchestrator and with each other. A global git
+command in one reaches all of them, so:
+
+- **A subagent never mutates git** — no `stash`, `reset`, `checkout -- <path>`, `clean`,
+  `add` or `commit`. The orchestrator owns git and commits. Say so in every subagent
+  prompt, but do not rely on the prompt alone: a subagent's `git stash`/`reset`/`checkout`
+  has thrown away another agent's uncommitted work three times (k111) even when the prompt
+  forbade it.
+- **When two or more code-touching agents run at once, isolate them.** Launch each with
+  `isolation: "worktree"` so a stray git command in one cannot reach another's tree, or run
+  them sequentially in the shared tree. Never fan out parallel code-touching agents into the
+  same working tree without isolation.
+- **A worktree may branch from a stale base.** Integrate its result by the diff
+  (`git diff <merge-base> <branch> -- <files>` piped to `git apply`, or a cherry-pick),
+  never by `git checkout <branch> -- <file>` for a file the main tree has since changed —
+  that reverts the main tree to the stale copy. Check the merge-base against what main
+  touched first.
+- **Commit a verified-green checkpoint before the next mutating fan-out.** A committed HEAD
+  is immune to a later stray `stash`/`reset`; uncommitted work is not.
 
 ## Coordination — karr board (always in scope)
 
@@ -91,38 +114,47 @@ names a specific item to handle.
 
 ## API-Docker-specific hazards
 
-- **There is no Docker on this machine — only rootless Podman.**
-  `unix:///var/run/docker.sock` does not exist here, and `check_live_access` answers a
-  missing socket with `skip_all`. A live run pointed at the default therefore reports
-  success while testing nothing. The real endpoint is
-  `API_DOCKER_TEST_HOST=unix:///run/user/1000/podman/podman.sock` (announces API 1.41).
-- **The suite is not green against a live daemon.** `t/system.t`'s `events` subtest
-  asserts `ref eq 'ARRAY'` outside its `is_live()` guard; a real daemon with no events in
-  the requested window returns an empty body, `_request` returns undef, and the test
-  fails. It is ticketed — do not rediscover it as a new finding and do not fix it
-  opportunistically.
-- **`containers->logs` hands frame headers to the caller.** A container created without
-  a TTY produces an 8-byte-framed stream (`01 00 00 00 00 00 00 04` + payload, stream
-  type in byte 0, big-endian length in bytes 4-7) and the method returns it undecoded;
-  with a TTY the stream is raw and looks correct, so hand-testing interactively hides it.
-  `exec->start` shares the problem and there is no `attach` at all. Ticketed — it is a
-  public return-shape change, not a passing fix.
+- **Which engine is there is a fact about the machine, not about this file.** Before
+  any live run, check which sockets exist (`/var/run/docker.sock`,
+  `$XDG_RUNTIME_DIR/podman/podman.sock`) and what each announces on `GET /version` --
+  `Platform.Name`, `ApiVersion`, `MinAPIVersion`. `check_live_access` answers a missing
+  socket with `skip_all`, so a live run pointed at a socket that is not there reports
+  success while testing nothing: read the skip line. The `/v1.XX/` in a hand-written
+  curl is what the request asked for, not what the engine is. A measurement names the
+  engine and the version it was taken on, or it is not a measurement.
 - **Live write tests mutate the real engine.** `API_DOCKER_TEST_WRITE=1` creates and
   removes actual containers, images, networks and volumes; cleanup runs in an `END`
   block, so an interrupted run leaves them behind. Run only when the task is about live
   behavior.
+- **`prune` destroys, and `dangling => 0` destroys MORE, not less.** `POST
+  /images/prune` with `filters => { dangling => ['false'] }` removes every
+  unused *tagged* image on the engine, locally built ones included, and they
+  are not recoverable. It reads like a narrowing filter and is the opposite.
+  This has already cost a locally built image, during what its caller
+  believed was a read-only probe. **No `prune` of any
+  kind -- images, containers, networks, volumes, build cache -- and no
+  `rm -a` or `system reset`, on either engine, ever, unless the user names
+  the command.** Probing what an endpoint answers is not a reason: measure
+  it against something you created yourself.
 - **`images->push` publishes.** With credentials it writes to a real registry under the
   maintainer's account. Never run it — nor any test that does — without explicit
   instruction.
-- **Streaming endpoints block until the daemon closes.** `_request` buffers whole
-  responses, so `system->events` or `containers->stats` without a bound never returns.
-  Always bound the window, and wrap manual probes in `timeout`.
-- **`tls` and `cert_path` are attributes with no implementation.** `Role::HTTP` never
-  reads them; `tcp://` is always plaintext. Wiring TLS is new work with an ADR-grade
-  decision behind it, not a repair.
+- **Streaming endpoints block until the daemon closes, unless given a callback.**
+  `_request` still buffers a whole response by default, so `system->events` or
+  `containers->stats` without a bound and without `on_event`/`on_frame`/`on_chunk` never
+  returns. Bound the window, pass a callback, or wrap a manual probe in `timeout` — a
+  callback still needs `$stop->()` called from somewhere, or it runs until the daemon
+  closes the connection on its own.
 - **`../p5-dist-zilla-plugin-docker-api` consumes this API.** A public signature or
   return-shape change is a cross-repo change: verify that repo, or file a ticket on its
   board before landing.
+- **`[@Author::GETTY]` gathers through `Git::GatherDir`, which sees only tracked
+  files.** A new `.pm`, test file or fixture is invisible to `dzil build`/`dzil test`
+  until it is `git add`-ed — while `prove -lr t/` stays green the whole time, because it
+  reads `lib/` and `t/` directly rather than through the gathered file list. A `dzil
+  build` failure that looks like a missing module, or a passing `prove` next to a
+  failing `dzil test`, is this before anything else: check `git status` for an untracked
+  file first.
 
 ## Perl specifics — reference, don't restate
 

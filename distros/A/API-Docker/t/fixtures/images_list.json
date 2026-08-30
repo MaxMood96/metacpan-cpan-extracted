@@ -1,28 +1,110 @@
 [
   {
-    "Id": "sha256:abc123def456789abc123def456789abc123def456789abc123def456789abcd",
+    "Id": "sha256:28cf899893feeb2e46c15c862d35345422c6cc9c72b20b572a58cb0fc81fc5c5",
     "ParentId": "",
-    "RepoTags": ["nginx:latest", "nginx:1.25"],
-    "RepoDigests": ["nginx@sha256:abc123"],
-    "Created": 1705300000,
-    "Size": 187654321,
-    "SharedSize": 75000000,
-    "VirtualSize": 187654321,
+    "RepoTags": [],
+    "RepoDigests": [],
+    "Created": 1787794246,
+    "Size": 626593137,
+    "SharedSize": -1,
     "Labels": {
-      "maintainer": "NGINX"
+      "io.buildah.version": "1.39.3"
     },
-    "Containers": 2
+    "Containers": 0,
+    "Dangling": true,
+    "Digest": "sha256:4d5c3e45f65928a50648e4beaf2cf73f15952ce29a4ca5f2dc79051be8e4ef55",
+    "History": [
+      "docker.io/library/9ca1c8a645893266f2a077c801bcc5dc40fc5d2699605744c747c44c8821cb70-tmp:latest"
+    ]
   },
   {
-    "Id": "sha256:def789ghi012345def789ghi012345def789ghi012345def789ghi012345defg",
+    "Id": "sha256:a9d745d1c5d1b12cfa2f797fd4506e11cf8739bae09a30f8052db2824143e763",
     "ParentId": "",
-    "RepoTags": ["redis:7"],
-    "RepoDigests": ["redis@sha256:def789"],
-    "Created": 1705200000,
-    "Size": 130000000,
-    "SharedSize": 50000000,
-    "VirtualSize": 130000000,
-    "Labels": {},
-    "Containers": 1
+    "RepoTags": [],
+    "RepoDigests": [],
+    "Created": 1787795000,
+    "Size": 673802034,
+    "SharedSize": -1,
+    "Labels": {
+      "io.buildah.version": "1.43.2"
+    },
+    "Containers": 0,
+    "Dangling": true,
+    "Digest": "sha256:c53f61336477e9d263d66303dd888a4df3ad92080d08034c5ccdb43422602853",
+    "History": [
+      "docker.io/library/b641468f007e9f66da957078ff1ece84ca78894c7f23cf7b0d462f50f8d28d6e-tmp:latest"
+    ]
+  },
+  {
+    "Id": "sha256:d529dd0c6e5597ac7e4a3e2dea65c3fcc6173f4cae713c409265c1dd9914a11b",
+    "ParentId": "",
+    "RepoTags": [
+      "docker.io/library/alpine:3",
+      "docker.io/library/alpine:latest"
+    ],
+    "RepoDigests": [
+      "docker.io/library/alpine@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b",
+      "docker.io/library/alpine@sha256:79ff19e9084a00eece421b2523fb93e22d730e2c0e525905de047e848e56d95f"
+    ],
+    "Created": 1781568089,
+    "Size": 8709729,
+    "SharedSize": -1,
+    "Labels": null,
+    "Containers": 0,
+    "Digest": "sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b",
+    "History": [
+      "docker.io/library/alpine:latest",
+      "docker.io/library/alpine:3"
+    ],
+    "Names": [
+      "docker.io/library/alpine:3",
+      "docker.io/library/alpine:latest"
+    ]
+  },
+  {
+    "Id": "sha256:c6348fa86ba0fb2108c9334f5fe913ddc6d853313e655891f133a0127c30099f",
+    "ParentId": "",
+    "RepoTags": [
+      "docker.io/library/busybox:latest"
+    ],
+    "RepoDigests": [
+      "docker.io/library/busybox@sha256:1cfa4e2b09e127b9c4ed43578d3f3c18e7d44ea47b9ea98475c0cbe9086525f8",
+      "docker.io/library/busybox@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616"
+    ],
+    "Created": 1778638909,
+    "Size": 4690894,
+    "SharedSize": -1,
+    "Labels": null,
+    "Containers": 0,
+    "Digest": "sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616",
+    "History": [
+      "docker.io/library/busybox:latest"
+    ],
+    "Names": [
+      "docker.io/library/busybox:latest"
+    ]
+  },
+  {
+    "Id": "sha256:26b2eb03618e749084668eaff68cff8f81dda12d06ac641be7a6398b82a6f25b",
+    "ParentId": "",
+    "RepoTags": [
+      "docker.io/library/registry:2"
+    ],
+    "RepoDigests": [
+      "docker.io/library/registry@sha256:46faa9a1ae6813194b53921a370f2f4f8c5e1aae228a89bceafef5847a6a3278",
+      "docker.io/library/registry@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373"
+    ],
+    "Created": 1696272161,
+    "Size": 26014639,
+    "SharedSize": -1,
+    "Labels": null,
+    "Containers": 0,
+    "Digest": "sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373",
+    "History": [
+      "docker.io/library/registry:2"
+    ],
+    "Names": [
+      "docker.io/library/registry:2"
+    ]
   }
 ]

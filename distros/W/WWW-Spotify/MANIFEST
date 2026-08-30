@@ -11,9 +11,6 @@ README.md
 cpanfile
 dist.ini
 lib/WWW/Spotify.pm
-lib/WWW/Spotify/Client.pm
-lib/WWW/Spotify/Endpoint.pm
-lib/WWW/Spotify/Response.pm
 perlimports.toml
 perltidyrc
 t/00-report-prereqs.dd
@@ -21,10 +18,13 @@ t/00-report-prereqs.t
 t/01-spotify.t
 t/02-live.t
 t/03-ua.t
-t/04-live-user-auth.t
+t/04-send-request.t
+t/05-oauth-user.t
+t/06-methods-mocked.t
 tidyall.ini
 weaver.ini
 xt/author/eol.t
+xt/author/live-user.t
 xt/author/mojibake.t
 xt/author/pod-coverage.t
 xt/author/pod-spell.t

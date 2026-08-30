@@ -2,9 +2,12 @@
 use 5.010;
 use strict;
 use warnings;
+use lib "t/lib";
 use Test::More;
+use HMTest qw(free_ports quiet_child server_status);
 use IO::Socket::INET;
 use Time::HiRes ();
+use POSIX ();
 
 # A large request body goes to a temp file rather than a second copy in
 # memory.
@@ -16,12 +19,13 @@ use Time::HiRes ();
 
 plan skip_all => 'fork is POSIX-only here' if $^O eq 'MSWin32';
 
-my $port = 28100 + ($$ % 120);
+my ($port) = free_ports(1);
+plan skip_all => 'no free port' unless $port;
 my $host = "127.0.0.1:$port";
 
 my $pid = fork // die "fork: $!";
 if (!$pid) {
-    open STDERR, '>', '/dev/null';
+    quiet_child();
     my $app = sub {
         my ($env) = @_;
         my $in  = $env->{'psgi.input'};
@@ -47,10 +51,33 @@ if (!$pid) {
     exit 0;
 }
 
+# TERM, then KILL if it will not go. An unbounded waitpid here is the other
+# half of the inherited-pipe hazard: a server that never exits leaves the
+# harness blocked forever rather than failing.
+sub shutdown_server {
+    return unless $pid;
+    kill 'TERM', $pid;
+    for (1 .. 100) {
+        return if waitpid($pid, POSIX::WNOHANG()) == $pid;
+        Time::HiRes::sleep(0.1);
+    }
+    kill 'KILL', $pid;
+    waitpid $pid, 0;
+}
+
+my $up = 0;
 for (1 .. 100) {
+    if (my $why = server_status($pid)) {
+        $pid = 0;                       # already reaped by server_status
+        plan skip_all => "server did not start: $why";
+    }
     my $s = IO::Socket::INET->new(PeerAddr => $host);
-    last if $s;
+    if ($s) { $up = 1; last }
     Time::HiRes::sleep(0.1);
+}
+unless ($up) {
+    shutdown_server();
+    plan skip_all => 'server never accepted a connection';
 }
 
 sub post_bytes {
@@ -229,7 +256,6 @@ sub post_bytes {
     }
 }
 
-kill 'TERM', $pid;
-waitpid $pid, 0;
+shutdown_server();
 
 done_testing;

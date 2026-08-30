@@ -80,6 +80,30 @@ sub set_incident {
 
 post '/authorize' => 'Api#authorize', { name => 'authorize' };
 put  '/incident'  => 'Api#incident',  { name => 'incident'  };
-get  '/health'    => sub { $_[0]->json({ ok => 1, broken => incident_on() }) };
+# THE REAL HEALTH PLUGIN, with real checks.
+#
+# There was a hand-rolled `get '/health'` here returning {ok=>1}: a liveness
+# answer wearing a readiness name, with no checks in it at all, and a second
+# opinion about health beside this one. It is gone - `/healthz` and `/readyz`
+# below are the only answers this service gives, and they come from the
+# plugin rather than from a route that has to be kept in step with it.
+#
+# `detail => 1` because these endpoints are unauthenticated and the detail
+# names an application's internal dependencies - on a demo bound to loopback
+# that is fine, and it is what makes the per-check series exist.
+plugin 'Health' => {
+    detail  => 1,
+    version => '0.01',
+    checks  => {
+        # The incident switch, as a check. Flipping it with
+        # `curl -X PUT '.../incident?on=1'` now shows up on the observer's
+        # status page as well as in the traces, which is the join this
+        # feature exists to make.
+        processor => sub { return incident_on() ? 0 : 1 },
+        # Something that is always fine, so a failing check sits next to a
+        # passing one rather than the whole target going red at once.
+        ledger    => sub { 1 },
+    },
+};
 
 1;

@@ -4,7 +4,18 @@ use Test::More;
 use JSON::MaybeXS qw( decode_json );
 use MIME::Base64 qw( decode_base64 );
 
-use API::Docker::API::Images;
+use API::Docker;
+
+# The encoder is API::Docker::Role::RegistryAuth::_registry_auth_header,
+# composed into API::Docker::API::Images -- it used to be a bare sub in
+# Images.pm called as a function, and Plugins.pm carried a copy. It is
+# exercised here through the class that consumes it, which is what a caller
+# reaches, and the shared role itself is covered in t/registry_auth.t.
+my $client = API::Docker->new(
+    host        => 'unix:///dev/null',
+    api_version => '1.47',
+);
+my $images = $client->images;
 
 # No padding is added back here on purpose. The previous version of this
 # helper computed the missing '=' and appended it before decoding, which made
@@ -23,17 +34,17 @@ sub b64url_decode {
 # anonymous case is the shortest and most certain to need a pad -- '{}'
 # encodes to three characters plus one '='.
 subtest 'the header carries its base64 padding' => sub {
-    my $hdr = API::Docker::API::Images::_build_registry_auth_header(undef);
+    my $hdr = $images->_registry_auth_header(undef);
     is $hdr, 'e30=', 'anonymous auth is exactly the padded encoding of {}';
     is length($hdr) % 4, 0, 'length is a multiple of four';
 
-    my $creds = API::Docker::API::Images::_build_registry_auth_header(
+    my $creds = $images->_registry_auth_header(
         { username => 'me', password => 'secret' });
     is length($creds) % 4, 0, 'credentials are padded too';
 };
 
 subtest 'empty/undef auth -> base64url("{}")' => sub {
-    my $hdr = API::Docker::API::Images::_build_registry_auth_header(undef);
+    my $hdr = $images->_registry_auth_header(undef);
     ok length($hdr), 'header is non-empty for undef';
     is_deeply(decode_json(b64url_decode($hdr)), {},
         'decodes to empty JSON object');
@@ -45,30 +56,26 @@ subtest 'hashref auth -> JSON-encoded credentials' => sub {
         password      => 'secret',
         serveraddress => 'https://index.docker.io/v1/',
     };
-    my $hdr = API::Docker::API::Images::_build_registry_auth_header($auth);
+    my $hdr = $images->_registry_auth_header($auth);
     is_deeply(decode_json(b64url_decode($hdr)), $auth,
         'header roundtrips through base64url + JSON');
 };
 
 subtest 'identitytoken auth' => sub {
     my $auth = { identitytoken => 'tok-123', serveraddress => 'ghcr.io' };
-    my $hdr = API::Docker::API::Images::_build_registry_auth_header($auth);
+    my $hdr = $images->_registry_auth_header($auth);
     is_deeply(decode_json(b64url_decode($hdr)), $auth,
         'identitytoken roundtrips');
 };
 
 subtest 'pre-encoded base64-like string passes through' => sub {
     my $pre = 'eyJ1IjoibWUifQ';
-    is API::Docker::API::Images::_build_registry_auth_header($pre), $pre,
+    is $images->_registry_auth_header($pre), $pre,
         'string passed through unchanged';
 };
 
 subtest 'push() sends X-Registry-Auth via _request' => sub {
-    require API::Docker;
-    my $docker = API::Docker->new(
-        host        => 'unix:///dev/null',
-        api_version => '1.47',
-    );
+    my $docker = $client;
 
     my $captured;
     my $mock = sub {

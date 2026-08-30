@@ -1,7 +1,7 @@
 package Object::Proto;
 use strict;
 use warnings;
-our $VERSION = '0.20';
+our $VERSION = '0.21';
 
 use DynaLoader;
 our @ISA = ('DynaLoader');
@@ -24,7 +24,7 @@ Object::Proto - objects with prototype chains
 	use Object::Proto;
 
 	# Define class properties (compile time)
-	object 'Cat', qw(name age));
+	object 'Cat', qw(name age);
 
 	# Positional constructor - fastest
 	my $cat = new Cat 'Whiskers', 3;
@@ -70,7 +70,7 @@ custom package methods all work as expected.
 Define properties for a class at compile time. This assigns slot indices
 and installs accessor methods. Must be called before using C<new>.
 
-	object 'Cat', qw(name age color));
+	object 'Cat', qw(name age color);
 
 This is a convenience keyword exported by C<use Object::Proto>. It is
 equivalent to calling C<Object::Proto::define()> directly.
@@ -91,8 +91,7 @@ using the colon-separated format:
 	    'age:Int:default(0)',          # Integer with default 0
 	    'email:Str',                   # Optional string
 	    'id:Str:required:readonly',    # Required, immutable after new()
-	    'tags:ArrayRef:default([])',   # Fresh empty array per object
-	);
+	    'tags:ArrayRef:default([])';   # Fresh empty array per object
 
 =head3 Built-in Types
 
@@ -173,8 +172,7 @@ Default values support:
 Lazy slots defer computation until first access:
 
 	object 'Config',
-	    'settings:HashRef:lazy:builder(_build_settings)',
-	);
+	    'settings:HashRef:lazy:builder(_build_settings)';
 
 	package Config;
 	sub _build_settings {
@@ -187,8 +185,7 @@ Lazy slots defer computation until first access:
 Install helper methods to clear and check slot values:
 
 	object 'Person',
-	    'nickname:Str:clearer:predicate',
-	);
+	    'nickname:Str:clearer:predicate';
 
 	my $p = new Person;
 	$p->has_nickname;     # false
@@ -200,8 +197,7 @@ Install helper methods to clear and check slot values:
 Custom method names can be specified:
 
 	object 'Config',
-	    'cache:HashRef:clearer(invalidate):predicate(is_cached)',
-	);
+	    'cache:HashRef:clearer(invalidate):predicate(is_cached)';
 
 	$config->is_cached;    # false
 	$config->cache({});
@@ -214,8 +210,7 @@ For Java-style accessors, use C<reader> and C<writer> to create
 separate getter and setter methods:
 
 	object 'Person',
-	    'name:Str:reader(get_name):writer(set_name)',
-	);
+	    'name:Str:reader(get_name):writer(set_name)';
 
 	my $p = new Person;
 	$p->set_name('Alice');
@@ -229,8 +224,7 @@ the default accessor. Use with C<readonly> to prevent modification
 after construction:
 
 	object 'Entity',
-	    'id:Int:readonly:reader(get_id)',  # readonly, no writer needed
-	);
+	    'id:Int:readonly:reader(get_id)';  # readonly, no writer needed
 
 =head3 Weak References
 
@@ -240,8 +234,7 @@ preventing circular reference memory leaks:
 	object 'TreeNode',
 	    'value:Str',
 	    'parent:Object:weak',      # weak ref to parent
-	    'children:ArrayRef',
-	);
+	    'children:ArrayRef';
 
 	my $parent = new TreeNode value => 'root';
 	my $child = new TreeNode value => 'leaf', parent => $parent;
@@ -270,8 +263,7 @@ Use C<arg(name)> to specify a different name for the constructor
 argument. The accessor method still uses the property name:
 
 	object 'Config',
-	    'api_key:Str:required:arg(_api_key)',
-	);
+	    'api_key:Str:required:arg(_api_key)';
 
 	# Constructor uses the init_arg name
 	my $config = new Config _api_key => 'secret123';
@@ -295,8 +287,7 @@ Combined with other modifiers:
 
 	object 'Widget',
 	    'id:Int:required:readonly:arg(_widget_id)',
-	    'config:HashRef:weak:arg(_config)',
-	);
+	    'config:HashRef:weak:arg(_config)';
 
 =head3 Private Attributes
 
@@ -333,8 +324,7 @@ Classes can inherit slots from a parent class using the C<extends> key:
 
 	object 'Dog',
 	    extends => 'Animal',
-	    'breed:Str',
-	);
+	    'breed:Str';
 
 	my $dog = new Dog name => 'Rex', sound => 'Woof', breed => 'Lab';
 	print $dog->name;   # "Rex"  (inherited from Animal)
@@ -348,8 +338,7 @@ any inherited slot by redefining it:
 	object 'StrictDog',
 	    extends => 'Animal',
 	    'name:Str:required:readonly',   # override with readonly
-	    'breed:Str:required',
-	);
+	    'breed:Str:required';
 
 =head4 Multiple Inheritance
 
@@ -360,8 +349,7 @@ Pass an arrayref to C<extends> to inherit from multiple parents:
 
 	object 'Triathlete',
 	    extends => ['Swimmer', 'Runner'],
-	    'event:Str',
-	);
+	    'event:Str';
 
 	my $t = new Triathlete stroke => 'freestyle', pace => 7.5, event => '70.3';
 	print $t->isa('Swimmer');  # true
@@ -400,8 +388,7 @@ Register a custom type for use in slot specifications.
 	# Now use in define
 	object 'Counter',
 	    'value:PositiveInt',
-	    'label:TrimmedStr',
-	);
+	    'label:TrimmedStr';
 
 =head2 Object::Proto::has_type($name)
 
@@ -572,8 +559,7 @@ Usage in Perl:
 	object 'User',
 	    'id:PositiveInt:required',
 	    'email:Email',
-	    'bio:TrimmedStr',
-	);
+	    'bio:TrimmedStr';
 
 	my $user = new User id => 42, email => 'user@example.com';
 
@@ -847,7 +833,7 @@ avoids method dispatch overhead.
 	# In a BEGIN block so call checker sees the functions
 	BEGIN {
 	    use Object::Proto;
-	    object 'Cat', qw(name age));
+	    object 'Cat', qw(name age);
 	    Object::Proto::import_accessors('Cat');  # imports to current package
 	}
 
@@ -888,7 +874,7 @@ Import a single accessor with an optional alias name.
 
 	BEGIN {
 	    use Object::Proto;
-	    object 'Cat', qw(name age));
+	    object 'Cat', qw(name age);
 	    Object::Proto::import_accessor('Cat', 'name', 'get_name');
 	    Object::Proto::import_accessor('Cat', 'age', 'set_age');
 	}
@@ -969,7 +955,7 @@ a C<DESTROY> wrapper that calls your C<DEMOLISH> method.
 	}
 
 	package main;
-	object 'FileHandle', 'fh', 'path:Str');
+	object 'FileHandle', 'fh', 'path:Str';
 
 Zero overhead: The DESTROY wrapper is only installed for classes that
 define a DEMOLISH method.
@@ -1027,7 +1013,7 @@ Declare methods that consuming classes must implement:
 
 Compose roles into a class:
 
-	object 'Document', 'title:Str', 'content:Str');
+	object 'Document', 'title:Str', 'content:Str';
 	Object::Proto::with('Document', 'Serializable');
 
 	my $doc = new Document title => 'Test', content => 'Hello';

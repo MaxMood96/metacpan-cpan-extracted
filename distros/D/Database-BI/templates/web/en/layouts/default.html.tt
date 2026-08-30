@@ -468,6 +468,11 @@
       transition: background 0.12s;
     }
     .btn-graph:hover { background: #f0f0f0; }
+    .btn-graph:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
 
     /* Graph panel: selects + buttons on one row */
     .graph-fields-row {

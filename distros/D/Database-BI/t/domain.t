@@ -462,8 +462,8 @@ subtest 'filter BVA-colon-in-value: split limit 3 preserves colons in val' => su
 # Equivalence Partitions:
 #   VP-csv    : format=csv     -> text/csv download
 #   VP-sqlite : format=sqlite  -> application/octet-stream
+#   VP-json   : format=json    -> application/json download
 #   VP-absent : no format=     -> csv (default)
-#   IP-json   : format=json    -> csv (fallback)
 #
 # Boundary Values:
 #   BV-SQLITE : format=SQLITE  -> csv (uppercase != 'sqlite')
@@ -493,10 +493,10 @@ subtest 'export format VP-absent: missing format defaults to csv' => sub {
 	  ->content_type_like(qr{text/csv}i);
 };
 
-subtest 'export format IP-json: unknown format "json" falls back to csv' => sub {
+subtest 'export format VP-json: format=json returns application/json' => sub {
 	$t->get_ok('/export?l=table:sales&format=json')
 	  ->status_is(200)
-	  ->content_type_like(qr{text/csv}i);
+	  ->content_type_like(qr{application/json}i);
 };
 
 subtest 'export format BV-SQLITE: uppercase "SQLITE" does NOT match -- csv returned' => sub {

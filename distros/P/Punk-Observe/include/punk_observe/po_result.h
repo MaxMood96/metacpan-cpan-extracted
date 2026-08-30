@@ -56,7 +56,48 @@ typedef struct {
      * missing its tail looks like a service that stopped reporting, so this
      * is refused with advice instead of served short. */
     int    too_many_groups;
+
+    /* THE EXEMPLAR IDS OF EVERY ROW THAT SURVIVED THE FILTERS, collected only
+     * when the query asked to re-key on them.
+     *
+     * An aggregate CONSUMES its rows: after `| bucket(5m) p99` there are
+     * buckets and no rows at all, so a cross-signal jump reading the result's
+     * rows finds nothing and joins to nothing - which is what the flagship
+     * expression did on its first run, silently and with `ok` true. The ids
+     * are therefore taken where a row passes the filters, before whatever
+     * happens to the row itself.
+     *
+     * `| exemplars` after an aggregate means "the traces behind the points
+     * this pipeline selected", which is the question somebody bucketing to a
+     * p99 is asking. It is not "the trace AT the p99" - that would need the
+     * percentile's own sample to carry an id, and claiming it without that
+     * would be a precise-sounding wrong answer. */
+    po_u64 *ex_hi, *ex_lo;
+    uint32_t nex, cap_ex;
+    int      ex_overflow;      /* past the cap; the caller refuses */
 } po_result;
+
+/* The same ceiling po_traceset enforces, named once here so the executor can
+ * stop collecting rather than growing without bound. */
+#define PO_MAX_EXEMPLARS 4096
+
+static int po_result_exemplar(po_result *r, po_u64 hi, po_u64 lo) {
+    if (!hi && !lo) return 1;                 /* no id: nothing to join to */
+    if (r->nex >= PO_MAX_EXEMPLARS) { r->ex_overflow = 1; return 1; }
+    if (r->nex == r->cap_ex) {
+        uint32_t want = r->cap_ex ? r->cap_ex * 2 : 64;
+        po_u64 *nh = (po_u64 *)realloc(r->ex_hi, want * sizeof(po_u64));
+        po_u64 *nl = (po_u64 *)realloc(r->ex_lo, want * sizeof(po_u64));
+        if (nh) r->ex_hi = nh;
+        if (nl) r->ex_lo = nl;
+        if (!nh || !nl) return 0;
+        r->cap_ex = want;
+    }
+    r->ex_hi[r->nex] = hi;
+    r->ex_lo[r->nex] = lo;
+    r->nex++;
+    return 1;
+}
 
 /* The ceiling on distinct groups.
  *
@@ -76,6 +117,7 @@ static void po_result_init(po_result *r) {
 static void po_result_free(po_result *r) {
     uint32_t i;
     for (i = 0; i < r->ng; i++) free(r->g[i].samples);
+    free(r->ex_hi); free(r->ex_lo);
     free(r->g); free(r->row);
     r->g = NULL; r->row = NULL; r->ng = r->nrow = 0;
 }

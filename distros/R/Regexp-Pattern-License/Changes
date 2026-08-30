@@ -7,6 +7,21 @@ Home page:    <https://metacpan.org/release/Regexp-Pattern-License>
 Bug tracker:  <https://bugs.debian.org/libregexp-pattern-license-perl>
 Maintainer:   Jonas Smedegaard (JONASS) <jonass@cpan.org>
 
+v3.11.3	2026-08-30
+
+ [ Documentation ]
+ - improve comment about internal patterns
+
+ [ Other ]
+ - extend trait object except_bison_2_2: fix typo
+ - improve trait object addr_fsf_franklin by embedding trait object
+   addr_fsf_franklin_steet
+ - improve trait object by_james_clark: fixing typo in named capture
+ - update license object mit_oldstyle: tighten license pattern to shadow
+   ntp; extend description to compare against ntp
+ - update license object ntp_disclaimer: add tag
+   license:contains:license:ntp
+
 v3.11.2	2024-08-21
 
  [ Bug Fixes ]

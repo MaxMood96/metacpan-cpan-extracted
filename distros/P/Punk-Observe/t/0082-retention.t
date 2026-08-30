@@ -199,4 +199,305 @@ sub seg {
     is($r->{unlinked}, 0, '  and nothing is unlinked');
 }
 
+
+
+# --- a read does not hold a mapping across a retention pass -----------------
+#
+# THIS REPLACES A NUMBER ON THE STATUS PAGE.
+#
+# `mapped_deleted` was displayed so an operator could see why the disk had not
+# shrunk: a segment unlinked while a reader still holds it open occupies space
+# that du cannot see. But the figure was structurally always zero, because
+# this store cannot accumulate one - a read copies the segment and releases it
+# inside the call. A zero that cannot be anything else demonstrates nothing,
+# so the number came off the page and the property is asserted here instead.
+#
+# mmap plus unlink is safe and mmap plus TRUNCATE is a SIGBUS, which is why
+# retention only ever unlinks. If a read ever starts holding a mapping open
+# across a pass, this is the test that says so.
+{
+    require Punk::Observe::Store;
+    require Punk::Observe::WAL;
+
+    my $d = tempdir(CLEANUP => 1);
+    my $s = Punk::Observe::Store->new(dir => $d);
+    my $T = '1774224000000000000';
+
+    my @recs = map {
+        { kind => 2, t => Punk::Observe::Store::nadd($T, $_ * 1_000_000_000),
+          body => "line $_", severity => 9,
+          attrs => { 'service.name' => 'api' } }
+    } 0 .. 9;
+    Punk::Observe::WAL::append($s->wal_path, \@recs, 0, 0);
+    ok($s->seal, 'a segment to read and then delete');
+
+    # Read it, and let the read finish. The mapping must not outlive the call.
+    my ($rows) = $s->rows(from => $T,
+                          to => Punk::Observe::Store::nadd($T, 60_000_000_000));
+    cmp_ok(scalar @$rows, '>', 0, '  the read returns rows');
+
+    # Now unlink every sealed segment, as a retention pass does.
+    my @segs = glob(File::Spec->catfile($d, 'default', 'wal', '*.seg'));
+    cmp_ok(scalar @segs, '>', 0, '  and there is a sealed segment on disk');
+    unlink @segs;
+
+    # THE ASSERTION: the store still answers, and answers with nothing rather
+    # than crashing on a mapping into a file that is gone.
+    my $after = eval {
+        my ($r2) = $s->rows(from => $T,
+                            to => Punk::Observe::Store::nadd($T, 60_000_000_000));
+        scalar @$r2;
+    };
+    ok(defined $after, 'reading after the segments are unlinked does not die')
+        or diag("died: $@ - a read is holding a mapping across the pass");
+
+    my $st = eval { $s->stats };
+    ok($st, '  and the store still reports its stats');
+}
+
+# --- a log whose worker died is adopted, not abandoned ----------------------
+#
+# Retention considers SEALED segments only, and the live log is deliberately
+# never touched. A log left by a worker that died is neither: never indexed,
+# never expired, never counted against the byte budget. Every restart left
+# another - 261MB across 127 files on a demo store after one day, none of
+# which `keep` could reach.
+#
+# The dangerous half is the other direction, and it is what most of these
+# assert: sealing a log somebody is still appending to renames the file under
+# their descriptor and lets them write WAL records past the seal trailer.
+
+{
+    require Punk::Observe::Retain;
+    require Punk::Observe::WAL;
+
+    my $dir = tempdir(CLEANUP => 1);
+    my $store = Punk::Observe::Store->new(dir => $dir);
+    my $T = '1774224000000000000';
+
+    my $rec = sub {
+        my ($n) = @_;
+        return { kind => 2, t => Punk::Observe::Store::nadd($T, $n * 1_000_000),
+                 body => "line $n", severity => 9, span_kind => 0, status => 0,
+                 duration => 0, span_id => 0, parent_id => 0,
+                 trace_hi => 0, trace_lo => 0, attrs => {} };
+    };
+
+    my $waldir = $store->wal_dir;
+    Punk::Observe::WAL::append($store->wal_path, [ $rec->(1) ], 0, 0);
+
+    # A pid that cannot be running: pid 0 is never a user process, and the
+    # file is backdated so the staleness test passes too.
+    my $dead = File::Spec->catfile($waldir, 'w999999999.wal');
+    Punk::Observe::WAL::append($dead, [ $rec->(2), $rec->(3) ], 0, 0);
+    utime time - 7200, time - 7200, $dead;
+
+    # OUR OWN pid, which is alive by construction - the case that must never
+    # be adopted however stale the file looks.
+    my $mine = File::Spec->catfile($waldir, "w$$.wal");
+    Punk::Observe::WAL::append($mine, [ $rec->(4) ], 0, 0)
+        unless -e $mine;
+    utime time - 7200, time - 7200, $mine;
+
+    # A log written seconds ago, whose pid is long gone. Stale-by-pid but not
+    # by mtime: a recycled pid is exactly the case the age test covers, so
+    # this must be left alone too.
+    my $fresh = File::Spec->catfile($waldir, 'w999999998.wal');
+    Punk::Observe::WAL::append($fresh, [ $rec->(5) ], 0, 0);
+
+    # `opendir my $d, $dir` parses as a `my` LIST without parentheses and
+    # warns; the handle also went unclosed. One helper, used twice.
+    my $segs = sub {
+        opendir(my $dh, $waldir) or return ();
+        my @f = grep { /\.seg\z/ } readdir $dh;
+        closedir $dh;
+        return @f;
+    };
+
+    my $before = scalar @{[ $segs->() ]};
+
+    my $r = Punk::Observe::Retain::adopt_orphans(store => $store,
+                                                 grace_s => 600);
+    is($r->{adopted}, 1, 'the log of a dead worker is adopted');
+    ok($r->{bytes} > 0, '  and its bytes are reported');
+    ok(!-e $dead, '  the log is gone from the wal directory');
+
+    ok(-e $mine, 'a LIVE worker\'s own log is never adopted, however stale');
+    ok(-e $fresh, 'nor one written moments ago, whatever its pid says - a '
+                . 'recycled pid is why the age test exists');
+    is($r->{skipped_recent}, 1, '  and the recent one is counted as skipped');
+
+    my @segs = $segs->();
+    is(scalar @segs, $before + 1, 'the adopted log became one segment');
+
+    # THE POINT OF SEALING RATHER THAN DELETING: the records survive and are
+    # now indexed, so retention can age them out on the same rule as
+    # everything else instead of never seeing them.
+    my ($seg) = grep { /\.seg\z/ } @segs;
+    (my $idx = $seg) =~ s/\.seg\z/.idx/;
+    ok(-e File::Spec->catfile($waldir, $idx),
+       '  with the sidecar that makes it prunable and expirable');
+
+    my ($rows) = $store->records(from => $T,
+        to => Punk::Observe::Store::nadd($T, '60000000000'));
+    my %bodies = map { ($_->{body} // '') => 1 } @$rows;
+    ok($bodies{'line 2'} && $bodies{'line 3'},
+       '  and the records it held are still readable, not destroyed');
+
+    # The segment keeps the ORIGINAL worker's pid, so a segment can be traced
+    # back to the process that wrote it.
+    like($seg, qr/-999999999-/, 'the segment is named for the worker that '
+                              . 'wrote the log, not the one that adopted it');
+
+    # Idempotent: a second pass has nothing left to do.
+    my $again = Punk::Observe::Retain::adopt_orphans(store => $store,
+                                                     grace_s => 600);
+    is($again->{adopted}, 0, 'a second pass adopts nothing');
+
+    # dry_run decides everything and seals nothing.
+    my $dead2 = File::Spec->catfile($waldir, 'w999999997.wal');
+    Punk::Observe::WAL::append($dead2, [ $rec->(6) ], 0, 0);
+    utime time - 7200, time - 7200, $dead2;
+    my $dry = Punk::Observe::Retain::adopt_orphans(store => $store,
+                                                   grace_s => 600, dry_run => 1);
+    # Every decision, only the seal skipped - which is what dry_run means for
+    # `pass`. Counting the seal instead of the decision made a dry run report
+    # nothing to do on a store with 127 reclaimable logs.
+    is($dry->{adopted}, 1, 'dry_run reports what a real pass would adopt');
+    ok($dry->{bytes} > 0, '  including the bytes it would reclaim');
+    ok(-e $dead2, '  while leaving the log exactly where it was');
+}
+
+# --- the scheduled forms ----------------------------------------------------
+#
+# `cron_task` and `retain_job` were the last two subs in this module and were
+# exercised by nothing: a block named for `retain_job` called `pass` instead.
+# Both are now XS - the closure carries its options on the CV - and an XSUB
+# nobody calls is an XSUB nobody knows compiles.
+
+{
+    package Fake::Queue;
+    sub new {
+        my ($c, %o) = @_;
+        return bless { grant => (exists $o{grant} ? $o{grant} : 1),
+                       calls => [] }, $c;
+    }
+    sub lock {
+        my ($s, $name, $lease, %o) = @_;
+        push @{ $s->{calls} }, [ 'lock', $name, $lease, $o{owner} ];
+        return $s->{grant};
+    }
+    sub renew_lock {
+        my ($s, @a) = @_; push @{ $s->{calls} }, [ 'renew_lock', @a ]; 1;
+    }
+    sub unlock {
+        my ($s, @a) = @_; push @{ $s->{calls} }, [ 'unlock', @a ]; 1;
+    }
+    sub did { my ($s, $m) = @_; scalar grep { $_->[0] eq $m } @{ $s->{calls} } }
+}
+
+sub seeded_store {
+    my ($dir) = @_;
+    my $store = Punk::Observe::Store->new(dir => $dir);
+    my $now = Punk::Observe::now_ns();
+    for my $age (9 * 86_400, 3_600) {
+        Punk::Observe::WAL::append($store->wal_path, [ {
+            kind => 2, t => Punk::Observe::Store::nsub($now, $age . '000000000'),
+            body => 'x', severity => 9, span_kind => 0, status => 0,
+            duration => 0, span_id => 0, parent_id => 0,
+            trace_hi => 0, trace_lo => 0,
+            attrs => { 'service.name' => 'a' } } ], 0, 0);
+        $store->seal;
+    }
+    return $store;
+}
+
+{
+    require Punk::Observe::Retain;
+    my $keep = 7 * 86_400 * 1_000_000_000;
+
+    my $store = seeded_store(tempdir(CLEANUP => 1));
+    my $code = Punk::Observe::Retain::cron_task(
+        store => $store, keep_ns => $keep, owner => 4242);
+    is(ref $code, 'CODE', 'cron_task hands back a coderef');
+
+    my $q = Fake::Queue->new;
+    is($code->($q), 1, '  which runs the pass and returns what it unlinked');
+    is($q->{calls}[0][1], 'leader', '  under the leader lease');
+    is($q->{calls}[0][3], 4242, '  as the owner it was given');
+    ok($q->did('renew_lock'), '  renewing it');
+    ok($q->did('unlock'), '  and releasing it');
+
+    # THE OPTIONS RIDE ON THE CLOSURE. A second call with a second queue must
+    # still know its store and window - the XSUB is handed only the queue.
+    my $again = $code->(Fake::Queue->new);
+    is($again, 0, 'a second call finds nothing left and still knows its store');
+
+    # LOSING THE RACE IS THE NORMAL CASE ON A POOL, not an error - and the
+    # pass must not run at all.
+    my $store2 = seeded_store(tempdir(CLEANUP => 1));
+    my $lost = Punk::Observe::Retain::cron_task(
+        store => $store2, keep_ns => $keep);
+    my $refuse = Fake::Queue->new(grant => 0);
+    is($lost->($refuse), 0, 'a worker that loses the lock reports nothing done');
+    ok(!$refuse->did('unlock'),
+       '  and does not unlock a lease it never held');
+    is(scalar @{ $store2->segments }, 2,
+       '  having deleted nothing at all');
+
+    eval { Punk::Observe::Retain::cron_task(store => $store) };
+    like($@, qr/needs keep_ns/,
+         'cron_task with no window croaks at build time, not at fire time');
+}
+
+# --- retain_job, the queue task body ----------------------------------------
+
+{
+    require Punk::Plugin::Observe;
+    my $dir = tempdir(CLEANUP => 1);
+    my $store = seeded_store($dir);
+
+    # Registered under a class NAME: `register` files the state under
+    # `ref($app) || $app`, and a plain string is neither an object nor undef,
+    # so the state is reachable by the name the job carries.
+    #
+    # `retain` is NOT passed to register here: configuring it asks the plugin
+    # to schedule the cron, which needs a queue this test has no business
+    # standing up. The window is put on the state directly, which is the shape
+    # `retain_job` actually reads.
+    my $class = 'Retain::Job::Test::App';
+    my $st = Punk::Plugin::Observe->register($class, {
+        guard => sub { 1 }, store => $dir,
+        alerts => sub { {} },        # our own evaluator, so no queue is needed
+    });
+    $st->{retain_opts} = { keep_ns => 7 * 86_400 * 1_000_000_000 };
+
+    {
+        package Fake::Job;
+        sub new { my ($c, $q) = @_; bless { q => $q }, $c }
+        sub queue_object { $_[0]{q} }
+        sub retries { 0 }
+    }
+
+    my $q = Fake::Queue->new;
+    my $out = Punk::Observe::Retain::retain_job(Fake::Job->new($q), $class);
+    is(ref $out, 'HASH', 'retain_job returns what it did');
+    is($out->{unlinked}, 1, '  the nine-day segment went');
+    is($out->{kept}, 1, '  the one inside the window stayed');
+    ok(exists $out->{unknown_kept}, '  and it reports what it could not age');
+    is($q->{calls}[0][1], 'observe.retain',
+       '  under its own named lease, not the leader one');
+    ok($q->did('unlock'), '  which it releases');
+
+    my $refused = Punk::Observe::Retain::retain_job(
+        Fake::Job->new(Fake::Queue->new(grant => 0)), $class);
+    is($refused->{skipped}, 'lock',
+       'a worker that loses the lease says so rather than running twice');
+
+    # A class the worker never compiled is the misconfiguration this names.
+    eval { Punk::Observe::Retain::retain_job(Fake::Job->new($q), 'No::Such') };
+    like($@, qr/no Observe plugin state/,
+         'an unknown application class croaks with what to check');
+}
+
 done_testing();

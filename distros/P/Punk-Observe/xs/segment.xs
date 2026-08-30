@@ -282,6 +282,30 @@ pos_shm_new(SV *cap)
     OUTPUT:
         RETVAL
 
+void
+pos_shm_rotate(SV *h)
+    CODE:
+        {
+            po_shared *s = INT2PTR(po_shared *, SvIV(h));
+#if defined(PO_HAVE_ATOMICS) && !defined(_WIN32)
+            if (s->ok && s->m) {
+                __atomic_store_n(&s->m->epoch_start, po_now_ns(),
+                                 __ATOMIC_SEQ_CST);
+                po_shm_rotate(s->m);
+            }
+#endif
+        }
+
+void
+pos_shm_window(SV *h, SV *ns)
+    CODE:
+        {
+            po_shared *s = INT2PTR(po_shared *, SvIV(h));
+            po_u64 w = 0;
+            (void)po_sv_to_u64(aTHX_ ns, &w);
+            if (s->ok && s->m) s->m->window_ns = w;
+        }
+
 int
 pos_shm_admit(SV *h)
     CODE:
@@ -311,6 +335,8 @@ pos_shm_stats(SV *h)
             hv_stores(res, "rate_records",  po_u64_to_sv(s->m->rate_records));
             hv_stores(res, "rate_bytes",    po_u64_to_sv(s->m->rate_bytes));
             hv_stores(res, "rate_rejected", po_u64_to_sv(s->m->rate_rejected));
+            hv_stores(res, "series_window", po_u64_to_sv(s->m->window_ns));
+            hv_stores(res, "live_gaps",  po_u64_to_sv(s->m->live_gaps));
             hv_stores(res, "shared",     newSViv(po_shared_is_shared(s)));
             mXPUSHs(newRV_noinc((SV *)res));
         }

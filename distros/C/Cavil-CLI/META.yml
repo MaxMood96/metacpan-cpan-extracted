@@ -1,0 +1,34 @@
+---
+abstract: 'Check code against known open source and commercial code indexed by Cavil'
+author:
+  - 'Sebastian Riedel <sriedel@suse.com>'
+build_requires:
+  ExtUtils::MakeMaker: '0'
+  Test::More: '0.98'
+configure_requires:
+  ExtUtils::MakeMaker: '7.12'
+dynamic_config: 0
+generated_by: 'ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013'
+license: gpl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Cavil-CLI
+no_index:
+  directory:
+    - t
+    - inc
+requires:
+  Cavil::Matcher: '1.03'
+  Cpanel::JSON::XS: '4.09'
+  IO::Socket::SSL: '2.009'
+  Mojo::SQLite: '3.000'
+  Mojolicious: '9.34'
+  Text::Glob: '0.11'
+  perl: '5.020'
+resources:
+  bugtracker: https://github.com/openSUSE/cavil-cli/issues
+  license: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+  repository: https://github.com/openSUSE/cavil-cli.git
+version: '0.01'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

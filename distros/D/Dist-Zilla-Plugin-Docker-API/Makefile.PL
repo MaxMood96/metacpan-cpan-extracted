@@ -16,26 +16,31 @@ my %WriteMakefileArgs = (
   "LICENSE" => "perl",
   "NAME" => "Dist::Zilla::Plugin::Docker::API",
   "PREREQ_PM" => {
-    "API::Docker" => "0.002",
-    "Archive::Tar::Wrapper" => 0,
+    "API::Docker" => "0.004",
+    "Archive::Tar" => 0,
+    "Carp" => 0,
     "Dist::Zilla::Role::AfterBuild" => 0,
+    "Dist::Zilla::Role::BeforeBuild" => 0,
     "Dist::Zilla::Role::Plugin" => 0,
     "Dist::Zilla::Role::Releaser" => 0,
     "JSON::MaybeXS" => 0,
     "Log::Any" => 0,
     "MIME::Base64" => 0,
     "Moo" => 0,
+    "Moose" => 0,
     "Path::Tiny" => 0,
-    "Types::Standard" => 0
+    "Types::Standard" => 0,
+    "namespace::autoclean" => 0
   },
   "TEST_REQUIRES" => {
     "Capture::Tiny" => 0,
     "File::Temp" => 0,
     "Path::Tiny" => 0,
     "Test::DZil" => 0,
-    "Test::More" => 0
+    "Test::More" => 0,
+    "Test::Warnings" => 0
   },
-  "VERSION" => "0.103",
+  "VERSION" => "0.104",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -43,10 +48,12 @@ my %WriteMakefileArgs = (
 
 
 my %FallbackPrereqs = (
-  "API::Docker" => "0.002",
-  "Archive::Tar::Wrapper" => 0,
+  "API::Docker" => "0.004",
+  "Archive::Tar" => 0,
   "Capture::Tiny" => 0,
+  "Carp" => 0,
   "Dist::Zilla::Role::AfterBuild" => 0,
+  "Dist::Zilla::Role::BeforeBuild" => 0,
   "Dist::Zilla::Role::Plugin" => 0,
   "Dist::Zilla::Role::Releaser" => 0,
   "File::Temp" => 0,
@@ -54,10 +61,13 @@ my %FallbackPrereqs = (
   "Log::Any" => 0,
   "MIME::Base64" => 0,
   "Moo" => 0,
+  "Moose" => 0,
   "Path::Tiny" => 0,
   "Test::DZil" => 0,
   "Test::More" => 0,
-  "Types::Standard" => 0
+  "Test::Warnings" => 0,
+  "Types::Standard" => 0,
+  "namespace::autoclean" => 0
 );
 
 

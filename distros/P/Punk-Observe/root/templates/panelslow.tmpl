@@ -1,0 +1,88 @@
+
+{% if p.partial %}
+<p class="note">Partial: the scan stopped after {% p.partial %} rows, so
+  this covers less than the window above. Narrow the range for a complete
+  answer.</p>
+{% end %}
+{% if p.refusal %}
+<div class="warnbox"><strong>Cannot answer that from this range.</strong>
+  {% p.refusal %}</div>
+{% else %}
+{% if p.stat_value %}
+<p class="stat">{% p.stat_value %}</p>
+{% end %}
+
+{% if p.series_plot %}
+<div class="chartwrap" data-chart>
+  <script type="application/json" data-plot>{% raw p.series_plot %}</script>
+  <noscript><p class="note">This chart is drawn in the browser and needs
+    JavaScript. The numbers behind it are in
+    <a href="{% prefix %}/explore?q={% p.query_esc %}{% range_amp %}">the
+    explorer</a>.</p></noscript>
+</div>
+{% end %}
+{% if p.series %}
+<div class="chartwrap" data-brush data-from="{% from %}" data-to="{% to %}">
+  <svg class="chart" viewBox="0 0 720 220" role="img" aria-label="{% p.title %}">
+    {% for t in p.yticks %}
+    <line class="axis" x1="0" y1="{% t.y %}" x2="720" y2="{% t.y %}"/>
+    <text class="label" x="2" y="{% t.label_y %}">{% t.label %}</text>
+    {% end %}
+    {% for s in p.series %}
+    <g class="{% s.class %}"><path class="line" d="{% s.path %}"/></g>
+    {% end %}
+  </svg>
+</div>
+{% end %}
+{% if p.bucket_rows %}
+
+{% if p.bucket_truncated %}
+<p class="note">Showing the most recent rows of {% p.bucket_truncated %}.</p>
+{% end %}
+<div class="tablewrap">
+  <table class="rows">
+    <thead><tr><th>bucket</th>{% if p.has_series %}<th>series</th>{% end %}
+               <th class="num">value</th></tr></thead>
+    <tbody>
+    {% for b in p.bucket_rows %}
+    <tr>
+      <td class="mono nowrap">{% b.time %}</td>
+      {% if p.has_series %}<td class="nowrap">{% b.series %}</td>{% end %}
+      <td class="num mono">{% b.value %}</td>
+    </tr>
+    {% end %}
+    </tbody>
+  </table>
+</div>
+{% end %}
+{% if p.rows %}
+
+<div class="tablewrap">
+  <table class="rows">
+    <tbody>
+    {% for r in p.rows %}
+    <tr>
+      <td class="mono">{% r.time %}</td>
+      <td>{% r.service %}</td>
+      <td>{% r.body %}</td>
+      {% if p.has_value %}<td class="num mono">{% r.value %}</td>{% end %}
+    </tr>
+    {% end %}
+    </tbody>
+  </table>
+</div>
+{% if p.more %}<p class="note">{% p.more %} rows in this range; the first
+  {% p.shown %} are shown.</p>{% end %}
+{% end %}
+{% if p.groups %}
+<div class="tablewrap">
+  <table class="rows">
+    <tbody>
+    {% for g in p.groups %}
+    <tr><td>{% g.key %}</td><td class="num mono">{% g.value %}</td></tr>
+    {% end %}
+    </tbody>
+  </table>
+</div>
+{% end %}
+{% end %}

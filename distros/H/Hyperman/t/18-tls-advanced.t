@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use lib "t/lib";
 use Test::More;
-use HMTest qw(free_ports);
+use HMTest qw(free_ports quiet_child);
 use IO::Socket::INET;
 use Time::HiRes ();
 use File::Temp ();
@@ -55,7 +55,7 @@ plan skip_all => "no free loopback ports" unless $rel_port;
 # ---- server 1: require client certs ----
 my $mpid = fork // die;
 if ($mpid == 0) {
-    open STDERR, '>', '/dev/null';
+    quiet_child();
     Hyperman->run(
         app => sub {
             my $env = shift;
@@ -74,7 +74,7 @@ if ($mpid == 0) {
 # ---- server 2: SNI, default cert + example.test cert ----
 my $spid = fork // die;
 if ($spid == 0) {
-    open STDERR, '>', '/dev/null';
+    quiet_child();
     Hyperman->run(
         app => sub { [ 200, [ 'Content-Type' => 'text/plain' ], [ 'sni-ok' ] ] },
         host => '127.0.0.1', port => $sni_port, workers => 1,
@@ -95,7 +95,7 @@ if ($spid == 0) {
 #   GET /reload-bad  a key that does not exist - must change nothing
 my $rpid = fork // die;
 if ($rpid == 0) {
-    open STDERR, '>', '/dev/null';
+    quiet_child();
     Hyperman->run(
         app => sub {
             my $env = shift;

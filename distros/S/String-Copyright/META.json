@@ -39,9 +39,8 @@
          },
          "requires" : {
             "Exporter::Tiny" : "0",
-            "Set::IntSpan" : "1.12",
             "constant" : "0",
-            "perl" : "5.008001"
+            "perl" : "5.040001"
          }
       },
       "test" : {
@@ -55,7 +54,7 @@
    "provides" : {
       "String::Copyright" : {
          "file" : "lib/String/Copyright.pm",
-         "version" : "0.003014"
+         "version" : "v0.4.0"
       }
    },
    "release_status" : "stable",
@@ -73,11 +72,11 @@
       },
       "x_identifier" : "http://purl.org/NET/cpan-uri/dist/String-Copyright/project"
    },
-   "version" : "0.003014",
+   "version" : "v0.4.0",
    "x_help_wanted" : [
-      "tester",
-      "documenter"
+      "documenter",
+      "tester"
    ],
-   "x_serialization_backend" : "JSON::PP version 4.07",
+   "x_serialization_backend" : "JSON::PP version 4.16",
    "x_static_install" : 1
 }

@@ -6,6 +6,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>             /* offsetof, for the layout assertions */
+#include <errno.h>              /* EPERM, which is how retention reads alive */
+#ifndef _WIN32
+#  include <signal.h>           /* kill(pid, 0): is that worker still there */
+#endif
 
 /* The headers carry the whole contract; the XS below is a thin surface onto
  * them. Perl headers first, because po_compat.h uses SV, UV and pTHX. */
@@ -29,6 +33,8 @@
 #include "punk_observe/po_bits.h"
 #include "punk_observe/po_gorilla.h"
 #include "punk_observe/po_metric.h"
+#include "punk_observe/po_traceset.h"
+#include "punk_observe/po_chunk.h"
 #include "punk_observe/po_tsidx.h"
 #include "punk_observe/po_bloom.h"
 #include "punk_observe/po_log.h"
@@ -211,6 +217,12 @@ static void po_rec_service(const po_rec *rec, const po_arena *ar,
  * the answer rather than a step towards it. */
 typedef struct {
     po_u64 records, logs, spans, metrics, errors, traces;
+    /* The time span too, so ONE parse serves both the skip decision and the
+     * totals. `span_seen` says both bounds were present - a sidecar from an
+     * interrupted seal may carry neither, and a segment whose span is unknown
+     * must never be skipped on it. */
+    po_u64 t_min, t_max;
+    int span_seen;
 } po_idx_nums;
 
 static int po_idx_num_field(const char *f, size_t fl, const char *want) {
@@ -267,8 +279,19 @@ static int po_index_nums(const char *path, po_idx_nums *out, HV *svc) {
             else if (po_idx_num_field(f[0], fl[0], "metrics")) out->metrics = v;
             else if (po_idx_num_field(f[0], fl[0], "errors"))  out->errors  = v;
             else if (po_idx_num_field(f[0], fl[0], "traces"))  out->traces  = v;
+            /* strtoull, not the strtoul above: these are nanosecond instants
+             * and a 32-bit long truncates them. */
+            else if (po_idx_num_field(f[0], fl[0], "t_min")) {
+                out->t_min = (po_u64)strtoull(f[1], NULL, 10);
+                out->span_seen |= 1;
+            }
+            else if (po_idx_num_field(f[0], fl[0], "t_max")) {
+                out->t_max = (po_u64)strtoull(f[1], NULL, 10);
+                out->span_seen |= 2;
+            }
         }
     }
+    out->span_seen = (out->span_seen == 3);
     free(buf);
     return 1;
 }
@@ -353,32 +376,290 @@ static int po_wal_nums(const char *path, po_idx_nums *out, HV *svc) {
     return 1;
 }
 
-/* Just the time span out of a sidecar, for the skip that happens before a
- * segment is opened at all. */
-static int po_index_span(const char *path, po_u64 *t_min, po_u64 *t_max,
-                         int *seen) {
-    size_t len = 0;
-    char *buf = po_slurp(path, &len);
-    char *p, *end;
-    int got = 0;
+/* ---- the segment snapshot ------------------------------------------------ */
+/*
+ * Everything a read wants to know about a SEALED segment - its span, its
+ * per-kind counts, its service table, its size - is immutable from the moment
+ * the seal renames the file. Rediscovering it cost every store call one
+ * readdir, one string sort of every name, and one sidecar open PER SEGMENT -
+ * on a 758-segment store that was most of every page load, paid eight times
+ * over on the pages that make eight store calls.
+ *
+ * So the store object carries a snapshot: the sorted segment names with each
+ * one's parsed sidecar, keyed on the wal directory's mtime. Every event that
+ * changes the set - a seal (rename in, sidecar written), a new worker's live
+ * log appearing, a retention unlink - touches the directory, so a stale name
+ * list cannot outlive one stat. Appends to an existing live log do NOT touch
+ * the directory, which is why nothing about live logs is ever cached here.
+ *
+ * The one hole in mtime keying is granularity: a second seal in the same
+ * second as the snapshot leaves the key unchanged. So a snapshot whose key
+ * second is within two seconds of now is rebuilt regardless - after that
+ * window closes, any later change lands in a newer second and misses the key.
+ * (The same trick git's index uses for racily-clean entries.) Rebuilds are
+ * incremental - an entry whose name is already known is reused, sealed
+ * segments being immutable - so the racy window costs a readdir, not a
+ * re-parse.
+ *
+ * The snapshot is plain Perl data in $self->{_snap}: it dies with the object,
+ * needs no magic, and a test can read it. Per-process, per-object, no shared
+ * state - two workers each pay one build and then stat.
+ */
 
-    *seen = 0;
-    if (!buf) return 0;
-    p = buf; end = buf + len;
-    while (p < end) {
-        char *nl = memchr(p, '\n', (size_t)(end - p));
-        size_t ll = nl ? (size_t)(nl - p) : (size_t)(end - p);
-        if (ll > 6 && memcmp(p, "t_min\t", 6) == 0) {
-            *t_min = (po_u64)strtoull(p + 6, NULL, 10); got |= 1;
+enum {
+    PO_SNAP_NAME = 0,   /* segment file name                                 */
+    PO_SNAP_FLAGS,      /* PO_SNAP_HAS_IDX | PO_SNAP_SPAN_SEEN               */
+    PO_SNAP_TMIN,       /* nanosecond instants, po_u64_to_sv                 */
+    PO_SNAP_TMAX,
+    PO_SNAP_RECORDS,
+    PO_SNAP_LOGS,
+    PO_SNAP_METRICS,
+    PO_SNAP_SPANS,
+    PO_SNAP_ERRORS,
+    PO_SNAP_TRACES,
+    PO_SNAP_SVC,        /* HV ref: service name => record count              */
+    PO_SNAP_SIZE,       /* file bytes at parse time                          */
+    PO_SNAP_FIELDS
+};
+#define PO_SNAP_HAS_IDX   1
+#define PO_SNAP_SPAN_SEEN 2
+
+static SV *po_snap_entry_new(pTHX_ const char *dir, const char *name) {
+    AV *e = newAV();
+    char path[PO_PATHMAX], idx[PO_PATHMAX];
+    size_t pl;
+    po_u64 sz = 0;
+    po_idx_nums ix;
+    HV *svc = newHV();
+    int flags = 0;
+
+    memset(&ix, 0, sizeof(ix));
+    if (po_path_join(path, sizeof(path), dir, name)) {
+        po_file_size(path, &sz);
+        pl = strlen(path);
+        if (pl > 4) {
+            memcpy(idx, path, pl + 1);
+            memcpy(idx + pl - 4, ".idx", 5);
+            if (po_index_nums(idx, &ix, svc)) {
+                flags |= PO_SNAP_HAS_IDX;
+                if (ix.span_seen) flags |= PO_SNAP_SPAN_SEEN;
+            }
         }
-        else if (ll > 6 && memcmp(p, "t_max\t", 6) == 0) {
-            *t_max = (po_u64)strtoull(p + 6, NULL, 10); got |= 2;
-        }
-        p = nl ? nl + 1 : end;
     }
-    free(buf);
-    *seen = (got == 3);
-    return 1;
+
+    av_extend(e, PO_SNAP_FIELDS - 1);
+    av_store(e, PO_SNAP_NAME,    newSVpv(name, 0));
+    av_store(e, PO_SNAP_FLAGS,   newSViv(flags));
+    av_store(e, PO_SNAP_TMIN,    po_u64_to_sv(ix.t_min));
+    av_store(e, PO_SNAP_TMAX,    po_u64_to_sv(ix.t_max));
+    av_store(e, PO_SNAP_RECORDS, po_u64_to_sv(ix.records));
+    av_store(e, PO_SNAP_LOGS,    po_u64_to_sv(ix.logs));
+    av_store(e, PO_SNAP_METRICS, po_u64_to_sv(ix.metrics));
+    av_store(e, PO_SNAP_SPANS,   po_u64_to_sv(ix.spans));
+    av_store(e, PO_SNAP_ERRORS,  po_u64_to_sv(ix.errors));
+    av_store(e, PO_SNAP_TRACES,  po_u64_to_sv(ix.traces));
+    av_store(e, PO_SNAP_SVC,     newRV_noinc((SV *)svc));
+    av_store(e, PO_SNAP_SIZE,    po_u64_to_sv(sz));
+    return newRV_noinc((SV *)e);
+}
+
+/* One u64 field back out of an entry. */
+static po_u64 po_snap_u64(pTHX_ AV *e, int field) {
+    SV **f = av_fetch(e, field, 0);
+    po_u64 v = 0;
+    if (f && SvOK(*f)) (void)po_sv_to_u64(aTHX_ *f, &v);
+    return v;
+}
+
+static IV po_snap_flags(pTHX_ AV *e) {
+    SV **f = av_fetch(e, PO_SNAP_FLAGS, 0);
+    return (f && SvOK(*f)) ? SvIV(*f) : 0;
+}
+
+/* A sidecar that counts zero of the wanted kind proves the segment holds
+ * none - but only when its counts are COMPLETE, meaning the per-kind lines
+ * add up to `records`. A sidecar from before a counter existed reads as
+ * zero, and pruning on a zero that means "unrecorded" would silently lose
+ * every record the segment holds. */
+static int po_snap_kind_absent(pTHX_ AV *ea, int kind) {
+    po_u64 kl, km, ks, kc;
+    if (!kind || !(po_snap_flags(aTHX_ ea) & PO_SNAP_HAS_IDX)) return 0;
+    kl = po_snap_u64(aTHX_ ea, PO_SNAP_LOGS);
+    km = po_snap_u64(aTHX_ ea, PO_SNAP_METRICS);
+    ks = po_snap_u64(aTHX_ ea, PO_SNAP_SPANS);
+    kc = kind == PO_METRIC ? km : kind == PO_LOG ? kl : ks;
+    return !kc && kl + km + ks == po_snap_u64(aTHX_ ea, PO_SNAP_RECORDS);
+}
+
+/* The scan order for a limited newest-first read: SEGMENT NAMES sort by seal
+ * time, and seal time is not record time - a worker that fell behind seals
+ * old records after its neighbours sealed newer ones. So the early-stop walk
+ * goes by each segment's own t_max, newest first, and a segment whose span
+ * is unknown comes before all of them: it can hold anything, so no stop rule
+ * may fire until it has been read. */
+typedef struct { po_u64 tmax; IV idx; } po_snap_ord;
+
+static int po_snap_ord_desc(const void *a, const void *b) {
+    po_u64 x = ((const po_snap_ord *)a)->tmax;
+    po_u64 y = ((const po_snap_ord *)b)->tmax;
+    return x < y ? 1 : (x > y ? -1 : 0);
+}
+
+static HV *po_snap_get(pTHX_ SV *self, const char *dir) {
+    HV *h;
+    struct stat st;
+    IV mtime, now = (IV)time(NULL);
+    SV **snapp;
+    HV *old = NULL;
+    AV *old_segs = NULL;
+    HV *snap;
+    AV *segs, *wals, *names, *idxs;
+    po_dir d;
+    const char *name;
+    SSize_t i, n, oi = 0, on = 0;
+    IV orphan = 0, builds = 0;
+
+    if (!SvROK(self) || SvTYPE(SvRV(self)) != SVt_PVHV) return NULL;
+    h = (HV *)SvRV(self);
+    if (stat(dir, &st) != 0) return NULL;
+    mtime = (IV)st.st_mtime;
+
+    snapp = hv_fetchs(h, "_snap", 0);
+    if (snapp && SvROK(*snapp) && SvTYPE(SvRV(*snapp)) == SVt_PVHV) {
+        SV **k, **b;
+        old = (HV *)SvRV(*snapp);
+        k = hv_fetchs(old, "key", 0);
+        b = hv_fetchs(old, "builds", 0);
+        if (b && SvOK(*b)) builds = SvIV(*b);
+        /* Valid iff the directory has not changed AND its last change is old
+         * enough that a same-second change is impossible. Strictly greater
+         * than two: a skewed clock makes the difference negative, and
+         * negative must rebuild. */
+        if (k && SvOK(*k) && SvIV(*k) == mtime && now - mtime > 2)
+            return old;
+        {
+            SV **sp = hv_fetchs(old, "segs", 0);
+            if (sp && SvROK(*sp) && SvTYPE(SvRV(*sp)) == SVt_PVAV)
+                old_segs = (AV *)SvRV(*sp);
+        }
+    }
+
+    names = newAV(); wals = newAV(); idxs = newAV();
+    if (!po_opendir(&d, dir)) {
+        SvREFCNT_dec((SV *)names); SvREFCNT_dec((SV *)wals);
+        SvREFCNT_dec((SV *)idxs);
+        return NULL;
+    }
+    while ((name = po_readdir(&d))) {
+        size_t nl = strlen(name);
+        if (nl <= 4) continue;
+        if      (memcmp(name + nl - 4, ".seg", 4) == 0)
+            av_push(names, newSVpv(name, 0));
+        else if (memcmp(name + nl - 4, ".wal", 4) == 0)
+            av_push(wals, newSVpv(name, 0));
+        else if (memcmp(name + nl - 4, ".idx", 4) == 0)
+            av_push(idxs, newSVpv(name, 0));
+    }
+    po_closedir(&d);
+    sortsv(AvARRAY(names), (SSize_t)(av_len(names) + 1), Perl_sv_cmp);
+    sortsv(AvARRAY(wals),  (SSize_t)(av_len(wals) + 1),  Perl_sv_cmp);
+
+    /* An index with no segment is half an interrupted retention pass;
+     * counted at build so stats can report it without a stat per call. */
+    n = av_len(idxs) + 1;
+    for (i = 0; i < n; i++) {
+        SV **e = av_fetch(idxs, i, 0);
+        char path[PO_PATHMAX];
+        size_t pl;
+        if (!e) continue;
+        if (!po_path_join(path, sizeof(path), dir, SvPV_nolen(*e))) continue;
+        pl = strlen(path);
+        memcpy(path + pl - 4, ".seg", 5);
+        if (!po_file_size(path, NULL)) orphan++;
+    }
+    SvREFCNT_dec((SV *)idxs);
+
+    /* Both name lists are sorted, so reuse is a single merge walk: a name
+     * already in the old snapshot keeps its parsed entry (the segment is
+     * immutable), a new name pays one sidecar parse, a vanished name is
+     * dropped by never being reached. */
+    segs = newAV();
+    if (old_segs) on = av_len(old_segs) + 1;
+    n = av_len(names) + 1;
+    av_extend(segs, n - 1);
+    for (i = 0; i < n; i++) {
+        SV **e = av_fetch(names, i, 0);
+        const char *np;
+        STRLEN nl;
+        SV *reuse = NULL;
+        if (!e) continue;
+        np = SvPV(*e, nl);
+        while (oi < on) {
+            SV **oe = av_fetch(old_segs, oi, 0);
+            AV *oa;
+            SV **onm;
+            const char *op;
+            STRLEN ol;
+            int c;
+            if (!oe || !SvROK(*oe)) { oi++; continue; }
+            oa = (AV *)SvRV(*oe);
+            onm = av_fetch(oa, PO_SNAP_NAME, 0);
+            if (!onm) { oi++; continue; }
+            op = SvPV(*onm, ol);
+            c = memcmp(op, np, ol < nl ? ol : nl);
+            if (!c) c = ol == nl ? 0 : (ol < nl ? -1 : 1);
+            if (c < 0) { oi++; continue; }
+            if (c == 0) { reuse = *oe; oi++; }
+            break;
+        }
+        av_push(segs, reuse ? SvREFCNT_inc(reuse)
+                            : po_snap_entry_new(aTHX_ dir, np));
+    }
+    SvREFCNT_dec((SV *)names);
+
+    /* The t_max-descending order, unknown spans first. Rebuilt each build:
+     * a sort of S integers, next to nothing beside the sidecar parses it
+     * spares. */
+    {
+        AV *order = newAV();
+        po_snap_ord *ord;
+        SSize_t nspan = 0, j;
+        IV unspanned = 0;
+
+        n = av_len(segs) + 1;
+        Newx(ord, n ? n : 1, po_snap_ord);
+        for (i = 0; i < n; i++) {
+            SV **e = av_fetch(segs, i, 0);
+            AV *ea;
+            if (!e || !SvROK(*e)) continue;
+            ea = (AV *)SvRV(*e);
+            if (po_snap_flags(aTHX_ ea) & PO_SNAP_SPAN_SEEN) {
+                ord[nspan].tmax = po_snap_u64(aTHX_ ea, PO_SNAP_TMAX);
+                ord[nspan].idx  = (IV)i;
+                nspan++;
+            }
+            else {
+                av_push(order, newSViv((IV)i));
+                unspanned++;
+            }
+        }
+        if (nspan > 1)
+            qsort(ord, (size_t)nspan, sizeof(po_snap_ord), po_snap_ord_desc);
+        for (j = 0; j < nspan; j++) av_push(order, newSViv(ord[j].idx));
+        Safefree(ord);
+
+        snap = newHV();
+        hv_stores(snap, "order",     newRV_noinc((SV *)order));
+        hv_stores(snap, "unspanned", newSViv(unspanned));
+    }
+    hv_stores(snap, "key",    newSViv(mtime));
+    hv_stores(snap, "built",  newSViv(now));
+    hv_stores(snap, "builds", newSViv(builds + 1));
+    hv_stores(snap, "orphan", newSViv(orphan));
+    hv_stores(snap, "segs",   newRV_noinc((SV *)segs));
+    hv_stores(snap, "wals",   newRV_noinc((SV *)wals));
+    hv_stores(h, "_snap", newRV_noinc((SV *)snap));
+    return snap;
 }
 
 static SV *po_index_read_sv(pTHX_ const char *path) {
@@ -867,29 +1148,82 @@ static SV *po_sym_sv(pTHX_ const po_intern *t, uint32_t id) {
     return p ? newSVpvn(p, len) : newSVpvs("unknown");
 }
 
-/* Every log in a store directory, gathered into one span set. */
-static void po_gather_dir(pTHX_ const char *dir, po_span_gather *g,
+/* Every log in a store directory, gathered into one span set.
+ *
+ * The file list and every skip decision come from the SNAPSHOT: a sealed
+ * segment whose whole span misses the window, or whose sidecar proves it
+ * holds no spans at all, is never slurped. Everything inside the window
+ * still lands in ONE set - the cross-file parent invariant the graph
+ * comment below guards - because pruning decides which files to read, never
+ * how their spans merge. Live logs are always read; the window filters
+ * inside the gather. `files`/`skipped` report what happened, so a test can
+ * prove the pruning fired rather than inferring it from timing. */
+static void po_gather_dir(pTHX_ SV *self, const char *dir, po_span_gather *g,
                           int have_from, po_u64 from,
-                          int have_to, po_u64 to) {
-    po_dir d;
-    const char *name;
+                          int have_to, po_u64 to,
+                          IV *files, IV *skipped) {
+    HV *snap = po_snap_get(aTHX_ self, dir);
+    AV *segs = NULL, *wals = NULL;
+    SSize_t i, n;
 
-    if (!po_opendir(&d, dir)) return;
-    while ((name = po_readdir(&d))) {
-        size_t nl = strlen(name);
+    if (!snap) return;
+    {
+        SV **f = hv_fetchs(snap, "segs", 0);
+        if (f && SvROK(*f)) segs = (AV *)SvRV(*f);
+        f = hv_fetchs(snap, "wals", 0);
+        if (f && SvROK(*f)) wals = (AV *)SvRV(*f);
+    }
+
+    n = segs ? av_len(segs) + 1 : 0;
+    for (i = 0; i < n; i++) {
+        SV **e = av_fetch(segs, i, 0);
+        AV *ea;
+        SV **nm;
         char path[PO_PATHMAX];
         size_t blen = 0;
         char *bytes;
 
-        if (!(nl > 4 && (memcmp(name + nl - 4, ".seg", 4) == 0
-                      || memcmp(name + nl - 4, ".wal", 4) == 0))) continue;
-        if (!po_path_join(path, sizeof(path), dir, name)) continue;
+        if (!e || !SvROK(*e)) continue;
+        ea = (AV *)SvRV(*e);
+
+        if ((have_from || have_to)
+            && (po_snap_flags(aTHX_ ea) & PO_SNAP_SPAN_SEEN)) {
+            po_u64 ix_min = po_snap_u64(aTHX_ ea, PO_SNAP_TMIN);
+            po_u64 ix_max = po_snap_u64(aTHX_ ea, PO_SNAP_TMAX);
+            if ((have_from && ix_max < from) || (have_to && ix_min > to)) {
+                if (skipped) (*skipped)++;
+                continue;
+            }
+        }
+        if (po_snap_kind_absent(aTHX_ ea, PO_SPAN)) {
+            if (skipped) (*skipped)++;
+            continue;
+        }
+
+        nm = av_fetch(ea, PO_SNAP_NAME, 0);
+        if (!nm) continue;
+        if (!po_path_join(path, sizeof(path), dir, SvPV_nolen(*nm))) continue;
         bytes = po_slurp(path, &blen);
         if (!bytes) continue;
+        if (files) (*files)++;
         po_gather_wal(g, bytes, blen, have_from, from, have_to, to);
         free(bytes);
     }
-    po_closedir(&d);
+
+    n = wals ? av_len(wals) + 1 : 0;
+    for (i = 0; i < n; i++) {
+        SV **e = av_fetch(wals, i, 0);
+        char path[PO_PATHMAX];
+        size_t blen = 0;
+        char *bytes;
+        if (!e) continue;
+        if (!po_path_join(path, sizeof(path), dir, SvPV_nolen(*e))) continue;
+        bytes = po_slurp(path, &blen);
+        if (!bytes) continue;
+        if (files) (*files)++;
+        po_gather_wal(g, bytes, blen, have_from, from, have_to, to);
+        free(bytes);
+    }
 }
 
 /* One edge into the merge table, keyed on the pair of NAMES.
@@ -937,46 +1271,6 @@ static void po_edge_merge(pTHX_ HV *edges, const char *caller, size_t cl,
          * describes nothing. */
         if (m && dur_max > mv) sv_setsv(*m, sv_2mortal(po_u64_to_sv(dur_max)));
     }
-}
-
-/* Just the SERVICE COUNTS from a sidecar.
- *
- * A per-record tally merges correctly file by file; an EDGE does not, because
- * a graph derived from one file can only see the parents that are in it. So
- * the counts come from the summary and the edges are built from the spans
- * themselves - see post_graph. */
-static void po_graph_merge_services(pTHX_ const char *idx, HV *svc) {
-    size_t len = 0;
-    char *buf = po_slurp(idx, &len);
-    char *p, *end;
-
-    if (!buf) return;
-    p = buf; end = buf + len;
-    while (p < end) {
-        char *nl = memchr(p, '\n', (size_t)(end - p));
-        char *line = p;
-        size_t ll = nl ? (size_t)(nl - p) : (size_t)(end - p);
-        char *f[8];
-        size_t fl[8];
-        int nf = 0;
-        size_t i, start = 0;
-
-        p = nl ? nl + 1 : end;
-        if (!ll) continue;
-        for (i = 0; i <= ll && nf < 8; i++)
-            if (i == ll || line[i] == '\t') {
-                f[nf] = line + start; fl[nf] = i - start; nf++; start = i + 1;
-            }
-        if (nf < 3) continue;
-        if (fl[0] == 3 && memcmp(f[0], "svc", 3) == 0) {
-            char k[512];
-            size_t kn = po_idx_unesc(f[1], fl[1], k, sizeof(k));
-            SV **slot = hv_fetch(svc, k, (I32)kn, 1);
-            if (slot) sv_setiv(*slot, (SvOK(*slot) ? SvIV(*slot) : 0)
-                                    + (IV)atol(f[2]));
-        }
-    }
-    free(buf);
 }
 
 /* A live log's edges, from the graph just built over its spans. */
@@ -1054,6 +1348,46 @@ static void povw_set_count(pTHX_ HV *out, const char *key, HV *src,
     if (!f || !SvOK(*f)) l = 1;
     n = po_fmt_count(p, (size_t)l, buf, sizeof(buf));
     hv_store(out, key, (I32)strlen(key), newSVpvn(buf, n), 0);
+}
+
+/* A SEAM THAT DIED SAYS SO, ON THE PAGE.
+ *
+ * The `alerts` and `dashboards` readers are host code called through
+ * G_EVAL, and the exception used to be discarded: a reader whose database was
+ * gone fell through to the same empty state as a mount with nothing
+ * configured. Two very different problems, one blank screen, and the one that
+ * needs fixing looks like the one that does not.
+ *
+ * Since 0.02 it is worse than ambiguous. An absent seam now means the
+ * built-in configuration store, so "empty" does not even imply "not
+ * configured" any more - it means the reader ran and found nothing, which is
+ * exactly what a died reader is not.
+ *
+ * Returns 1 if there was an exception, having put it on the page.
+ */
+static int povw_seam_died(pTHX_ HV *v, const char *what) {
+    STRLEN el = 0;
+    const char *ep = SvOK(ERRSV) ? SvPV(ERRSV, el) : NULL;
+    SV *hint;
+
+    if (!ep || !el) return 0;
+
+    hv_stores(v, "error", newSVpvf("The %s source could not be read.", what));
+
+    /* The exception itself, because it is the only thing that says WHY, with
+     * the trailing newline trimmed - " at Foo.pm line 40." is worth keeping
+     * on an operator's screen and a dangling blank line is not. */
+    hint = newSVpvn(ep, el);
+    {
+        char *hp; STRLEN hl;
+        hp = SvPV(hint, hl);
+        while (hl && (hp[hl - 1] == '\n' || hp[hl - 1] == '\r'
+                      || hp[hl - 1] == ' ')) hl--;
+        SvCUR_set(hint, hl);
+        hp[hl] = '\0';
+    }
+    hv_stores(v, "hint", hint);
+    return 1;
 }
 
 static void povw_set_iv(pTHX_ HV *out, const char *key, HV *src,
@@ -1355,147 +1689,381 @@ static SV *po_row_hv(pTHX_ const po_rec *rec, const po_arena *ar) {
     return rv;
 }
 
+/* The collected result and counters of one records scan, threaded through
+ * the per-file helper below so the walk over files stays one loop whatever
+ * order the caller visits them in. */
+typedef struct {
+    po_sortpair *all;
+    IV nall, call;
+    IV scanned, files, degraded;
+    /* Early-stop bookkeeping: `kth` is the limit-th newest key collected so
+     * far (valid while kth_set; any append invalidates it), `dropped` says
+     * records beyond the limit were seen and thrown away - which is exactly
+     * what `truncated` reports. */
+    po_u64 kth;
+    int kth_set;
+    int dropped;
+} po_records_acc;
+
+/* Case-SENSITIVE byte search, the sibling of po_bloom.h's case-folded
+ * po_memfind. The executor compares a metric name to the row body exactly,
+ * so the file-level superset check can be exact too - a stronger prune that
+ * is still provably conservative. */
+static const char *po_memfind_exact(const char *hay, size_t hn,
+                                    const char *needle, size_t nn) {
+    size_t i;
+    if (nn == 0 || nn > hn) return NULL;
+    for (i = 0; i + nn <= hn; i++)
+        if (hay[i] == needle[0] && memcmp(hay + i, needle, nn) == 0)
+            return hay + i;
+    return NULL;
+}
+
+/* One file's worth of the scan: slurp, replay-check, frame walk.
+ *
+ * The two needles are CONSERVATIVE SUPERSETS of filters the executor will
+ * apply after the scan - `search` (matched case-folded against row bodies)
+ * and the metric name (matched exactly against row bodies). Bodies live
+ * verbatim in the frame arenas, so a file or frame in which the needle
+ * appears NOWHERE cannot contain a row the executor would keep, and the
+ * scan skips building its hashes. A hit proves nothing - the needle may sit
+ * in an attribute, another kind's body, half of a longer name - so the
+ * executor's own filter still decides every row. The needle only ever says
+ * "nothing here", never "this one matches". */
+static void po_records_scan_file(pTHX_ const char *path,
+                                 po_u64 from, int have_from,
+                                 po_u64 to, int have_to, int kind,
+                                 po_u64 trace_hi, po_u64 trace_lo,
+                                 int have_trace,
+                                 const po_traceset *tset, int as_rows,
+                                 const char *needle_ci, size_t needle_ci_len,
+                                 const char *needle_ex, size_t needle_ex_len,
+                                 po_records_acc *acc) {
+    char *bytes;
+    size_t blen = 0;
+    po_wal_replay rp;
+    size_t off = 0;
+
+    bytes = po_slurp(path, &blen);
+    if (!bytes || !blen) { free(bytes); return; }
+    acc->files++;
+
+    if ((needle_ci_len && !po_memfind(bytes, blen, needle_ci, needle_ci_len))
+     || (needle_ex_len && !po_memfind_exact(bytes, blen,
+                                            needle_ex, needle_ex_len))) {
+        free(bytes);
+        return;
+    }
+
+    po_wal_replay_buf(bytes, blen, &rp, NULL, NULL);
+    /* A log this build cannot read is REPORTED, never guessed at, and it is
+     * not fatal: the other segments still answer and the answer says it is
+     * short. */
+    if (rp.stopped_reason == PO_REPLAY_VERSION) acc->degraded++;
+
+    for (;;) {
+        uint32_t magic, frame_len, n_recs, arena_len;
+        uint16_t version, flags;
+        const char *h;
+        const po_rec *recs;
+        po_arena view;
+        size_t j;
+
+        if (blen - off < PO_WAL_HDR) break;
+        h = bytes + off;
+        memcpy(&magic, h, 4); magic = po_le32(magic);
+        if (magic != PO_WAL_MAGIC) break;
+        memcpy(&frame_len, h + 4, 4);  frame_len = po_le32(frame_len);
+        memcpy(&n_recs,    h + 8, 4);  n_recs    = po_le32(n_recs);
+        memcpy(&arena_len, h + 12, 4); arena_len = po_le32(arena_len);
+        flags   = (uint16_t)((unsigned char)h[36] | ((unsigned char)h[37] << 8));
+        version = (uint16_t)((unsigned char)h[38] | ((unsigned char)h[39] << 8));
+        if (version != PO_WAL_VERSION) break;
+        if (flags & PO_WAL_F_SEALED) break;
+        if (blen - off - PO_WAL_HDR < (size_t)frame_len) break;
+        if (off + PO_WAL_HDR + frame_len > rp.bytes_ok) break;
+
+        recs = (const po_rec *)(h + PO_WAL_HDR);
+        view.base = (char *)(h + PO_WAL_HDR + (size_t)n_recs * sizeof(po_rec));
+        view.len  = (size_t)arena_len;
+        view.cap  = (size_t)arena_len;
+
+        /* The frame-level needle check: bodies live in this arena, so a
+         * frame without the needle has no row worth a hash. */
+        if ((needle_ci_len && !po_memfind(view.base, view.len,
+                                          needle_ci, needle_ci_len))
+         || (needle_ex_len && !po_memfind_exact(view.base, view.len,
+                                                needle_ex, needle_ex_len))) {
+            off += PO_WAL_HDR + frame_len;
+            continue;
+        }
+
+        for (j = 0; j < n_recs; j++) {
+            const po_rec *r = &recs[j];
+            acc->scanned++;
+            if (have_from && r->t_unix_nano < from) continue;
+            if (have_to   && r->t_unix_nano > to)   continue;
+            if (kind && r->kind != (uint8_t)kind)   continue;
+            /* THE CROSS-SIGNAL FILTER. A record's trace id is the only thing
+             * that ties a log line to the request that produced it, and
+             * comparing two integers here is what keeps "the logs for this
+             * trace" a scan rather than a second pass in Perl over
+             * everything the window held. */
+            if (have_trace && (r->trace_id_hi != trace_hi
+                            || r->trace_id_lo != trace_lo)) continue;
+            /* THE SET FORM OF THE SAME FILTER, which is what makes a
+             * cross-signal join one scan rather than one scan per trace. */
+            if (tset && !po_traceset_has(tset, r->trace_id_hi,
+                                              r->trace_id_lo)) continue;
+
+            if (acc->nall == acc->call) {
+                IV want = acc->call ? acc->call * 2 : 256;
+                Renew(acc->all, want, po_sortpair);
+                acc->call = want;
+            }
+            acc->all[acc->nall].key = r->t_unix_nano;
+            acc->all[acc->nall].sv  = as_rows ? po_row_hv(aTHX_ r, &view)
+                                              : po_rec_hv(aTHX_ r, &view);
+            acc->nall++;
+            acc->kth_set = 0;
+        }
+        off += PO_WAL_HDR + frame_len;
+    }
+    free(bytes);
+}
+
+/* One file's metric names, tallied straight into an HV - no hash per
+ * record, which is the entire point: the metrics landing page needs the
+ * DISTINCT NAMES in a window with counts, and building half a million row
+ * hashes to throw away everything but the bodies was the single largest
+ * read in the UI. Returns the number of metric records tallied. */
+static po_u64 po_metric_names_file(pTHX_ const char *path,
+                                   po_u64 from, int have_from,
+                                   po_u64 to, int have_to,
+                                   HV *seen, IV *files, IV *degraded) {
+    char *bytes;
+    size_t blen = 0;
+    po_wal_replay rp;
+    size_t off = 0;
+    po_u64 tallied = 0;
+
+    bytes = po_slurp(path, &blen);
+    if (!bytes || !blen) { free(bytes); return 0; }
+    if (files) (*files)++;
+
+    po_wal_replay_buf(bytes, blen, &rp, NULL, NULL);
+    if (rp.stopped_reason == PO_REPLAY_VERSION && degraded) (*degraded)++;
+
+    for (;;) {
+        uint32_t magic, frame_len, n_recs, arena_len;
+        uint16_t version, flags;
+        const char *h;
+        const po_rec *recs;
+        const char *arena;
+        size_t j;
+
+        if (blen - off < PO_WAL_HDR) break;
+        h = bytes + off;
+        memcpy(&magic, h, 4); magic = po_le32(magic);
+        if (magic != PO_WAL_MAGIC) break;
+        memcpy(&frame_len, h + 4, 4);  frame_len = po_le32(frame_len);
+        memcpy(&n_recs,    h + 8, 4);  n_recs    = po_le32(n_recs);
+        memcpy(&arena_len, h + 12, 4); arena_len = po_le32(arena_len);
+        flags   = (uint16_t)((unsigned char)h[36] | ((unsigned char)h[37] << 8));
+        version = (uint16_t)((unsigned char)h[38] | ((unsigned char)h[39] << 8));
+        if (version != PO_WAL_VERSION) break;
+        if (flags & PO_WAL_F_SEALED) break;
+        if (blen - off - PO_WAL_HDR < (size_t)frame_len) break;
+        if (off + PO_WAL_HDR + frame_len > rp.bytes_ok) break;
+
+        recs  = (const po_rec *)(h + PO_WAL_HDR);
+        arena = h + PO_WAL_HDR + (size_t)n_recs * sizeof(po_rec);
+
+        for (j = 0; j < n_recs; j++) {
+            const po_rec *r = &recs[j];
+            SV **slot;
+            if (r->kind != PO_METRIC) continue;
+            if (have_from && r->t_unix_nano < from) continue;
+            if (have_to   && r->t_unix_nano > to)   continue;
+            if (!r->body_len
+                || (size_t)r->body_off + r->body_len > (size_t)arena_len)
+                continue;
+            slot = hv_fetch(seen, arena + r->body_off, (I32)r->body_len, 1);
+            if (slot) sv_setiv(*slot, (SvOK(*slot) ? SvIV(*slot) : 0) + 1);
+            tallied++;
+        }
+        off += PO_WAL_HDR + frame_len;
+    }
+    free(bytes);
+    return tallied;
+}
+
+/* Sort the collected pairs newest-first and cut the run to `limit`, so the
+ * memory high-water stays near the limit however wide the window is, and so
+ * the limit-th key exists for the early-stop rule to compare against. */
+static void po_records_trim(pTHX_ po_records_acc *acc, po_u64 limit) {
+    IV i;
+    if (acc->kth_set || !limit || (po_u64)acc->nall < limit) return;
+    qsort(acc->all, (size_t)acc->nall, sizeof(po_sortpair), po_sortpair_desc);
+    if ((po_u64)acc->nall > limit) {
+        for (i = (IV)limit; i < acc->nall; i++)
+            SvREFCNT_dec(acc->all[i].sv);
+        acc->nall = (IV)limit;
+        acc->dropped = 1;
+    }
+    acc->kth = acc->all[acc->nall - 1].key;
+    acc->kth_set = 1;
+}
+
 /* The scan across every segment, shared by `records` and `rows`.
  *
  * A function rather than one XSUB calling the other: a call_method back into
  * Perl to reach the same C is a stack frame, a mortal stack and two argument
- * copies to arrive where the caller already was. */
+ * copies to arrive where the caller already was.
+ *
+ * The file list and every sealed segment's span come from the SNAPSHOT, so
+ * the per-call cost of deciding what to read is one stat - not a readdir, a
+ * sort and a sidecar open per segment. */
 static void po_records_run(pTHX_ SV *self, po_u64 from, int have_from,
                            po_u64 to, int have_to, int kind, po_u64 limit,
                            int as_rows, po_u64 trace_hi, po_u64 trace_lo,
-                           int have_trace, AV *out, HV *meta) {
+                           int have_trace,
+                           const po_traceset *tset,
+                           const char *needle_ci, size_t needle_ci_len,
+                           const char *needle_ex, size_t needle_ex_len,
+                           AV *out, HV *meta) {
     char dir[PO_PATHMAX];
-    po_dir d;
-    const char *name;
-    AV *names = newAV();
+    HV *snap;
+    AV *segs = NULL, *wals = NULL, *order = NULL;
     SSize_t i, n;
-    IV scanned = 0, skipped = 0, files = 0, degraded = 0;
-    po_sortpair *all = NULL;
-    IV nall = 0, call = 0;
+    IV skipped = 0, unspanned = 0;
+    po_records_acc acc;
+
+    memset(&acc, 0, sizeof(acc));
         if (!po_store_waldir(aTHX_ self, dir, sizeof(dir))) goto done;
-        if (!po_opendir(&d, dir)) goto done;
-        while ((name = po_readdir(&d))) {
-            size_t nl = strlen(name);
-            if (nl > 4 && (memcmp(name + nl - 4, ".seg", 4) == 0
-                        || memcmp(name + nl - 4, ".wal", 4) == 0))
-                av_push(names, newSVpv(name, 0));
+        snap = po_snap_get(aTHX_ self, dir);
+        if (!snap) goto done;
+        {
+            SV **f = hv_fetchs(snap, "segs", 0);
+            if (f && SvROK(*f)) segs = (AV *)SvRV(*f);
+            f = hv_fetchs(snap, "wals", 0);
+            if (f && SvROK(*f)) wals = (AV *)SvRV(*f);
+            f = hv_fetchs(snap, "order", 0);
+            if (f && SvROK(*f)) order = (AV *)SvRV(*f);
+            f = hv_fetchs(snap, "unspanned", 0);
+            if (f && SvOK(*f)) unspanned = SvIV(*f);
         }
-        po_closedir(&d);
-        sortsv(AvARRAY(names), (SSize_t)(av_len(names) + 1), Perl_sv_cmp);
-        n = av_len(names) + 1;
 
+        /* The live logs first, always in full: nothing about them is cached,
+         * because an append does not touch the directory the snapshot is
+         * keyed on - and their records are usually the newest, which fills
+         * the limit early and lets the stop rule below fire sooner. */
+        n = wals ? av_len(wals) + 1 : 0;
         for (i = 0; i < n; i++) {
-            SV **e = av_fetch(names, i, 0);
-            const char *np;
-            STRLEN nl;
+            SV **e = av_fetch(wals, i, 0);
             char path[PO_PATHMAX];
-            char *bytes;
-            size_t blen = 0;
-            po_wal_replay rp;
-            size_t off = 0;
-
             if (!e) continue;
-            np = SvPV(*e, nl);
-            if (!po_path_join(path, sizeof(path), dir, np)) continue;
-
-            /* THE CHEAP SKIP FIRST, from the sidecar rather than the log. */
-            if (nl > 4 && memcmp(np + nl - 4, ".seg", 4) == 0
-                && (have_from || have_to)) {
-                char idx[PO_PATHMAX];
-                size_t pl = strlen(path);
-                po_u64 ix_min = 0, ix_max = 0;
-                int seen = 0;
-                memcpy(idx, path, pl + 1);
-                memcpy(idx + pl - 4, ".idx", 5);
-                if (po_index_span(idx, &ix_min, &ix_max, &seen) && seen) {
-                    if (have_from && ix_max < from) { skipped++; continue; }
-                    if (have_to   && ix_min > to)   { skipped++; continue; }
-                }
-            }
-
-            bytes = po_slurp(path, &blen);
-            if (!bytes || !blen) { free(bytes); continue; }
-            files++;
-
-            po_wal_replay_buf(bytes, blen, &rp, NULL, NULL);
-            /* A log this build cannot read is REPORTED, never guessed at, and
-             * it is not fatal: the other segments still answer and the answer
-             * says it is short. */
-            if (rp.stopped_reason == PO_REPLAY_VERSION) degraded++;
-
-            for (;;) {
-                uint32_t magic, frame_len, n_recs, arena_len;
-                uint16_t version, flags;
-                const char *h;
-                const po_rec *recs;
-                po_arena view;
-                size_t j;
-
-                if (blen - off < PO_WAL_HDR) break;
-                h = bytes + off;
-                memcpy(&magic, h, 4); magic = po_le32(magic);
-                if (magic != PO_WAL_MAGIC) break;
-                memcpy(&frame_len, h + 4, 4);  frame_len = po_le32(frame_len);
-                memcpy(&n_recs,    h + 8, 4);  n_recs    = po_le32(n_recs);
-                memcpy(&arena_len, h + 12, 4); arena_len = po_le32(arena_len);
-                flags   = (uint16_t)((unsigned char)h[36] | ((unsigned char)h[37] << 8));
-                version = (uint16_t)((unsigned char)h[38] | ((unsigned char)h[39] << 8));
-                if (version != PO_WAL_VERSION) break;
-                if (flags & PO_WAL_F_SEALED) break;
-                if (blen - off - PO_WAL_HDR < (size_t)frame_len) break;
-                if (off + PO_WAL_HDR + frame_len > rp.bytes_ok) break;
-
-                recs = (const po_rec *)(h + PO_WAL_HDR);
-                view.base = (char *)(h + PO_WAL_HDR + (size_t)n_recs * sizeof(po_rec));
-                view.len  = (size_t)arena_len;
-                view.cap  = (size_t)arena_len;
-
-                for (j = 0; j < n_recs; j++) {
-                    const po_rec *r = &recs[j];
-                    scanned++;
-                    if (have_from && r->t_unix_nano < from) continue;
-                    if (have_to   && r->t_unix_nano > to)   continue;
-                    if (kind && r->kind != (uint8_t)kind)   continue;
-                    /* THE CROSS-SIGNAL FILTER. A record's trace id is the
-                     * only thing that ties a log line to the request that
-                     * produced it, and comparing two integers here is what
-                     * keeps "the logs for this trace" a scan rather than a
-                     * second pass in Perl over everything the window held. */
-                    if (have_trace && (r->trace_id_hi != trace_hi
-                                    || r->trace_id_lo != trace_lo)) continue;
-
-                    if (nall == call) {
-                        IV want = call ? call * 2 : 256;
-                        Renew(all, want, po_sortpair);
-                        call = want;
-                    }
-                    all[nall].key = r->t_unix_nano;
-                    all[nall].sv  = as_rows ? po_row_hv(aTHX_ r, &view)
-                                            : po_rec_hv(aTHX_ r, &view);
-                    nall++;
-                }
-                off += PO_WAL_HDR + frame_len;
-            }
-            free(bytes);
+            if (!po_path_join(path, sizeof(path), dir, SvPV_nolen(*e)))
+                continue;
+            po_records_scan_file(aTHX_ path, from, have_from, to, have_to,
+                                 kind, trace_hi, trace_lo, have_trace,
+                                 tset, as_rows, needle_ci, needle_ci_len,
+                                 needle_ex, needle_ex_len, &acc);
         }
-        SvREFCNT_dec((SV *)names);
+
+        /* The sealed segments, newest t_max first, unknown spans ahead of
+         * everything (see po_snap_ord). Once `limit` records are in hand,
+         * a segment whose whole span is STRICTLY older than the limit-th
+         * newest key cannot change the answer - and neither can anything
+         * after it in this order - so the walk stops. Strictly: a tie on
+         * the boundary still scans. */
+        n = order ? av_len(order) + 1 : 0;
+        for (i = 0; i < n; i++) {
+            SV **oe = av_fetch(order, i, 0);
+            SV **e, **nm;
+            AV *ea;
+            char path[PO_PATHMAX];
+            po_u64 ix_min, ix_max;
+            int span_seen;
+
+            if (!oe || !segs) continue;
+            e = av_fetch(segs, SvIV(*oe), 0);
+            if (!e || !SvROK(*e)) continue;
+            ea = (AV *)SvRV(*e);
+
+            span_seen = (po_snap_flags(aTHX_ ea) & PO_SNAP_SPAN_SEEN) ? 1 : 0;
+            ix_min = po_snap_u64(aTHX_ ea, PO_SNAP_TMIN);
+            ix_max = po_snap_u64(aTHX_ ea, PO_SNAP_TMAX);
+
+            if (i >= unspanned && limit
+                && (po_u64)acc.nall >= limit && span_seen) {
+                po_records_trim(aTHX_ &acc, limit);
+                if (ix_max < acc.kth) {
+                    /* Truncated iff anything left behind could actually have
+                     * answered: a remaining segment passing the window has
+                     * its t_max record inside it (t_max < kth <= to at this
+                     * point), so one more matching record provably exists. */
+                    SSize_t j;
+                    for (j = i; j < n; j++) {
+                        SV **je = av_fetch(order, j, 0);
+                        SV **je2;
+                        AV *ja;
+                        po_u64 jmin, jmax;
+                        if (!je) continue;
+                        je2 = av_fetch(segs, SvIV(*je), 0);
+                        if (!je2 || !SvROK(*je2)) continue;
+                        ja = (AV *)SvRV(*je2);
+                        jmin = po_snap_u64(aTHX_ ja, PO_SNAP_TMIN);
+                        jmax = po_snap_u64(aTHX_ ja, PO_SNAP_TMAX);
+                        if (have_from && jmax < from) continue;
+                        if (have_to   && jmin > to)   continue;
+                        if (po_snap_kind_absent(aTHX_ ja, kind)) continue;
+                        acc.dropped = 1;
+                        break;
+                    }
+                    break;
+                }
+            }
+
+            /* THE CHEAP SKIP, from the snapshot rather than the log. A
+             * segment whose span is unknown is never skipped on it. */
+            if ((have_from || have_to) && span_seen) {
+                if (have_from && ix_max < from) { skipped++; continue; }
+                if (have_to   && ix_min > to)   { skipped++; continue; }
+            }
+
+            /* The kind skip: see po_snap_kind_absent. */
+            if (po_snap_kind_absent(aTHX_ ea, kind)) { skipped++; continue; }
+
+            nm = av_fetch(ea, PO_SNAP_NAME, 0);
+            if (!nm) continue;
+            if (!po_path_join(path, sizeof(path), dir, SvPV_nolen(*nm)))
+                continue;
+            po_records_scan_file(aTHX_ path, from, have_from, to, have_to,
+                                 kind, trace_hi, trace_lo, have_trace,
+                                 tset, as_rows, needle_ci, needle_ci_len,
+                                 needle_ex, needle_ex_len, &acc);
+        }
 
         /* Newest first. qsort rather than the reverse the single-segment scan
          * can use, because across segments the runs interleave. */
-        if (nall > 1) qsort(all, (size_t)nall, sizeof(po_sortpair), po_sortpair_desc);
+        if (acc.nall > 1)
+            qsort(acc.all, (size_t)acc.nall, sizeof(po_sortpair),
+                  po_sortpair_desc);
 
-        for (i = 0; i < nall; i++) {
-            if ((po_u64)i < limit) av_push(out, all[i].sv);
-            else SvREFCNT_dec(all[i].sv);
+        for (i = 0; i < acc.nall; i++) {
+            if ((po_u64)i < limit) av_push(out, acc.all[i].sv);
+            else SvREFCNT_dec(acc.all[i].sv);
         }
-        hv_stores(meta, "truncated", newSViv((po_u64)nall > limit ? 1 : 0));
-        Safefree(all);
+        hv_stores(meta, "truncated",
+                  newSViv((po_u64)acc.nall > limit || acc.dropped ? 1 : 0));
+        Safefree(acc.all);
 
     done:
-        hv_stores(meta, "scanned",  newSViv(scanned));
+        hv_stores(meta, "scanned",  newSViv(acc.scanned));
         hv_stores(meta, "skipped",  newSViv(skipped));
-        hv_stores(meta, "files",    newSViv(files));
-        hv_stores(meta, "degraded", newSViv(degraded));
+        hv_stores(meta, "files",    newSViv(acc.files));
+        hv_stores(meta, "degraded", newSViv(acc.degraded));
         if (!hv_exists(meta, "truncated", 9))
             hv_stores(meta, "truncated", newSViv(0));
         return;
@@ -1837,6 +2405,76 @@ static void povw_add_figure_sv(pTHX_ HV *v, const char *fn, SV *arg,
  * a figure needs. A shape that contributes a figure AND the table under it
  * would need two calls returning two types, so the hash goes across instead
  * and the Perl side sets what it likes. */
+/* Does this query group by severity?
+ *
+ * IT IS THE QUERY THAT SAYS SO, AND NOTHING ELSE CAN. A series keyed 13 is a
+ * severity or an attempt count depending only on what was grouped by, and the
+ * result does not carry that - so guessing from the values would rename a
+ * `by attempt` grouping of 1, 2, 3 into trace and debug.
+ *
+ * The executor returns the NUMBER on purpose, and t/0903 asserts it: a query
+ * compares severities numerically, and `severity >= error` has to keep
+ * meaning that. The name is for the person reading the page, so it is put on
+ * at the point of reading rather than in the engine.
+ */
+static int povw_by_severity(const char *q, size_t n) {
+    size_t i;
+    if (!q) return 0;
+    for (i = 0; i + 2 < n; i++) {
+        size_t j;
+        if ((q[i] != 'b' && q[i] != 'B') || (q[i+1] != 'y' && q[i+1] != 'Y'))
+            continue;
+        if (i && !isspace((unsigned char)q[i-1]) && q[i-1] != '|') continue;
+        if (!isspace((unsigned char)q[i+2])) continue;
+        j = i + 3;
+        while (j < n && isspace((unsigned char)q[j])) j++;
+        if (n - j >= 8 && memcmp(q + j, "severity", 8) == 0
+            && (n - j == 8 || !isalnum((unsigned char)q[j+8]))) return 1;
+    }
+    return 0;
+}
+
+/* Rename a bucketed result's series keys from severity numbers to names.
+ *
+ * ON THE RESULT, BEFORE ANYTHING IS BUILT FROM IT, so the chart legend and
+ * the table under it get the same labels from one place. Renaming the table
+ * afterwards fixed the column and left the legend reading 13, 17, 5, 9 - two
+ * renderings of one answer disagreeing about what the answer says.
+ *
+ * Only a key that is entirely digits is touched, and only when the caller has
+ * already established that the query grouped by severity. */
+static void povw_name_severities(pTHX_ SV *res) {
+    SV **se;
+    AV *sa;
+    SSize_t i, n;
+
+    if (!res || !SvROK(res) || SvTYPE(SvRV(res)) != SVt_PVHV) return;
+    se = hv_fetchs((HV *)SvRV(res), "series", 0);
+    if (!se || !SvROK(*se) || SvTYPE(SvRV(*se)) != SVt_PVAV) return;
+
+    sa = (AV *)SvRV(*se);
+    n = av_len(sa) + 1;
+    for (i = 0; i < n; i++) {
+        SV **e = av_fetch(sa, i, 0);
+        SV **k;
+        const char *p;
+        STRLEN l, j;
+        int digits = 1;
+
+        if (!e || !SvROK(*e) || SvTYPE(SvRV(*e)) != SVt_PVHV) continue;
+        k = hv_fetchs((HV *)SvRV(*e), "key", 0);
+        if (!k || !SvOK(*k)) continue;
+        p = SvPV(*k, l);
+        if (!l) continue;
+        for (j = 0; j < l; j++)
+            if (p[j] < '0' || p[j] > '9') { digits = 0; break; }
+        if (!digits) continue;
+
+        (void)hv_stores((HV *)SvRV(*e), "key",
+                        newSVpv(po_severity_name(atoi(p)), 0));
+    }
+}
+
 static void povw_fill_vars(pTHX_ HV *v, const char *fn, SV *arg) {
     dSP;
     if (!arg || !SvOK(arg)) return;
@@ -1848,6 +2486,76 @@ static void povw_fill_vars(pTHX_ HV *v, const char *fn, SV *arg) {
     (void)call_pv(fn, G_VOID | G_DISCARD | G_EVAL);
     SPAGAIN;
     FREETMPS; LEAVE;
+}
+
+/* `| viz` IN THE QUERY ITSELF, applied at the page boundary.
+ *
+ * One function because the rule is one vocabulary: a viz that draws in the
+ * explorer and not in the logs page's box is the panel/explorer split all
+ * over again. The result carries `viz` when the query did, and the rules are
+ * the panel renderer's exactly. A kind the shape cannot take is refused with
+ * the stage that fixes it; `bar` over a plain grouped answer draws the bars
+ * figure the metrics page already uses, because one number per group IS a
+ * bar chart; `table` is what a rows or groups answer already is.
+ *
+ * This also owns the bucketed fill, viz or no viz - a bucketed answer that
+ * reaches a page and draws nothing is a heading over an empty panel, which
+ * is how the explorer's own buckets gap was found. */
+static void povw_apply_viz(pTHX_ HV *v, HV *r, SV *res,
+                           const char *q, size_t ql,
+                           int rows_shape, int buckets_shape)
+{
+    dSP;
+    SV **vz = hv_fetchs(r, "viz", 0);
+    if (vz && SvOK(*vz)) {
+        const char *vv = SvPV_nolen(*vz);
+        int is_groups = !rows_shape && !buckets_shape;
+        if (buckets_shape) {
+            hv_stores(v, "viz", newSVsv(*vz));
+        }
+        else if (is_groups && strEQ(vv, "bar")) {
+            SV **gv2 = hv_fetchs(r, "groups", 0);
+            if (gv2 && SvROK(*gv2)) {
+                SV *fig = NULL, *enc = NULL;
+                int n2;
+                ENTER; SAVETMPS; PUSHMARK(SP);
+                XPUSHs(*gv2);
+                PUTBACK;
+                n2 = call_pv("Punk::Observe::Plot::bars", G_SCALAR);
+                SPAGAIN;
+                fig = n2 ? SvREFCNT_inc(POPs) : NULL;
+                PUTBACK; FREETMPS; LEAVE; SPAGAIN;
+                if (fig) {
+                    ENTER; SAVETMPS; PUSHMARK(SP);
+                    XPUSHs(sv_2mortal(fig));
+                    PUTBACK;
+                    n2 = call_pv("Punk::Observe::Plot::encode", G_SCALAR);
+                    SPAGAIN;
+                    enc = n2 ? SvREFCNT_inc(POPs) : NULL;
+                    PUTBACK; FREETMPS; LEAVE; SPAGAIN;
+                    if (enc) hv_stores(v, "series_plot", enc);
+                }
+            }
+        }
+        else if (strEQ(vv, "table")) {
+            /* The table is what these shapes already are. */
+        }
+        else {
+            hv_stores(v, "error",
+                newSVpvf("%s needs a bucketed answer", vv));
+            hv_stores(v, "hint",
+                newSVpvs("add | bucket(30s) before the "
+                         "aggregate to get one row per window"));
+        }
+    }
+
+    if (buckets_shape) {
+        /* Renamed on the RESULT, so the chart legend and the table under it
+         * agree about what the answer says. */
+        if (povw_by_severity(q, ql))
+            povw_name_severities(aTHX_ res);
+        povw_fill_vars(aTHX_ v, "Punk::Observe::Plot::bucket_vars", res);
+    }
 }
 
 /* A BUCKETED RESULT IS RESHAPED ONCE, HERE, AT THE BOUNDARY.
@@ -2053,6 +2761,35 @@ static const char *povw_row_t(pTHX_ SV *rowref, STRLEN *len) {
  * small enough that the page is a page. The reader narrows the window or the
  * query to see further back, and the partial-result banner says so. */
 #define POVW_LOG_PAGE 500
+
+/* HOW MUCH ONE PANEL MAY READ.
+ *
+ * A dashboard runs its panels serially in the request, and until now passed
+ * no limit at all - so each one got Store::query's own default of 500,000
+ * rows, and six panels was six of those before the first byte of HTML.
+ *
+ * A panel is a chart. The chart is decimated to 2,000 points before it is
+ * drawn (POVW_PLOT_MAX), and a bucketed panel is a few hundred buckets, so
+ * a budget in the tens of thousands is far more than any panel can show and
+ * far less than a screen that stops answering. The truncation flag the store
+ * already sets is what makes the difference visible when it bites. */
+#define POVW_PANEL_ROWS 20000
+
+/* A GRID THE STYLESHEET HAS RULES FOR.
+ *
+ * `cols-N` and `span-N` are static CSS classes, so a number outside the range
+ * they cover renders as a class nothing matches and the panel silently
+ * occupies one column. The schema has a CHECK constraint and the writers
+ * clamp - but a host's own seam is a hashref that never went near either, so
+ * the last chance to be right is here, at the point of drawing. */
+#define POVW_GRID_MIN 1
+#define POVW_GRID_MAX 6
+static int povw_grid(IV n, IV dflt) {
+    if (!n) n = dflt;
+    if (n < POVW_GRID_MIN) return POVW_GRID_MIN;
+    if (n > POVW_GRID_MAX) return POVW_GRID_MAX;
+    return (int)n;
+}
 
 /* The numeric value of a row, for deciding which points a chart can drop. */
 static double povw_row_value(pTHX_ SV *rowref) {
@@ -2477,6 +3214,761 @@ static SV *povw_num(pTHX_ SV *v) {
     return newSVnv(SvNV(v));
 }
 
+/* A VALUE IN A TABLE CELL. `%.4g` turned a count of 14,542 into
+ * "1.454e+04" - four significant digits, sitting beside a rows column that
+ * showed all five with commas. An integral value is an integer and is
+ * written as one, comma-grouped exactly like the counts beside it; a large
+ * fractional value rounds to the same shape, because its fraction is noise
+ * at that magnitude; only a small genuine fraction keeps the short %.4g
+ * form, where four digits is a choice rather than a loss. */
+static SV *povw_fmt_value(pTHX_ double d) {
+    int integral = (d == Perl_floor(d));
+    if ((integral || d >= 10000.0 || d <= -10000.0)
+        && d < 9e15 && d > -9e15) {
+        char raw[40], out[64];
+        const char *p = raw;
+        size_t n;
+        int neg = 0;
+        (void)snprintf(raw, sizeof(raw), "%.0f", d);
+        if (raw[0] == '-') { neg = 1; p = raw + 1; }
+        n = po_fmt_count(p, strlen(p), out, sizeof(out));
+        return neg ? newSVpvf("-%.*s", (int)n, out) : newSVpvn(out, n);
+    }
+    return newSVpvf("%.4g", d);
+}
+
+/* ---- one dashboard panel's body ------------------------------------------ */
+/*
+ * The panel body build, factored out of the page loop so it can run from
+ * TWO places: the page itself under ?full=1, and the per-panel fragment
+ * route that defer.js polls. The shell render calls neither - a dashboard
+ * used to run every panel's query serially in the request, and the editor
+ * ran all of them for forms that render none of it.
+ *
+ * `panel` is the template hashref the meta pass built (query and viz are
+ * already on it); `src_panel` is the SOURCE hashref, because check_panel
+ * validates position and span off the stored shape, not the drawn one.
+ */
+/* ---- retention's edges ---------------------------------------------------
+ *
+ * The store is an object with methods and a worker is a process, so these
+ * four are where the retention C reaches both.
+ */
+
+/* Size and mtime in one call. `po_file_size` exists and does not report the
+ * time, and the two are one stat. */
+static int por_stat(const char *path, po_u64 *size, po_u64 *mtime) {
+    struct stat st;
+    if (stat(path, &st) != 0) return 0;
+    if (size)  *size  = (po_u64)st.st_size;
+    if (mtime) *mtime = (po_u64)st.st_mtime;
+    return 1;
+}
+
+/* IS THAT PROCESS STILL RUNNING? `kill(pid, 0)` asks without signalling.
+ *
+ * EPERM IS ALIVE. It means the process exists and belongs to somebody else,
+ * and reading "not mine" as "dead" is how a live worker's log gets sealed out
+ * from under its descriptor. ESRCH is the only answer that means gone.
+ *
+ * On Windows there are no signals and no kill; a pid there is answered
+ * conservatively as ALIVE, so adoption there rests on the staleness test
+ * alone - which is the safe direction. */
+static int por_pid_alive(int pid) {
+#ifdef _WIN32
+    PERL_UNUSED_VAR(pid);
+    return 1;
+#else
+    if (kill((pid_t)pid, 0) == 0) return 1;
+    return errno == EPERM ? 1 : 0;
+#endif
+}
+
+/* UNLINK, NEVER TRUNCATE. Named here so the one primitive retention is
+ * allowed to use is the one it reaches for: a truncated segment is SIGBUS for
+ * every reader mapping it, while an unlinked one keeps reading to the end for
+ * anyone already holding it. */
+static int po_unlink(const char *path) { return remove(path); }
+
+static int po_file_exists(const char *path) {
+    struct stat st;
+    return stat(path, &st) == 0;
+}
+
+/* Plain digits, and nothing else. A window or a byte count that is merely
+ * number-ISH - "7d", " 12", "1e6" - is a typo somebody would rather hear
+ * about at boot than discover as an empty store. */
+static int por_all_digits(pTHX_ SV *sv) {
+    STRLEN l = 0;
+    const char *p;
+    size_t i;
+    if (!sv || !SvOK(sv)) return 0;
+    p = SvPV(sv, l);
+    if (!l) return 0;
+    for (i = 0; i < l; i++) if (p[i] < '0' || p[i] > '9') return 0;
+    return 1;
+}
+
+/* One string-returning method on the store, or NULL if it dies. */
+static SV *por_call_str(pTHX_ SV *obj, const char *meth) {
+    dSP;
+    SV *r = NULL;
+    int n;
+    ENTER; SAVETMPS; PUSHMARK(SP);
+    XPUSHs(obj);
+    PUTBACK;
+    n = call_method(meth, G_SCALAR | G_EVAL);
+    SPAGAIN;
+    r = n ? SvREFCNT_inc(POPs) : NULL;
+    PUTBACK;
+    FREETMPS; LEAVE;
+    if (SvTRUE(ERRSV) || (r && !SvOK(r))) { if (r) SvREFCNT_dec(r); r = NULL; }
+    return r;
+}
+
+/* `$store->seal($path)` - adopting a named log rather than this worker's own.
+ * A die is caught: one log that cannot be sealed is counted and the pass goes
+ * on to the rest. */
+static SV *por_call_seal(pTHX_ SV *store, const char *path) {
+    dSP;
+    SV *r = NULL;
+    int n;
+    ENTER; SAVETMPS; PUSHMARK(SP);
+    XPUSHs(store);
+    XPUSHs(sv_2mortal(newSVpv(path, 0)));
+    PUTBACK;
+    n = call_method("seal", G_SCALAR | G_EVAL);
+    SPAGAIN;
+    r = n ? SvREFCNT_inc(POPs) : NULL;
+    PUTBACK;
+    FREETMPS; LEAVE;
+    if (SvTRUE(ERRSV) || (r && !SvOK(r))) { if (r) SvREFCNT_dec(r); r = NULL; }
+    return r;
+}
+
+/* ---- the cron closure ----------------------------------------------------
+ *
+ * `cron_task` hands back a coderef the host schedules, which means an XSUB
+ * that has to CARRY the options it was built with - the caller passes only
+ * the queue. An anonymous XSUB does that: the options ride on the CV as
+ * magic, which is also what frees them, so the closure owns its captures the
+ * way a Perl one would rather than leaking them for the life of the process.
+ */
+static MGVTBL por_cron_vtbl = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+/* One method call on the queue, discarding the result. */
+static void por_q_call(pTHX_ SV *q, const char *meth, SV **args, int nargs) {
+    dSP;
+    int i;
+    ENTER; SAVETMPS; PUSHMARK(SP);
+    XPUSHs(q);
+    for (i = 0; i < nargs; i++) XPUSHs(args[i]);
+    PUTBACK;
+    (void)call_method(meth, G_SCALAR | G_EVAL | G_DISCARD);
+    SPAGAIN;
+    PUTBACK;
+    FREETMPS; LEAVE;
+}
+
+static int por_q_lock(pTHX_ SV *q, const char *name, IV lease, IV owner) {
+    dSP;
+    int n, ok = 0;
+    ENTER; SAVETMPS; PUSHMARK(SP);
+    XPUSHs(q);
+    XPUSHs(sv_2mortal(newSVpv(name, 0)));
+    XPUSHs(sv_2mortal(newSViv(lease)));
+    XPUSHs(sv_2mortal(newSVpvs("owner")));
+    XPUSHs(sv_2mortal(newSViv(owner)));
+    PUTBACK;
+    n = call_method("lock", G_SCALAR | G_EVAL);
+    SPAGAIN;
+    if (n) ok = SvTRUE(POPs);
+    PUTBACK;
+    FREETMPS; LEAVE;
+    if (SvTRUE(ERRSV)) ok = 0;
+    return ok;
+}
+
+static void por_cron_thunk(pTHX_ CV *cv) {
+    dXSARGS;
+    /* `mg_find`, NOT `mg_findext`, which is 5.14 and this distribution says
+     * 5.10 - the same trap G_LIST sprang, and one a smoker would have found
+     * the same way. It is sufficient here rather than merely cheaper: the CV
+     * was created a line above the magic was attached to it, so it carries
+     * exactly one, and there is nothing for a vtable to disambiguate. */
+    MAGIC *mg = mg_find((SV *)cv, PERL_MAGIC_ext);
+    HV *o = (mg && mg->mg_obj && SvROK(mg->mg_obj)
+             && SvTYPE(SvRV(mg->mg_obj)) == SVt_PVHV)
+          ? (HV *)SvRV(mg->mg_obj) : NULL;
+    SV *q = items > 0 ? ST(0) : NULL;
+    SV **f;
+    SV *store = NULL, *keep = NULL, *bytes = NULL;
+    IV lease = 30, owner = 0, unlinked = 0;
+    SV *out = NULL;
+    SV *err = NULL;
+
+    if (!o || !q || !SvOK(q)) { ST(0) = sv_2mortal(newSViv(0)); XSRETURN(1); }
+    f = hv_fetchs(o, "store", 0);   if (f && SvOK(*f)) store = *f;
+    f = hv_fetchs(o, "keep_ns", 0); if (f && SvOK(*f)) keep = *f;
+    f = hv_fetchs(o, "bytes", 0);   if (f && SvTRUE(*f)) bytes = *f;
+    f = hv_fetchs(o, "lease", 0);   if (f && SvOK(*f)) lease = SvIV(*f);
+    f = hv_fetchs(o, "owner", 0);   if (f && SvOK(*f)) owner = SvIV(*f);
+    if (!store) { ST(0) = sv_2mortal(newSViv(0)); XSRETURN(1); }
+
+    /* LOSING THE RACE IS THE NORMAL CASE ON A POOL, not an error: one worker
+     * runs the pass and the rest report nothing done. */
+    if (!por_q_lock(aTHX_ q, "leader", lease, owner)) {
+        ST(0) = sv_2mortal(newSViv(0));
+        XSRETURN(1);
+    }
+
+    {
+        dSP;
+        int n;
+        ENTER; SAVETMPS; PUSHMARK(SP);
+        XPUSHs(sv_2mortal(newSVpvs("store"))); XPUSHs(store);
+        XPUSHs(sv_2mortal(newSVpvs("keep_ns"))); XPUSHs(keep ? keep : &PL_sv_undef);
+        if (bytes) { XPUSHs(sv_2mortal(newSVpvs("bytes"))); XPUSHs(bytes); }
+        PUTBACK;
+        n = call_pv("Punk::Observe::Retain::pass", G_SCALAR | G_EVAL);
+        SPAGAIN;
+        out = n ? SvREFCNT_inc(POPs) : NULL;
+        PUTBACK;
+        FREETMPS; LEAVE;
+        if (SvTRUE(ERRSV)) err = newSVsv(ERRSV);
+    }
+
+    /* THE LEASE IS RENEWED AND RELEASED WHETHER OR NOT THE PASS THREW. A
+     * holder that dies still holds it otherwise, and the next worker waits
+     * out the whole lease for nothing. */
+    {
+        SV *a[3];
+        a[0] = sv_2mortal(newSVpvs("leader"));
+        a[1] = sv_2mortal(newSViv(owner));
+        a[2] = sv_2mortal(newSViv(lease));
+        por_q_call(aTHX_ q, "renew_lock", a, 3);
+        por_q_call(aTHX_ q, "unlock", a, 2);
+    }
+
+    if (err) {
+        if (out) SvREFCNT_dec(out);
+        sv_setsv(ERRSV, err);
+        SvREFCNT_dec(err);
+        croak(NULL);            /* rethrow, preserving the message */
+    }
+    if (out) {
+        if (SvROK(out) && SvTYPE(SvRV(out)) == SVt_PVHV) {
+            SV **u = hv_fetchs((HV *)SvRV(out), "unlinked", 0);
+            if (u && SvOK(*u)) unlinked = SvIV(*u);
+        }
+        SvREFCNT_dec(out);
+    }
+    ST(0) = sv_2mortal(newSViv(unlinked));
+    XSRETURN(1);
+}
+
+/* `Punk::Plugin::Observe->state_for($class)`, or NULL when the worker is not
+ * running the same application the server compiled. */
+static SV *por_state_for(pTHX_ SV *class) {
+    dSP;
+    SV *r = NULL;
+    int n;
+    load_module(PERL_LOADMOD_NOIMPORT,
+                newSVpvs("Punk::Plugin::Observe"), NULL, NULL);
+    ENTER; SAVETMPS; PUSHMARK(SP);
+    XPUSHs(sv_2mortal(newSVpvs("Punk::Plugin::Observe")));
+    XPUSHs(class);
+    PUTBACK;
+    n = call_method("state_for", G_SCALAR | G_EVAL);
+    SPAGAIN;
+    r = n ? SvREFCNT_inc(POPs) : NULL;
+    PUTBACK;
+    FREETMPS; LEAVE;
+    if (SvTRUE(ERRSV) || (r && !SvROK(r))) {
+        if (r) SvREFCNT_dec(r);
+        r = NULL;
+    }
+    return r;
+}
+
+/* The store and the window the plugin was configured with. Borrowed from the
+ * state rather than copied: the caller uses them within this call. */
+static void por_job_opts(pTHX_ SV *st, SV **store, SV **keep, SV **bytes) {
+    HV *h;
+    SV **f, **ro;
+    *store = *keep = *bytes = NULL;
+    if (!st || !SvROK(st) || SvTYPE(SvRV(st)) != SVt_PVHV) return;
+    h = (HV *)SvRV(st);
+
+    {   /* store_for($st, $tenant): the tenant's own directory, made on
+         * demand, which is where a fixed-tenant mount keeps its data. */
+        dSP;
+        SV *tenant = NULL;
+        int n;
+        f = hv_fetchs(h, "tenant", 0);
+        if (f && SvROK(*f) && SvTYPE(SvRV(*f)) == SVt_PVHV) {
+            SV **fx = hv_fetchs((HV *)SvRV(*f), "fixed", 0);
+            if (fx && SvTRUE(*fx)) tenant = *fx;
+        }
+        ENTER; SAVETMPS; PUSHMARK(SP);
+        XPUSHs(st);
+        XPUSHs(tenant ? tenant : sv_2mortal(newSVpvs("default")));
+        PUTBACK;
+        SV *got = NULL;
+        n = call_pv("Punk::Plugin::Observe::store_for", G_SCALAR | G_EVAL);
+        SPAGAIN;
+        if (n) { SV *s = POPs; if (SvOK(s)) got = SvREFCNT_inc(s); }
+        PUTBACK;
+        FREETMPS; LEAVE;
+        /* MORTALISED AFTER THE SCOPE CLOSES, not inside it. A mortal made
+         * between SAVETMPS and FREETMPS is freed by that FREETMPS, and the
+         * caller was handed a store that had already gone - which arrived as
+         * "pass needs a store" from a call that plainly passed one. */
+        if (got) *store = sv_2mortal(got);
+    }
+
+    ro = hv_fetchs(h, "retain_opts", 0);
+    if (ro && SvROK(*ro) && SvTYPE(SvRV(*ro)) == SVt_PVHV) {
+        HV *r = (HV *)SvRV(*ro);
+        f = hv_fetchs(r, "keep_ns", 0); if (f && SvOK(*f)) *keep = *f;
+        f = hv_fetchs(r, "bytes", 0);   if (f && SvTRUE(*f)) *bytes = *f;
+    }
+}
+
+/* `$store->retain(bytes => N)` - the store's own byte-budget pass. */
+static SV *por_call_retain(pTHX_ SV *store, SV *bytes) {
+    dSP;
+    SV *r = NULL;
+    int n;
+    ENTER; SAVETMPS; PUSHMARK(SP);
+    XPUSHs(store);
+    XPUSHs(sv_2mortal(newSVpvs("bytes")));
+    XPUSHs(sv_2mortal(newSVsv(bytes)));
+    PUTBACK;
+    n = call_method("retain", G_SCALAR | G_EVAL);
+    SPAGAIN;
+    r = n ? SvREFCNT_inc(POPs) : NULL;
+    PUTBACK;
+    FREETMPS; LEAVE;
+    if (SvTRUE(ERRSV)) { if (r) SvREFCNT_dec(r); r = NULL; }
+    return r;
+}
+
+/* `Punk::Observe::Retain::adopt_orphans` from inside `pass`, so the two share
+ * one implementation rather than the pass growing a second copy. */
+static SV *por_adopt(pTHX_ SV *store, int dry) {
+    dSP;
+    SV *r = NULL;
+    int n;
+    ENTER; SAVETMPS; PUSHMARK(SP);
+    XPUSHs(sv_2mortal(newSVpvs("store")));
+    XPUSHs(store);
+    XPUSHs(sv_2mortal(newSVpvs("dry_run")));
+    XPUSHs(sv_2mortal(newSViv(dry)));
+    PUTBACK;
+    n = call_pv("Punk::Observe::Retain::adopt_orphans", G_SCALAR | G_EVAL);
+    SPAGAIN;
+    r = n ? SvREFCNT_inc(POPs) : NULL;
+    PUTBACK;
+    FREETMPS; LEAVE;
+    if (SvTRUE(ERRSV) || (r && !SvROK(r))) {
+        if (r) SvREFCNT_dec(r);
+        r = NULL;
+    }
+    return r;
+}
+
+/* Does this object answer to that method? Used where a newer name is
+ * preferred and an older one still has to work. */
+static int povw_can(pTHX_ SV *obj, const char *name) {
+    HV *stash;
+    if (!obj || !SvROK(obj)) return 0;
+    stash = SvSTASH(SvRV(obj));
+    if (!stash) return 0;
+    return gv_fetchmethod_autoload(stash, name, 0) ? 1 : 0;
+}
+
+static void povw_panel_fill(pTHX_ HV *panel, SV *src_panel, SV *store,
+                            SV *from, SV *to) {
+    dSP;
+    SV **x;
+    SV *chk = NULL;
+    const char *q = "";
+    STRLEN qlen = 0;
+
+    x = hv_fetchs(panel, "query", 0);
+    if (x && SvOK(*x)) q = SvPV(*x, qlen);
+
+    /* THE QUERY IS VALIDATED BY THE PARSER THAT WILL RUN IT. A panel saved
+     * with a query nothing can execute is a dashboard broken for everybody
+     * who opens it and for nobody who saved it. */
+    {
+        int n2;
+        ENTER; SAVETMPS; PUSHMARK(SP);
+        XPUSHs(src_panel);
+        PUTBACK;
+        n2 = call_pv("Punk::Observe::Dashboard::check_panel",
+                     G_SCALAR | G_EVAL);
+        SPAGAIN;
+        chk = n2 ? SvREFCNT_inc(POPs) : NULL;
+        PUTBACK;
+        FREETMPS; LEAVE;
+        SPAGAIN;
+    }
+
+    if (chk && SvROK(chk) && SvTYPE(SvRV(chk)) == SVt_PVHV
+        && (!(x = hv_fetchs((HV *)SvRV(chk), "ok", 0))
+            || !SvTRUE(*x))) {
+        SV **e = hv_fetchs((HV *)SvRV(chk), "error", 0);
+        hv_stores(panel, "refusal", (e && SvOK(*e))
+                  ? newSVsv(*e)
+                  : newSVpvs("that panel query is not valid"));
+    }
+    else if (SvOK(store) && SvROK(store)) {
+        SV *r = NULL;
+        int n2;
+        int plain_rows = 0;
+
+        /* THE BUDGET FOLLOWS THE SHAPE. A rows panel shows twenty lines, so
+         * a 20,000-row newest-first scan is generous; an AGGREGATE eats
+         * every row in the window, and the same budget silently narrowed a
+         * 6h chart to the newest fifteen minutes of a busy store - the
+         * range picker changed the URL and not the answer. So only a PLAIN
+         * rows query (where, search, limit, sort) is capped; anything that
+         * aggregates or ranks gets the store's own default, exactly what
+         * the explorer gives the identical query. Decided by kind rather
+         * than by naming the aggregate stages, so a future stage defaults
+         * to the full window, not to a silent sliver. */
+        {
+            po_query pq;
+            if (po_parse(&pq, q, (size_t)qlen)) {
+                po_stage *stg;
+                plain_rows = 1;
+                for (stg = pq.stages; stg; stg = stg->next)
+                    if (stg->kind != PO_ST_WHERE
+                     && stg->kind != PO_ST_SEARCH
+                     && stg->kind != PO_ST_LIMIT
+                     && stg->kind != PO_ST_SORT) {
+                        plain_rows = 0;
+                        break;
+                    }
+                po_query_free(&pq);
+            }
+        }
+
+        ENTER; SAVETMPS; PUSHMARK(SP);
+        XPUSHs(store);
+        XPUSHs(sv_2mortal(newSVpvn(q, qlen)));
+        XPUSHs(sv_2mortal(newSVpvs("from")));
+        XPUSHs(sv_2mortal(newSVsv(from)));
+        XPUSHs(sv_2mortal(newSVpvs("to")));
+        XPUSHs(sv_2mortal(newSVsv(to)));
+        if (plain_rows) {
+            XPUSHs(sv_2mortal(newSVpvs("limit")));
+            XPUSHs(sv_2mortal(newSViv(POVW_PANEL_ROWS)));
+        }
+        else {
+            /* A PARTIAL GRAPH IS A POINTLESS GRAPH. An aggregate that stops
+             * scanning mid-window draws a chart of some other window and
+             * labels it with this one - so an aggregate panel scans
+             * everything the range asks for. The store's budgets default to
+             * 500,000 when left unset; these are the explicit "no ceiling"
+             * spellings of all three. */
+            XPUSHs(sv_2mortal(newSVpvs("limit")));
+            XPUSHs(sv_2mortal(newSViv((IV)1 << 62)));
+            XPUSHs(sv_2mortal(newSVpvs("hard_max")));
+            XPUSHs(sv_2mortal(newSViv((IV)1 << 62)));
+            XPUSHs(sv_2mortal(newSVpvs("max_rows")));
+            XPUSHs(sv_2mortal(newSViv((IV)1 << 62)));
+        }
+        PUTBACK;
+        /* THE CACHED PATH, WHICH IS THE PLAIN ONE WHEN NO CACHE IS
+         * CONFIGURED. A panel is the query that is re-run most and changes
+         * least - the same twenty-four hours re-scanned on every refresh, of
+         * which all but the last few minutes has settled. `cached_query`
+         * decides for itself whether the query can be split; it is not this
+         * layer's business to know. */
+        /* `cached_query` WHERE THE STORE HAS IT, `query` otherwise. A store
+         * is a seam a host may implement itself, and the two differ only in
+         * whether the settled part is recomputed - so asking for the newer
+         * name must not be a requirement to grow it. */
+        n2 = call_method(povw_can(aTHX_ store, "cached_query")
+                         ? "cached_query" : "query", G_SCALAR);
+        SPAGAIN;
+        r = n2 ? SvREFCNT_inc(POPs) : NULL;
+        PUTBACK;
+        FREETMPS; LEAVE;
+        SPAGAIN;
+
+        if (r && SvROK(r) && SvTYPE(SvRV(r)) == SVt_PVHV) {
+            HV *rh = (HV *)SvRV(r);
+            SV **ok = hv_fetchs(rh, "ok", 0);
+            if (!ok || !SvTRUE(*ok)) {
+                SV **e = hv_fetchs(rh, "error", 0);
+                hv_stores(panel, "refusal", e ? newSVsv(*e) : newSV(0));
+            }
+            else {
+                SV **sh = hv_fetchs(rh, "shape", 0);
+                int rows = sh && SvOK(*sh)
+                        && strEQ(SvPV_nolen(*sh), "rows");
+                int buckets = sh && SvOK(*sh)
+                        && strEQ(SvPV_nolen(*sh), "buckets");
+                int mismatch = 0;
+
+                /* A TRUNCATED AGGREGATE IS A DIFFERENT ANSWER. Newest-first,
+                 * a truncated rows panel still shows the true newest twenty;
+                 * a truncated aggregate covers a sliver of the window and
+                 * looks complete. The chart cannot say it, so the panel
+                 * does. */
+                if (!rows) {
+                    SV **mv2 = hv_fetchs(rh, "meta", 0);
+                    HV *mh2 = (mv2 && SvROK(*mv2)
+                        && SvTYPE(SvRV(*mv2)) == SVt_PVHV)
+                        ? (HV *)SvRV(*mv2) : NULL;
+                    SV **tr2 = mh2
+                        ? hv_fetchs(mh2, "truncated", 0)
+                        : NULL;
+                    if (tr2 && SvTRUE(*tr2))
+                        povw_set_count(aTHX_ panel, "partial",
+                                       mh2, "scanned_rows");
+                }
+                {
+                    /* THE QUERY'S OWN `| viz` WINS over the panel column.
+                     * Both name a chart; when they disagree, the one written
+                     * next to the question is the one somebody meant - and
+                     * it is the one a saved view or a pasted explorer URL
+                     * carries. */
+                    SV **qv = hv_fetchs(rh, "viz", 0);
+                    if (qv && SvOK(*qv))
+                        hv_stores(panel, "viz", newSVsv(*qv));
+                }
+                {
+                    SV **vz2 = hv_fetchs(panel, "viz", 0);
+                    const char *vv = (vz2 && SvOK(*vz2))
+                                   ? SvPV_nolen(*vz2) : "line";
+                    int groups_shape = !rows && !buckets;
+                    /* A CHART KIND THE ANSWER CANNOT TAKE IS REFUSED, NOT
+                     * QUIETLY SUBSTITUTED. `bar` over a plain grouped answer
+                     * is one bar per group - the chart the metrics page
+                     * already draws for exactly this shape. */
+                    mismatch = (strEQ(vv, "area")
+                             || strEQ(vv, "stat")
+                             || (strEQ(vv, "bar")
+                                 && !groups_shape)) && !buckets;
+                    if (mismatch)
+                        hv_stores(panel, "refusal",
+                            newSVpvf("%s panels need a bucketed answer - "
+                                     "add | bucket(30s) to the query", vv));
+                }
+
+                /* NOT an early return on mismatch: a refused panel still has
+                 * to reach the page, or the reader loses the one thing that
+                 * would tell them why it is not there. */
+                if (mismatch) { }
+                else if (buckets) {
+                    /* 13, 17, 5, 9 is not information, and the legend needs
+                     * the names as much as the table does - so the result is
+                     * renamed BEFORE either is built. */
+                    if (povw_by_severity(q, (size_t)qlen))
+                        povw_name_severities(aTHX_ r);
+
+                    povw_fill_vars(aTHX_ panel,
+                        "Punk::Observe::Plot::bucket_vars", r);
+                }
+                else if (rows) {
+                    /* ROWS ARE NOT ALWAYS A LINE. The chart path plots each
+                     * row's `value`, which a metric row has and a log or
+                     * span row does not. Valueless rows render as a TABLE,
+                     * and `viz table` forces one even for metric rows. */
+                    SV **rv = hv_fetchs(rh, "rows", 0);
+                    AV *ra = (rv && SvROK(*rv)
+                              && SvTYPE(SvRV(*rv)) == SVt_PVAV)
+                             ? (AV *)SvRV(*rv) : NULL;
+                    SSize_t nr = ra ? av_len(ra) + 1 : 0;
+                    int has_val = 0, want_table = 0;
+                    if (nr) {
+                        SV **e0 = av_fetch(ra, 0, 0);
+                        SV **v0 = (e0 && SvROK(*e0))
+                            ? hv_fetchs((HV *)SvRV(*e0), "value", 0) : NULL;
+                        has_val = v0 && SvOK(*v0);
+                    }
+                    {
+                        SV **vz3 = hv_fetchs(panel, "viz", 0);
+                        want_table = vz3 && SvOK(*vz3)
+                            && strEQ(SvPV_nolen(*vz3), "table");
+                    }
+                    if (has_val && !want_table) {
+                        SV *series = NULL;
+                        int n3;
+                        ENTER; SAVETMPS; PUSHMARK(SP);
+                        XPUSHs(rv ? *rv
+                                  : sv_2mortal(newRV_noinc((SV *)newAV())));
+                        XPUSHs(sv_2mortal(newSVsv(from)));
+                        XPUSHs(sv_2mortal(newSVsv(to)));
+                        XPUSHs(sv_2mortal(newRV_inc((SV *)panel)));
+                        PUTBACK;
+                        n3 = call_pv("Punk::Observe::View::_series_paths",
+                                     G_SCALAR);
+                        SPAGAIN;
+                        series = n3 ? SvREFCNT_inc(POPs) : NULL;
+                        PUTBACK;
+                        FREETMPS; LEAVE;
+                        SPAGAIN;
+                        if (series) hv_stores(panel, "series", series);
+                    }
+                    else {
+                        /* A GLANCE, NOT A LOG VIEWER: twenty rows, newest as
+                         * the result orders them. The explorer link under
+                         * the panel is the way to the rest. */
+                        AV *out = newAV();
+                        SSize_t i2, mx = nr < 20 ? nr : 20;
+                        for (i2 = 0; i2 < mx; i2++) {
+                            SV **e = av_fetch(ra, i2, 0);
+                            HV *row, *o;
+                            SV **x3;
+                            char tb[64];
+                            size_t tn;
+                            const char *tp = "0";
+                            STRLEN tl = 1;
+                            if (!e || !SvROK(*e)) continue;
+                            row = (HV *)SvRV(*e);
+                            o = newHV();
+                            x3 = hv_fetchs(row, "t", 0);
+                            if (x3 && SvOK(*x3))
+                                tp = SvPV(*x3, tl);
+                            tn = po_fmt_time(tp, (size_t)tl, tb);
+                            hv_stores(o, "time", newSVpvn(tb, tn));
+                            x3 = hv_fetchs(row, "service", 0);
+                            hv_stores(o, "service", x3
+                                ? newSVsv(*x3) : newSVpvs(""));
+                            x3 = hv_fetchs(row, "body", 0);
+                            hv_stores(o, "body",
+                                (x3 && SvOK(*x3))
+                                ? newSVsv(*x3) : newSVpvs(""));
+                            x3 = hv_fetchs(row, "value", 0);
+                            hv_stores(o, "value",
+                                (x3 && SvOK(*x3))
+                                ? povw_num(aTHX_ *x3)
+                                : newSVpvs(""));
+                            av_push(out, newRV_noinc((SV *)o));
+                        }
+                        hv_stores(panel, "rows", newRV_noinc((SV *)out));
+                        hv_stores(panel, "has_value", newSViv(has_val));
+                        hv_stores(panel, "more",
+                                  newSViv(nr > mx ? (IV)nr : 0));
+                        /* HOW MANY ARE ACTUALLY SHOWN, so a cap change
+                         * cannot leave the note claiming eight. */
+                        hv_stores(panel, "shown", newSViv((IV)mx));
+                    }
+                }
+                else {
+                    AV *groups = newAV();
+                    SV **gv = hv_fetchs(rh, "groups", 0);
+
+                    /* One bar per group, when that is what the panel asked
+                     * for - the same figure the explorer draws. */
+                    SV **pv3 = hv_fetchs(panel, "viz", 0);
+                    if (pv3 && SvOK(*pv3)
+                        && strEQ(SvPV_nolen(*pv3), "bar")
+                        && gv && SvROK(*gv)) {
+                        SV *fig3 = NULL, *enc3 = NULL;
+                        int n3b;
+                        ENTER; SAVETMPS; PUSHMARK(SP);
+                        XPUSHs(*gv);
+                        PUTBACK;
+                        n3b = call_pv("Punk::Observe::Plot::bars", G_SCALAR);
+                        SPAGAIN;
+                        fig3 = n3b ? SvREFCNT_inc(POPs) : NULL;
+                        PUTBACK; FREETMPS; LEAVE; SPAGAIN;
+                        if (fig3) {
+                            ENTER; SAVETMPS; PUSHMARK(SP);
+                            XPUSHs(sv_2mortal(fig3));
+                            PUTBACK;
+                            n3b = call_pv("Punk::Observe::Plot::encode",
+                                          G_SCALAR);
+                            SPAGAIN;
+                            enc3 = n3b ? SvREFCNT_inc(POPs) : NULL;
+                            PUTBACK; FREETMPS; LEAVE; SPAGAIN;
+                            if (enc3)
+                                hv_stores(panel, "series_plot", enc3);
+                        }
+                    }
+                    if (gv && SvROK(*gv)
+                        && SvTYPE(SvRV(*gv)) == SVt_PVAV) {
+                        AV *ga = (AV *)SvRV(*gv);
+                        SSize_t j, m = av_len(ga) + 1;
+                        for (j = 0; j < m; j++) {
+                            SV **e = av_fetch(ga, j, 0);
+                            HV *g, *o;
+                            SV **y;
+                            if (!e || !SvROK(*e)) continue;
+                            g = (HV *)SvRV(*e);
+                            o = newHV();
+                            y = hv_fetchs(g, "key", 0);
+                            hv_stores(o, "key", y ? newSVsv(*y) : newSV(0));
+                            y = hv_fetchs(g, "value", 0);
+                            hv_stores(o, "value", y
+                                ? povw_fmt_value(aTHX_ (double)SvNV(*y))
+                                : newSVpvs("0"));
+                            av_push(groups, newRV_noinc((SV *)o));
+                        }
+                    }
+                    hv_stores(panel, "groups", newRV_noinc((SV *)groups));
+                }
+            }
+        }
+        if (r) SvREFCNT_dec(r);
+    }
+    if (chk) SvREFCNT_dec(chk);
+}
+
+/* The panel's template hashref from its source hashref: the metadata every
+ * render needs, body or no body. The KEY is what a deferred URL addresses:
+ * the SQL id when the panel has one (stable across reordering), else the
+ * index in the sorted panel list - a seam-supplied dashboard owes nobody an
+ * id column. */
+static HV *povw_panel_meta(pTHX_ HV *p, SSize_t idx) {
+    HV *panel = newHV();
+    SV **x;
+    const char *q = "";
+    STRLEN qlen = 0;
+
+    x = hv_fetchs(p, "title", 0);
+    hv_stores(panel, "title", x ? newSVsv(*x) : newSV(0));
+    x = hv_fetchs(p, "span", 0);
+    hv_stores(panel, "span",
+              newSViv(povw_grid((x && SvOK(*x)) ? SvIV(*x) : 0, 1)));
+    x = hv_fetchs(p, "query", 0);
+    if (x && SvOK(*x)) q = SvPV(*x, qlen);
+    {
+        char *esc;
+        size_t en;
+        Newx(esc, qlen * 3 + 1, char);
+        en = po_url_esc(q, (size_t)qlen, esc, qlen * 3 + 1);
+        hv_stores(panel, "query_esc", newSVpvn(esc, en));
+        Safefree(esc);
+    }
+    /* THE EDITOR NEEDS THE PANEL, not only the drawing of it: an id to
+     * address, the raw query to put back in the box, its order and its
+     * chart kind. */
+    hv_stores(panel, "query", newSVpvn(q, qlen));
+    x = hv_fetchs(p, "id", 0);
+    hv_stores(panel, "id", x ? newSVsv(*x) : newSV(0));
+    if (x && SvOK(*x) && SvTRUE(*x))
+        hv_stores(panel, "key", newSVsv(*x));
+    else
+        hv_stores(panel, "key", newSVpvf("i%d", (int)idx));
+    x = hv_fetchs(p, "position", 0);
+    hv_stores(panel, "position",
+              newSViv((x && SvOK(*x)) ? SvIV(*x) : 0));
+    x = hv_fetchs(p, "viz", 0);
+    hv_stores(panel, "viz",
+              (x && SvOK(*x)) ? newSVsv(*x) : newSVpvs("line"));
+    hv_stores(panel, "body",    newSVpvs(""));
+    hv_stores(panel, "refusal", newSVpvs(""));
+    return panel;
+}
+
 /* Does this row carry a trace to jump to? */
 static int povw_row_has_trace(pTHX_ SV *rowref) {
     HV *row;
@@ -2515,6 +4007,224 @@ static SV *povw_plot_ms(pTHX_ SV *ns_sv) {
     if (v <= (po_u64)IV_MAX) return newSViv((IV)v);
     return newSVnv((NV)v);
 }
+
+/* ---- the chunk cache's Perl-facing edges ---------------------------------
+ *
+ * The store and the cache are objects with methods, so these four are where
+ * the C in po_chunk.h reaches them. Kept together and small: everything that
+ * can go wrong at this seam - a store that dies, a cache that throws, a blob
+ * that will not decode - has to come out as "compute it again", never as a
+ * failed page.
+ */
+
+/* One plain scan. A die inside it is caught and becomes undef, because a
+ * chunk that cannot be computed should not take the panel with it. */
+static SV *poc_plain(pTHX_ SV *store, SV *q, po_u64 from, po_u64 to) {
+    dSP;
+    SV *r = NULL;
+    int n;
+    ENTER; SAVETMPS; PUSHMARK(SP);
+    XPUSHs(store);
+    XPUSHs(sv_2mortal(newSVsv(q)));
+    XPUSHs(sv_2mortal(newSVpvs("from")));  XPUSHs(sv_2mortal(po_u64_to_sv(from)));
+    XPUSHs(sv_2mortal(newSVpvs("to")));    XPUSHs(sv_2mortal(po_u64_to_sv(to)));
+    PUTBACK;
+    n = call_method("query", G_SCALAR | G_EVAL);
+    SPAGAIN;
+    r = n ? SvREFCNT_inc(POPs) : NULL;
+    PUTBACK;
+    FREETMPS; LEAVE;
+    if (SvTRUE(ERRSV)) { if (r) SvREFCNT_dec(r); r = NULL; }
+    return r;
+}
+
+/* The key names everything the answer depends on: the tenant, because a
+ * store is a directory per tenant and one cache may serve several; the chunk
+ * start and width, because they are what the entry covers; and the query
+ * VERBATIM rather than hashed - Punk::Cache takes any bytes and hashes the
+ * key into a path itself, so a digest here would be a digest over a digest,
+ * and a key somebody can read is a cache somebody can debug.
+ *
+ * NULL when the key would exceed what Punk::Cache accepts, which turns
+ * chunking off for that query instead of croaking in the middle of a render. */
+#define POC_KEY_MAX 4096
+static SV *poc_key(pTHX_ SV *store, SV *q, po_u64 start, po_u64 width,
+                   SV *tenant) {
+    SV *k = newSVpvs("po.chunk");
+    SV *t = tenant;
+
+    if (!t && SvROK(store) && SvTYPE(SvRV(store)) == SVt_PVHV) {
+        SV **f = hv_fetchs((HV *)SvRV(store), "tenant", 0);
+        if (f && SvOK(*f)) t = *f;
+    }
+    sv_catpvn(k, "\0", 1);
+    if (t && SvOK(t)) sv_catsv(k, t); else sv_catpvs(k, "default");
+    sv_catpvn(k, "\0", 1);
+    sv_catsv(k, sv_2mortal(po_u64_to_sv(start)));
+    sv_catpvn(k, "\0", 1);
+    sv_catsv(k, sv_2mortal(po_u64_to_sv(width)));
+    sv_catpvn(k, "\0", 1);
+    sv_catsv(k, q);
+    if (SvCUR(k) > POC_KEY_MAX) { SvREFCNT_dec(k); return NULL; }
+    return k;
+}
+
+static SV *poc_cache_get(pTHX_ SV *cache, SV *key) {
+    dSP;
+    SV *r = NULL;
+    int n;
+    ENTER; SAVETMPS; PUSHMARK(SP);
+    XPUSHs(cache);
+    XPUSHs(key);
+    PUTBACK;
+    n = call_method("get", G_SCALAR | G_EVAL);
+    SPAGAIN;
+    r = n ? SvREFCNT_inc(POPs) : NULL;
+    PUTBACK;
+    FREETMPS; LEAVE;
+    if (SvTRUE(ERRSV) || (r && !SvOK(r))) {
+        if (r) SvREFCNT_dec(r);
+        r = NULL;
+    }
+    return r;
+}
+
+static void poc_cache_set(pTHX_ SV *cache, SV *key,
+                          const unsigned char *buf, size_t len, IV ttl) {
+    dSP;
+    ENTER; SAVETMPS; PUSHMARK(SP);
+    XPUSHs(cache);
+    XPUSHs(key);
+    XPUSHs(sv_2mortal(newSVpvn((const char *)buf, len)));
+    XPUSHs(sv_2mortal(newSViv(ttl)));
+    PUTBACK;
+    (void)call_method("set", G_SCALAR | G_EVAL | G_DISCARD);
+    SPAGAIN;
+    PUTBACK;
+    FREETMPS; LEAVE;
+    /* A refused or failed store is not an error: the answer is already
+     * computed, and the next call recomputes it. */
+}
+
+/* A query result into the accumulator. Only a bucketed answer has anything
+ * to merge; anything else means the query was not what it was taken to be,
+ * and the caller falls back. */
+static int poc_ingest(pTHX_ po_cres *acc, SV *res) {
+    HV *h;
+    SV **f;
+    AV *series;
+    SSize_t i, n;
+
+    if (!res || !SvROK(res) || SvTYPE(SvRV(res)) != SVt_PVHV) return 0;
+    h = (HV *)SvRV(res);
+    f = hv_fetchs(h, "ok", 0);
+    if (!f || !SvTRUE(*f)) return 0;
+
+    f = hv_fetchs(h, "bucket_ns", 0);
+    if (f && SvOK(*f) && !acc->bucket_ns)
+        (void)po_sv_to_u64(aTHX_ *f, &acc->bucket_ns);
+
+    f = hv_fetchs(h, "meta", 0);
+    if (f && SvROK(*f) && SvTYPE(SvRV(*f)) == SVt_PVHV) {
+        HV *m = (HV *)SvRV(*f);
+        SV **x = hv_fetchs(m, "truncated", 0);
+        if (x && SvTRUE(*x)) acc->truncated = 1;
+        x = hv_fetchs(m, "exact", 0);
+        if (x && SvOK(*x) && !SvTRUE(*x)) acc->exact = 0;
+        x = hv_fetchs(m, "scanned_rows", 0);
+        if (x && SvOK(*x)) {
+            po_u64 sc = 0;
+            (void)po_sv_to_u64(aTHX_ *x, &sc);
+            acc->scanned += sc;
+        }
+    }
+
+    f = hv_fetchs(h, "series", 0);
+    if (!f || !SvROK(*f) || SvTYPE(SvRV(*f)) != SVt_PVAV) return 0;
+    series = (AV *)SvRV(*f);
+    n = av_len(series) + 1;
+    for (i = 0; i < n; i++) {
+        SV **e = av_fetch(series, i, 0);
+        HV *sh;
+        SV **kf, **pf;
+        po_cser *cs;
+        STRLEN kl = 0;
+        const char *kp = "";
+        AV *pts;
+        SSize_t j, pn;
+
+        if (!e || !SvROK(*e) || SvTYPE(SvRV(*e)) != SVt_PVHV) continue;
+        sh = (HV *)SvRV(*e);
+        kf = hv_fetchs(sh, "key", 0);
+        if (kf && SvOK(*kf)) kp = SvPV(*kf, kl);
+        cs = po_cres_series(acc, kp, (size_t)kl);
+        if (!cs) return 0;
+
+        pf = hv_fetchs(sh, "points", 0);
+        if (!pf || !SvROK(*pf) || SvTYPE(SvRV(*pf)) != SVt_PVAV) continue;
+        pts = (AV *)SvRV(*pf);
+        pn = av_len(pts) + 1;
+        for (j = 0; j < pn; j++) {
+            SV **p = av_fetch(pts, j, 0);
+            AV *pa;
+            SV **a0, **a1, **a2;
+            po_u64 at = 0, cnt = 0;
+            if (!p || !SvROK(*p) || SvTYPE(SvRV(*p)) != SVt_PVAV) continue;
+            pa = (AV *)SvRV(*p);
+            a0 = av_fetch(pa, 0, 0);
+            a1 = av_fetch(pa, 1, 0);
+            a2 = av_fetch(pa, 2, 0);
+            if (a0 && SvOK(*a0)) (void)po_sv_to_u64(aTHX_ *a0, &at);
+            if (a2 && SvOK(*a2)) (void)po_sv_to_u64(aTHX_ *a2, &cnt);
+            if (!po_cser_put(cs, at, (a1 && SvOK(*a1)) ? SvNV(*a1) : 0, cnt))
+                return 0;
+        }
+    }
+    return 1;
+}
+
+/* The merged answer, in the shape every caller of `query` already reads.
+ * Points before `min_at` are dropped: a chunk starts on a chunk edge, which
+ * can be earlier than the window asked for, and a plain query would not have
+ * returned those buckets. */
+static SV *poc_emit(pTHX_ const po_cres *acc, po_u64 min_at, int chunks) {
+    HV *res = newHV();
+    HV *meta = newHV();
+    AV *series = newAV();
+    size_t i, j;
+
+    for (i = 0; i < acc->n; i++) {
+        HV *sh = newHV();
+        AV *pts = newAV();
+        for (j = 0; j < acc->s[i].n; j++) {
+            AV *p;
+            if (acc->s[i].pt[j].at < min_at) continue;
+            p = newAV();
+            av_push(p, po_u64_to_sv(acc->s[i].pt[j].at));
+            av_push(p, newSVnv((NV)acc->s[i].pt[j].value));
+            av_push(p, po_u64_to_sv(acc->s[i].pt[j].count));
+            av_push(pts, newRV_noinc((SV *)p));
+        }
+        hv_stores(sh, "key", newSVpvn(acc->s[i].key, acc->s[i].klen));
+        hv_stores(sh, "points", newRV_noinc((SV *)pts));
+        av_push(series, newRV_noinc((SV *)sh));
+    }
+
+    hv_stores(meta, "truncated",    newSViv(acc->truncated ? 1 : 0));
+    hv_stores(meta, "exact",        newSViv(acc->exact ? 1 : 0));
+    hv_stores(meta, "scanned_rows", po_u64_to_sv(acc->scanned));
+
+    hv_stores(res, "ok",        newSViv(1));
+    hv_stores(res, "shape",     newSVpvs("buckets"));
+    hv_stores(res, "series",    newRV_noinc((SV *)series));
+    hv_stores(res, "bucket_ns", po_u64_to_sv(acc->bucket_ns));
+    hv_stores(res, "meta",      newRV_noinc((SV *)meta));
+    hv_stores(res, "groups",    newRV_noinc((SV *)newAV()));
+    hv_stores(res, "rows",      newRV_noinc((SV *)newAV()));
+    hv_stores(res, "cached_chunks", newSViv(chunks));
+    return newRV_noinc((SV *)res);
+}
+
 
 MODULE = Punk::Observe   PACKAGE = Punk::Observe
 
@@ -2556,6 +4266,8 @@ INCLUDE: xs/alert.xs
 INCLUDE: xs/tenant.xs
 
 INCLUDE: xs/store.xs
+
+INCLUDE: xs/chunk.xs
 
 INCLUDE: xs/view.xs
 

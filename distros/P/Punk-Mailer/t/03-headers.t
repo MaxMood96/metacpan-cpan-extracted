@@ -30,7 +30,10 @@ use Punk::Mailer;
                  'a@example.com>', 'Alice <a@example.com', 'a@.example.com',
                  'a@example.com.', '', 'Alice <a@x> <b@y>', 'a<b@example.com',
                  "a\@example.com\r\nBcc: x\@evil.example") {
-        ok(!eval { Punk::Mailer::_address($bad); 1 }, "refused: " . ($bad =~ s/\r\n/\\r\\n/gr));
+        # s///r is 5.14; this dist runs on 5.10.
+        my $shown = $bad;
+        $shown =~ s/\r\n/\\r\\n/g;
+        ok(!eval { Punk::Mailer::_address($bad); 1 }, "refused: $shown");
         like($@, qr/not an address|carriage return/, '  with a reason');
     }
 }

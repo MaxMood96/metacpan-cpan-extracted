@@ -19,11 +19,11 @@ Regexp::Pattern::License - Regular expressions for legal licenses
 
 =head1 VERSION
 
-Version v3.11.2
+Version v3.11.3
 
 =cut
 
-our $VERSION = version->declare("v3.11.2");
+our $VERSION = version->declare("v3.11.3");
 
 =head1 SYNOPSIS
 
@@ -85,6 +85,11 @@ L<Regexp::Pattern> is a convention for organizing reusable regex patterns.
 # [tm]          trademark, maybe space before
 # [word]        word
 # [ word]       space and word
+
+# Any pattern above not listed in %_ANNOTATIONS below
+# is passed through literally:
+# the brackets are stripped and the inner text is emitted as-is.
+# (e.g. [.] and [+] are documented above but intentionally not defined.)
 
 my %_ANNOTATIONS = (
 	'[. ]'  => '(?:\.\s{1,3})',
@@ -249,11 +254,6 @@ $RE{addr_fsf_franklin} = {
 	tags    => [
 		'type:trait:address:gnu',
 	],
-
-	'pat.alt.subject.trait' =>
-		'(?P<_addr_fsf_franklin>51 Franklin [Ss]t(?:reet|(?P<_addr_fsf_franklin_steet>eet)|\.)?, '
-		. '(?:Fifth|5th) [Ff]loor(?:[;]? |[ - ])'
-		. 'Boston,? MA 02110[-]1301,? USA[.]?)',
 };
 
 $RE{addr_fsf_franklin_steet} = {
@@ -264,10 +264,13 @@ $RE{addr_fsf_franklin_steet} = {
 	],
 
 	'pat.alt.subject.trait' =>
-		'(?P<_addr_fsf_franklin_steet>51 Franklin [Ss]teet, '
-		. '(?:Fifth|5th) [Ff]loor(?:[;]? |[ - ])'
-		. 'Boston,? MA 02110[-]1301,? USA[.]?)',
+		'(?P<_addr_fsf_franklin_steet>51 Franklin [Ss]teet)',
 };
+
+$RE{addr_fsf_franklin}{'pat.alt.subject.trait'}
+	= "(?P<_addr_fsf_franklin>(?:51 Franklin [Ss]t(?:reet|\.)?|$RE{addr_fsf_franklin_steet}{'pat.alt.subject.trait'}), "
+	. '(?:Fifth|5th) [Ff]loor(?:[;]? |[ - ])'
+	. 'Boston,? MA 02110[-]1301,? USA[.]?)';
 
 $RE{addr_fsf_mass} = {
 	caption => 'obsolete FSF postal address (Mass Ave)',
@@ -385,7 +388,7 @@ $RE{by_james_clark} = {
 	],
 
 	'pat.alt.subject.trait' =>
-		'(?P<_by_hames_clark> ?(?:as )?published by James Clark)',
+		'(?P<_by_james_clark> ?(?:as )?published by James Clark)',
 };
 
 $RE{by_psf} = {
@@ -688,7 +691,7 @@ $RE{except_bison_2_2} = {
 		. 'using the skeleton or a modified version thereof '
 		. 'as a parser skeleton[.]'
 		. 'Alternatively, if you modify or redistribute the parser skeleton itself, '
-		. 'yoy may [(]at your option[)] remove this special exception, '
+		. 'you may [(]at your option[)] remove this special exception, '
 		. 'which will cause the skeleton and the resulting Bison output files '
 		. 'to be licensed under the GNU General Public License '
 		. 'without this special exception[.][  ]',
@@ -10270,6 +10273,13 @@ $RE{mit_oldstyle} = {
 	'summary.alt.org.fedora.iri.mit' => 'MIT-style license, Old Style',
 	description                      => <<'END',
 Origin: Possibly by Jamie Zawinski in 1993 for xscreensaver.
+
+Identical to NTP, except...
+* add explicit permission to sell
+* omit explicit permission to charge or not charge fee
+* extend permissions with note that they are granted without fee
+* omit non-endorsement clause
+* rephrase no-reprensetation disclaimer
 END
 	tags => [
 		'family:mit',
@@ -10279,6 +10289,16 @@ END
 
 	'pat.alt.subject.license.scope.line.scope.paragraph' =>
 		'documentation[. ]No representations are made',
+	'pat.alt.subject.license.scope.paragraph' =>
+		'Permission to use, copy, modify, distribute, and sell '
+		. 'this software and its documentation '
+		. 'for any purpose is hereby granted without fee, '
+		. 'provided that the above copyright notice appears? in all copies,?(?: and)? '
+		. 'that both(?: that)?(?: the)? copyright notice '
+		. 'and this permission notice appear in supporting documentation[. ]'
+		. 'No representations are made about the suitability of this software for any purpose[. ]'
+		. 'It is '
+		. $P{asis_expr_warranty},
 };
 
 =item * mit_oldstyle_disclaimer
@@ -11290,6 +11310,7 @@ $RE{ntp_disclaimer} = {
 	caption               => 'NTP License (legal disclaimer)',
 	tags                  => [
 		'family:mit',
+		'license:contains:license:ntp',
 		'license:is:grant',
 		'type:unversioned',
 	],
@@ -15372,7 +15393,7 @@ for my $id (@_OBJECTS) {
 				{ prefix => '\b', suffix => $version ? '' : '\b' },
 
 				# TODO: use { s/-/[-]/gr } when needing perl 5.14 anyway
-				map      { my $s = $_; $s =~ s/-/[-]/g; $s; }
+				map { my $s = $_; $s =~ s/-/[-]/g; $s; }
 					grep { not exists $multiword_pat{$_} }
 					sort { length($b) <=> length($a) || $a cmp $b }
 					keys %singleword_pat,
@@ -15475,8 +15496,8 @@ for my $id (@_OBJECTS) {
 		$RE{$id}{"pat.alt.subject.$subject"}
 			//= _join_pats( $RE{$id}{"_pat.alt.subject.$subject"} )
 			|| _join_pats(
-			map      { $RE{$id}{$_} }
-				sort { length($b) <=> length($a) || $a cmp $b }
+			map  { $RE{$id}{$_} }
+			sort { length($b) <=> length($a) || $a cmp $b }
 				keys %{ $subject_pat{$subject} }
 			) or delete $RE{$id}{"pat.alt.subject.$subject"};
 	}

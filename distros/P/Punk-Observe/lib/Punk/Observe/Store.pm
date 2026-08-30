@@ -23,8 +23,19 @@ my %SOURCE_KIND = (
     spans  => KIND_SPAN,
 );
 
-
-
+# THE SAME ANSWER, WITH THE SETTLED PART NOT RECOMPUTED.
+#
+# One name the renderer can call whether or not a cache was configured, so the
+# decision lives here rather than in every caller: with a cache and a bucketed
+# query this splits the window and reuses the chunks that have settled; with
+# neither it is `query`. See Punk::Observe::Cache for why concatenating
+# chunks is exact rather than approximate.
+sub cached_query {
+    my ($self, $q, %opt) = @_;
+    return $self->query($q, %opt) unless $self->{cache};
+    require Punk::Observe::Cache;
+    return Punk::Observe::Cache::query($self, $q, %opt, cache => $self->{cache});
+}
 
 1;
 
@@ -144,6 +155,26 @@ C<degraded> and C<truncated>.
 
 The same, mapped into the executor's row shape.
 
+=head2 generation
+
+    my $gen = $store->generation;
+
+An opaque token that changes whenever the set of files changes - a seal, a
+new live log, a retention unlink. One stat. An append to an existing live
+log does not move it; the token means "the sealed data is as it was", not
+"nothing arrived". Empty string when the store directory cannot be read.
+
+=head2 metric_names
+
+    my ($names, $meta) = $store->metric_names(from => $t0, to => $t1);
+
+The distinct metric names seen in the range, as a hashref of name to how
+many points carried it. This is the metrics landing page's question, and it
+is answered without materialising a record per point. C<%meta> reports
+C<scanned> (metric points tallied), C<files>, C<skipped>, C<degraded> and
+C<truncated> - the tally stops at C<max_rows> points, and a stopped answer
+says so.
+
 =head2 row
 
     my $row = Punk::Observe::Store->row($record);
@@ -162,6 +193,20 @@ L<Punk::Observe::Exec/run>'s, plus C<store> describing what was read.
 
 B<Read the metadata.> A caller that renders C<rows> without checking
 C<< meta->{truncated} >> renders a partial answer as a complete one.
+
+=head2 cached_query
+
+    my $r = $store->cached_query($source, from => $t0, to => $t1);
+
+The same answer L</query> gives, with the settled part of the window not
+recomputed. One name a renderer can call whether or not a C<cache> was passed
+to L</new>: with a cache and a bucketed query the window is split and the
+chunks that have settled are reused; with neither this B<is> L</query>.
+
+The panel renderer calls this, because a dashboard panel is the query that is
+re-run most and changes least. L<Punk::Observe::Cache> carries why splitting a
+window and concatenating the pieces is exact rather than approximate, and
+which queries cannot be split at all.
 
 =head2 graph
 
@@ -243,6 +288,16 @@ than parsing, so it keeps working on values too wide for a C<uint64> - which
 is what stops a future timestamp format sorting into the wrong century.
 C<nadd> saturates and C<nsub> clamps at zero, because a horizon that wrapped
 to zero would delete everything.
+
+=head2 nfloor
+
+    my $edge = Punk::Observe::Store::nfloor($t, $width);
+
+An instant rounded B<down> to a multiple - the start of the bucket or chunk it
+falls in, and the same division the executor buckets with. In C<uint64>,
+because that is the part that has to be exact: an instant is past 2^53, so
+C<< int($t / $w) * $w >> in Perl rounds the product and lands on an edge that
+is close to the right one and is not it.
 
 =head2 scan
 

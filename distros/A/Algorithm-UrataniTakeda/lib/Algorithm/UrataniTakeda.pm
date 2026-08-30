@@ -8,7 +8,7 @@ use Object::Pad;
 
 package Algorithm::UrataniTakeda;
 
-our $VERSION = 'v0.1.4';
+our $VERSION = 'v0.1.5';
 
 use Carp ();
 use List::Util ();
@@ -17,6 +17,7 @@ use List::Util ();
 class Algorithm::UrataniTakeda {
 
     field $states = [];
+    field $fails  = [];
     field $ends   = [];
     field $left   = [];
     field $depth  = [];
@@ -153,24 +154,28 @@ class Algorithm::UrataniTakeda {
         my $n      = $#string;
 
         my $q = $min;
+        my $c;
 
       TEXT: while ( $q <= $n ) {
-
             my $z = 0;
-            while ( $q >= 0 && $states->[$z]{ $string[$q] } ) {
-                $z = $states->[$z]{ $string[$q] };
+            while ( $q >= 0 && $states->[$z]{ $c = $string[$q] } ) {
+                $z = $states->[$z]{$c};
                 if ( $ends->[$z] ) {
                     $callback->( $q, $ends->[$z] ) or last TEXT;
                 }
                 $q--;
             }
 
-            # calculate minimum failure shift
-            my $a = $shift1->[$z]{ $string[$q] };
-            my $b = $shift2->[$z];
-            $b = $a if $a && $a < $b;
+            # calculate and memoise the failure shift
+            my $f = (
+                $fails->[$z]{$c} //= do {
+                    my $a = $shift1->[$z]{$c};
+                    my $b = $shift2->[$z];
+                    ( $a && $a < $b ) ? $a : $b;
+                }
+            );
 
-            $q += $b;
+            $q += $f;
 
             last if $q > $n;
 
@@ -249,7 +254,7 @@ Algorithm::UrataniTakeda - an implementation of the Uratani-Takeda string search
 
 =head1 VERSION
 
-version v0.1.4
+version v0.1.5
 
 =head1 SYNOPSIS
 
@@ -330,6 +335,23 @@ This returns the first match, or C<undef> if there are none.
 This returns true if there is a match.
 
 This was added in v0.1.2.
+
+=head1 KNOWN ISSUES
+
+When some of the L</patterns> are substrings other patterns, the order results returned by L</matches> or even L</first>
+may not be consistent.
+
+To ensure consistent ordering, you need to use the L</search> method with a custom sort.
+For example, to to get the keywords sorted by position and then longest-match-first, use:
+
+    my @raw;
+
+    $m->search( $text, sub ( $pos, $phrase ) { push @raw, [ $pos, $phrase ] } );
+
+    my @results =
+      map { $_->[1] }
+      sort { $a->[0] <=> $b->[0] || length( $b->[1] ) <=> length( $a->[1] ) }
+      @raw;
 
 =head1 SEE ALSO
 

@@ -1,7 +1,8 @@
 package API::Docker::API::Exec;
 # ABSTRACT: Docker Engine Exec API
-our $VERSION = '0.003';
+our $VERSION = '0.004';
 use Moo;
+with 'API::Docker::Role::Using', 'API::Docker::Role::JSONBody';
 use Carp qw( croak );
 use namespace::clean;
 
@@ -13,10 +14,18 @@ has client => (
 );
 
 
+# The ExecConfig booleans of spec/v1.51.yaml. The engine rejects a number for
+# any of them, so 1/0 is normalised to a JSON boolean on the way out; a caller
+# may still pass 1/0 (or a JSON boolean) and it goes out correctly either way.
+my @EXEC_CONFIG_BOOLS = qw(
+  AttachStdin AttachStdout AttachStderr Tty Privileged
+);
+
 sub create {
   my ($self, $container_id, %config) = @_;
   croak "Container ID required" unless $container_id;
   croak "Cmd required" unless $config{Cmd};
+  $self->_json_bools(\%config, @EXEC_CONFIG_BOOLS);
   return $self->client->post("/containers/$container_id/exec", \%config);
 }
 
@@ -28,9 +37,14 @@ sub start {
     Detach => $opts{Detach} ? \1 : \0,
     Tty    => $opts{Tty}    ? \1 : \0,
   };
+  # exists, not truth: an unset callback is a caller bug, and falling back to
+  # the buffered path for it would answer a long-running command by waiting
+  # for it in silence. Handed over as it is, the transport says so instead.
   return $self->client->stream_frames('POST', "/exec/$exec_id/start",
     body => $body,
     $opts{Tty} ? ( tty => 1 ) : (),
+    %{ $self->_request_options },
+    exists $opts{on_frame} ? ( on_frame => $opts{on_frame} ) : (),
   );
 }
 
@@ -41,14 +55,19 @@ sub resize {
   my %params;
   $params{h} = $opts{h} if defined $opts{h};
   $params{w} = $opts{w} if defined $opts{w};
-  return $self->client->post("/exec/$exec_id/resize", undef, params => \%params);
+  return $self->client->post("/exec/$exec_id/resize", undef,
+    params => \%params,
+    %{ $self->_request_options },
+  );
 }
 
 
 sub inspect {
   my ($self, $exec_id) = @_;
   croak "Exec ID required" unless $exec_id;
-  return $self->client->get("/exec/$exec_id/json");
+  return $self->client->get("/exec/$exec_id/json",
+    %{ $self->_request_options },
+  );
 }
 
 
@@ -67,7 +86,7 @@ API::Docker::API::Exec - Docker Engine Exec API
 
 =head1 VERSION
 
-version 0.003
+version 0.004
 
 =head1 SYNOPSIS
 
@@ -95,7 +114,9 @@ version 0.003
 This module provides methods for executing commands inside running containers
 using the Docker Exec API.
 
-Accessed via C<< $docker->exec >>.
+Accessed via C<< $docker->exec >>, or through
+L<API::Docker::Role::Using/using> for a run of calls that needs its own
+transport bound: C<< $docker->exec->using(read_timeout => 5) >>.
 
 =head2 client
 
@@ -116,6 +137,12 @@ Required config: C<Cmd> (ArrayRef of command and arguments).
 
 Common config keys: C<AttachStdin>, C<AttachStdout>, C<AttachStderr>, C<Tty>,
 C<Env>, C<User>, C<WorkingDir>.
+
+The boolean flags (C<AttachStdin>, C<AttachStdout>, C<AttachStderr>, C<Tty>,
+C<Privileged>) may be given as a Perl C<1>/C<0> or as a JSON boolean; either
+goes out as a real JSON C<true>/C<false>, which the engine's body type-check
+requires. Passing C<1> where the daemon wants a boolean would otherwise be
+rejected.
 
 =head2 start
 
@@ -152,13 +179,60 @@ to L</create>, and it also suppresses demultiplexing of the response. Framing is
 otherwise detected from the response bytes -- see
 L<API::Docker::Role::HTTP/"Detecting a framed stream">
 
+=item * C<on_frame> - CodeRef called with each frame as it arrives, instead of
+the ArrayRef being collected and returned; see below
+
 =back
+
+=head2 Watching the output as it is produced
+
+Without a callback this returns when the command has finished and the daemon
+has closed the stream -- a command that runs for a minute is a minute of
+silence, and one that never finishes never returns. Pass C<on_frame> and the
+frames are handed over as they arrive:
+
+    my $summary = $exec->start($exec_id,
+        on_frame => sub {
+            my ($frame, $stop) = @_;
+            print $frame->{data};
+            $stop->() if $frame->{data} =~ /ready/;
+        },
+    );
+
+    $summary;   # { delivered => 9, stopped => 1 }
+
+With a callback the return value is that summary HashRef, not the frames:
+C<delivered> is how many went to the callback, C<stopped> is 1 when the
+callback ended the stream and 0 when the daemon did. Nothing is accumulated,
+so joining the output is the callback's job. See
+L<API::Docker::Role::HTTP/"Streaming a response as it arrives">.
+
+A detached start produces no output, so its summary is
+C<< { delivered => 0, stopped => 0 } >> where the buffered call returns an
+empty ArrayRef.
+
+C<Tty> means something stronger on this path. The buffered path decides
+framing by walking the whole body, which is exactly what a streamed one does
+not have; so with C<on_frame> it is a promise about the exec instance rather
+than a hint, and an undeclared stream that turns out not to be framed croaks
+instead of being handed back raw. Pass the same C<Tty> that went to L</create>
+-- the engine expects them to agree in any case.
 
 =head2 resize
 
     $exec->resize($exec_id, h => 40, w => 120);
 
-Resize the TTY for an exec instance. Options: C<h> (height), C<w> (width).
+Resize the TTY for an exec instance.
+
+Options:
+
+=over
+
+=item * C<h> - New height in character rows
+
+=item * C<w> - New width in character columns
+
+=back
 
 =head2 inspect
 

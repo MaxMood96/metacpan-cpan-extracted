@@ -61,7 +61,7 @@ static const char *po_viz_name(int v) {
 typedef struct {
     int    viz;
     int    position;
-    int    cols;
+    int    span;      /* columns this panel occupies, 1..PO_PANEL_COLS_MAX */
     char   err[256];
 } po_panel;
 
@@ -71,15 +71,15 @@ typedef struct {
 static int po_panel_check(po_panel *p, const char *title, size_t tlen,
                           const char *query, size_t qlen,
                           const char *viz, size_t vlen,
-                          int position, int cols) {
+                          int position, int span) {
     po_query q;
     size_t i;
 
     memset(p, 0, sizeof(*p));
     p->viz      = po_viz_from(viz ? viz : "", vlen);
     p->position = position < 0 ? 0 : position;
-    p->cols     = (cols < 1) ? 1 : (cols > PO_PANEL_COLS_MAX
-                                    ? PO_PANEL_COLS_MAX : cols);
+    p->span     = (span < 1) ? 1 : (span > PO_PANEL_COLS_MAX
+                                    ? PO_PANEL_COLS_MAX : span);
 
     if (!title || !tlen) {
         memcpy(p->err, "a panel needs a title", 22);

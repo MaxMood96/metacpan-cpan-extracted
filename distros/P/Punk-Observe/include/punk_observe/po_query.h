@@ -63,6 +63,13 @@
 #define PO_V_NUMBER   2
 #define PO_V_DURATION 3
 #define PO_V_SEVERITY 4
+/* `null` - the absence test. A comparison against an absent field is false
+ * in BOTH directions, which is right and leaves no way to ask "does this row
+ * carry the attribute at all"; grouping then buries the answer in a (none)
+ * bucket. `x != null` is that question. Only = and != mean anything against
+ * absence, and every other consumer of a value kind ignores this one, which
+ * is what keeps the pushdown honest: there is no value here to prune on. */
+#define PO_V_NULL     5
 
 /* expression node kinds */
 #define PO_E_AND 1
@@ -145,6 +152,11 @@ typedef struct {
     const char *name; size_t name_len;   /* metric name */
     po_expr  *selector;                  /* {a="b"} sugar, folded to a where */
     po_stage *stages;
+    /* `| viz bar` - HOW to draw the answer, which is why it is a field here
+     * and not a stage in the list above: every stage transforms rows, and a
+     * presentation hint transforms nothing. A stage kind the planner had no
+     * case for is exactly how `top N` shipped doing nothing. */
+    const char *viz; size_t viz_len;
     /* everything above is allocated in this bump and freed with it */
     po_bump   bump;
     char      err[256];
@@ -229,6 +241,37 @@ static int po_severity_value(const char *p, size_t len, po_u64 *out) {
         { "trace", 1 }, { "debug", 5 }, { "info", 9 },
         { "warn", 13 }, { "warning", 13 },
         { "error", 17 }, { "fatal", 21 }, { NULL, 0 }
+    };
+    int i;
+    for (i = 0; S[i].n; i++) {
+        size_t n = strlen(S[i].n);
+        if (n == len) {
+            size_t k; int eq = 1;
+            for (k = 0; k < len; k++) {
+                char a = p[k], b = S[i].n[k];
+                if (a >= 'A' && a <= 'Z') a = (char)(a - 'A' + 'a');
+                if (a != b) { eq = 0; break; }
+            }
+            if (eq) { *out = (po_u64)S[i].v; return 1; }
+        }
+    }
+    return 0;
+}
+
+/* OTLP span status names. `status = error` is a NUMERIC comparison too.
+ *
+ * The scale is tiny and closed - unset, ok, error - and the names are what
+ * the screens print, so they are what a person types. Resolved at parse time
+ * to the number the row holds, exactly as the severity names are, and for the
+ * same reason: string-comparing a numeric column would make `status > "3"`
+ * mean something absurd, and would leave a typo silently matching nothing.
+ *
+ * `error` is BOTH a severity name and a status name. Which one a bare word
+ * means is decided by the column it is compared against, which the parser
+ * already knows by the time it reads the value. */
+static int po_status_value(const char *p, size_t len, po_u64 *out) {
+    struct { const char *n; int v; } S[] = {
+        { "unset", 0 }, { "ok", 1 }, { "error", 2 }, { NULL, 0 }
     };
     int i;
     for (i = 0; S[i].n; i++) {

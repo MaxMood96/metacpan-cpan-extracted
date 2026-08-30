@@ -1,62 +1,43 @@
 package API::Docker::Image;
-# ABSTRACT: Docker image entity
-our $VERSION = '0.003';
-use Moo;
-use namespace::clean;
+# ABSTRACT: Removed in 0.004 -- replaced by API::Docker::Type::ImageSummary and ImageInspect
+our $VERSION = '0.004';
+use strict;
+use warnings;
+use Carp qw( croak );
 
+# A removed class, kept as a stub on purpose (karr k92). A module that
+# disappears from a distribution does not disappear from the disks it was
+# installed on: the old file stays behind and keeps loading, so deleting it
+# here would leave a working API::Docker::Image shadowing this release for
+# everyone who ever installed the last one. Shipping a file overwrites it;
+# shipping nothing does not.
+#
+# It refuses instead of working, and it refuses at load rather than at the
+# first method call, because that is the earliest point at which the caller
+# can be told -- and because @Author::GETTY generates no compile-all author
+# test that a dying module would fail. Measured on 2026-08-28: the bundle
+# generates exactly xt/author/pod-syntax.t, which parses POD without loading
+# anything, and xt/release/changes_has_content.t, which only reads Changes.
+my $REFUSED =
+  __PACKAGE__ . ' was removed in API::Docker 0.004 and this file is a stub'
+  . ' with nothing in it: it ships only so that installing this'
+  . ' release overwrites the working copy an earlier one left on'
+  . ' disk. You have not hit a fault in the distribution. The'
+  . ' images the daemon answers with are'
+  . ' API::Docker::Type::ImageSummary (images->list) and'
+  . ' API::Docker::Type::ImageInspect (images->inspect), with the'
+  . ' field names the swagger\'s own in snake_case, and inspect,'
+  . ' history, tag and remove are unchanged on them, composed in'
+  . ' from API::Docker::Role::Entity::Image. This stub refuses';
 
-has client => (
-  is       => 'ro',
-  weak_ref => 1,
-);
+# The croak below is what a caller normally hits. AUTOLOAD is for the one who
+# swallowed it -- eval { require API::Docker::Image } and then called a
+# method anyway; the answer has to be the same one, not a bare "Can't locate
+# object method". DESTROY is defined so it does not reach AUTOLOAD.
+sub AUTOLOAD { croak $REFUSED }
+sub DESTROY  { }
 
-
-has Id           => (is => 'ro');
-
-
-has ParentId     => (is => 'ro');
-has RepoTags     => (is => 'ro');
-
-
-has RepoDigests  => (is => 'ro');
-has Created      => (is => 'ro');
-has Size         => (is => 'ro');
-
-
-has SharedSize   => (is => 'ro');
-has VirtualSize  => (is => 'ro');
-has Labels       => (is => 'ro');
-has Containers   => (is => 'ro');
-
-has Architecture => (is => 'ro');
-has Os           => (is => 'ro');
-has Config       => (is => 'ro');
-has RootFS       => (is => 'ro');
-has Metadata     => (is => 'ro');
-
-sub inspect {
-  my ($self) = @_;
-  return $self->client->images->inspect($self->Id);
-}
-
-
-sub history {
-  my ($self) = @_;
-  return $self->client->images->history($self->Id);
-}
-
-
-sub tag {
-  my ($self, %opts) = @_;
-  return $self->client->images->tag($self->Id, %opts);
-}
-
-
-sub remove {
-  my ($self, %opts) = @_;
-  return $self->client->images->remove($self->Id, %opts);
-}
-
+croak $REFUSED;
 
 
 1;
@@ -69,77 +50,45 @@ __END__
 
 =head1 NAME
 
-API::Docker::Image - Docker image entity
+API::Docker::Image - Removed in 0.004 -- replaced by API::Docker::Type::ImageSummary and ImageInspect
 
 =head1 VERSION
 
-version 0.003
-
-=head1 SYNOPSIS
-
-    my $docker = API::Docker->new;
-    my $images = $docker->images->list;
-    my $image = $images->[0];
-
-    say $image->Id;
-    say join ', ', @{$image->RepoTags};
-    say $image->Size;
-
-    $image->tag(repo => 'myrepo/app', tag => 'v1');
-    $image->remove;
+version 0.004
 
 =head1 DESCRIPTION
 
-This class represents a Docker image. Instances are returned by
-L<API::Docker::API::Images> methods.
+B<This class is gone.> It has been replaced by the generated type model, and
+this file is a stub: loading it croaks, and so does every method call on it.
 
-=head2 client
+This class was released in 0.003 and removed in 0.004. Installing 0.004
+over it replaces the working copy with this stub, which is the only reason
+the file is still in the distribution.
 
-Reference to L<API::Docker> client.
+What to reach for instead:
 
-=head2 Id
+=over
 
-Image ID (usually sha256:... hash).
+=item * L<API::Docker::Type::ImageSummary> -- what C<< images->list >> returns
 
-=head2 RepoTags
+=item * L<API::Docker::Type::ImageInspect> -- what C<< images->inspect >> returns
 
-ArrayRef of repository tags (e.g., C<["nginx:latest", "nginx:1.21"]>).
+=item * L<API::Docker::Role::Entity::Image> -- inspect, history, tag and remove,
+unchanged, composed into the above at load time
 
-=head2 Size
+=back
 
-Image size in bytes.
-
-=head2 inspect
-
-    my $updated = $image->inspect;
-
-Get fresh image information.
-
-=head2 history
-
-    my $history = $image->history;
-
-Get image layer history.
-
-=head2 tag
-
-    $image->tag(repo => 'myrepo/app', tag => 'v1');
-
-Tag the image.
-
-=head2 remove
-
-    $image->remove(force => 1);
-
-Remove the image.
+Where this class mirrored the daemon's CamelCase verbatim, the generated
+classes carry the swagger's own names in snake_case.
+L<API::Docker::API::Images> documents the shape each method returns.
 
 =head1 SEE ALSO
 
 =over
 
-=item * L<API::Docker::API::Images> - Image API operations
+=item * L<API::Docker::API::Images> - the resource class these objects come from
 
-=item * L<API::Docker> - Main Docker client
+=item * L<API::Docker::Role::Entity> - why the methods live in a role
 
 =back
 

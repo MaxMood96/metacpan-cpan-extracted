@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use lib "t/lib";
 use Test::More;
-use HMTest qw(free_ports);
+use HMTest qw(free_ports quiet_child);
 use IO::Socket::INET;
 use Time::HiRes ();
 
@@ -35,7 +35,7 @@ sub spawn {
     my $pid = fork;
     die "fork: $!" unless defined $pid;
     if ($pid == 0) {
-        open STDERR, '>', '/dev/null';
+        quiet_child();
         require Hyperman;
         Hyperman->run(app => $app, host => '127.0.0.1', port => $port,
                       workers => 1, deny => [ @deny ]);

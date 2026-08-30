@@ -1,5 +1,8 @@
 Revision history for Object-Proto
 
+0.21	2026-08-29
+	- Fix the POD examples: remove trailing closing paren
+
 0.19	2026-08-02
 	- Add a :private attribute modifier. 
 

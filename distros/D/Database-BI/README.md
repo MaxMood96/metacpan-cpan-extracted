@@ -4,7 +4,7 @@ Database::BI - Web-based Business Intelligence viewer for flat data files
 
 # VERSION
 
-0.004.0
+0.005.0
 
 # SYNOPSIS
 
@@ -233,8 +233,11 @@ implemented.
 hash join.  It is suitable for BI files that fit comfortably in RAM.
 For very large files, replace the `open_table` helper body with a
 `Database::Join` instance (Phase 2) without changing the controller.
-- The `.uploads/` directory grows indefinitely; no automatic eviction is
-performed.  Users may delete `.uploads/` at any time to reclaim space.
+- On startup, `Database::BI` automatically evicts upload subdirectories whose
+modification time is older than 24 hours.  Uploads created during the current
+or recent server sessions are preserved.  Users may also trigger an immediate
+full purge (regardless of age) via the "Clear upload cache" button, which
+posts to `POST /uploads/clear`.
 - `Sub::Protected`/:Protected enforcement relies on the CHECK compilation
 phase.  When a module is loaded dynamically at test time (e.g. via
 `Test::Mojo-`new(...)>), the CHECK phase has already passed and the

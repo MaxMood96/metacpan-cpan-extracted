@@ -357,4 +357,63 @@ SKIP: {
     is($descends, 0, 'the cumulative counts never decrease');
 }
 
+# --- an exemplar belongs to ONE bucket ---------------------------------------
+#
+# One wire point becomes a record per bucket here, and the exemplar arrives on
+# the point. Copying its trace id onto every derived record would claim the
+# same request was observed at fifteen different latencies; dropping it would
+# leave histograms - the shape this SDK actually sends - with no cross-signal
+# jump at all. The wire carries no bucket index, so the bucket is the one the
+# exemplar's own value falls in.
+
+sub hist_ex {          # an Exemplar inside a HistogramDataPoint (field 8)
+    my (%a) = @_;
+    my $s = '';
+    $s .= POWire::dbl(3, $a{as_double})   if defined $a{as_double};
+    $s .= POWire::bytes(5, $a{trace_id})  if defined $a{trace_id};
+    return $s;
+}
+
+{
+    my $T = pack 'H*', '0123456789abcdef0123456789abcdef';
+    my $HALF = '81985529216486895';
+
+    # Bounds 1, 5, 10 - so four buckets: <=1, <=5, <=10, +Inf. The exemplar's
+    # value of 7 falls in the third.
+    my $point = hist_point(time => 1, count => 4, sum => 20,
+                           counts => [ 1, 1, 1, 1 ], bounds => [ 1, 5, 10 ])
+              . POWire::msg(8, hist_ex(as_double => 7, trace_id => $T));
+    my $d = decode(req(metrics => [ metric_hist(name => 'h',
+                                                points => [ $point ]) ]));
+    ok($d->{ok}, 'a histogram with an exemplar decodes');
+
+    my %by;
+    for my $r (@{ $d->{records} }) {
+        my $le = $r->{attrs}{le};
+        my $key = $r->{body} . (defined $le ? "{le=$le}" : '');
+        $by{$key} = $r;
+    }
+    is($by{'h_bucket{le=10}'}{trace_hi}, $HALF,
+       'the exemplar lands on the bucket its value falls in');
+    is($by{'h_bucket{le=5}'}{trace_hi} + $by{'h_bucket{le=5}'}{trace_lo}, 0,
+       '  and not on the bucket below it');
+    is($by{'h_bucket{le=+Inf}'}{trace_hi}
+     + $by{'h_bucket{le=+Inf}'}{trace_lo}, 0,
+       '  nor on every bucket above, which cumulative counts might suggest');
+    is($by{'h_count'}{trace_hi} + $by{'h_count'}{trace_lo}, 0,
+       '  and never on _count, which is arithmetic and not an observation');
+    is($by{'h_sum'}{trace_hi} + $by{'h_sum'}{trace_lo}, 0,
+       '  nor on _sum');
+
+    # A value above every bound belongs to +Inf, which is the bucket with no
+    # upper bound to compare against.
+    my $over = hist_point(time => 1, count => 1, counts => [ 0, 0, 0, 1 ],
+                          bounds => [ 1, 5, 10 ])
+             . POWire::msg(8, hist_ex(as_double => 99, trace_id => $T));
+    my $d2 = decode(req(metrics => [ metric_hist(name => 'h',
+                                                 points => [ $over ]) ]));
+    my ($inf) = grep { ($_->{attrs}{le} // '') eq '+Inf' } @{ $d2->{records} };
+    is($inf->{trace_hi}, $HALF, 'a value over the top bound lands on +Inf');
+}
+
 done_testing();

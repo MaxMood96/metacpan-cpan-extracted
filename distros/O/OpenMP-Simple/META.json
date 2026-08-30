@@ -1,5 +1,5 @@
 {
-   "abstract" : "Wrapper around C<Alien::OpenMP> that provides helpful C macros and runtime C functions",
+   "abstract" : "Inline::C support for using OpenMP from Perl",
    "author" : [
       "oodler <oodler@cpan.org>"
    ],
@@ -52,7 +52,7 @@
          "web" : "https://github.com/Perl-OpenMP/p5-OpenMP-Simple"
       }
    },
-   "version" : "0.2.6",
+   "version" : "0.2.7",
    "x_dynamic_prereqs" : {
       "expressions" : [
          {

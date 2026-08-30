@@ -1,3 +1,59 @@
+0.104     2026-08-30 03:51:54Z
+  - "dockerfile = ..." in a dist.ini now takes effect; the deprecated
+    "file = ..." spelling still works and warns.
+  - The deprecated repository, push and load keys work as aliases for
+    image, release_push and build_load, with the canonical key winning
+    on collision. "phase" is warned about and discarded rather than
+    silently ignored as an unknown key.
+  - fail_if_tag_exists asks the registry whether a tag already exists,
+    through API::Docker 0.004's distribution->exists (GET
+    /distribution/{name}/json), with the credential resolved for the
+    reference or an anonymous request. An engine with no /distribution
+    route -- rootless Podman among them -- makes the release a fatal
+    error rather than a silent pass; set fail_if_tag_exists = 0 to
+    release without the check.
+  - New before_build precheck: dzil confirms the engine answers, naming
+    it in the build log, before assembling the distribution, and during
+    a release also verifies the registry credential the push will use
+    through the engine's POST /auth. A rejected credential or an
+    unreachable registry fails fast; a missing credential does not, an
+    anonymous push being legal. DZIL_DOCKER_API_SKIP_PRECHECK=1 skips
+    both checks.
+  - A failed release push is fatal. API::Docker 0.004 croaks on a push
+    failure rather than returning an errorDetail event, and the client
+    catches it and surfaces it through the same log_fatal, carrying the
+    engine's errorDetail message when the error is a stream error and
+    the exception itself otherwise.
+  - A failed build logs the complete build output, not just the failing
+    step: the client drains the exception's event list through the same
+    progress filter used for a live stream before re-raising.
+  - Every tag after the first now applies. The image reference is split
+    into repository and tag before reaching the engine's tag endpoint,
+    so a registry host:port is no longer mistaken for the tag separator
+    and %V/%v no longer vanish -- only "latest" survived the default tag
+    list before. A tag the engine refuses is left out of the result
+    instead of being reported as applied.
+  - New DZIL_DOCKER_API_SKIP=1 skips the image build for one run -- no
+    engine contact, no image -- for dzil build/install/test while the
+    image cannot build yet. dzil release refuses to run with it set.
+  - Document the container engine requirement in POD and README: any
+    engine serving the Docker Engine HTTP API works, no docker binary
+    needed, and target reaches it unchanged for multi-stage builds.
+  - New build_verbose attribute (default off): the build log normally
+    echoes only Dockerfile step headers -- "Step N/M : ..." (legacy),
+    "STEP N/M: ..." (Podman classic, verified against a live rootless
+    Podman 5.4.2 stream) and "#N [N/M] ..." (BuildKit) -- instead of the
+    full stream, which build_verbose = 1 restores; errors are always
+    surfaced. Verbose output shares concise mode's line-buffering, so
+    multi-line daemon chunks become one log entry per line with no blank
+    lines between them.
+  - Add "=encoding utf8" so the POD passes podchecker.
+  - cpanfile requires API::Docker 0.004 (where distribution->exists and
+    system->auth come from) and declares Moose,
+    Dist::Zilla::Role::BeforeBuild, namespace::autoclean, Carp,
+    Archive::Tar and Test::Warnings; Archive::Tar::Wrapper is no longer
+    a dependency.
+
 0.103     2026-05-18 17:04:54Z
   - New `%V` tag template token: the major version extracted from
     `$zilla->version` (e.g. `0` for `0.402`). Pairs with `%v` (full

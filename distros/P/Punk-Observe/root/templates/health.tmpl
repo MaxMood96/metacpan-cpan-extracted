@@ -1,0 +1,17 @@
+
+{% if health_html %}
+{% raw health_html %}
+{% else %}
+<div class="deferwrap"
+     data-defer="{% prefix %}/health.slow{% range_qs %}"
+     data-defer-poll="30">
+  <div class="panel">
+    <h2>Service health</h2>
+    <p class="empty">Loading&hellip;</p>
+    <noscript><p class="note">This panel loads after the page, which needs
+      JavaScript - or
+      <a href="{% prefix %}/health?full=1{% range_amp %}">render everything
+      with the page</a>.</p></noscript>
+  </div>
+</div>
+{% end %}

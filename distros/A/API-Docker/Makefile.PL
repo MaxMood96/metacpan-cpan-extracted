@@ -2,7 +2,7 @@
 use strict;
 use warnings;
 
-
+use 5.014;
 
 use ExtUtils::MakeMaker;
 
@@ -14,15 +14,25 @@ my %WriteMakefileArgs = (
   },
   "DISTNAME" => "API-Docker",
   "LICENSE" => "perl",
+  "MIN_PERL_VERSION" => "5.014",
   "NAME" => "API::Docker",
   "PREREQ_PM" => {
     "Carp" => 0,
+    "Errno" => 0,
+    "IO::Handle" => 0,
     "IO::Socket::INET" => 0,
     "IO::Socket::UNIX" => 0,
+    "Import::Into" => 0,
     "JSON::MaybeXS" => 0,
     "Log::Any" => 0,
     "MIME::Base64" => 0,
+    "Module::Runtime" => 0,
     "Moo" => 0,
+    "Package::Stash" => 0,
+    "Path::Tiny" => 0,
+    "Scalar::Util" => 0,
+    "Socket" => 0,
+    "Types::Standard" => 0,
     "namespace::clean" => 0,
     "overload" => 0
   },
@@ -31,7 +41,7 @@ my %WriteMakefileArgs = (
     "Path::Tiny" => 0,
     "Test::More" => 0
   },
-  "VERSION" => "0.003",
+  "VERSION" => "0.004",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -40,15 +50,23 @@ my %WriteMakefileArgs = (
 
 my %FallbackPrereqs = (
   "Carp" => 0,
+  "Errno" => 0,
   "Exporter" => 0,
+  "IO::Handle" => 0,
   "IO::Socket::INET" => 0,
   "IO::Socket::UNIX" => 0,
+  "Import::Into" => 0,
   "JSON::MaybeXS" => 0,
   "Log::Any" => 0,
   "MIME::Base64" => 0,
+  "Module::Runtime" => 0,
   "Moo" => 0,
+  "Package::Stash" => 0,
   "Path::Tiny" => 0,
+  "Scalar::Util" => 0,
+  "Socket" => 0,
   "Test::More" => 0,
+  "Types::Standard" => 0,
   "namespace::clean" => 0,
   "overload" => 0
 );

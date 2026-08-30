@@ -7,6 +7,25 @@ Home page:    <https://metacpan.org/release/String-Copyright>
 Bug tracker:  <https://bugs.debian.org/cgi-bin/pkgreport.cgi?pkg=libstring-copyright-perl>
 Maintainer:   Jonas Smedegaard (JONASS) <jonass@cpan.org>
 
+v0.4.0	2026-08-30
+
+ [ Documentation ]
+ - clarify dash normalization
+ - fix typo in changelog
+
+ [ Test Suite ]
+ - add test checking that RE2 module is enabled by default
+ - update wordlist in author test pod-spell
+
+ [ Packaging ]
+ - bump version; use Version object
+
+ [ Other ]
+ - Added: clean cruft
+ - cover more copyright sign mojibake
+ - stop use Set::IntSpan
+ - use perl v5.40
+
 0.003014	2022-12-17
 
  [ Documentation ]
@@ -17,7 +36,7 @@ Maintainer:   Jonas Smedegaard (JONASS) <jonass@cpan.org>
  - fix wordlist in author test pod-spell
 
  [ Other ]
- - detect SPDX-FileCopyrightText: as stricl label
+ - detect SPDX-FileCopyrightText: as strict label
 
 0.003013	2022-01-16
 

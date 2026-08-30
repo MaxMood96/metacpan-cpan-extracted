@@ -7,6 +7,7 @@ use lib "$FindBin::Bin/lib";
 use Test::More;
 use Socket;
 use Time::HiRes ();
+use POSIX ();
 
 # Server-Sent Events. The field formatting and the blocking / psgi.streaming
 # transports run in-process; the detach transport runs against a real Hyperman
@@ -118,6 +119,12 @@ SKIP: {
         }, { heartbeat => 0.2 };
         get '/fast'   => sub { $_[0]->text('fast') };
         get '/closed' => sub { $_[0]->text($LApp::CLOSED) };
+        # which event backend this box picked, so a failure names it: the
+        # detach path is the same code everywhere but the loop under it is not
+        get '/backend' => sub {
+            my $s = Hyperman->stats;
+            $_[0]->text($s ? ($s->{backend} || '?') : '?');
+        };
         package main;
         Hyperman->run(app => LApp->to_app, host => '127.0.0.1',
                       port => $port, workers => 1);
@@ -128,9 +135,12 @@ SKIP: {
         last if $s;
         Time::HiRes::sleep(0.1);
     }
+    # undef: nothing accepted the connection at all. '': it was accepted and
+    # answered nothing. The two say different things about the worker, so they
+    # are not both reported as the empty string.
     my $plain = sub {
         my ($p) = @_;
-        my $s = IO::Socket::INET->new(PeerAddr => $host) or return '';
+        my $s = IO::Socket::INET->new(PeerAddr => $host) or return undef;
         $s->autoflush(1);
         syswrite $s, "GET $p HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n";
         my $b = '';
@@ -157,10 +167,31 @@ SKIP: {
     ok($events >= 3, "several events arrived over the loop ($events)");
     like($buf, qr/^:$/m, 'a heartbeat comment arrived');
 
-    # drop the client; the worker should fire on(close)
+    # asked while the worker is known good, and only reported if the next
+    # assertion fails
+    my $backend = $plain->('/backend');
+
+    # Drop the client; the worker should fire on(close). Polled rather than
+    # slept on: how long the loop takes to notice is a property of the box,
+    # and a fixed wait either fails a loaded one or slows every other.
     close $es;
-    Time::HiRes::sleep(0.4);
-    ok($plain->('/closed') >= 1, 'dropping the client fired on(close) in the worker');
+    my $closed;
+    for (1 .. 40) {
+        Time::HiRes::sleep(0.1);
+        $closed = $plain->('/closed');
+        last if defined $closed && $closed =~ /\A[1-9]/;
+    }
+    ok(defined $closed && $closed =~ /\A\d+\z/ && $closed >= 1,
+       'dropping the client fired on(close) in the worker')
+        or diag sprintf
+            "/closed said %s after 4s; the worker is %s; backend %s\n"
+          . "(nothing accepted = the process is gone; accepted-no-answer = "
+          . "its loop stopped serving)",
+            !defined $closed         ? 'nothing accepted the connection'
+          : !length $closed          ? 'accepted the connection and answered nothing'
+          :                            "'$closed'",
+            (waitpid($pid, POSIX::WNOHANG()) == 0 ? 'still running' : 'gone'),
+            (defined $backend && length $backend ? $backend : '(unknown)');
 
     kill 9, $pid; waitpid $pid, 0;
 }

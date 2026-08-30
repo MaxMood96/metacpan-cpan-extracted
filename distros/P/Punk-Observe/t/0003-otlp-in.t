@@ -12,6 +12,7 @@ use warnings;
 use lib 't/lib';
 use Test::More;
 use Punk::Observe;
+use Punk::Observe::Ingest ();
 use POWire;
 
 sub decode { Punk::Observe::Decode::decode($_[0], $_[1]) }
@@ -382,6 +383,91 @@ SKIP: {
     ok($r->{ok}, 'the SDK-encoded log request decodes');
     is(scalar @{ $r->{records} }, 1, '  one record');
     is($r->{records}[0]{body}, 'connection refused', '  body matches');
+}
+
+# --- exemplars: the field the cross-signal pipeline is made of --------------
+#
+# A metric point's exemplar is the (trace id, span id) of a request that
+# contributed to it, and it is the ONLY thing tying "the p99 moved" to
+# something a person can read. Dropped at ingest - which is what happened
+# until this - `| exemplars | traces | logs` has nothing to re-key on and
+# cannot be executed at all.
+
+my $TRACE = pack 'H*', '0123456789abcdef0123456789abcdef';
+my $SPAN  = pack 'H*', 'fedcba9876543210';
+my $HALF  = '81985529216486895';           # 0x0123456789abcdef, both halves
+my $SPANV = '18364758544493064720';        # 0xfedcba9876543210
+
+sub metric_with {          # one sum point carrying whatever exemplars are given
+    my (@ex) = @_;
+    return POWire::metric_request(metrics => [ POWire::metric_sum(
+        name => 'http.server.request.count', temporality => 2, monotonic => 1,
+        points => [ POWire::number_point(
+            time => '1774224000000000000', as_double => 1.5,
+            @ex ? (exemplars => \@ex) : ()) ]) ]);
+}
+
+{
+    my $m = decode(metric_with(POWire::exemplar(
+                time => '1774224000000000000', as_double => 1.5,
+                trace_id => $TRACE, span_id => $SPAN)), 'metrics')->{records}[0];
+    is($m->{trace_hi}, $HALF, 'a metric point stores its exemplar trace id');
+    is($m->{trace_lo}, $HALF, '  both halves of it');
+    is($m->{span_id}, $SPANV, '  and the span within it');
+
+    # A point with no exemplar stores zeros - not a trace id of nought, which
+    # `po_trace_id_valid` treats as a broken propagator everywhere else.
+    my $bare = decode(metric_with(), 'metrics')->{records}[0];
+    is($bare->{trace_hi} + $bare->{trace_lo}, 0,
+       'a point with no exemplar carries no trace id');
+
+    # AN EXEMPLAR WITH NO TRACE ID POINTS NOWHERE. OTLP permits one - value
+    # and timestamp alone are legal - and storing it would mint a trace id of
+    # zero, which is the id a misconfigured propagator sends.
+    my $idless = decode(metric_with(POWire::exemplar(as_double => 1)),
+                        'metrics')->{records}[0];
+    is($idless->{trace_hi} + $idless->{trace_lo}, 0,
+       '  and neither does an exemplar without one');
+
+    # Several exemplars, one slot: the FIRST valid one is the record's. The
+    # runner-up is not silently preferred, which is the bug a reservoir makes
+    # easy to write.
+    my $two = decode(metric_with(
+        POWire::exemplar(trace_id => $TRACE, span_id => $SPAN),
+        POWire::exemplar(trace_id => pack('H*', 'f' x 32))),
+        'metrics')->{records}[0];
+    is($two->{trace_hi}, $HALF, '  and the first of several is the one kept');
+
+    # A value-only exemplar ahead of a real one does not consume the slot.
+    my $skip = decode(metric_with(
+        POWire::exemplar(as_double => 9),
+        POWire::exemplar(trace_id => $TRACE)), 'metrics')->{records}[0];
+    is($skip->{trace_hi}, $HALF,
+       '  an id-less exemplar does not shadow the one behind it');
+}
+
+# The same point over OTLP/JSON decodes to the same ids. A field the two
+# transports disagree about is data that changes shape with the exporter's
+# configuration.
+{
+    my $json = <<'JSON';
+{"resourceMetrics":[{"resource":{"attributes":[]},"scopeMetrics":[{"scope":{},
+ "metrics":[{"name":"http.server.request.count","sum":{"dataPoints":[
+   {"timeUnixNano":"1774224000000000000","asDouble":1.5,
+    "exemplars":[{"traceId":"0123456789abcdef0123456789abcdef",
+                  "spanId":"fedcba9876543210","asDouble":1.5}]}
+ ],"aggregationTemporality":2,"isMonotonic":true}}]}]}]}
+JSON
+    # The JSON transport hands an already-parsed document to the decoder -
+    # the parse itself is File::Raw::JSON's and stays in Perl.
+    require File::Raw::JSON;
+    my $doc = File::Raw::JSON::file_json_decode($json);
+    my $r = Punk::Observe::Ingest::decode_json($doc, 'metrics');
+    ok($r->{ok}, 'the JSON form decodes') or diag explain $r;
+    my $m = $r->{records}[0];
+    is($m->{trace_hi}, $HALF, '  with the same trace id protobuf produced');
+    is($m->{trace_lo}, $HALF, '  both halves');
+    is($m->{span_id},  $SPANV, '  and the same span');
 }
 
 done_testing();

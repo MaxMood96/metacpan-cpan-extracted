@@ -5,14 +5,18 @@ author:
 build_requires:
   ExtUtils::MakeMaker: '0'
   File::Spec: '0'
+  HTTP::Response: '0'
   LWP::UserAgent: '0'
   Test::More: '0'
   Test::RequiresInternet: '0'
   Try::Tiny: '0'
-  perl: '5.012'
+  parent: '0'
+  perl: '5.024'
+  strict: '0'
+  warnings: '0'
 configure_requires:
   ExtUtils::MakeMaker: '0'
-  perl: '5.012'
+  perl: '5.010'
 dynamic_config: 0
 generated_by: 'Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150012'
 license: perl
@@ -26,6 +30,7 @@ no_index:
     - t
     - xt
 requires:
+  Carp: '0'
   Data::Dumper: '0'
   HTTP::Status: '0'
   IO::CaptureOutput: '0'
@@ -34,18 +39,15 @@ requires:
   LWP::Protocol::https: '6.10'
   MIME::Base64: '0'
   Moo: '2.002004'
-  Moo::Role: '0'
   Types::Standard: '0'
   URI::Escape: '0'
   WWW::Mechanize: '0'
-  perl: '5.012'
-  strict: '0'
-  warnings: '0'
+  perl: '5.024'
 resources:
   bugtracker: https://github.com/trs-80/WWW-Spotify/issues
   homepage: https://github.com/trs-80/WWW-Spotify
   repository: https://github.com/trs-80/WWW-Spotify.git
-version: '0.014'
+version: '0.016'
 x_Dist_Zilla:
   perl:
     version: '5.042000'
@@ -484,7 +486,7 @@ x_Dist_Zilla:
           branch: ~
           changelog: Changes
           signed: 0
-          tag: v0.014
+          tag: v0.016
           tag_format: v%V
           tag_message: v%V
         Dist::Zilla::Role::Git::Repo:
@@ -544,6 +546,10 @@ x_Dist_Zilla:
           repo_root: .
       name: '@Author::OALDERS/Git::Push'
       version: '2.052'
+    -
+      class: Dist::Zilla::Plugin::PruneFiles
+      name: PruneFiles
+      version: '6.037'
     -
       class: Dist::Zilla::Plugin::Prereqs
       config:

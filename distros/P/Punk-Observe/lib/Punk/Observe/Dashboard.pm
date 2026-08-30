@@ -22,8 +22,8 @@ Punk::Observe::Dashboard - a panel is an OQL string with a title
 
     my $p = Punk::Observe::Dashboard::check_panel({
         title => 'Checkout latency',
-        query => 'metric http.server.duration | p95 by http.route',
-        viz   => 'line', position => 2, cols => 3,
+        query => 'spans | bucket(30s) p95 by http.route',
+        viz   => 'line', position => 2, span => 3,
     });
     die $p->{error} unless $p->{ok};
 
@@ -57,13 +57,24 @@ is accessible without any work.
 
 =head1 FUNCTIONS
 
+=head2 viz_names
+
+    my @kinds = Punk::Observe::Dashboard::viz_names();   # line area bar stat table
+
+Every visualisation a panel may be, in the order they are declared.
+
+The editor builds its picker from this rather than from a list of its own,
+because a picker offering something the validator refuses - or omitting
+something it accepts - is a panel that cannot be saved, or one that can be
+saved and not drawn.
+
 =head2 check_panel
 
     my $p = Punk::Observe::Dashboard::check_panel(\%spec);
 
-Takes C<title>, C<query>, C<viz>, C<position> and C<cols>. Returns:
+Takes C<title>, C<query>, C<viz>, C<position> and C<span>. Returns:
 
-    { ok, code, error, viz, position, cols }
+    { ok, code, error, viz, position, span }
 
 C<error> carries the parser's own message where the query is at fault,
 because "that query is wrong" is not a usable form error and the parser
@@ -73,7 +84,7 @@ C<viz> is one of C<line>, C<area>, C<bar>, C<stat> or C<table>. An unknown
 hint becomes C<table>, which shows the data; falling back to nothing would
 hide it.
 
-C<cols> is clamped to 1..6 and C<position> to zero or more. A title may
+C<span> is clamped to 1..6 and C<position> to zero or more. A title may
 contain markup - the template escapes it, and refusing every angle bracket
 would make C<< p95 < 200ms >> unsayable - but not control characters, which
 have no legitimate use and reach places that are not HTML.

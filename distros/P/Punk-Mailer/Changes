@@ -1,5 +1,9 @@
 Revision history for Punk-Mailer
 
+0.05    2026-08-30
+	- Add XS_INTERNAL and mg_findext shims
+	- s///r left t/03-headers.t
+
 0.04    2026-08-25
 	- the sendmail transport reads the child's exit status before the
 	  write failure, so a command that cannot be exec'd is 127 and not

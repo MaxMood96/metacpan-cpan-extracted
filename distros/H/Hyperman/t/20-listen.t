@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use lib "t/lib";
 use Test::More;
-use HMTest qw(free_ports);
+use HMTest qw(free_ports quiet_child);
 
 unless ( $ENV{HM_LISTEN_TESTS} ) {
     plan( skip_all => "multi-listener tests skipped; set HM_LISTEN_TESTS to run" );
@@ -47,7 +47,7 @@ sub req {
 
 my $pid = fork // die "fork: $!";
 if (!$pid) {
-    open STDERR, '>', '/dev/null';
+    quiet_child();
     Hyperman->run(
         app => sub {
             my $env = shift;
@@ -108,7 +108,7 @@ SKIP: {
     skip 'no free loopback ports', 3 unless $sp;
     my $pid2 = fork // die "fork: $!";
     if (!$pid2) {
-        open STDERR, '>', '/dev/null';
+        quiet_child();
         Hyperman->run(
             app => sub {
                 my $env = shift;

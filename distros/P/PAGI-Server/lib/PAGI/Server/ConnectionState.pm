@@ -3,7 +3,7 @@ package PAGI::Server::ConnectionState;
 use strict;
 use warnings;
 
-our $VERSION = '0.002010';
+our $VERSION = '0.002011';
 
 use Scalar::Util qw(weaken);
 
@@ -226,6 +226,14 @@ there is nothing for it to resolve with.
 
 The Future resolves with the disconnect reason string.
 
+Each call returns a B<cancellation-isolated> observer of one private
+master future (per the PAGI spec's Connection State section): cancelling
+a returned Future — directly, or implicitly as the losing component of a
+combinator such as C<< Future->wait_any >> — never disturbs the
+connection's disconnect processing or a Future returned by another call.
+Take a fresh one for each race; a Future that lost one race cannot win a
+later one.
+
 This is useful for racing against other async operations:
 
     await Future->wait_any($disconnect_future, $event_future);
@@ -235,29 +243,32 @@ This is useful for racing against other async operations:
 sub disconnect_future {
     my $self = shift;
 
-    # Return cached Future if exists
-    return $self->{_future} if $self->{_future};
+    unless ($self->{_future}) {
+        # Create new Future (lazy)
+        my $conn = $self->{_connection};
+        my $loop = $conn && $conn->{server} ? $conn->{server}->loop : undef;
 
-    # Create new Future (lazy)
-    my $conn = $self->{_connection};
-    my $loop = $conn && $conn->{server} ? $conn->{server}->loop : undef;
+        if ($loop) {
+            $self->{_future} = $loop->new_future;
+        } else {
+            # Fallback if no loop available (shouldn't happen in practice)
+            require Future;
+            $self->{_future} = Future->new;
+        }
 
-    if ($loop) {
-        $self->{_future} = $loop->new_future;
-    } else {
-        # Fallback if no loop available (shouldn't happen in practice)
-        require Future;
-        $self->{_future} = Future->new;
+        # Resolve immediately only for an ABNORMAL end. After a clean completion
+        # the connection is closed but this Future is deliberately left pending —
+        # completion is not a disconnect (on_complete is the completion signal).
+        if (!${$self->{_connected}} && !$self->{_completed}) {
+            $self->{_future}->done(${$self->{_reason}});
+        }
     }
 
-    # Resolve immediately only for an ABNORMAL end. After a clean completion
-    # the connection is closed but this Future is deliberately left pending —
-    # completion is not a disconnect (on_complete is the completion signal).
-    if (!${$self->{_connected}} && !$self->{_completed}) {
-        $self->{_future}->done(${$self->{_reason}});
-    }
-
-    return $self->{_future};
+    # Cancellation-isolated observer per call (spec, Connection State):
+    # cancelling a returned future — e.g. as a wait_any loser — must never
+    # disturb the connection's signal or other consumers. The cached master
+    # stays private; it alone is resolved at transition step 3.
+    return $self->{_future}->without_cancel;
 }
 
 =head2 on_disconnect
@@ -445,22 +456,33 @@ sub _mark_complete {
 
 __END__
 
-=head1 USAGE WITH PAGI::Request
+=head1 USAGE
 
-The L<PAGI::Request> class provides convenience methods that delegate
-to the connection object:
+The server provides one instance per HTTP request, in the scope under the
+C<pagi.connection> key (MUST-level for C<http> scopes; WebSocket and SSE
+scopes use their own disconnect events instead):
 
-    my $req = PAGI::Request->new($scope, $receive);
+    async sub app {
+        my ($scope, $receive, $send) = @_;
+        my $conn = $scope->{'pagi.connection'};
 
-    # Access connection object directly
-    my $conn = $req->connection;
+        $conn->is_connected;                   # synchronous, non-destructive
+        $conn->disconnect_reason;              # undef until an abnormal end
+        $conn->on_disconnect(sub { ... });     # abnormal end only
+        $conn->on_complete(sub { ... });       # clean finish only
+        ...
+    }
 
-    # Convenience delegates
-    $req->is_connected;                    # $conn->is_connected
-    $req->is_disconnected;                 # !$conn->is_connected
-    $req->disconnect_reason;               # $conn->disconnect_reason
-    $req->on_disconnect(sub { ... });      # $conn->on_disconnect(...)
-    $req->disconnect_future;               # $conn->disconnect_future
+To race long-running work against the client leaving, take a fresh
+observer from C<disconnect_future> for the race (each returned Future is
+cancellation-isolated, so losing the race never disarms the signal):
+
+    await Future->wait_any($work, $conn->disconnect_future);
+    return unless $conn->is_connected;     # authoritative at resume
+
+Frameworks layered above PAGI typically wrap this object in their own
+request abstractions; this class is the raw per-request surface they
+build on.
 
 =head1 EXAMPLE: Basic Connection Check
 
@@ -511,7 +533,7 @@ to the connection object:
 
 =head1 SEE ALSO
 
-L<PAGI::Request> - High-level request API with connection convenience methods
+L<PAGI::Spec::Www/"Connection State"> - The governing specification
 
 L<PAGI::Server> - Reference server implementation
 

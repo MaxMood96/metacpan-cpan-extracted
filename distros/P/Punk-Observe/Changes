@@ -1,4 +1,20 @@
 Revision history for Punk-Observe
 
+0.04	2026-08-30
+	- Fixes: the arriving chart draws a signal with no data as zero instead of dropping it from the legend
+	- Fixes: builds on perls below 5.36 again - G_LIST issues
+	- Fixes: the cron closure uses mg_find, not the 5.14-only mg_findext
+
+0.03	2026-08-29
+	- Adds: dashboard panels keep the settled part of a window, so a refresh recomputes only the live tail
+	- Fixes: retention adopts the logs of workers that died, which nothing reclaimed before
+	- Fixes: registering the plugin without an application no longer warns
+
+0.02	2026-08-29
+	- Adds: Custom Dashboards
+	- Adds: Health service check
+	- Adds: Help page
+	- Fixes to many things accross existing pages and the query language itself
+
 0.01    2026-08-27
 	First version

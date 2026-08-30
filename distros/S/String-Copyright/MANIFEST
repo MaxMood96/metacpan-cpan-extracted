@@ -15,8 +15,10 @@ doap.ttl
 lib/String/Copyright.pm
 t/20_parse.t
 t/30_RE2_missing.t
+t/35_RE2_loaded.t
 t/50_context.t
 t/50_encoding.t
 t/50_identifier.t
 t/50_owner.t
 t/50_range.t
+t/lib/Test2/Require/WorkingUtf8.pm

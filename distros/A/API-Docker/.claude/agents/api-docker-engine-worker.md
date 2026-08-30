@@ -26,33 +26,20 @@ silently, do not restate.
 Coordinate via `karr`: pick tickets from the local board, record drift you find as new
 tickets rather than expanding scope mid-change.
 
-## What the client currently does not model
-
-Verified against the rootless Podman socket on this machine, not deduced:
-
-- **`containers->logs` returns frames, unparsed.** A container created without a TTY
-  produces `01 00 00 00 00 00 00 04 "OUT\n" 02 00 00 00 00 00 00 04 "ERR\n"`, and the
-  method hands those header bytes to the caller as if they were log text. With
-  `Tty => \1` the same container produces `"OUT\r\n" "ERR\r\n"` and looks fine — which is
-  why nothing has caught it. `exec->start` with `Detach => 0` has the same problem, and
-  there is no `attach` method at all.
-- **`exec->start` never surfaces the exit status.** It comes from a separate
-  `GET /exec/{id}/json`, which this client does expose as `exec->inspect` — a caller has
-  no way to know that from the method's POD.
-- **Nothing checks `errorDetail`.** `build`, `pull` and `push` return the event list and
-  leave failure detection to the caller, while the HTTP status was 200.
-
-Fixing any of these changes a public return shape. `../p5-dist-zilla-plugin-docker-api`
-consumes `images->build`, `->tag`, `->push` and `->inspect` — verify it, or file a ticket
-on its board, before landing.
-
 ## Working method
 
-Measure, don't assume. The daemon is reachable at
-`unix:///run/user/1000/podman/podman.sock` (Podman, API 1.41 — there is no Docker on this
-machine). `curl --unix-socket <sock> http://localhost/v1.41/...` shows the raw stream
+Measure, don't assume — and first find out what there is to measure against. Which
+engines this machine runs is not written down anywhere: check which sockets exist
+(`/var/run/docker.sock`, `$XDG_RUNTIME_DIR/podman/podman.sock`) and what each answers on
+`GET /version` (`Platform.Name`, `ApiVersion`, `MinAPIVersion`) before the first probe.
+`curl --unix-socket <sock> http://localhost/v<ApiVersion>/...` shows the raw stream
 including frame headers, which is the fastest way to confirm a wire format before writing
-code against it.
+code against it. A finding names the engine and version it was taken on; the `/v1.XX/`
+in your own URL is what you asked for, not what the engine is.
+
+Changing a public return shape is a cross-repo change: `../p5-dist-zilla-plugin-docker-api`
+consumes `images->build`, `->tag`, `->push` and `->inspect` — verify it, or file a ticket
+on its board, before landing.
 
 Podman is a reimplementation: anything beyond the documented surface — event payload
 fields, healthcheck details, error message text — is unverified until you have measured

@@ -1,4 +1,4 @@
-use 5.016000;
+use 5.010001;
 use strict;
 use warnings;
 use Config;                 # $Config{cc}, for the getentropy probe below
@@ -110,7 +110,7 @@ WriteMakefile(
     VERSION_FROM     => 'lib/Punk/Mailer.pm',
     ABSTRACT_FROM    => 'lib/Punk/Mailer.pm',
     LICENSE          => 'artistic_2',
-    MIN_PERL_VERSION => '5.016000',
+    MIN_PERL_VERSION => '5.010001',
     CONFIGURE_REQUIRES => {
         'ExtUtils::MakeMaker' => '0',
         'ExtUtils::Depends'   => '0.404',

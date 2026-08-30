@@ -3,8 +3,16 @@
     <input type="text" name="q" value="{% query %}" spellcheck="false"
            placeholder='log | where severity >= error | search "refused"'>
     <button type="submit">Run</button>
+    <a class="helpicon" href="{% prefix %}/help"
+       title="What can I type here?" aria-label="Query language help">?</a>
     {% include _range.tmpl %}
   </form>
+</div>
+
+{% include _discover.tmpl %}
+
+<div class="toolbar">
+  {% include _views.tmpl %}
 </div>
 
 {% if error %}
@@ -45,9 +53,43 @@
 </div>
 {% end %}
 
-{% if groups %}
+{% if series_plot %}
 <div class="panel">
   <h2>{% query %}</h2>
+  <div class="chartwrap" data-chart data-from="{% from %}" data-to="{% to %}">
+    <script type="application/json" data-plot>{% raw series_plot %}</script>
+    <noscript><p class="note">This chart is drawn in the browser and needs
+      JavaScript.</p></noscript>
+  </div>
+
+  {% if bucket_rows %}
+  {% if bucket_truncated %}
+  <div class="warnbox">Showing the most recent 500 of {% bucket_truncated %}
+    buckets. Widen the bucket or narrow the range for all of them.</div>
+  {% end %}
+  <div class="tablewrap">
+    <table class="rows">
+      <thead><tr><th>bucket</th>{% if has_series %}<th>series</th>{% end %}
+                 <th class="num">value</th><th class="num">rows</th></tr></thead>
+      <tbody>
+      {% for b in bucket_rows %}
+      <tr>
+        <td class="mono nowrap">{% b.time %}</td>
+        {% if has_series %}<td class="nowrap">{% b.series %}</td>{% end %}
+        <td class="num mono">{% b.value %}</td>
+        <td class="num mono">{% b.count %}</td>
+      </tr>
+      {% end %}
+      </tbody>
+    </table>
+  </div>
+  {% end %}
+</div>
+{% end %}
+
+{% if groups %}
+<div class="panel">
+  {% if series_plot %}{% else %}<h2>{% query %}</h2>{% end %}
   <div class="tablewrap">
     <table>
       <thead><tr><th>group</th><th class="num">value</th><th class="num">rows</th></tr></thead>
@@ -84,12 +126,25 @@
       </tbody>
     </table>
   </div>
+
+{% if older_cursor %}
+<p class="pager">
+  <a href="{% prefix %}/logs?q={% query_esc %}&before={% older_cursor %}{% range_amp %}">Older
+    lines</a>
+  {% if paged %}
+  <a href="{% prefix %}/logs?q={% query_esc %}{% range_amp %}">Back to the newest</a>
+  {% end %}
+</p>
+{% else %}{% if paged %}
+<p class="pager">That is the oldest line in this window.
+  <a href="{% prefix %}/logs?q={% query_esc %}{% range_amp %}">Back to the newest</a></p>
+{% end %}{% end %}
   <p class="note">{% scanned %} rows scanned.</p>
   {% else %}
-  {% if groups %}{% else %}
+  {% if groups %}{% else %}{% if series_plot %}{% else %}
   <p class="empty">No log lines matched in the {% range %} window.
     {% if range_all %}Nothing has been received yet.{% else %}Try a wider
     range above, or <b>all</b> for everything the store still holds.{% end %}</p>
-  {% end %}
+  {% end %}{% end %}
   {% end %}
 </div>

@@ -71,6 +71,32 @@ get  '/'             => 'Web::Shop#index',    { name => 'home'     };
 get  '/product/:id'  => 'Web::Shop#product',  { name => 'product'  };
 get  '/cart'         => 'Web::Shop#cart',     { name => 'cart'     };
 post '/checkout'     => 'Web::Shop#checkout', { name => 'checkout' };
-get  '/health'       => sub { $_[0]->json({ ok => 1 }) };
+# THE REAL HEALTH PLUGIN. See the note in Demo::Cards: a hand-rolled
+# `{ok=>1}` is a liveness answer with no checks in it, and the observer polls
+# `/readyz` for the per-check breakdown.
+plugin 'Health' => {
+    detail  => 1,
+    version => '0.01',
+    checks  => {
+        # The shop's dependency IS the card processor, so its readiness
+        # follows: an incident on cards makes the shop unready too, which is
+        # the propagation an operator wants to see on one screen.
+        cards   => sub {
+            my $url = $ENV{DEMO_CARDS_URL} or return 1;
+            require Fetch;
+            # `/readyz`, which is the readiness contract - not a bespoke
+            # endpoint this service and that one have to agree about. Cards
+            # answers 503 when it is unready, so an unready dependency and an
+            # unreachable one both land here as 0: for the shop's purposes
+            # they are the same fact, which is that it cannot rely on cards.
+            my $r = eval { Fetch->new(timeout => 1)->get("$url/readyz")->get };
+            return 0 unless $r && $r->status == 200;
+            my $b = eval { require File::Raw::JSON;
+                           File::Raw::JSON::file_json_decode($r->content) };
+            return $b && ($b->{status} || '') eq 'ok' ? 1 : 0;
+        },
+        catalog => sub { 1 },
+    },
+};
 
 1;

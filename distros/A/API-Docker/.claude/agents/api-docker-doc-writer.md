@@ -35,7 +35,11 @@ from the signature:
   socket and consults no Docker contexts, and contrasts that with other clients. That
   section is a promise about behavior; keep it true or flag it.
 
-`tls` and `cert_path` are documented as experimental and are in fact unimplemented — say
-what is true, do not describe intent as capability.
+Say what is true, do not describe intent as capability — and do not trust a claim of
+incapability written down here either. This paragraph used to assert that `tls` and
+`cert_path` were unimplemented. They are implemented: `API::Docker::Role::HTTP` carries
+a full `IO::Socket::SSL` path, including `tls_insecure` and the `docker` CLI's cert
+layout. An agent following that sentence would have written a falsehood into
+shipped POD. Check the code for the feature you are about to describe, every time.
 
 `README.md` carries a short synopsis that must not contradict `lib/API/Docker.pm`.

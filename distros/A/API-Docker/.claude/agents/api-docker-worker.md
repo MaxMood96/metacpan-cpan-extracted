@@ -20,7 +20,8 @@ Implement, refactor, debug, and test the Perl side of this distribution. The con
 above are non-negotiable — apply silently, do not restate.
 
 **Where your lane ends.** You own how this distribution is built: `Role::HTTP`'s socket
-handling and chunked reader, Moo composition, the entity classes, `cpanfile`, dist
+handling and chunked reader, Moo composition, the entity roles composed onto the
+generated types, `cpanfile`, dist
 plumbing. You do not own what the Docker Engine accepts or answers. If the task turns on
 daemon semantics — a wire format, a query-parameter meaning, a response shape, registry
 auth, API version gating — stop and hand it to `api-docker-engine-worker`, which is
@@ -57,8 +58,10 @@ Touch a public signature, touch its POD in the same change.
 `prove -lr t/` — recursive, so a subdirectory added under `t/` later is not silently
 skipped. Fixture-driven, no daemon needed, and it must stay that way.
 
-Against a real daemon: there is no Docker on this machine, only rootless Podman at
-`API_DOCKER_TEST_HOST=unix:///run/user/1000/podman/podman.sock`; add
+Against a real daemon: which engines this machine has is not written down -- check which
+sockets exist (`/var/run/docker.sock`, `$XDG_RUNTIME_DIR/podman/podman.sock`) and what
+each announces on `GET /version`, then point `API_DOCKER_TEST_HOST=unix://<socket>` at
+one and read the skip line, since a missing socket is a `skip_all`, not a failure. Add
 `API_DOCKER_TEST_WRITE=1` for the mutating tests, which create and remove real
 containers, images and volumes. Run them only when the task is about live behavior.
 

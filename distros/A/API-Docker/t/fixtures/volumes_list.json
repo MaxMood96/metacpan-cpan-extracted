@@ -1,27 +1,16 @@
 {
   "Volumes": [
     {
-      "Name": "my-data",
+      "CreatedAt": "2026-08-29T02:54:02Z",
       "Driver": "local",
-      "Mountpoint": "/var/lib/docker/volumes/my-data/_data",
-      "CreatedAt": "2025-01-10T08:00:00Z",
-      "Status": {},
       "Labels": {
-        "project": "test"
+        "apidocker-fixture-probe": "1"
       },
-      "Scope": "local",
-      "Options": {}
-    },
-    {
-      "Name": "postgres-data",
-      "Driver": "local",
-      "Mountpoint": "/var/lib/docker/volumes/postgres-data/_data",
-      "CreatedAt": "2025-01-11T09:00:00Z",
-      "Status": {},
-      "Labels": {},
-      "Scope": "local",
-      "Options": {}
+      "Mountpoint": "/var/lib/docker/volumes/apidocker-fixture-probe-39a25e34/_data",
+      "Name": "apidocker-fixture-probe-39a25e34",
+      "Options": null,
+      "Scope": "local"
     }
   ],
-  "Warnings": []
+  "Warnings": null
 }

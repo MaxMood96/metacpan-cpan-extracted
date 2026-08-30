@@ -87,7 +87,15 @@ static int po_is_digit(char c) { return c >= '0' && c <= '9'; }
 
 /* A duration suffix, in nanoseconds. `m` is minutes; there is deliberately no
  * month, because `1m` meaning a month somewhere would be a trap nobody
- * recovers from. */
+ * recovers from - and because a month has no length, so `1mo` would have to
+ * pick one and be wrong eleven times a year.
+ *
+ * `y` IS EXACTLY 365 DAYS, not a calendar year. Retention is "delete what is
+ * older than this many nanoseconds", which is arithmetic and not a calendar
+ * operation: there is no date to be relative to, so a leap day has nothing to
+ * attach to. It is the same 365 days Prometheus and Go's duration parser
+ * mean, and the POD says so rather than leaving somebody to discover that
+ * seven years is 2,555 days and not 2,557. */
 static po_u64 po_dur_unit(const char *p, size_t n) {
     if (n == 2 && p[0] == 'n' && p[1] == 's') return 1;
     if (n == 2 && p[0] == 'u' && p[1] == 's') return 1000;
@@ -97,6 +105,7 @@ static po_u64 po_dur_unit(const char *p, size_t n) {
     if (n == 1 && p[0] == 'h') return 3600ULL * 1000000000ULL;
     if (n == 1 && p[0] == 'd') return 86400ULL * 1000000000ULL;
     if (n == 1 && p[0] == 'w') return 7ULL * 86400ULL * 1000000000ULL;
+    if (n == 1 && p[0] == 'y') return 365ULL * 86400ULL * 1000000000ULL;
     return 0;
 }
 
@@ -205,7 +214,8 @@ static void po_lex_next(po_lex *l) {
                     po_u64 unit = po_dur_unit(l->src + us, l->pos - us);
                     if (!unit) {
                         po_lex_fail(l, us,
-                            "unknown duration unit (use ns, us, ms, s, m, h, d, w)");
+                            "unknown duration unit "
+                            "(use ns, us, ms, s, m, h, d, w, y)");
                         return;
                     }
                     if (seen_dot) {

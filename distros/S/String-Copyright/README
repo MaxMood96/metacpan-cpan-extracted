@@ -2,7 +2,7 @@ NAME
     String::Copyright - Representation of text-based copyright statements
 
 VERSION
-    Version 0.003014
+    Version v0.4.0
 
 SYNOPSIS
         use String::Copyright;
@@ -64,6 +64,10 @@ BUGS/CAVEATS/etc
 
     If copyright sign is not detected or accents or multi-byte characters
     display wrong, then most likely the data was not decoded into a string.
+
+    Some common mis-decoded forms of the copyright sign are recognized and
+    normalized to © (e.g. UTF-8 read as Latin1, EUC-JP, Shift-JIS/CP932, and
+    GBK). When this happens a warning is emitted via Log::Any.
 
     If ranges or lists of years are not tidied, then maybe it contained
     non-ASCII whitespace or digits.

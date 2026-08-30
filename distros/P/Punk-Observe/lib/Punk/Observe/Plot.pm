@@ -87,7 +87,10 @@ back is recomputed from it in decimal.
 
 One line per series from a C<buckets> answer. C<unit> labels the y axis,
 C<zero_fill> fills empty buckets with zero, C<fill> stacks the series, and
-C<log> asks for a logarithmic y axis - honoured only where no point is zero or
+C<kind> is C<line>, C<area> or C<bar> and decides what shape the same numbers
+take - C<area> implies C<fill>, and bars stack rather than overlay, because
+two series of bars drawn on top of each other hide one of them and the reader
+cannot tell that is what happened. C<log> asks for a logarithmic y axis - honoured only where no point is zero or
 negative, since a log axis silently drops those and the gaps read as missing
 data.
 

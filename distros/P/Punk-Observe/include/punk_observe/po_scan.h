@@ -168,7 +168,11 @@ static void po_pushdown_build(po_pushdown *pd, const po_plan *p) {
     pd->from = 0;
     pd->to   = PO_U64_MAX;
     if (!p) return;
-    po_pushdown_walk(pd, p->where);
+    {   /* Each where is a conjunct, so a bound proven by ANY of them
+         * narrows the read for all of them. */
+        int i;
+        for (i = 0; i < p->nwhere; i++) po_pushdown_walk(pd, p->wheres[i]);
+    }
     pd->search     = p->search;
     pd->search_len = p->search_len;
 }

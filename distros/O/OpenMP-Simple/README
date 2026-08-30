@@ -1,7 +1,7 @@
 This archive contains the distribution OpenMP-Simple,
-version 0.2.6:
+version 0.2.7:
 
-  Wrapper around C<Alien::OpenMP> that provides helpful C macros and runtime C functions
+  Inline::C support for using OpenMP from Perl
 
 This software is copyright (c) 2024 by oodler.
 

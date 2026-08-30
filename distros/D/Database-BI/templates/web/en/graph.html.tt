@@ -1,5 +1,33 @@
 [%- WRAPPER 'web/en/layouts/default.html.tt' -%]
 
+<style>
+  /* Allow rotated X-axis labels on the leftmost tick to render outside the SVG
+     boundary without being clipped.
+     Problem: D3 rotates labels -45° with text-anchor:end, so the leftmost label
+     extends to a negative SVG x-coordinate.  overflow:visible on the SVG lets
+     the ink escape the SVG box, but the parent .graph-container has
+     overflow-x:auto, which creates a scroll context that clips child ink
+     overflow at the container's left edge regardless.
+     Fix: padding-left shifts the SVG rightward so the label's visual overflow
+     falls within the container's padding area, which IS part of the scroll area. */
+  #chart { overflow: visible; }
+  .graph-container { padding-left: 3rem; }
+
+  /* Style the HTML::D3-generated Reset zoom button to match .btn-graph-export */
+  #reset-btn {
+    padding: 0.28rem 0.75rem;
+    border: 1px solid #888;
+    border-radius: 6px;
+    background: transparent;
+    color: #444;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: background 0.12s;
+    margin-bottom: 0;
+  }
+  #reset-btn:hover { background: #f0f0f0; }
+</style>
+
 <p class="back-link"><a href="[% back_url | html %]">&larr; [% back_label | html %]</a></p>
 
 <h2 class="graph-title">[% title | html %]</h2>
@@ -7,6 +35,7 @@
 <div class="graph-export-bar">
   <button class="btn-graph-export" onclick="biExportSVG()">Export SVG</button>
   <button class="btn-graph-export" onclick="biExportPNG()">Export PNG</button>
+  <span class="graph-point-count">Plotting [% point_count %] point[% IF point_count != 1 %]s[% END %]</span>
 </div>
 
 <div class="graph-container">
@@ -16,6 +45,22 @@
 
 <script>
 (function () {
+  // Widen the SVG viewBox so the first rotated X-axis label is not cropped.
+  // D3 rotates labels -45° with text-anchor:end; the leftmost label extends
+  // to a negative SVG x-coordinate.  A viewBox starting at -pad makes that
+  // region part of the SVG viewport, bypassing all container overflow rules.
+  // Run inside setTimeout(0) so D3's duration=0 transitions have completed
+  // and the axis text elements are in the DOM before we size the viewport.
+  setTimeout(function () {
+    var _svg = document.getElementById('chart');
+    if (!_svg) return;
+    var _w   = parseFloat(_svg.getAttribute('width'))  || 1100;
+    var _h   = parseFloat(_svg.getAttribute('height')) || 580;
+    var _pad = 80;
+    _svg.setAttribute('width',   _w + _pad);
+    _svg.setAttribute('viewBox', (-_pad) + ' 0 ' + (_w + _pad) + ' ' + _h);
+  }, 0);
+
   function biExportSVG() {
     var svg = document.getElementById('chart');
     if (!svg) return;

@@ -4,11 +4,12 @@ use warnings;
 
 use Exporter ();
 use Errno ();
+use File::Spec ();
 use IO::Socket::INET ();
 use POSIX ();
 
 our @ISA       = 'Exporter';
-our @EXPORT_OK = qw(free_ports server_status server_reap slurp);
+our @EXPORT_OK = qw(free_ports quiet_child server_status server_reap slurp);
 
 # Test helpers shared by the tests that fork a real server.
 #
@@ -40,6 +41,33 @@ sub free_ports {
     }
     close $_ for @sock;
     return @port == $n ? @port : ();
+}
+
+# First thing in a forked server child. Nothing in that child may hold the
+# harness's TAP pipe: the harness reads until EOF, so one surviving server
+# makes `make test` hang after every test in the file has already passed, and
+# the smoker reports that as a SIGKILL rather than a failure.
+#
+# Reopening STDOUT is not enough. Test::Builder dups the pipe into its own
+# handles when it loads, and a child forked afterwards inherits that copy
+# untouched by the reopen, so those are closed too.
+#
+# The alarm is the backstop for the child that is never reaped at all - a die
+# mid-test, or a parent killed outright. SIGALRM's default action kills; a
+# TERM does not, because perl defers it to an op boundary the child never
+# reaches while it is wedged in accept(2) or an SSL handshake.
+sub quiet_child {
+    my (%o) = @_;
+    my $null = File::Spec->devnull;
+    open STDOUT, '>', $null;
+    open STDERR, '>', (defined $o{stderr} ? $o{stderr} : $null);
+    if (my $tb = eval { Test::Builder->new }) {
+        for my $h (eval { $tb->output }, eval { $tb->failure_output },
+                   eval { $tb->todo_output }) {
+            close $h if defined $h;
+        }
+    }
+    alarm(defined $o{alarm} ? $o{alarm} : 120);
 }
 
 # Reaped children, so a status check and a later wait agree on what happened.
