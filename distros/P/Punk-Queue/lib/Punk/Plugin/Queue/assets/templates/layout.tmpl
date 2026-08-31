@@ -8,16 +8,20 @@
 {% end %}</head>
 <body data-theme="dark">
 
+<!-- Funky.Announce's polite live region, which it looks up by this exact
+     id and creates for itself when it is missing (js/13-announce.js).
+     The name is upstream's and predates anything to do with an SPA;
+     renaming it would mean editing a vendored file. -->
 <div id="spa-announcer" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
 
 <div class="pq-shell">
-<nav class="pq-nav" data-no-spa-exempt>
+<nav class="pq-nav">
   <span class="pq-brand">punk-queue</span>
 {% for item in nav %}  <a href="{% item.href %}">{% item.label %}</a>
 {% end %}  <span class="pq-live" id="pqLive" data-live="off">polling</span>
 </nav>
 
-<main id="spaContent" data-page="{% page %}" data-breadcrumb-title="{% title %}">
+<main id="pqContent" data-page="{% page %}">
 {% raw content %}
 </main>
 </div>
@@ -29,8 +33,13 @@
    X-CSRF-Token, and the registry lock forbids patching Funky.Api after
    load - so the app's actual csrf cookie (name injected server-side) is
    mirrored into `csrf_token`. Punk's csrf cookie is script-readable by
-   design (double-submit), so the mirror leaks nothing. Runs before any
-   Funky script and again after every SPA navigation (token rotation). */
+   design (double-submit), so the mirror leaks nothing.
+
+   Every page is a fresh document, so this runs against a freshly-set
+   cookie on every navigation, ahead of any Funky script. Token rotation
+   needs nothing else; the content-updated listener is for components
+   that replace markup without a load, and app.js calls the mirror
+   directly before each write. */
 (function () {
   var NAME = "{% csrf_cookie %}";
   function mirror() {
@@ -39,7 +48,6 @@
     if (m) document.cookie = 'csrf_token=' + m[1] + '; path=/; SameSite=Lax';
   }
   mirror();
-  document.addEventListener('funky.spa.pageload', mirror);
   document.addEventListener('funky.content-updated', mirror);
   window.__pqCsrfMirror = mirror;
 })();

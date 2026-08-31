@@ -1,5 +1,41 @@
 Revision history for Punk
 
+0.38    2026-08-31
+        - t/1040-stream.t drops its client on a stream with no end, so no
+          socket buffer can hold the whole body first
+
+0.37    2026-08-30
+        - $c->stream sends the real chunk length wherever perl expands
+          my_snprintf to a statement expression
+
+0.36    2026-08-30
+        - ADDS: $c->stream($content_type, $cb) + Punk::Stream - a response
+          body of unknown length on the SSE transports (Hyperman detach,
+          psgi.streaming, blocking psgix.io), chunk-framed on the socket
+          transports so a die is visible truncation, never a short success
+        - Punk::Stream drain - a Punk::Future settled when the write buffer
+          reaches the kernel; awaiting it after each write bounds memory to
+          one chunk while the worker keeps serving other requests
+        - Punk::Test declares psgi.streaming in every request env, so
+          get_ok drives a streamed route instead of collecting its 501
+        - ADDS: the `last_modified` route option - Punk::Plugin::
+          ConditionalGet's date validator, a coderef returning an epoch,
+          answered 304 before the handler runs; If-None-Match wins, the
+          date comparison is exact (the file path's convention), a future
+          epoch is clamped to now
+        - ADDS: Punk::Test `upload` - multipart/form-data requests: file
+          parts from a path or a scalar ref, streamed through one read
+          buffer however large, boundary verified absent from the content
+        - t/0410-upload.t posts through the client, so the encoder and the
+          streaming parser test each other
+        - ADDS: `max_record` on Punk::Plugin::Idempotency - a response
+          larger than it (default 1MB) is served with
+          Idempotency-Recorded: false and not stored; the single-flight
+          lock still covers the request
+        - ADDS: `signed => 1` on $c->cookie, both directions - HMAC over
+          name=value with the session's secret and verify, so a tampered,
+          swapped or unsigned cookie reads as undef
+
 0.35    2026-08-29
         - An SSE heartbeat that finds the client gone no longer re-arms
           itself on a stream it has just torn down.

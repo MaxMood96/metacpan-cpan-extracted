@@ -33,7 +33,8 @@ register(self, app, opts = &PL_sv_undef)
         if (SvOK(opts) && SvROK(opts) && SvTYPE(SvRV(opts)) == SVt_PVHV)
             o = (HV *)SvRV(opts);
         if (o) {
-            static const char *const known[] = { "scope", "ttl", NULL };
+            static const char *const known[] =
+                { "scope", "ttl", "max_record", NULL };
             HE *he;
             hv_iterinit(o);
             while ((he = hv_iternext(o))) {
@@ -60,6 +61,19 @@ register(self, app, opts = &PL_sv_undef)
             SV **t = o ? hv_fetchs(o, "ttl", 0) : NULL;
             (void)hv_stores(cfg, "ttl",
                 (t && *t && SvOK(*t)) ? newSVnv(SvNV(*t)) : newSVnv(86400));
+        }
+        {   /* The plugin stores whole responses, so a response bigger than
+             * this is served but not recorded (and says so in a header).
+             * 1MB default: a JSON answer sits well under it, an export sits
+             * well over, and either kind of application can move it. */
+            SV **m = o ? hv_fetchs(o, "max_record", 0) : NULL;
+            IV mr = 1048576;
+            if (m && *m && SvOK(*m)) {
+                if (!looks_like_number(*m) || (mr = SvIV(*m)) <= 0)
+                    croak("Punk::Plugin::Idempotency: max_record must be a "
+                          "positive number of bytes");
+            }
+            (void)hv_stores(cfg, "max_record", newSViv(mr));
         }
         (void)hv_stores(h, K_IDEM, newRV_noinc((SV *)cfg));
     }

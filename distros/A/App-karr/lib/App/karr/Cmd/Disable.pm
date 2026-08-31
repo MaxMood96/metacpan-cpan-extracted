@@ -1,7 +1,7 @@
 # ABSTRACT: Disable automated agent runs on this board
 
 package App::karr::Cmd::Disable;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use MooX::Cmd;
 use MooX::Options (
@@ -59,7 +59,7 @@ App::karr::Cmd::Disable - Disable automated agent runs on this board
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -78,10 +78,10 @@ A disabled board is skipped by L<App::karr::Foundation> B<whole>: no drain, no
 auto-block, no agent run. The flag is checked before the agent command is even
 resolved, so it wins over C<karr-foundation --command>, the config's
 C<default_command>, the per-repo F<.karr> C<command>, and C<< claude: true >>.
-C<--force> does not override it — disabled means disabled.
+C<--force> does not override it -- disabled means disabled.
 
 Nothing else changes: the board stays fully usable for humans and for agents
-driven by hand (C<karr list>, C<karr pick>, C<karr move>, …). Use it for a
+driven by hand (C<karr list>, C<karr pick>, C<karr move>, ...). Use it for a
 repository whose backlog is parked rather than abandoned, so an automation host
 that drains every discovered board leaves this one alone.
 
@@ -131,9 +131,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

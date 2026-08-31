@@ -3,7 +3,7 @@ package Hyperman::Loop;
 use strict;
 use warnings;
 
-our $VERSION = '0.38';
+our $VERSION = '0.39';
 
 require Hyperman;   # all methods are XS (xs/loop.xs, include/hyperman/)
 

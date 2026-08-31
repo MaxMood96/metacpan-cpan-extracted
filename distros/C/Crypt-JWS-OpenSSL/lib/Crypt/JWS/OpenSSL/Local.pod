@@ -1,0 +1,38 @@
+
+=head1 NAME
+
+Crypt::JWS::OpenSSL::Local - Local configuration
+
+=head1 SYNOPSYS
+
+  use Crypt::JWS::OpenSSL;
+  $Crypt::JWS::OpenSSL::Local::HAS_OPENSSL3 = 1;
+  
+  # or
+  
+  use Crypt::JWS::OpenSSL;
+  $Crypt::JWS::OpenSSL::Local::HAS_OPENSSL3 = 0;
+
+=head1 DESCRIPTION
+
+The module make scripts determine which version of OpenSSL is available and record that in this module.
+
+Crypt::OpenSSL::RSA needs OpenSSL 3 to support algorithms PS256, PS384 and PS512.
+
+It may be that you have a different version of OpenSSL available at run time. If so, you can set
+C<$Crypt::JWS::OpenSSL::Local::HAS_OPENSSL3> as required.
+
+=head1 VERSION
+
+version 0.003
+
+=head1 AUTHOR
+
+Mark Dootson E<lt>mdootson@cpan.orgE<gt>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2026 by Mark Dootson
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as the Perl 5 programming language system itself.

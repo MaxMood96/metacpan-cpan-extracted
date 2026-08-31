@@ -1,12 +1,14 @@
 # ABSTRACT: A libgit2 remote (fetch / push)
 
 package Git::Native::Remote;
+our $VERSION = '0.006';
 use Moo;
 use Carp ();
 use Scalar::Util ();
 use Git::Libgit2::FFI ();
 use Git::Libgit2 qw(
   oid_to_hex GIT_PASSTHROUGH GIT_DIRECTION_FETCH GIT_DIRECTION_PUSH
+  fetch_options_prune_offset cert_hostkey_offsets
 );
 use Git::Native::Error qw( check_rc );
 use FFI::Platypus::Buffer qw( scalar_to_buffer );
@@ -40,7 +42,13 @@ use Digest::SHA qw( sha1 sha256 hmac_sha1 );
 }
 
 # libgit2 1.5.x struct layouts (probed). 1.9.x add fields at the end of
-# git_remote_callbacks but the offsets up through `payload` are stable.
+# git_remote_callbacks but the offsets up through `payload` are stable, so the
+# callback offsets below hold across releases. What does not hold is a field
+# sitting *behind* the embedded callbacks struct -- it moves when the struct
+# grows (120 bytes in 1.5, 128 in 1.9). git_fetch_options.prune is the one such
+# field we write, so its offset comes from Git::Libgit2::fetch_options_prune_offset
+# instead of from this block; a stale value here would land on `update_refs`,
+# which libgit2 1.9 prefers over `update_tips` and calls.
 # Allocate buffers a bit larger than the C struct for forward-compat.
 use constant {
   GIT_REMOTE_CALLBACKS_VERSION => 1,
@@ -67,15 +75,11 @@ use constant {
   GIT_CERT_X509            => 1,
   GIT_CERT_HOSTKEY_LIBSSH2 => 2,
 
-  # git_cert_hostkey field offsets + git_cert_ssh_t bits (1.5.x layout)
-  CERT_HOSTKEY_TYPE_OFFSET   => 4,    # git_cert_ssh_t bitmask (which hashes set)
-  CERT_HOSTKEY_SHA1_OFFSET   => 24,   # hash_sha1[20]
-  CERT_HOSTKEY_SHA256_OFFSET => 44,   # hash_sha256[32]
+  # git_cert_ssh_t bits
   GIT_CERT_SSH_SHA1   => 2,
   GIT_CERT_SSH_SHA256 => 4,
 
   FETCH_OPTS_CALLBACKS_OFFSET => 8,    # callbacks struct (embedded)
-  FETCH_OPTS_PRUNE_OFFSET     => 128,  # int (8 + 120)
 
   PUSH_OPTS_CALLBACKS_OFFSET  => 8,
 
@@ -374,7 +378,7 @@ sub _build_fetch_options {
     my $val = $prune ? 1 : 2;   # 1 = PRUNE, 2 = NO_PRUNE
     my $pb  = pack 'l', $val;
     my ($pbp) = scalar_to_buffer($pb);
-    memcpy( $opts_ptr + FETCH_OPTS_PRUNE_OFFSET, $pbp, 4 );
+    memcpy( $opts_ptr + fetch_options_prune_offset, $pbp, 4 );
     CORE::push @keep, \$pb;
   }
 
@@ -688,16 +692,20 @@ sub _make_certcheck_thunk {
 # match, 0 otherwise (with an actionable warning).
 sub _verify_known_host {
   my ( $cert_ptr, $host ) = @_;
-  my $bits = unpack 'l', _peek_bytes( $cert_ptr + CERT_HOSTKEY_TYPE_OFFSET, 4 );
+  # The git_cert_hostkey field offsets come from Git::Libgit2 (derived from
+  # the ABI, karr #30); t/75-cert-hostkey-layout.t cross-checks them against
+  # offsetof() wherever a C compiler is available.
+  my %off  = cert_hostkey_offsets();
+  my $bits = unpack 'l', _peek_bytes( $cert_ptr + $off{type}, 4 );
 
   my ( $digest, $want );
   if ( $bits & GIT_CERT_SSH_SHA256 ) {
     $digest = 'sha256';
-    $want   = _peek_bytes( $cert_ptr + CERT_HOSTKEY_SHA256_OFFSET, 32 );
+    $want   = _peek_bytes( $cert_ptr + $off{sha256}, 32 );
   }
   elsif ( $bits & GIT_CERT_SSH_SHA1 ) {
     $digest = 'sha1';
-    $want   = _peek_bytes( $cert_ptr + CERT_HOSTKEY_SHA1_OFFSET, 20 );
+    $want   = _peek_bytes( $cert_ptr + $off{sha1}, 20 );
   }
   else {
     warn "Git::Native: ssh hostkey for '$host' offers no SHA1/SHA256 "
@@ -800,7 +808,7 @@ Git::Native::Remote - A libgit2 remote (fetch / push)
 
 =head1 VERSION
 
-version 0.005
+version 0.006
 
 =head1 SYNOPSIS
 

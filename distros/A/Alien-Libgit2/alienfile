@@ -1,13 +1,23 @@
 use alienfile;
 use Path::Tiny;
 
-# Prefer the system libgit2 if pkg-config can find it (>= 1.5).
+# Prefer the system libgit2 if pkg-config can find it (>= 1.9.3).
 # Falls back to building from the bundled source tarball.
-# (Min raised when we start using post-1.5 APIs in Git::Libgit2.)
+#
+# The floor is 1.9.3 for a bug, not for an API: libgit2 PR #7165 (released in
+# 1.9.3) stopped the ssh transport from looping forever on
+# LIBSSH2_ERROR_TIMEOUT. Below it, an ssh peer that accepts the connection and
+# then goes silent parks the caller indefinitely -- libssh2 does its own reads
+# and no libgit2 timeout option reaches that loop, so the caller cannot bound
+# it either. Measured: against 1.9.0 a fetch was still blocked after 25 s with
+# GIT_OPT_SET_SERVER_TIMEOUT set; against 1.9.3 the same fetch returns at the
+# configured timeout. Debian trixie ships 1.9.0, so waiting for the
+# distribution to catch up is not a plan -- a system lib below the fix falls
+# through to the share build instead.
 
 plugin 'PkgConfig' => (
   pkg_name        => 'libgit2',
-  minimum_version => '1.5',
+  minimum_version => '1.9.3',
 );
 
 share {

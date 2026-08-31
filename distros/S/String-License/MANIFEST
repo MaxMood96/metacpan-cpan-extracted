@@ -135,7 +135,9 @@ t/SPDX/Zlib.txt
 t/SPDX/curl.txt
 t/SPDX/zlib-acknowledgement.txt
 t/Software-License.t
+t/basic-lib-RE2.t
 t/basic-lib-no-RE2.t
+t/dash.t
 t/devscripts.t
 t/devscripts/academic.h
 t/devscripts/artistic-2-0-modules.pm
@@ -314,6 +316,7 @@ t/grant/NTP/monlist.c
 t/grant/WTFPL/COPYING.WTFPL
 t/grant/misc/rpplexer.h
 t/lib/Test2/Require/TestCorpus.pm
+t/lib/Test2/Require/WorkingUtf8.pm
 t/lib/Test2/ScanCode.pm
 t/lib/Uncruft.pm
 t/license.t

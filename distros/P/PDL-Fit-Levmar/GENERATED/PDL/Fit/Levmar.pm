@@ -3,7 +3,7 @@
 #
 package PDL::Fit::Levmar;
 
-our @EXPORT_OK = qw(levmar levmar_report levmar_chkjac levmar_der_lb_ub levmar_der_ub levmar_der_ levmar_der_lb levmar_diff_lb_ub levmar_diff_ub levmar_diff_ levmar_diff_lb _levmar_chkjac _levmar_chkjac_no_t );
+our @EXPORT_OK = qw(levmar levmar_report levmar_chkjac levmar_der_lb levmar_der_lb_ub levmar_der_ub levmar_der_ levmar_diff_lb levmar_diff_lb_ub levmar_diff_ub levmar_diff_ _levmar_chkjac _levmar_chkjac_no_t );
 our %EXPORT_TAGS = (Func=>\@EXPORT_OK);
 
 use PDL::Core;
@@ -11,7 +11,7 @@ use PDL::Exporter;
 use DynaLoader;
 
 
-   our $VERSION = '0.0109';
+   our $VERSION = '0.0110';
    our @ISA = ( 'PDL::Exporter','DynaLoader' );
    push @PDL::Core::PP, __PACKAGE__;
    bootstrap PDL::Fit::Levmar $VERSION;
@@ -24,8 +24,6 @@ use DynaLoader;
 
 
 #line 14 "levmar.pd"
-
-#use Data::Dumper;
 
 =head1 NAME
 
@@ -1106,10 +1104,10 @@ $LPPEXT = ".lpp";
 
 sub deb { print STDERR $_[0],"\n"}
 
-#line 1131 "levmar.pd"
+#line 1130 "levmar.pd"
 $PDL::Fit::Levmar::HAVE_LAPACK=0;
 
-#line 1166 "levmar.pd"
+#line 1165 "levmar.pd"
 # check if dims are equal in two pdls
 sub chk_eq_dims {
     my ($x,$y) = @_;
@@ -1261,7 +1259,7 @@ sub levmar {
     die "levmar: neither FUNC nor CSRC defined"
         unless defined $inh->{FUNC} or defined $inh->{CSRC};
 
-#line 1323 "levmar.pd"
+#line 1322 "levmar.pd"
  
     foreach (qw( A B C D FIX WGHT )) {
         barf "PDL::Fit::Levmar not built with lapack. Found parameter $_"
@@ -1269,7 +1267,7 @@ sub levmar {
     }
    
 
-#line 1332 "levmar.pd"
+#line 1331 "levmar.pd"
         
 ########  Handle parameters
     my $h = {}; # parameter hash to be built from $inh and defaults
@@ -1646,7 +1644,12 @@ sub levmar_chkjac {
     DFP_free($DFP);
     return $err;
 }
-#line 1650 "Levmar.pm"
+#line 1648 "Levmar.pm"
+
+*levmar_der_lb = \&PDL::levmar_der_lb;
+
+
+
 
 *levmar_der_lb_ub = \&PDL::levmar_der_lb_ub;
 
@@ -1663,7 +1666,7 @@ sub levmar_chkjac {
 
 
 
-*levmar_der_lb = \&PDL::levmar_der_lb;
+*levmar_diff_lb = \&PDL::levmar_diff_lb;
 
 
 
@@ -1683,11 +1686,6 @@ sub levmar_chkjac {
 
 
 
-*levmar_diff_lb = \&PDL::levmar_diff_lb;
-
-
-
-
 *_levmar_chkjac = \&PDL::_levmar_chkjac;
 
 
@@ -1701,7 +1699,7 @@ sub levmar_chkjac {
 
 
 
-#line 1133 "levmar.pd"
+#line 1132 "levmar.pd"
 
 =head1 AUTHORS
 
@@ -1717,7 +1715,7 @@ distribution, the copyright notice should be included in the
 file.
 
 =cut
-#line 1721 "Levmar.pm"
+#line 1719 "Levmar.pm"
 
 # Exit with OK status
 

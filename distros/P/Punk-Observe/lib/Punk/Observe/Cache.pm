@@ -8,10 +8,6 @@ use Punk::Observe ();
 
 our $VERSION = $Punk::Observe::VERSION;
 
-# All of it is C: po_chunk.h and xs/chunk.xs. The arithmetic is unsigned
-# 64-bit and the query is parsed by the same parser that will run it, so
-# neither lives here.
-
 1;
 
 __END__
@@ -64,12 +60,18 @@ B<backfilled> with old timestamps will not appear in a chunk already cached,
 and data B<deleted by retention> may still appear in one. Neither is a
 correctness problem for a dashboard, and both resolve within the hour.
 
-=head2 It also makes the answer more complete
+=head2 The budget is the caller's, not this layer's
 
-Not the point, but worth knowing. A query has a row ceiling, and a
-twenty-four-hour scan on the demo store hit it: C<truncated> set and nine
-buckets returned out of the twenty-three the data covers. Each chunk stays
-well under the ceiling, so the chunked answer is the whole one.
+Everything passed beyond C<from> and C<to> and the cache controls below is
+forwarded verbatim to every chunk. A dashboard panel asks for no row ceiling
+because a graph that stops mid-window draws some other window and labels it
+with this one, and that request has to survive being split - a chunk run at
+the store's own default instead would truncate on a busy hour and the panel
+would report the sum of a dozen capped scans.
+
+A chunk that truncated anyway is B<not> cached. It still answers the call, and
+it is exactly what C<< $store->query >> would have said; storing it would
+freeze a number known to be short for the entry's whole life.
 
 =head1 FUNCTIONS
 
@@ -83,6 +85,32 @@ The same shape C<< $store->query >> returns, plus C<cached_chunks>. Falls back
 to one plain query whenever chunking would not be sound. A cache that throws -
 an unwritable directory, a full disk - is a slow query rather than a failed
 one.
+
+=head2 warm
+
+    my $r = Punk::Observe::Cache::warm($store, $q,
+                from => $ns, to => $ns, cache => $c,
+                ttl => 691200, refresh_ns => $ns,
+                budget => 400, deadline => 20);
+
+The same walk L</query> does, with the answer thrown away: no live tail, no
+merge, nothing built that a chart would read - only the entries, so that the
+request which follows finds them already there. L<Punk::Observe::Warm> is what
+schedules this.
+
+Walks B<newest first>, because that is the end of the range people look at.
+Recomputes chunks newer than C<refresh_ns> and fills the rest only where they
+are missing.
+
+C<budget> bounds the chunks computed and C<deadline> the seconds spent.
+Neither can interrupt a scan already begun, so both are checked before one
+starts and before the entry being replaced is touched: a pass that stops
+leaves the cache no colder than it found it.
+
+Returns C<chunks>, C<computed>, C<hits>, C<failed>, C<unstorable> and
+C<stopped> - the last naming the bound that ended the pass, or why there was
+nothing to do (C<no cache>, C<no window>, C<unbucketed>, C<nothing settled>,
+C<key too long>).
 
 =head2 bucket_ns
 

@@ -128,6 +128,7 @@ include/punk/punk_sitemap.h
 include/punk/punk_sse.h
 include/punk/punk_static.h
 include/punk/punk_stencil.h
+include/punk/punk_stream.h
 include/punk/punk_txn.h
 include/punk/punk_ua.h
 include/punk/punk_url.h
@@ -218,6 +219,7 @@ lib/Punk/SendFile/Reader.pm
 lib/Punk/Session.pm
 lib/Punk/Session/Store.pm
 lib/Punk/Static.pm
+lib/Punk/Stream.pm
 lib/Punk/Test.pm
 lib/Punk/Test/WS.pm
 lib/Punk/Test/WS/Conn.pm
@@ -260,6 +262,7 @@ t/0200-context.t
 t/0210-response.t
 t/0211-respond-to.t
 t/0220-cookie.t
+t/0221-cookie-signed.t
 t/0230-max-body.t
 t/0300-views.t
 t/0301-stencil-abi.t
@@ -325,10 +328,15 @@ t/1020-sse.t
 t/1030-room-bus.t
 t/1031-sse-bus.t
 t/1032-bus-app.t
+t/1040-stream.t
 t/1100-conditional-get.t
 t/1101-conditional-get-release.t
+t/1102-last-modified.t
 t/1110-idempotency.t
 t/1111-idempotency-window.t
+t/1112-idempotency-store.t
+t/1113-idempotency-flight.t
+t/1114-idempotency-synopsis.t
 t/1120-request-id.t
 t/1121-request-id-trust.t
 t/1122-request-id-log.t
@@ -354,6 +362,7 @@ t/1311-cli.t
 t/1312-serve.t
 t/1320-test-client.t
 t/1321-test-client-stream.t
+t/1322-test-client-upload.t
 t/1330-dev-error.t
 t/1340-myapp.t
 t/lib/Kinds/Controller/Thing.pm
@@ -429,6 +438,7 @@ xs/sitemap.xs
 xs/sse.xs
 xs/static.xs
 xs/stencil.xs
+xs/stream.xs
 xs/txn.xs
 xs/upload.xs
 xs/url.xs

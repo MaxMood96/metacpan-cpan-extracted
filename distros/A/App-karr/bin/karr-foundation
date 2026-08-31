@@ -3,9 +3,10 @@
 # ABSTRACT: Single-shot foundation daemon for periodic karr agent execution
 use strict;
 use warnings;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use App::karr::Foundation;
 use App::karr::Encoding qw( decode_argv enable_std_utf8 );
+use App::karr::Error qw( is_usage_error );
 
 # Same character/octet boundary as F<karr> (ticket #53). The agent output this
 # tees to the terminal is raw bytes and is decoded incrementally in
@@ -13,7 +14,50 @@ use App::karr::Encoding qw( decode_argv enable_std_utf8 );
 enable_std_utf8();
 decode_argv();
 
-exit App::karr::Foundation->new_with_options->run;
+# What is left of @ARGV after option parsing is the hub command, if any
+# (`ask`, `answer`, `chain`, `plan`) -- see App::karr::Foundation::run. MooX::Options is
+# configured with protect_argv => 0 in that class, which is what makes the
+# leftovers visible here.
+# An option name with a dash in it does not survive standing behind a boolean
+# flag, so the flags are respelled with underscores before MooX::Options looks
+# at argv (ticket #256). F<bin/karr> does the same one step earlier, because it
+# has to pick the command class first; here there is only one option table, so
+# the call is the whole of it. App::karr::Role::CliArgs/normalize_option_argv
+# carries the diagnosis and the condition under which the call may go again.
+@ARGV = App::karr::Foundation->normalize_option_argv( \@ARGV );
+
+my $exit;
+my $ran = eval {
+    my $foundation = App::karr::Foundation->new_with_options;
+    $exit = $foundation->run(@ARGV);
+    1;
+};
+if ( !$ran ) {
+    my $err = $@;
+
+    # Exit-code contract (ADR 0002): 0 success / 1 runtime failure / 2 usage
+    # error. The same central handler F<karr> has, for the same reason: without
+    # it an uncaught die leaves perl to pick the status -- 255, or whatever
+    # errno happens to hold -- so every user_error this binary raises reached
+    # its caller as an accident. A broken config file, an unknown mode and
+    # (since #191) `karr-foundation answer 7 x` on a question that already has
+    # an answer were all that accident; this binary is typed at and scripted
+    # like the CLI is, so it belongs to the same contract (ticket #201).
+    #
+    # The usage-versus-runtime split is decided by
+    # App::karr::Error::is_usage_error, on the same stable leading markers
+    # F<karr> documents -- "Unknown command:", "unexpected extra argument",
+    # "Usage:", "Usage error:". A new usage-error die here must start with one
+    # of them; everything else -- a config that will not parse, a question that
+    # is already answered, a Git failure -- is a runtime failure (1).
+    #
+    # Option-parse errors never reach here: MooX::Options exits 2 directly via
+    # App::karr::Role::ExitCodes, which App::karr::Foundation composes for it,
+    # and that exit bypasses this eval.
+    print STDERR $err if defined $err && length $err;
+    exit( is_usage_error($err) ? 2 : 1 );
+}
+exit $exit;
 
 __END__
 
@@ -27,7 +71,7 @@ karr-foundation - Single-shot foundation daemon for periodic karr agent executio
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -40,14 +84,55 @@ version 0.500
     # Preview without executing
     karr-foundation --dry-run --verbose
 
+    # Ask the fleet a question, and answer it from anywhere
+    karr-foundation ask "Which registry?" --options cpan,darkpan --wait 3600
+    karr-foundation answer 7 darkpan
+
+    # Write the fleet's plan into the hub, and execute it out of there
+    karr-foundation plan < chain.yml
+    karr-foundation chain
+
 =head1 DESCRIPTION
 
 F<karr-foundation> reads a config file listing karr board directories, detects
 board changes or open tasks, and invokes a configured agent command for each
-active repo. It is designed to be called repeatedly — by cron, a systemd timer,
+active repo. It is designed to be called repeatedly -- by cron, a systemd timer,
 or a tight while-loop.
 
 See L<App::karr::Foundation> for full documentation.
+
+=head1 EXIT CODES
+
+Cron only ever asked whether the tick failed, but the mailbox commands are
+typed by a person and scripted by agents, so F<karr-foundation> keeps the same
+exit-code contract as F<karr> (see F<docs/adr/0002-exit-code-contract.md>):
+
+=over 4
+
+=item * B<0> -- the tick finished: boards were drained, an overview was
+printed, a question was asked or answered, a chain was written, or the chain
+was worked through. A chain step that B<failed> does not change this: that is a
+statement about the plan, not about this binary.
+
+=item * B<1> -- runtime failure: no repository could be discovered, the config
+file does not parse or is not a mapping, a hub command found no hub, C<ask>
+rejects a value it accepted syntactically as the wrong string (an unrecognized
+C<--policy>, a C<--default> not among C<--options>, a policy that needs a
+C<--deadline> it was not given), the question being answered already had an
+answer, the chain document handed to C<plan> is not a chain, or C<chain>
+could not fetch C<refs/karr-foundation/*> and refused to run a step another
+machine may already be running.
+
+=item * B<2> -- usage error: an unknown command, an unknown option, an option
+value MooX::Options itself rejects by type (C<--wait> takes an integer), or a
+missing or surplus positional argument. A value MooX::Options accepts as a
+plain string but a command then rejects on its own terms -- see B<1> above --
+is a runtime failure, not this.
+
+=back
+
+A run killed by C<SIGTERM>, C<SIGINT> or C<SIGHUP> exits C<128 + signal> after
+taking its agents down with it, the usual shell convention for signal death.
 
 =head1 SUPPORT
 
@@ -70,9 +155,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

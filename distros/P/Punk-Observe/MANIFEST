@@ -5,6 +5,7 @@ Observe.xs
 README
 bin/punk-observe-health
 bin/punk-observe-retain
+bin/punk-observe-warm
 example/README.md
 example/bin/demo
 example/bin/traffic
@@ -121,6 +122,7 @@ lib/Punk/Observe/Target.pm
 lib/Punk/Observe/Tenant.pm
 lib/Punk/Observe/Trace.pm
 lib/Punk/Observe/View.pm
+lib/Punk/Observe/Warm.pm
 lib/Punk/Observe/WAL.pm
 lib/Punk/Plugin/Observe.pm
 root/static/brush.js
@@ -255,6 +257,8 @@ t/0926-deferred-status.t
 t/0927-oql.t
 t/0928-dashboard-defer.t
 t/0930-query-cache.t
+t/0931-chunk-budget.t
+t/0933-warm.t
 t/lib/POMurmur.pm
 t/lib/PORef.pm
 t/lib/POWire.pm

@@ -2,7 +2,7 @@
 #define AP_ABI_IMPL_H
 
 /* Apophis-side implementation of the shared C ABI (ap_abi.h). Included by
- * lib/Apophis.xs AFTER the static core it wraps - apophis_derive_namespace,
+ * Apophis.xs AFTER the static core it wraps - apophis_derive_namespace,
  * apophis_identify_content, apophis_identify_stream, apophis_build_path,
  * apophis_ensure_parent_dir and apophis_atomic_write - and after horus.h, so
  * horus_format_uuid and HORUS_FMT_STR are in scope.

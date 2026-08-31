@@ -1,0 +1,114 @@
+Fixtures - where every byte in this directory came from
+=======================================================
+
+Nothing here was written by hand. A test vector composed from memory
+either fails wrongly or passes vacuously, and a verifier tested against
+its own author's idea of the protocol is tested against nothing, so
+each file below is either published reference data or a capture from a
+real authenticator, and each one names its source.
+
+cbor-appendix-a.json
+--------------------
+The RFC 8949 Appendix A test vectors, VERBATIM, from the CBOR project's
+machine-readable copy:
+
+    https://github.com/cbor/test-vectors  (appendix_a.json)
+
+82 vectors, each with the encoded bytes as `hex` and the value as
+`decoded` (JSON) or `diagnostic` (CBOR diagnostic notation, used where
+JSON cannot express the value - byte strings, integer map keys, tags,
+floats, simple values).
+
+The file is the oracle in both directions. t/01-cbor.t requires that
+every vector this decoder ACCEPTS decodes to the published value, and
+that every vector it REFUSES is one the documented subset excludes -
+so a refusal that is really a bug cannot hide behind "not supported",
+and an acceptance that is really a misread cannot hide at all.
+
+reg-none.txt
+reg-packed-yubikey.txt
+reg-packed-windows-hello.txt
+reg-fido-u2f.txt
+-----------------------------
+Real registration responses captured from real authenticators, taken
+from the test data of the go-webauthn project (BSD-3-Clause), which
+records them for exactly this purpose:
+
+    https://github.com/go-webauthn/webauthn
+    protocol/attestation_test.go
+
+Each file holds the base64url `attestationObject` and, where the
+source pairs one with it, the `clientDataJSON` that was signed
+alongside - so phases 1 and 2 inherit complete ceremonies rather than
+half of one.
+
+The four cover what a deployment actually meets: `none` attestation
+(the stance this dist ships), `packed` from a roaming key and from a
+platform authenticator, and the legacy `fido-u2f` form.
+
+    file                          fmt        rpId          AAGUID
+    reg-none                      none       webauthn.io   all zero
+    reg-packed-yubikey            packed     localhost     adce0002-35bc-c60a-648b-0b25f1f05503 (Yubico)
+    reg-packed-windows-hello      packed     -             08987058-cadc-4b81-b6e1-30de50dcbe96 (Windows Hello)
+    reg-fido-u2f                  fido-u2f   webauthn.io   all zero
+
+Each was verified to be a genuine document before it was checked in,
+by two oracles that owe nothing to this distribution's code:
+
+  * the authenticatorData rpIdHash equals sha256 of the rpId named
+    above, computed with openssl - so the bytes are a coherent
+    WebAuthn document and not a plausible-looking string;
+  * the COSE (x, y) was wrapped in a SubjectPublicKeyInfo and loaded
+    with `openssl pkey -pubin`, which accepts it only if the point is
+    genuinely on P-256 - so the key material is real key material.
+
+t/02-cose.t repeats the second check through this dist's own SPKI
+encoder and Crypt::JWS, which is the point: the seam is proven against
+keys that were made by an authenticator, not by the code under test.
+
+auth-webauthn-io.txt
+--------------------
+A real AUTHENTICATION assertion - the second ceremony - from the same
+project's login tests:
+
+    https://github.com/go-webauthn/webauthn
+    webauthn/login_test.go
+
+It holds the base64url authenticatorData, clientDataJSON and
+signature. Its authenticatorData carries attested credential data, so
+the COSE public key the signature was made with travels inside the
+document itself; t/08 reads the key out of it and verifies with that,
+which is exactly what the ceremony does with a stored key.
+
+It was checked to be genuine before it was checked in, and the check
+was the only one that means anything for an assertion: the signature
+verifies. Independently of this distribution -
+
+    openssl dgst -sha256 -verify <key from the document> \
+        -signature <the signature> <authData || sha256(clientDataJSON)>
+    Verified OK
+
+- at rpId webauthn.io, type webauthn.get, UP and UV set, sign count
+  1553097241.
+
+Its clientDataJSON carries a field called
+`new_keys_may_be_added_here`, whose value says "do not compare
+clientDataJSON against a template". That is a gift: it makes this
+fixture prove the ceremony reads the object by NAME rather than
+matching a shape, which is the mistake the field exists to warn
+about.
+
+Only one assertion is checked in, because only one could be found
+published. t/08 supplements it with assertions signed by openssl at
+test time for the cases a single capture cannot express - RS256, a
+sign count that moves, user verification present and absent. Those are
+constructed documents with REAL signatures over them, and the test
+says so where it builds them: constructing a document is not the same
+sin as inventing a vector, provided the cryptography is genuinely
+computed and the constructed case is never mistaken for a capture.
+
+Capturing more
+--------------
+tools/capture.html registers a credential against a local Punk app and
+prints a fixture file to paste in here. Anything captured that way gets
+a row in the table above naming the authenticator it came from.

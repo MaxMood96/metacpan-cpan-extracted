@@ -1,6 +1,19 @@
 Revision history for Punk::Queue
 
+0.08    2026-08-30
+        - The admin UI navigates as ordinary page loads. Funky's SPA layer
+          is no longer vendored.
+        - A live entity_change refreshes the page's own view instead of
+          re-fetching and swapping the page.
+        - FontAwesome Free 6.4.0 (solid) is vendored and served from the
+          admin's own asset route.
+
 0.07    2026-08-23
+        - Punk::Plugin::Queue resolves its targets through $app->on_compile
+          when Punk offers it (0.31 and later), which is the moment it had
+          been reaching with a middleware whose constructor runs once at
+          compile; that middleware is kept for older Punk. No behaviour
+          changes either way.
         - the 0.05 fix for a float in a perl format cast the argument to
           an NV but left the format as %f. On a quadmath perl the format
           has to name the width as well (%Qf, via NVff) or the formatter

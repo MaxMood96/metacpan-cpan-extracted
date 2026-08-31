@@ -3,7 +3,7 @@ package File::Raw;
 use strict;
 use warnings;
 
-our $VERSION = '0.15';
+our $VERSION = '0.16';
 
 use DynaLoader;
 
@@ -244,6 +244,14 @@ much more efficient than calling multiple individual functions.
     # }
 
 Returns undef if stat fails.
+
+C<dev> and C<ino> together identify a file, so two paths naming one file
+agree on the pair and two distinct files never do. On Windows they come
+from the volume serial number and the file index rather than from
+C<stat>, which supplies neither; that costs one extra file handle, paid
+only here and never by C<size>, C<mtime> or the other single-field
+functions. C<ino> may be a floating point value on a perl whose integers
+are 32 bits, since a file index does not fit one.
 
 File::Raw caches the last stat result for performance. When you call
 multiple stat-like functions on the same file (size, mtime, is_readable,

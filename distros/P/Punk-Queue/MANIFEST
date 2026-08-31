@@ -1,5 +1,10 @@
-bin/punk-queue
 Changes
+MANIFEST
+Makefile.PL
+Queue.xs
+README
+bin/punk-queue
+example/Mailer/README.pod
 example/Mailer/app.psgi
 example/Mailer/bin/queue.pl
 example/Mailer/lib/Mailer.pm
@@ -7,7 +12,6 @@ example/Mailer/lib/Mailer/Controller/Job/Mail.pm
 example/Mailer/lib/Mailer/Controller/Job/Report.pm
 example/Mailer/lib/Mailer/Controller/Web/Auth.pm
 example/Mailer/lib/Mailer/Controller/Web/Home.pm
-example/Mailer/README.pod
 example/Mailer/root/queue.css
 example/Mailer/root/queue/overview.tmpl
 example/Mailer/root/static/mailer.css
@@ -41,7 +45,11 @@ include/pq_time.h
 include/pq_worker.h
 lib/Punk/Command/Queue.pm
 lib/Punk/Plugin/Queue.pm
+lib/Punk/Plugin/Queue/assets/VENDORED.md
 lib/Punk/Plugin/Queue/assets/app.js
+lib/Punk/Plugin/Queue/assets/fontawesome/LICENSE.txt
+lib/Punk/Plugin/Queue/assets/fontawesome/fa-solid-900.woff2
+lib/Punk/Plugin/Queue/assets/fontawesome/fontawesome.css
 lib/Punk/Plugin/Queue/assets/funky/css/01-dom.css
 lib/Punk/Plugin/Queue/assets/funky/css/02-layout.css
 lib/Punk/Plugin/Queue/assets/funky/css/03-buttons.css
@@ -57,7 +65,6 @@ lib/Punk/Plugin/Queue/assets/funky/css/12-spinner.css
 lib/Punk/Plugin/Queue/assets/funky/css/13-badge.css
 lib/Punk/Plugin/Queue/assets/funky/css/14-relative-time.css
 lib/Punk/Plugin/Queue/assets/funky/css/15-filters.css
-lib/Punk/Plugin/Queue/assets/funky/css/16-spa.css
 lib/Punk/Plugin/Queue/assets/funky/css/17-animate.css
 lib/Punk/Plugin/Queue/assets/funky/css/18-themes.css
 lib/Punk/Plugin/Queue/assets/funky/js/01-namespace.js
@@ -76,12 +83,8 @@ lib/Punk/Plugin/Queue/assets/funky/js/13-announce.js
 lib/Punk/Plugin/Queue/assets/funky/js/14-live-binding.js
 lib/Punk/Plugin/Queue/assets/funky/js/15-csrf.js
 lib/Punk/Plugin/Queue/assets/funky/js/16-api.js
-lib/Punk/Plugin/Queue/assets/funky/js/17-history.js
 lib/Punk/Plugin/Queue/assets/funky/js/18-animate.js
 lib/Punk/Plugin/Queue/assets/funky/js/19-modal.js
-lib/Punk/Plugin/Queue/assets/funky/js/20-navigation.js
-lib/Punk/Plugin/Queue/assets/funky/js/21-pages.js
-lib/Punk/Plugin/Queue/assets/funky/js/22-spa.js
 lib/Punk/Plugin/Queue/assets/funky/js/23-visibility-observer.js
 lib/Punk/Plugin/Queue/assets/funky/js/24-websocket.js
 lib/Punk/Plugin/Queue/assets/funky/js/25-formatting.js
@@ -105,7 +108,6 @@ lib/Punk/Plugin/Queue/assets/templates/layout.tmpl
 lib/Punk/Plugin/Queue/assets/templates/locks.tmpl
 lib/Punk/Plugin/Queue/assets/templates/overview.tmpl
 lib/Punk/Plugin/Queue/assets/templates/workers.tmpl
-lib/Punk/Plugin/Queue/assets/VENDORED.md
 lib/Punk/Queue.pm
 lib/Punk/Queue/Backend.pm
 lib/Punk/Queue/Backend/Pg.pm
@@ -114,10 +116,6 @@ lib/Punk/Queue/Command.pm
 lib/Punk/Queue/Cron.pm
 lib/Punk/Queue/Job.pm
 lib/Punk/Queue/Worker.pm
-Makefile.PL
-MANIFEST
-Queue.xs
-README
 share/punk-queue.openapi.json
 t/00-load.t
 t/01-migrate.t

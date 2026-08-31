@@ -1,5 +1,16 @@
 Revision history for Punk-Observe
 
+0.05	2026-08-30
+	- Fixes: a cached panel is no longer partial - the caller's row budget reaches every chunk
+	- Fixes: a chunk that truncated is never stored, and entries from before this are retired
+	- Adds: the settled chunks are warmed in the background, off the request path
+	- Adds: a cold chunk is computed once across the pool, not once per worker
+	- Adds: punk-observe-warm, one warm pass by hand
+	- Adds: the log volume, ingest and metrics charts use the chunk cache too
+	- Adds: the health page reads through the chunk cache - 7.5s to 0.9s over 7d
+	- Fixes: the arriving, volume and health charts ask for no row ceiling, so a busy chunk is cached instead of rescanned every poll
+	- Fixes: the chunked path reports degraded and scanned_bytes like the plain one
+
 0.04	2026-08-30
 	- Fixes: the arriving chart draws a signal with no data as zero instead of dropping it from the legend
 	- Fixes: builds on perls below 5.36 again - G_LIST issues

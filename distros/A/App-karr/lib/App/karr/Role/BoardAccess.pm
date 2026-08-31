@@ -1,7 +1,7 @@
 # ABSTRACT: Role providing board discovery, sync lifecycle, and task access
 
 package App::karr::Role::BoardAccess;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo::Role;
 use App::karr::Role::CliArgs;
 use App::karr::ActivityLog;
@@ -143,7 +143,7 @@ App::karr::Role::BoardAccess - Role providing board discovery, sync lifecycle, a
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 DESCRIPTION
 
@@ -331,9 +331,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

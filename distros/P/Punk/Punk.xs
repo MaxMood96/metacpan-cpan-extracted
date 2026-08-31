@@ -121,6 +121,8 @@ static const frj_abi *punk_frj(pTHX) {
 #include "punk/punk_dbil.h"        /* the async model backend, on DBIx::Loop's
                                       C ABI (needs punk_dbi.h + punk_future.h) */
 #include "punk/punk_txn.h"         /* $c->txn on either backend (needs dbil) */
+#include "punk/punk_stream.h"      /* $c->stream: a body of unknown length
+                                      (needs wsconn + wshandshake + future) */
 #include "punk/punk_import.h"     /* `use Punk` and the DSL table */
 #include "punk/punk_cors.h"       /* cross-origin: preflight + headers   */
 #include "punk/punk_headers.h"    /* security headers on every response  */
@@ -170,6 +172,7 @@ INCLUDE: xs/wshandshake.xs
 INCLUDE: xs/sse.xs
 INCLUDE: xs/wsroom.xs
 INCLUDE: xs/future.xs
+INCLUDE: xs/stream.xs
 INCLUDE: xs/config.xs
 INCLUDE: xs/static.xs
 INCLUDE: xs/sendfile.xs

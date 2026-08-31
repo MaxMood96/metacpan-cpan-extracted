@@ -1,6 +1,6 @@
 Changes
 lib/Apophis.pm
-lib/Apophis.xs
+Apophis.xs
 Makefile.PL
 MANIFEST
 PLAN.md

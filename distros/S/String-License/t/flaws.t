@@ -1,6 +1,4 @@
-use v5.20;
-use feature qw(signatures);
-no warnings qw(experimental::signatures);
+use v5.40;
 
 use Test2::V0;
 
@@ -16,11 +14,11 @@ plan 20;
 
 my $naming = String::License::Naming::Custom->new;
 
-sub parse ($path_string)
+sub parse ($path_to_parse)
 {
 	my ( $path, $string, $license );
 
-	$path   = path($path_string);
+	$path   = path($path_to_parse);
 	$string = uncruft( $path->slurp_utf8 );
 
 	$license = String::License->new(

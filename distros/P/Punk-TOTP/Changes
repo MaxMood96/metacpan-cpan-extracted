@@ -1,5 +1,12 @@
 Revision history for Punk-TOTP
 
+0.06    2026-08-30
+        - The default challenge form carries $c->csrf_field when the
+          application enabled `csrf`, decided at to_app (on_compile) so
+          declaration order does not matter; on Punk < 0.31 the key is
+          read at registration instead
+        - The default challenge page is sent Cache-Control: no-store
+
 0.05    2026-08-25
         - SECURITY (CVE-2026-78619): totp_use_recovery compared the row's
           user_id with the challenged user's numerically, so identifiers with

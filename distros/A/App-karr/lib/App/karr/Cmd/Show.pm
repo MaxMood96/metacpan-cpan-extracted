@@ -1,17 +1,21 @@
 # ABSTRACT: Show full details of a task
 
 package App::karr::Cmd::Show;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use MooX::Cmd;
 use MooX::Options (
-  usage_string => 'USAGE: karr show [ID] [--me] [--agent NAME] [--last N] [--json]',
+  usage_string => 'USAGE: karr show [ID] [--me] [--agent NAME] [--last N] [--json] [--compact]',
 );
 use App::karr::Role::BoardAccess;
 use App::karr::Role::Output;
+use App::karr::Role::CompactOutput;
 use App::karr::Task;
+use App::karr::CrossBoard;
+use App::karr::Error qw( command_hint );
 
-with 'App::karr::Role::BoardAccess', 'App::karr::Role::Output';
+with 'App::karr::Role::BoardAccess', 'App::karr::Role::Output',
+     'App::karr::Role::CompactOutput';
 
 
 option last => (
@@ -51,6 +55,16 @@ sub _show_task {
   printf "Depends:  %s\n",
     join( ', ', map { $self->_dependency_label($_) } @{$task->depends_on} )
     if @{$task->depends_on};
+  # The other board's cards cannot be labelled with a status the way local
+  # dependencies are: reading one needs a path this command does not have and
+  # must not invent (App::karr::CrossBoard). The reference is printed and
+  # `karr needs` is where the state comes from.
+  my @needs = App::karr::CrossBoard->needs_of($task);
+  printf "Needs:    %s\n",
+    join( ', ', map { App::karr::CrossBoard->format_ref($_) } @needs ) if @needs;
+  my @from = App::karr::CrossBoard->escalated_from_of($task);
+  printf "From:     %s\n",
+    join( ', ', map { App::karr::CrossBoard->format_ref($_) } @from ) if @from;
   printf "Claimed:  %s\n", $task->claimed_by if $task->has_claimed_by;
   printf "Blocked:  %s\n", $task->has_block_reason ? $task->block_reason : 'yes'
     if $task->has_blocked;
@@ -101,7 +115,13 @@ sub _select_tasks {
   # Explicit id always wins.
   if (defined $id) {
     my $task = $self->find_task($id);
-    die "Task $id not found\n" unless $task;
+    # The id names no card, so there is nothing to show -- end on the command
+    # that lists the ids that do exist, the same spelling the mutation commands
+    # raise through App::karr::Role::TaskMutation/task_not_found (ticket k264).
+    # Show is read-only and composes no mutation role, so the line is inlined.
+    die "Task $id not found on this board:\n"
+      . command_hint('list', '--compact') . "\n"
+      unless $task;
     return ($task);
   }
 
@@ -142,6 +162,11 @@ sub execute {
   my @pos = $self->positional_args($args_ref);
   my @tasks = $self->_select_tasks($pos[0]);
 
+  # "No tasks found." stands under --compact too. It is one line already, and
+  # printing nothing at all would make an empty selection indistinguishable
+  # from a card whose line went missing -- `list --compact` can afford silence
+  # because its table says "0 task(s)", this command has no second half to say
+  # it in.
   unless (@tasks) {
     print "No tasks found.\n" unless $self->json;
     $self->print_json([]) if $self->json;
@@ -152,6 +177,17 @@ sub execute {
     my @data = map { $_->to_json_hash } @tasks;
     # A single explicit lookup stays a bare object for backward compatibility.
     $self->print_json(@data == 1 ? $data[0] : \@data);
+    return;
+  }
+
+  # Below --json and above the detail view, the same place `pick` cuts (#251):
+  # --compact shapes the plaintext rendering and never the payload. The line
+  # is App::karr::Task's, shared with `list --compact` so the two renderings
+  # of one card cannot drift apart (#254).
+  if ($self->compact) {
+    for my $task (@tasks) {
+      print $task->compact_line . "\n";
+    }
     return;
   }
 
@@ -175,7 +211,7 @@ App::karr::Cmd::Show - Show full details of a task
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -185,6 +221,7 @@ version 0.500
     karr show --me            # the last task my identity acted on
     karr show --agent fox-owl # the last task claimed by that agent
     karr show 12 --json
+    karr show --last 5 --compact  # one line per card
 
 =head1 DESCRIPTION
 
@@ -198,10 +235,19 @@ current identity most recently acted on (via the activity log). C<--agent NAME>
 shows the task(s) most recently claimed by that agent name. C<ID> always wins
 over the selector options.
 
+C<--compact> replaces that full view with one line per card -- the very line
+C<karr list --compact> prints, from L<App::karr::Task/compact_line>. It is the
+rendering for confirming what a selector selected without reading a screenful
+per card, and it is what C<show --compact> was silently failing to do while
+C<--compact> was declared for every command in L<App::karr::Role::Output>
+(#254). C<--json> is unaffected by it: the payload is the whole card either
+way.
+
 =head1 SEE ALSO
 
 L<karr>, L<App::karr>, L<App::karr::Cmd::List>, L<App::karr::Cmd::Edit>,
-L<App::karr::Cmd::Move>, L<App::karr::Cmd::Archive>, L<App::karr::Cmd::Log>
+L<App::karr::Cmd::Move>, L<App::karr::Cmd::Archive>, L<App::karr::Cmd::Log>,
+L<App::karr::Cmd::Needs>
 
 =head1 SUPPORT
 
@@ -224,9 +270,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

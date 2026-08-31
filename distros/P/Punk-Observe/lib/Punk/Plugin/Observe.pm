@@ -71,6 +71,7 @@ sub register {
     };
     $st->{arena} = _arena($st);
     $st->{retain_opts} = _retain($opts);
+    $st->{warm_opts}   = _warm($opts, $st->{retain_opts});
     $st->{db}    = _backend($st);
     $st->{seam}  = { map { $_ => _seam($opts->{$_}) } qw(alerts dashboards) };
     $st->{alerts_opts} = _alerts_opts($opts);
@@ -144,6 +145,12 @@ sub _register_jobs {
         $task->('observe.retain', '+Punk::Observe::Retain#retain_job');
         $cron->($st->{retain_opts}{at}, 'observe.retain',
                 { name => 'observe-retain', args => [ $class ] });
+    }
+
+    if ($st->{warm_opts}) {
+        $task->('observe.warm', '+Punk::Observe::Warm#warm_job');
+        $cron->($st->{warm_opts}{every}, 'observe.warm',
+                { name => 'observe-warm', args => [ $class ] });
     }
     return 1;
 }
@@ -316,6 +323,63 @@ sub _retain {
 
     return { keep => $r->{keep}, keep_ns => $ns, at => $at,
              (defined $bytes ? (bytes => $bytes) : ()) };
+}
+
+# THE WARMER, ON UNLESS TURNED OFF, for the same reason the cache it fills is:
+# a dashboard that is only fast for the people who read the documentation is a
+# dashboard that is slow. It needs the cache, so `cache => 0` turns it off too
+# rather than leaving a job that can only ever compute and discard.
+sub _warm {
+    my ($opts, $retain) = @_;
+    my $w = exists $opts->{warm} ? $opts->{warm} : {};
+    return undef unless $w;
+    return undef if exists $opts->{cache} && !$opts->{cache};
+    $w = {} unless ref $w eq 'HASH';
+
+    require Punk::Observe::Retain;
+    require Punk::Observe::Warm;
+    my %out;
+    my %window = (depth => 'depth_ns', refresh => 'refresh_ns');
+    for my $k (sort keys %window) {
+        next unless defined $w->{$k} && length $w->{$k};
+        my $ns = Punk::Observe::Retain::parse_keep($w->{$k});
+        Carp::croak("Punk::Plugin::Observe: warm $k '$w->{$k}' is not a "
+                  . "window - a number and a unit, as in 7d")
+            unless defined $ns;
+        $out{ $window{$k} } = $ns;
+    }
+    if (defined $w->{ttl} && length $w->{ttl}) {
+        my $ns = Punk::Observe::Retain::parse_keep($w->{ttl});
+        Carp::croak("Punk::Plugin::Observe: warm ttl '$w->{ttl}' is not a "
+                  . "window - a number and a unit, as in 8d")
+            unless defined $ns;
+        $out{ttl} = int($ns / 1_000_000_000);
+    }
+    for my $k (qw(budget timeout)) {
+        next unless defined $w->{$k};
+        Carp::croak("Punk::Plugin::Observe: warm $k must be a positive number")
+            unless $w->{$k} =~ /\A\d+(?:\.\d+)?\z/ && $w->{$k} > 0;
+        $out{$k} = $w->{$k};
+    }
+
+    # WARMING PAST THE HORIZON IS WORK OVER DATA THAT IS GONE. Retention
+    # deletes segments; a chunk covering a window with nothing left in it is
+    # computed, stored and never right again.
+    if ($retain && $retain->{keep_ns}) {
+        my $depth = $out{depth_ns} || Punk::Observe::Warm::DEPTH_NS();
+        $out{depth_ns} = $retain->{keep_ns} if $retain->{keep_ns} < $depth;
+    }
+
+    my $every = defined $w->{every} ? $w->{every} : '@every 5m';
+    {
+        local $@;
+        eval { require Punk::Queue::Cron;
+               Punk::Queue::Cron->check($every); 1 }
+            or Carp::croak("Punk::Plugin::Observe: warm every '$every' is "
+                         . "not a cron expression: $@");
+    }
+    $out{every} = $every;
+    return \%out;
 }
 
 sub _arena {
@@ -1552,6 +1616,40 @@ Every path through it degrades to the plain query: L<Punk::Cache> not
 installed, an unwritable directory, a full disk and a corrupt entry all come
 out as a slower answer rather than a broken panel. L<Punk::Observe::Cache>
 carries what cannot be chunked and why.
+
+The budgets the caller passed travel with every chunk. A panel asks for no row
+ceiling, and a chunk run at the store's own default instead would truncate on
+a busy hour and report the sum of a dozen capped scans as a figure somebody
+had chosen.
+
+=item C<warm>
+
+    warm => 0                                     # off
+    warm => { every => '@every 5m', depth => '7d',
+              refresh => '2h', ttl => '8d',
+              budget => 400, timeout => 20 }
+
+Fills the cache above in the background, B<on unless turned off>. Without it
+the first person to open a dashboard after a restart pays for the whole
+window, because the cache fills as a side effect of answering. Measured on the
+demo's 10GB store, a cold twenty-four-hour panel took 64 seconds and a warm
+one 0.4.
+
+It is a L<Punk::Queue> cron task like the other four, so it runs in a worker
+pool and B<not> in the web server - a deployment without one gets the
+uncached behaviour rather than an error. It needs the query cache, so
+C<< cache => 0 >> turns it off too.
+
+C<depth> is how far back to keep hot, clamped to C<retain>'s window where one
+is configured: warming over data retention has deleted is work for an answer
+that can never be right. C<refresh> is the newest window recomputed on every
+pass rather than kept, which is where late telemetry lands. C<ttl> outlives
+C<depth> deliberately, so an entry is not re-earned on a schedule.
+
+C<budget> and C<timeout> bound one pass, because a pass over a busy store is
+unbounded work and a job that can run for ever can hold a worker for ever. A
+pass that stops resumes on the next tick. L<Punk::Observe::Warm> carries what
+it walks and what it reports; C<punk-observe-warm> runs one pass by hand.
 
 =item C<retain>
 

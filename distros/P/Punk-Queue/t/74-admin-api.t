@@ -228,7 +228,8 @@ my $wid = $q->backend->register_worker(0, { role => 'child' });
     my $html = $res->[2][0];
     unlike($html, qr{/api/}, 'the shell itself calls no API inline - '
                            . 'data loads from app.js, which handles errors');
-    like($html, qr/spaContent/, 'and carries the SPA container');
+    like($html, qr/id="pqContent"/,
+         'and carries the content element app.js mounts its page module on');
 }
 
 done_testing();

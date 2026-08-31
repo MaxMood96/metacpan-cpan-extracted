@@ -24,22 +24,26 @@ my %WriteMakefileArgs = (
     "bin/karr",
     "bin/karr-foundation"
   ],
-  "LICENSE" => "perl",
+  "LICENSE" => "artistic_2",
   "NAME" => "App::karr",
   "PREREQ_PM" => {
+    "Alien::Libgit2" => "0.002",
     "Encode" => 0,
     "Errno" => 0,
     "File::ShareDir" => 0,
-    "Git::Libgit2" => "0.006",
-    "Git::Native" => "0.005",
+    "Git::Libgit2" => "0.007",
+    "Git::Native" => "0.006",
+    "IO::Handle" => 0,
     "IO::Select" => 0,
     "JSON::MaybeXS" => 0,
+    "Module::Runtime" => 0,
     "Moo" => 0,
     "MooX::Cmd" => 0,
     "MooX::Options" => 0,
     "POSIX" => 0,
     "Path::Tiny" => 0,
     "Scalar::Util" => 0,
+    "Sys::Hostname" => 0,
     "Term::ANSIColor" => 0,
     "Time::HiRes" => 0,
     "Time::Piece" => 0,
@@ -51,7 +55,7 @@ my %WriteMakefileArgs = (
     "PPI" => 0,
     "Test::More" => 0
   },
-  "VERSION" => "0.500",
+  "VERSION" => "0.600",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -59,14 +63,17 @@ my %WriteMakefileArgs = (
 
 
 my %FallbackPrereqs = (
+  "Alien::Libgit2" => "0.002",
   "Encode" => 0,
   "Errno" => 0,
   "File::ShareDir" => 0,
   "File::Temp" => 0,
-  "Git::Libgit2" => "0.006",
-  "Git::Native" => "0.005",
+  "Git::Libgit2" => "0.007",
+  "Git::Native" => "0.006",
+  "IO::Handle" => 0,
   "IO::Select" => 0,
   "JSON::MaybeXS" => 0,
+  "Module::Runtime" => 0,
   "Moo" => 0,
   "MooX::Cmd" => 0,
   "MooX::Options" => 0,
@@ -74,6 +81,7 @@ my %FallbackPrereqs = (
   "PPI" => 0,
   "Path::Tiny" => 0,
   "Scalar::Util" => 0,
+  "Sys::Hostname" => 0,
   "Term::ANSIColor" => 0,
   "Test::More" => 0,
   "Time::HiRes" => 0,

@@ -1,0 +1,93 @@
+NAME
+
+Crypt::JWS::OpenSSL
+
+SYNOPSIS
+
+  use Crypt::JWS::OpenSSL;
+  my $cjos = Crypt::JWS::OpenSSL->new;
+  
+  my $token = $cjos->encode(
+      header => $header_ref,
+      claims => $claims_ref,
+      secret => $key,
+  );
+  
+  if(!$token) {
+     $logger->log_error( $cjos->last_error)
+  }
+  
+  ###################
+  ## in some module
+  ###################
+  
+  use Crypt::JWS::OpenSSL;
+  
+  has verifier => ( is => 'ro', default => sub { Crypt::JWS::OpenSSL->new } );
+  
+  sub permissions_from_token {
+    my($self, $token) = @_;
+    my $unverified = $self->verifier->decode_unverified(token => $token);
+    unless($unverified) {
+        my $reason = $self->verifier->last_error;
+        ## inspect and log reason
+        return undef;
+    }
+    my ($secret, $permissions) = $self->examine_token(
+        $unverified->{header}, $unverified->{claims}
+    );
+    unless($secret && $permissions) {
+      ## no secret and permissions
+      return undef;
+    }
+    my $ok = $self->verifier->verify(
+      secret      => $secret,
+      verifytoken => $unverified->{verifytoken}
+    );
+    unless( $ok && $ok eq '1' ) {
+       my $reason = $self->verifier->last_error;
+       ## inspect and log reason
+       return undef;
+    }
+    ## log access
+    ## grant permissions
+    return $permissions;
+  }
+  
+DESCRIPTION
+
+Encode, decode and verify signed compact JWTs using Crypt::OpenSSL modules.
+
+INSTALLATION
+
+Requires Perl minimum version 5.8.9
+
+To install this module, run the following commands:
+
+    perl Makefile.PL
+    make
+    make test
+    make install
+    
+MAKE PREREQUISITES
+
+ExtUtils::MakeMaker
+Test::Deep
+Test::More
+Crypt::OpenSSL::Guess
+    
+RUNTIME PREREQUISITES
+
+Crypt::OpenSSL::Bignum        0.09
+Crypt::OpenSSL::Bignum::CTX
+Crypt::OpenSSL::EC            1.32
+Crypt::OpenSSL::ECDSA         0.10
+Crypt::OpenSSL::RSA           0.33
+Crypt::OpenSSL::Random        0.15
+Digest::SHA
+JSON::MaybeXS                 1.002002
+MIME::Base64
+Moo                           2.004003
+Moo::Role
+Try::Tiny
+namespace::clean

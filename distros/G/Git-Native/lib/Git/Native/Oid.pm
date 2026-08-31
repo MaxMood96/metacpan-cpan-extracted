@@ -1,6 +1,7 @@
 # ABSTRACT: A libgit2 OID (20-byte SHA-1)
 
 package Git::Native::Oid;
+our $VERSION = '0.006';
 use Moo;
 use Carp ();
 use Git::Libgit2 qw( oid_from_hex oid_to_hex );
@@ -113,7 +114,7 @@ Git::Native::Oid - A libgit2 OID (20-byte SHA-1)
 
 =head1 VERSION
 
-version 0.005
+version 0.006
 
 =head1 SYNOPSIS
 

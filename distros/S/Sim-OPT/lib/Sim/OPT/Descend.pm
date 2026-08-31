@@ -3408,6 +3408,152 @@ for ( my $i = 0 ; $i < $max ; $i++ )
 
 #################################################################################
 
+  # When explicitly requested, convert the ordered metamodel (ordmeta) into
+  # the same row layout used by totres, without modifying totres itself.
+  #
+  # Exact inversion is possible when totres has one transformed objective:
+  #   totres:  id,name,raw,normalized,compound
+  #   ordmeta: id,compound
+  #
+  # Sampled points are copied verbatim from totres. Surrogate points use the
+  # normalization denominator derived from real sampled rows. If more than one
+  # independently normalized objective is present, one compound scalar cannot
+  # uniquely recover all raw objective values, so the conversion stops rather
+  # than inventing data.
+  sub _write_weightordmeta
+  {
+    my ( $ordmeta, $totres, $weights_r ) = @_;
+
+    return ( "", 0 ) unless defined( $ordmeta ) && $ordmeta ne "" && -e $ordmeta;
+    die "convergeintomodel: totres not found: $totres\n"
+      unless defined( $totres ) && $totres ne "" && -e $totres;
+
+    my $is_num = sub
+    {
+      my ( $v ) = @_;
+      return 0 unless defined $v;
+      return ( $v =~ /^\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?\s*$/ ) ? 1 : 0;
+    };
+
+    open( my $TR, '<', $totres ) or die "Cannot read totres '$totres': $!\n";
+    my @totrows = <$TR>;
+    close $TR;
+    chomp @totrows;
+    @totrows = grep { defined($_) && $_ ne "" } @totrows;
+    die "convergeintomodel: totres is empty: $totres\n" unless @totrows;
+
+    my @first = split( /,/, $totrows[0], -1 );
+    my $candidate = ( scalar(@first) - 2 ) / 3;
+    die "convergeintomodel: cannot infer totres objective layout from '$totres'\n"
+      unless $candidate >= 1 && int($candidate) == $candidate;
+
+    my $nobj = int($candidate);
+    die "convergeintomodel: weightordmeta inversion is underdetermined for $nobj objectives; "
+      . "ordmeta contains only one compound value. totres was not modified.\n"
+      unless $nobj == 1;
+
+    my $name = $first[1];
+    die "convergeintomodel: missing objective name in '$totres'\n"
+      unless defined($name) && $name ne "";
+
+    my $weight = 1;
+    if ( ref($weights_r) eq 'ARRAY' && scalar(@{$weights_r}) > 0
+      && defined($weights_r->[0]) && $is_num->($weights_r->[0]) )
+    {
+      $weight = abs( 0 + $weights_r->[0] );
+    }
+    die "convergeintomodel: cannot invert a zero objective weight\n" if $weight == 0;
+
+    my %sampled;
+    my $factor;
+    foreach my $row ( @totrows )
+    {
+      my @f = split( /,/, $row, -1 );
+      next unless scalar(@f) == 5;
+      $sampled{$f[0]} = $row if defined($f[0]) && $f[0] ne "";
+
+      my ( $raw, $norm ) = ( $f[2], $f[3] );
+      next unless $is_num->($raw) && $is_num->($norm);
+      next if ( 0 + $norm ) == 0;
+
+      my $ratio = ( 0 + $raw ) / ( 0 + $norm );
+      if ( !defined($factor) )
+      {
+        $factor = $ratio;
+      }
+      else
+      {
+        my $scale = abs($factor) > 1 ? abs($factor) : 1;
+        my $reldiff = abs( $ratio - $factor ) / $scale;
+        die "convergeintomodel: inconsistent normalization ratios in '$totres' "
+          . "($factor versus $ratio); refusing to create weightordmeta.\n"
+          if $reldiff > 1e-8;
+      }
+    }
+
+    die "convergeintomodel: no non-zero sampled normalized value in '$totres'; "
+      . "cannot derive normalization factor.\n"
+      unless defined($factor);
+
+    open( my $OMI, '<', $ordmeta ) or die "Cannot read ordmeta '$ordmeta': $!\n";
+    my @ordrows = <$OMI>;
+    close $OMI;
+
+    my $weightordmeta = $ordmeta;
+    if ( $weightordmeta =~ /_ordmeta\.csv$/ )
+    {
+      $weightordmeta =~ s/_ordmeta\.csv$/_weightordmeta.csv/;
+    }
+    else
+    {
+      $weightordmeta .= "_weightordmeta.csv";
+    }
+
+    open( my $WO, '>', $weightordmeta )
+      or die "Cannot write weightordmeta '$weightordmeta': $!\n";
+
+    my $written = 0;
+    my $skipped = 0;
+    foreach my $line ( @ordrows )
+    {
+      chomp $line;
+      next unless defined($line) && $line ne "";
+      my ( $id, $compound ) = split( /,/, $line, 2 );
+      next unless defined($id) && $id ne "";
+      # Preserve actual sampled rows exactly, including their raw value/format.
+      if ( exists $sampled{$id} )
+      {
+        print $WO $sampled{$id} . "\n";
+        $written++;
+        next;
+      }
+
+      # Some legacy Interlinear paths can leave unresolved ID,ID rows. They are
+      # not numerical metamodel results, so omit them from the weighted sidecar.
+      if ( !$is_num->($compound) )
+      {
+        $skipped++;
+        next;
+      }
+
+      my $compound_num = 0 + $compound;
+      my $normalized   = $compound_num / $weight;
+      my $raw          = $normalized * $factor;
+
+      my $raw_s  = sprintf( "%.15g", $raw );
+      my $norm_s = sprintf( "%.15g", $normalized );
+
+      # Keep Interlinear's compound string verbatim in the final column.
+      print $WO join( ',', $id, $name, $raw_s, $norm_s, $compound ) . "\n";
+      $written++;
+    }
+    close $WO;
+
+    warn "convergeintomodel: skipped $skipped unresolved non-numeric ordmeta rows.\n" if $skipped;
+    return ( $weightordmeta, $written, $skipped );
+  }
+
+
 
   sub metamodel
   {
@@ -3723,7 +3869,126 @@ for ( my $i = 0 ; $i < $max ; $i++ )
     open( my $OM, ">", $ordmeta ) or die "Cannot write $ordmeta: $!\n";
     foreach my $ln ( @sorted ) { print $OM $ln . "\n"; }
     close $OM;
+
+    my $convergeintomodel =
+      ( defined( $dowhat{convergeintomodel} ) && $dowhat{convergeintomodel} eq "y" ) ? "y" : "n";
+
+    if ( $convergeintomodel eq "y" )
+    {
+      my ( $weightordmeta, $weighted_rows, $skipped_rows ) =
+        _write_weightordmeta( $ordmeta, $dirfiles{totres}, \@main::weights );
+      say "#Created $weightordmeta with $weighted_rows ordered sampled/surrogate rows"
+        . ( $skipped_rows ? " ($skipped_rows unresolved rows skipped)." : "." )
+        if defined($weightordmeta) && $weightordmeta ne "";
+    }
   }  # END SUB DWGN
+
+
+  # Resolve an instance identifier to its variable-level coordinates for
+  # tie-breaking.  Long names are already clear identifiers; short/medium
+  # names are resolved through the current Sim::OPT instance map when needed.
+  sub _tie_levels
+  {
+    my ( $raw, $inst_r, $mypath, $file ) = @_;
+    return undef unless defined( $raw );
+
+    my $clear = Sim::OPT::clean( $raw, $mypath, $file );
+    if ( $clear !~ /(?:^|_)(\d+)-(\d+)(?=_|$)/ )
+    {
+      my @keys = ( $clear, "$mypath/$file" . "_" . $clear );
+      foreach my $key ( @keys )
+      {
+        next unless exists( $inst_r->{$key} );
+        my $mapped = $inst_r->{$key};
+        next unless defined( $mapped ) && $mapped ne "";
+        $mapped = Sim::OPT::clean( $mapped, $mypath, $file );
+        if ( $mapped =~ /(?:^|_)(\d+)-(\d+)(?=_|$)/ )
+        {
+          $clear = $mapped;
+          last;
+        }
+      }
+    }
+
+    my %levels;
+    while ( $clear =~ /(?:^|_)(\d+)-(\d+)(?=_|$)/g )
+    {
+      $levels{0 + $1} = 0 + $2;
+    }
+    return keys( %levels ) ? \%levels : undef;
+  }
+
+
+  # Hamming distance from the current incumbent represented by %carrier.
+  # Every variable present in the carrier must be recoverable from the
+  # candidate; otherwise the candidate is not safely comparable.
+  sub _tie_hamming_to_carrier
+  {
+    my ( $raw, $carrier_r, $inst_r, $mypath, $file ) = @_;
+    my $levels_r = _tie_levels( $raw, $inst_r, $mypath, $file );
+    return undef unless ref( $levels_r ) eq "HASH";
+
+    my $distance = 0;
+    my $compared = 0;
+    foreach my $var ( keys %{ $carrier_r } )
+    {
+      next unless defined( $carrier_r->{$var} ) && $carrier_r->{$var} ne "";
+      return undef unless exists( $levels_r->{$var} );
+      $distance++ if ( 0 + $levels_r->{$var} ) != ( 0 + $carrier_r->{$var} );
+      $compared++;
+    }
+    return undef unless $compared;
+    return $distance;
+  }
+
+
+  # The objective-ordered files put an optimum on the first row.  If several
+  # rows have exactly the same optimum value, prefer the one nearest to the
+  # current incumbent in Hamming distance.  If several are still equally near,
+  # choose randomly among those nearest rows.  If identifiers cannot be
+  # compared safely, retain the historical first-row behaviour.
+  sub _choose_tied_optimum
+  {
+    my ( $lines_r, $valuecolumn, $carrier_r, $inst_r, $mypath, $file ) = @_;
+    return undef unless ref( $lines_r ) eq "ARRAY" && @{ $lines_r };
+    return $lines_r->[0] if @{ $lines_r } == 1;
+
+    my @first = split( /,/, $lines_r->[0], -1 );
+    my $best = $first[$valuecolumn];
+    return $lines_r->[0] unless defined( $best );
+    $best =~ s/^\s+|\s+$//g;
+    return $lines_r->[0]
+      unless $best =~ /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?$/;
+
+    my @ties;
+    foreach my $line ( @{ $lines_r } )
+    {
+      my @fields = split( /,/, $line, -1 );
+      my $value = $fields[$valuecolumn];
+      next unless defined( $value );
+      $value =~ s/^\s+|\s+$//g;
+      next unless $value =~ /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?$/;
+      push( @ties, $line ) if ( 0 + $value ) == ( 0 + $best );
+    }
+    return $lines_r->[0] unless @ties > 1;
+
+    my @scored;
+    foreach my $line ( @ties )
+    {
+      my ( $rawid ) = split( /,/, $line, 2 );
+      my $distance = _tie_hamming_to_carrier( $rawid, $carrier_r, $inst_r, $mypath, $file );
+      return $lines_r->[0] unless defined( $distance );
+      push( @scored, [ $distance, $line ] );
+    }
+
+    my $mindistance = min( map { $_->[0] } @scored );
+    my @nearest = map { $_->[1] } grep { $_->[0] == $mindistance } @scored;
+    my $chosen = @nearest == 1 ? $nearest[0] : $nearest[ int( rand( scalar( @nearest ) ) ) ];
+
+    say "#Tie-break: " . scalar( @ties ) . " equal optima; minimum Hamming distance from incumbent = $mindistance; "
+      . scalar( @nearest ) . " equally-near candidate(s).";
+    return $chosen;
+  }
 
 
   sub takeoptima
@@ -3776,7 +4041,7 @@ for ( my $i = 0 ; $i < $max ; $i++ )
     my $winnerentry;
     if ( ( $direction eq ">" ) or ( ( $direction eq "star"  ) and ( $starorder eq ">"  ) ) )
     {
-      $winnerentry = $lines[0]; #say  "!!! \$winnerenty = \$lines[0]: $winnerenty";
+      $winnerentry = _choose_tied_optimum( \@lines, $objectivecolumn, \%carrier, \%inst, $mypath, $file ); #say  "!!! \$winnerenty = \$lines[0]: $winnerenty";
       if ( scalar( @{ $vehicles{nesting}{$dirfiles{nestclock}} } ) > 0 )
       {
         push( @{ $vehicles{$countcase}{$countblock} }, @lines[0..$slicenum]);
@@ -3784,7 +4049,7 @@ for ( my $i = 0 ; $i < $max ; $i++ )
     }
     elsif ( ( $direction eq "<" ) or ( ( $direction eq "star"  ) and ( $starorder eq "<"  ) ) )
     {
-      $winnerentry = $lines[0];
+      $winnerentry = _choose_tied_optimum( \@lines, $objectivecolumn, \%carrier, \%inst, $mypath, $file );
       if ( scalar( @{ $vehicles{nesting}{$dirfiles{nestclock}} } ) > 0 )
       {
         push( @{ $vehicles{$countcase}{$countblock} }, @lines[0..$slicenum]);
@@ -4005,11 +4270,11 @@ for ( my $i = 0 ; $i < $max ; $i++ )
         elsif ( $starstring ne "" )
         {
           my @lines = uniq( @lines );
-          if ( ( $starorder = ">" ) or ( $direction = ">" ) )
+          if ( ( $starorder eq ">" ) or ( $direction eq ">" ) )
           {
             @lines = sort { (split( ',', $b))[ $objectivecolumn ] <=> ( split( ',', $a))[ $objectivecolumn ] } @lines;
           }
-          elsif ( ( $starorder = "<" ) or ( $direction = "<" ) )
+          elsif ( ( $starorder eq "<" ) or ( $direction eq "<" ) )
           {
             @lines = sort { (split( ',', $a))[ $objectivecolumn ] <=> ( split( ',', $b))[ $objectivecolumn ] } @lines;
           }
@@ -4069,7 +4334,7 @@ for ( my $i = 0 ; $i < $max ; $i++ )
         my $winnerentry;
         if ( ( $direction eq ">" ) or ( ( $direction eq "star"  ) and ( $starorder eq ">"  ) ) )
         {
-          $winnerentry = $lines[0];
+          $winnerentry = _choose_tied_optimum( \@lines, ( $dirfiles{metamodel} eq "y" ? 1 : $objectivecolumn ), \%carrier, \%inst, $mypath, $file );
           if ( scalar( @{ $vehicles{nesting}{$dirfiles{nestclock}} } ) > 0 )
           {
             push( @{ $vehicles{$countcase}{$countblock} }, @lines[0..$slicenum]);
@@ -4077,7 +4342,7 @@ for ( my $i = 0 ; $i < $max ; $i++ )
         }
         elsif ( ( $direction eq "<" ) or ( ( $direction eq "star"  ) and ( $starorder eq "<"  ) ) )
         {
-          $winnerentry = $lines[0];
+          $winnerentry = _choose_tied_optimum( \@lines, ( $dirfiles{metamodel} eq "y" ? 1 : $objectivecolumn ), \%carrier, \%inst, $mypath, $file );
           if ( scalar( @{ $vehicles{nesting}{$dirfiles{nestclock}} } ) > 0 )
           {
             push( @{ $vehicles{$countcase}{$countblock} }, @lines[0..$slicenum]);
@@ -4095,7 +4360,7 @@ for ( my $i = 0 ; $i < $max ; $i++ )
         chomp $winnerentry;
 
 
-        if ( $dirfiles{popsupercycle} = "y" )
+        if ( $dirfiles{popsupercycle} eq "y" )
         {
           $dirfiles{launching} = "y";
           my $revealnum = $dirfiles{revealnum} - 1;
@@ -4250,7 +4515,7 @@ for ( my $i = 0 ; $i < $max ; $i++ )
         my $winnerentry;
         if ( ( $direction eq ">" ) or ( ( $direction eq "star"  ) and ( $starorder eq ">"  ) ) )
         {
-          $winnerentry = $lines[0];
+          $winnerentry = _choose_tied_optimum( \@lines, ( $dirfiles{metamodel} eq "y" ? 1 : $objectivecolumn ), \%carrier, \%inst, $mypath, $file );
           if ( scalar( @{ $vehicles{nesting}{$dirfiles{nestclock}} } ) > 0 )
           {
             push( @{ $vehicles{$countcase}{$countblock} }, @lines[0..$slicenum]);
@@ -4258,7 +4523,7 @@ for ( my $i = 0 ; $i < $max ; $i++ )
         }
         elsif ( ( $direction eq "<" ) or ( ( $direction eq "star"  ) and ( $starorder eq "<"  ) ) )
         {
-          $winnerentry = $lines[0];
+          $winnerentry = _choose_tied_optimum( \@lines, ( $dirfiles{metamodel} eq "y" ? 1 : $objectivecolumn ), \%carrier, \%inst, $mypath, $file );
           if ( scalar( @{ $vehicles{nesting}{$dirfiles{nestclock}} } ) > 0 )
           {
             push( @{ $vehicles{$countcase}{$countblock} }, @lines[0..$slicenum]);
@@ -4275,7 +4540,7 @@ for ( my $i = 0 ; $i < $max ; $i++ )
         }
         chomp $winnerentry;
 
-        if ( $dirfiles{popsupercycle} = "y" )
+        if ( $dirfiles{popsupercycle} eq "y" )
         {
           $dirfiles{launching} = "y";
           my $revealnum = $dirfiles{revealnum} - 1;
@@ -4342,7 +4607,7 @@ for ( my $i = 0 ; $i < $max ; $i++ )
       else
       { #say  "!!!! RELAUNCHING WITH INST " . dump( %inst ); 
         $winneritem = Sim::OPT::clean( $winneritem, $mypath, $file );
-        say  "!!!! \winneritem: " . dump( @winneritem );
+        say  "!!!! \winneritem: " . dump( $winneritem );
         push ( @{ $winneritems[$countcase][$countblock+1] }, $winneritem );
         say  "!!!! WINNERITEMS: " . dump( @winneritems );
         $countblock++; ### !!!

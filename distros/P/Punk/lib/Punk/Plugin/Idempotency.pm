@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk ();
 
-our $VERSION = '0.34';
+our $VERSION = '0.38';
 
 1;
 
@@ -27,7 +27,11 @@ Punk::Plugin::Idempotency - Idempotency on unsafe methods
         ttl   => 86400,
     };
 
-    post '/orders' => sub { ... }, { idempotent => 1 };
+    post '/orders' => sub {
+        my ($c) = @_;
+        my $order = create_order($c->req->json);   # at most once per key
+        $c->json($order, 201);
+    }, { idempotent => 1 };
 
 =head1 DESCRIPTION
 
@@ -134,6 +138,16 @@ stream - cannot be recorded without consuming what is being sent, so it
 is served normally and B<not> recorded. That means no idempotency on that
 request, so it is logged at warn.
 
+A response B<larger than C<max_record>> (1MB unless you say otherwise)
+is served but not recorded either: the plugin stores whole responses,
+and a 50MB export behind a key would be 50MB in the cache per key for
+the life of the TTL. The response carries
+C<Idempotency-Recorded: false> so a client can see its retry will
+re-execute, and the refusal is logged at warn. The single-flight lock is
+still held for the request's duration - a concurrent retry of an
+oversized request waits rather than executing in parallel; only the
+replayability is given up.
+
 A replay carries C<Idempotency-Replayed: true>. A client that cannot tell
 a replay from a fresh execution cannot debug anything, and neither can
 your log.
@@ -160,11 +174,14 @@ executing in parallel. A retry that waits out the budget executes anyway
 - a stalled request is worse than a duplicated one, which is the rule
 C<compute> already follows.
 
-The plugin reads B<through the memory tier, never from it>. A tier is a
-copy per worker, eventually consistent, and a tier that has not yet seen
-a write answers "no entry" - which here means "execute the work a second
-time". So C<< memory => ... >> on your cache is honoured for everything
-else and bypassed for these keys.
+The plugin's keys B<cannot enter the memory tier>. A tier is a copy per
+worker, eventually consistent, and a tier that has not yet seen a write
+answers "no entry" - which here means "execute the work a second time",
+the exact failure this plugin exists to prevent, delivered by
+configuration. So the plugin's reads and writes go straight to the
+backend: C<< memory => ... >> on your cache is honoured for everything
+else, and for these keys the path through the tier does not exist. Not a
+rule to follow - there is nothing to configure and nothing to get wrong.
 
 =head2 The store is a seam
 
@@ -189,6 +206,13 @@ Required, a coderef receiving the context. See above.
 Seconds an entry is replayable, default C<86400>. How long after a failed
 request will your client still retry is a business question, so this is
 an option rather than a constant.
+
+=item max_record
+
+The largest response body, in bytes, that will be recorded for replay;
+default C<1048576> (1MB). Over it the response is served with
+C<Idempotency-Recorded: false> and nothing is stored - see L</Which
+responses are replayed>. Must be positive; the boot croaks otherwise.
 
 =back
 

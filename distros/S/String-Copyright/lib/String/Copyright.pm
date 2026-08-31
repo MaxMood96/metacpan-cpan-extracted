@@ -28,11 +28,11 @@ String::Copyright - Representation of text-based copyright statements
 
 =head1 VERSION
 
-Version v0.4.0
+Version v0.4.1
 
 =cut
 
-our $VERSION = "v0.4.0";
+our $VERSION = "v0.4.1";
 
 use parent 'Exporter::Tiny';
 use Carp     ();
@@ -147,15 +147,26 @@ my %soup_patterns = (
 	"\xA2\xA9" => 'GBK © (Chinese, code page 936), read as latin1 as "¢©"',
 );
 
-my $sign_soup_ = do {
+my %dash_soup = (
+	"\x{E2}\x{80}\x{93}"       => 'EN-DASH (UTF-8 as Latin-1)',
+	"\x{E2}\x{80}\x{94}"       => 'EM-DASH (UTF-8 as Latin-1)',
+	"\x{E2}\x{20AC}\x{201C}"   => 'EN-DASH (UTF-8 as CP1252)',
+	"\x{E2}\x{20AC}\x{201D}"   => 'EM-DASH (UTF-8 as CP1252)',
+	"\x{0432}\x{0402}\x{2019}" => 'EN-DASH (UTF-8 as CP1251)',
+	"\x{0432}\x{0402}\x{201D}" => 'EM-DASH (UTF-8 as CP1251)',
+);
+
+my $_build_alt = sub ($table) {
 	my @alt;
-	for my $pat ( sort { length $b <=> length $a } keys %soup_patterns ) {
+	for my $pat ( sort { length $b <=> length $a } keys %$table ) {
 		my $esc = join '',
 			map { '\x{' . sprintf( '%X', ord ) . '}' } split //, $pat;
 		push @alt, $esc;
 	}
-	join '|', @alt;
+	return join '|', @alt;
 };
+my $sign_soup_ = $_build_alt->( \%soup_patterns );
+my $dash_soup_ = $_build_alt->( \%dash_soup );
 
 # high-bit © noise, caused by misparsing UTF-8 as latin1
 # except \xA2 (GBK © lead byte ¢©), \xAE (latin1 ©), \xAE (MacRoman ©)
@@ -259,24 +270,49 @@ sub _generate_copyright
 		# stringify objects
 		$copyright = "$copyright";
 
-		$copyright =~ s{$html_xml_tags_re}{}g;
+		my %changed;
+
+		my $pre = $copyright;
+
+		if ( my $c = $copyright =~ s{$html_xml_tags_re}{}g ) {
+			$changed{html} = $c;
+		}
+
+		if ( my $c = $copyright =~ s/$dash_soup_/-/g ) {
+			$changed{dash_soup} = $c;
+		}
 
 		if ( $copyright =~ /(?:$sign)|(?i:copyright\b)/ ) {
-			my $before = $log->is_debug ? $copyright : undef;
-			if ( $copyright =~ s/$sign_soup_/©/g ) {
-				$log->warn('String::Copyright normalized sign-soup input');
-				$log->debug(
-					sub { 'sign-soup detail: ' . _soup_detail($before) } );
+			if ( my $c = $copyright =~ s/$sign_soup_/©/g ) {
+				$changed{sign_soup} = $c;
 			}
 		}
 
-		if ( $copyright =~ /$dash/ ) {
-			my $before = $log->is_debug ? $copyright : undef;
-			for my $cp (@dash_codepoints) {
-				my $d = chr( hex($cp) );
-				$copyright =~ s/\Q$d\E/-/g;
+		if ( ( my $c = $copyright =~ s/$dash/-/g ) ) {
+			$changed{dash} = $c;
+			if ( $log->is_trace ) {
+				my %seen;
+				my @notes;
+				while ( $pre =~ /[$dash]/g ) {
+					my $cp = ord $&;
+					next if $cp == 0x2D;
+					next if $seen{$cp}++;
+					push @notes, sprintf( 'U+%04X', $cp );
+				}
+				$changed{dash} = \@notes if @notes;
 			}
-			$log->debug( sub { 'dash-normalized input: ' . $before } );
+		}
+
+		if (%changed) {
+			if ( $log->is_trace ) {
+				$log->trace( 'normalized copyright string', \%changed );
+			}
+			else {
+				$log->debugf(
+					'normalized copyright string: %s',
+					join( ', ', sort keys %changed )
+				);
+			}
 		}
 
 		# TODO: also parse @_ - but each separately!

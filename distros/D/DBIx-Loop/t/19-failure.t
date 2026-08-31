@@ -48,9 +48,16 @@ my $file = "$dir/fail.db";
     like($f->failure, qr/NOT NULL constraint failed: t\.name/,
         'sync: with the driver\'s own message');
 
-    $f = $db->query('INSERT INTO t (name) VALUES (NULL) RETURNING *');
+    # the query path, not the do path: prepare succeeds and execute returns
+    # false. No RETURNING - that is SQLite 3.35+, and on an older DBD::SQLite
+    # this fails in PREPARE instead, testing the wrong seam
+    $f = $db->query('INSERT INTO t (name) VALUES (NULL)');
     ok($f->is_failed, 'sync: a query whose execute fails fails the future');
     like($f->failure, qr/NOT NULL constraint/, 'sync: same message');
+
+    $f = $db->query('SELECT * FROM no_such_table');
+    ok($f->is_failed, 'sync: a query whose prepare fails fails the future');
+    like($f->failure, qr/no_such_table/, 'sync: with the driver\'s reason, not a placeholder');
 
     $f = $db->do('INSERT INTO t (name) VALUES (?)', 'ok');
     ok($f->is_done, 'sync: a good do still resolves');
@@ -63,7 +70,7 @@ my $file = "$dir/fail.db";
 
 # ---- the pool, and a transaction on it ---------------------------------------
 SKIP: {
-    skip 'IO::Async required for the pool half', 9
+    skip 'IO::Async required for the pool half', 10
         unless eval { require IO::Async::Loop; require DBIx::Loop::Loop::IOAsync; 1 };
 
     my $ad = DBIx::Loop::Loop::IOAsync->new;
@@ -76,9 +83,10 @@ SKIP: {
     ok($f->is_failed, 'pool: a failing do fails the future');
     like($f->failure, qr/NOT NULL constraint failed: t\.name/, 'pool: with the message');
 
-    $f = $db->query('INSERT INTO t (name) VALUES (NULL) RETURNING *');
+    $f = $db->query('INSERT INTO t (name) VALUES (NULL)');
     $ad->await($f);
     ok($f->is_failed, 'pool: a failing execute on the query path fails the future');
+    like($f->failure, qr/NOT NULL constraint/, 'pool: with the message too');
 
     # the case that matters: a transaction whose write fails must ROLL BACK
     my $count_before = do {

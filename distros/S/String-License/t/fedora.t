@@ -1,9 +1,7 @@
-use v5.20;
-use feature qw(signatures);
-no warnings qw(experimental::signatures);
+use v5.40;
 
 use Test2::V0;
-use Test2::Require::Module 'Regexp::Pattern::License' => '3.9.0';
+use Test2::Require::Module 'Regexp::Pattern::License' => '3.11.3';
 
 use Path::Tiny;
 

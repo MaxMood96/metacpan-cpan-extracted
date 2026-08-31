@@ -1,7 +1,7 @@
 # ABSTRACT: Write the ref-backed board out as a tasks/ file view
 
 package App::karr::Cmd::Materialize;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use MooX::Cmd;
 use MooX::Options (
@@ -9,6 +9,7 @@ use MooX::Options (
 );
 use App::karr::Role::BoardAccess;
 use App::karr::Role::Output;
+use App::karr::Error qw( command_hint );
 
 with 'App::karr::Role::BoardAccess', 'App::karr::Role::Output';
 
@@ -26,7 +27,9 @@ sub execute {
   # Read-only: materialize reflects the current local refs into files, so it
   # syncs nothing (matching the reading commands list/show/board).
   my $store = $self->store;
-  die "No karr board found. Run 'karr init' to create one.\n"
+  # Same sentence as everywhere else, with the way out spelled as the command
+  # instead of quoted inside the prose, and last (ticket k263).
+  die "No karr board found:\n" . command_hint('init') . "\n"
     unless $store->has_board_refs;
 
   # Asked before materialize_to runs, so the answer is about the working tree
@@ -81,7 +84,7 @@ App::karr::Cmd::Materialize - Write the ref-backed board out as a tasks/ file vi
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -156,9 +159,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

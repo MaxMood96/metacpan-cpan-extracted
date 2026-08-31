@@ -1,3 +1,452 @@
+0.600     2026-08-31 01:16:28Z
+
+    - Karr writes its own ticket ids as `kNNN` in prose from now on,
+      never as a bare `#NNN`. A `#`-number reads as an issue on whichever
+      bug tracker the reader's repository carries, and karr tracks its
+      work on its own board rather than in one, so `#243` in a changelog
+      line or a commit message pointed at the wrong system for every
+      reader but the author. The convention lives in the shared skills so
+      commits and Changes entries use one spelling; the entries below
+      already do.
+
+    - BREAKING: the bundled agent skill installs as
+      `kanban-issues-karr-cli`, not as `karr` (k211). `karr skill install`
+      and `karr init --claude-skill` now write
+      `.claude/skills/kanban-issues-karr-cli/SKILL.md`. The dist shipped
+      the skill under one name while this repository briefed its own agents
+      under the other; the longer name is the more findable. A project
+      still holding the old `.claude/skills/karr/` keeps it -- nothing
+      removes it for you, so delete it after updating or the agent reads a
+      skill nothing maintains any more.
+
+    - The distribution is licensed under the Artistic License 2.0 instead
+      of the same terms as Perl 5 itself; the dual grant carried a copyleft
+      option this project does not want. The LICENSE file ships in the
+      repository.
+
+    - Board commands report errors an agent can act on (k263, k264).
+      "Task 999 not found", shared by `move`, `edit`, `delete`, `archive`,
+      `handoff` and `show`, now ends `on this board:` with `karr list
+      --compact` on its own last line; `karr wibble` ends on a copyable
+      `karr --help`; and an error about a missing or malformed option ends
+      with the invocation that would have worked, built from the words the
+      caller typed -- `karr move 79 in-progress` answers with `karr move 79
+      in-progress --claim NAME` under it. That line comes last, because
+      agents read karr through `tail -n`, and only where at least one word
+      of it is the caller's own. `move`, `needs`, `import`, `materialize`,
+      `repair`, `edit` and `archive` are covered, as are the option-parse
+      errors karr does not word itself. Exit codes are unchanged and
+      `--json` keeps its single-line `error` field.
+
+    - `karr list` gains `--limit`/`-n`, `--class`, `--blocked`/
+      `--not-blocked` and `--unclaimed`, and `--sort title` (k237, k252).
+      The cut is the last stage, after filter and sort, so `--sort priority
+      -n 5` is the five most urgent cards and it applies to `--json` and
+      `--compact` alike; `0` is no limit and a negative count is a usage
+      error. An unknown `--class` names the board's own classes and exits 2
+      rather than printing an empty list, and `--blocked` with
+      `--not-blocked` is refused (k235). `--unclaimed` lists the cards no
+      live claim holds -- `claimed_by` unset, empty, or a claim past
+      `claim_timeout` -- which k237 had taken for a duplicate of
+      `--claimed-by` but asks a different question; it shares one claim
+      test with `karr pick` (`Role::ClaimTimeout::claim_held`) so the two
+      cannot disagree about what is free (k198's shape), and passing it
+      with `--claimed-by` is a usage error. `--sort title` compares
+      case-insensitively as kanban-md does, ties break on `id`, and the
+      comparison is on characters and not collated -- a non-ASCII title
+      sorts behind every ASCII one, a documented non-goal rather than a gap
+      (a collating comparator would need a locale two agents need not
+      share).
+
+    - `karr pick` ranks two `fixed-date` cards by the sooner due date
+      before priority (k233), matching kanban-md's `compareDue`: the one
+      class of service that exists because a date rather than an urgency
+      decides was the one place the date was ignored. The exception is
+      narrow and the reference's own -- only where both candidates carry
+      `fixed-date`, and only between them.
+
+    - Invalid and no-op invocations are refused or short-circuited instead
+      of resolved in silence (k231, k235). Five contradicting invocations
+      -- `edit --block X --unblock`, `edit --body X --append-body Y`,
+      `create TITLE --title OTHER`, `move ID STATUS --next` and `move ID
+      --next --prev` -- exited 0 with one half quietly discarded; all five
+      now exit 2 through `usage_error` (`move ID STATUS --next` is the one
+      step away from kanban-md, which resolves it silently the other way),
+      and the refused `create` is checked before an id is allocated (k235).
+      A `move` to the status a card already has, and an `edit` naming no
+      field, no longer write at all: both went through the mutation path,
+      stamping `updated` and logging a move that never happened -- the field
+      karr-foundation's drain reads to tell a stuck card from a worked one.
+      The no-op move exits 0 with `Task N is already at X` and `--json`
+      gains a `changed` key; an `edit` naming no field is an empty request
+      and exits 2 (ADR 0002). `move ID SAME --claim NAME` still writes,
+      because the claim is a change (k231).
+
+    - `karr board` and `karr context` leave archived cards out entirely and
+      ask the board which status is terminal instead of looking for `done`
+      (k229, k234). `board` counted archived cards in the footer total and
+      in `blocked` and rendered them as a column -- so this board read `241
+      tasks` over ten rendered cards -- and on a board whose last column is
+      `shipped`, `--done` did nothing; the hidden-count hint now names the
+      real column (`2 tasks (1 shipped hidden)`) and archived cards are gone
+      from all three output modes (k234). `context` had been filtering every
+      terminal status where kanban-md filters only `archived`, so finished
+      work went missing from the header total and a card blocked before
+      `done` fell out of the `blocked` count -- the two tools maintain one
+      context block in a shared host file and have to put the same numbers
+      in it (k229). Filed cards are read with `karr list --archived` and
+      `karr show ID`; default boards print the same bytes as before.
+
+    - An appended note is a paragraph of its own, and `karr edit` takes the
+      `-t`/`--timestamp` flag `karr handoff` already had (k238). `karr edit
+      ID -a` and `karr handoff --note` joined the new text with a single
+      newline, which Markdown folds away; they join with a blank line now,
+      through one `Task/append_body`, trimming trailing newlines first, as
+      kanban-md's `AppendBody` does. An empty body still gets no leading
+      blank line, existing cards are not rewritten, and `--timestamp` alone
+      is refused as an empty request.
+
+    - The board config no longer carries per-class WIP limits (k227).
+      `default_config` gave every `expedite` class `wip_limit: 1` and
+      `bypass_column_wip: 1` and `validate` checked them, but no command
+      ever read either -- karr has no WIP limits, per-status or per-class.
+      Boards already carrying the keys are unaffected (`validate` ignores
+      what it does not model), but they are pruned from an imported
+      `config.yml` so another tool's class defaults cannot freeze in as an
+      override nobody chose (the k88 failure), the way `wip_limits` and
+      `show_duration` already were.
+
+    - karr preprocesses its own argv so options survive whatever stands in
+      front of them (k243, k247, k256, k259). Four MooX::Options/MooX::Cmd
+      edges are closed in `bin/karr` and `Role::CliArgs`: an empty argument
+      no longer vanishes through `MooX::Cmd::Role`'s `shellwords` round trip
+      and shifts every later argument left, so `karr move "$IDS" todo` with
+      an unset variable is refused, not misread (k243); an abbreviated
+      option that takes a value keeps it, so `karr edit 1 --prio high` no
+      longer blames `"high"` (k247); a dashed option name after a boolean
+      flag is respelled before dispatch, so `karr list --json --claimed-by
+      NAME` -- the order an agent types -- reaches its nineteen affected
+      options (k256); and a flag-shaped value rides inline on its own option
+      (`--append_body=--we-ird`) so it is not swallowed and folded into a
+      name nobody typed (k259). The question asked throughout is only
+      k247's -- whether the option takes a value -- so short forms,
+      `--prio=high`, ambiguity messages and everything after `--` are
+      untouched. `bin/karr-foundation` gets the same walk; the MooX::Options
+      4.103 swallow this routes around is still current, so it is a detour,
+      not a version floor.
+
+    - A sweep of the truthiness guards that read `0` and the empty string
+      as "not given" (k230, k239, k244, k255, following k153). `karr create
+      0` made no card and reported "Title is required" (k230); `karr move
+      0` / `edit 0` / `delete 0` / `archive 0` / `handoff 0` exited 2 as a
+      usage error where card `0` is simply not found, splitting the
+      exit-code contract with `karr show 0` (k239); `karr config get 0` did
+      the same (k244); and `karr config show` dropped any row whose value
+      was `0` or empty, falsifying its own `diff` promise against
+      `--defaults` (k255). All read `defined` (or `defined && length`) now,
+      so a false-but-given value lands on the right side of ADR 0002.
+      `handoff ID --block 0` also stopped denying a block it had just made.
+
+    - A claim on a task in a terminal status no longer blocks anything, and
+      reopening a finished task releases the claim it carried (k223, k224).
+      `check_claim` never asked what status a card was in, so the agent that
+      finished one went on guarding it for the rest of `claim_timeout` --
+      the hour in which the note is appended or the card archived --
+      demanding a name `karr board` hides on finished cards. All five
+      commands (`edit`, `move`, `delete`, `archive`, `handoff`) now pass on
+      a card the board calls terminal (`is_terminal_status`, so a board
+      ending in `shipped` releases there), and a card leaving a terminal
+      status for a non-terminal one has `claimed_by`/`claimed_at` cleared
+      unless the command names a claimant, so the reopened card is free
+      rather than leased to whoever finished it; `done` to `archived` keeps
+      the name. `karr pick` still refuses to hand a terminal card out, and
+      `--json`/`karr show` still print `claimed_by` as provenance.
+
+    - Expired claims are handled honestly at both ends (k177, k232).
+      Stepping over a claim older than `claim_timeout` is allowed, as it
+      always was, but the five mutating commands said nothing while
+      `move`/`handoff --claim` re-stamped `claimed_by` -- leaving
+      karr-foundation attributing a stall to a name nobody held; the
+      override is now reported once the write lands (`Warning: ... overriding
+      the expired claim held by X` on STDERR, an `expired_claim` object under
+      `--json`, silenced by `--quiet`) (k177). And `claim_timeout: 0s` means
+      claims never expire, as it always said: `_claim_expired` read the zero
+      as a duration, so `(now - claimed_at) > 0` handed every claim older
+      than a second to the next agent -- the setting a board uses to make
+      claims binding was the one that gave them away. A negative value is
+      answered like zero, and the config POD now says `0s to disable`
+      (k232).
+
+    - The `$(karr agentname)` idiom no longer teaches an agent to lose its
+      claim (k176). Every `karr agentname` mints a new name and stores none,
+      so the single-`pick` example became wrong the moment it was copied to
+      the handoff at the end of the work. The POD, the shipped skill and the
+      release scenario now show only `NAME=$(karr agentname)`, warn that the
+      name is not remembered, and point at `karr show ID` to read a lost
+      claim back off the board. The generator stays random and stateless on
+      purpose -- any stable handle is shared by every concurrent agent on
+      the board.
+
+    - `--compact` is declared only by the nine commands that render one
+      (k251, k254). It used to sit beside `--json` in the shared role, so
+      all twenty-two advertised it and thirteen accepted and dropped it;
+      those thirteen now answer `Unknown option: compact` and exit 2. `karr
+      show`, `context`, `log` and `config show` are new to it, and `karr
+      pick --compact` ends after the assignment line instead of printing the
+      whole card as before -- an accepted option that changed nothing
+      (k225's class). `--json` is unchanged and still wins where both are
+      given; the shipped skill knows which nine take it.
+
+    - `karr context --write-to FILE` is a side effect, and the output flags
+      decide stdout (k260). `--json --write-to` returned JSON and wrote no
+      file; `--compact --write-to` wrote the file and dropped its four
+      numbers. The block between the kanban-md sentinels is Markdown by the
+      interop contract whatever the caller asked on stdout, so all three
+      spellings write the same block and differ only in what they print;
+      with an output flag the `Context written to` line moves to STDERR so a
+      redirect decodes whole.
+
+    - karr's output streams read in the order it printed them, and dialogue
+      goes to STDERR (k241, k248, k249, k253). The `:encoding(UTF-8)` layer
+      buffers STDERR, so both handles flushed at exit STDOUT-first and every
+      warning landed under every result on `2>&1` or a pipe; `enable_std_utf8`
+      now autoflushes both, so a combined stream reads in print order and
+      `karr-foundation`'s teed run log fills as the run happens (k249). The
+      `karr delete` confirmation is unbuffered before the read (k241) and
+      goes to STDERR unconditionally (k248) -- a question is dialogue, not a
+      result, so `printf "n\n" | karr delete 1 --json` no longer puts a bare
+      prompt in front of an object that then will not decode; the outcome
+      stays on STDOUT. And `karr log` dropped its own dead no-repository
+      branch, which printed plain text ahead of the `--json` check but could
+      never run behind `git_root` and `require_local_board` anyway (k253).
+
+    - `karr delete` names what points at the card before it goes (k236,
+      k242, k250). Dependents are searched backwards -- a `depends_on` entry
+      or `parent` set to the id -- and each is reported on STDERR before the
+      confirmation so it can change the answer, offering `karr archive ID`
+      to keep the card; the cross-board far card is named too, out of the
+      card's own `escalated-from:`/`needs:` tag, under a
+      `cross_board_warnings` key (k236, k242). The archive advice now says a
+      settled link reads as finished-or-not, since `done` and `archived` are
+      both terminal and neither claims success (k250, `docs/adr/0004`). All
+      three ride STDERR, carry into `--json`, and are silenced by `--quiet`;
+      the warnings come under `--yes` too, the mode agents delete in.
+
+    - karr-foundation grew the coordination layer of the fleet epic (k194):
+      it can run several boards at once and drive a stored, fleet-wide chain
+      of work. Concurrency is bounded by the tightest of three levels -- the
+      machine ceiling, an agent's estimated session limit, and a chain
+      header's own `limits:` -- and defaults to 1, the serial runner it has
+      always been; one agent per repository stays, each a forked child
+      holding that board's `.karr.lock` (k186). The chain lives in
+      `refs/karr-foundation/*` as a DAG of steps (ticket, shell, question or
+      plan) with edges, prechecks, timeouts and `on_*` policies, stored with
+      compare-and-swap and segmented run logs (k189); `karr-foundation
+      chain` picks a ready step, checks its precheck by measuring the board,
+      runs it through the target repo's existing mode, and writes its state
+      back (k202). A step whose precheck no longer holds is marked stale and
+      the planner recorded as wanted; a shell step with no command is refused
+      when the chain is written. The whole binary joins the 0/1/2 exit-code
+      contract (k201), and `karr pick` and ticket mode select through one
+      `Role::PickRules` so a coordinator cannot argue with its own board
+      (k198).
+
+    - The fleet plans, asks and routes (k191, k200, k210, k213). A question
+      mailbox under `refs/karr-foundation/questions/*` (`ask`/`answer`,
+      `--policy block|use_default|escalate_to_ai`, a deadline) lets a `kind:
+      question` step wait on an answer while the rest of the chain runs
+      (k191); a ready question step resolves it -- waiting on `open`,
+      finishing on `answered`, doing what the asker wrote on `overdue`
+      (k200). `karr-foundation plan` writes a chain from a YAML/JSON document
+      on stdin or `--input`, validating ids, edges, kinds, prechecks and the
+      cycle check before a ref is written, and carries the coordination
+      agent's prompt (k213). That coordination agent is the fleet's judgement
+      layer (k210): marked `role: coordinator`, it runs almost never -- once
+      at the end of a tick, carrying every deviation the tick met -- and
+      writes an assignment (repository to an ordered agent list with an
+      explicit `WAIT`) that karr-foundation then reads with no AI in the hot
+      path. A fleet that marks no coordinator behaves exactly as before.
+
+    - karr-foundation learned per-repo modes and named agents (k185, k187,
+      k188). `mode: ticket` picks one card by `karr pick`'s ranking minus
+      the claim, names it in the prompt and as `$KARR_TASK`, runs the agent
+      once and reports what happened to that card; a stall costs one attempt
+      and auto-blocks at `max_attempts` (k185). The local config defines
+      named agents -- `command`, `kind`, `probe_every`, a prose `description`
+      the routing agent reads -- picked per board with `agent:`, and
+      definitions stay local and never sync (k188). A `kind: claude-code`
+      run is classified from the JSON result object it ends with, not its
+      transcript, so a spent turn budget is a reason to run again while a
+      provider status backs the board off, and availability is tracked as ok
+      / failing-since-X with a next attempt (k187, k160's last-line rule).
+
+    - Chain steps and boards can wait on work in another repository (k192,
+      k209). Cross-board links are `BOARD#ID`, never a path (a path is one
+      machine's property): `karr create --needs other#7` /
+      `--escalated-from home#5`, `karr needs` reporting both ends with the
+      far card's status, and `karr needs --resolve` dropping a link whose
+      far card reached the FAR board's own terminal status and lifting the
+      blocked flag (k192). A chain precheck can be about a far card through
+      the `ticket_links` fact -- `settled` when every `needs:` link is
+      terminal, `open`/`missing` otherwise, and ABSENT for a board this
+      machine does not hold, which makes the precheck not hold so the
+      machine that does have the board runs the step (k209). The executor
+      measures and never resolves: nothing is fetched, and lifting `blocked`
+      stays `karr needs --resolve`.
+
+    - `on_drained`, the domain hook (k193): when a board has no actionable
+      task left, a configured command runs in it and karr does not know what
+      it does -- the seam that keeps karr generic (in the fleet this came
+      from, it drives a release gate). Its exit code is interpreted by
+      nobody, it never marks the agent failing, and it runs under the
+      board's own lock with `KARR_ROLE=hook`. A drain ending in a
+      common-error does not count as drained; the round in which the hook
+      files new work is counted and capped at `on_drained_max_rounds`, and
+      the same board state is never asked twice.
+
+    - `karr sync` now carries `refs/karr-foundation/*` as well as the board
+      (k190), since the chain, run logs and design document are coordination
+      state that has to reach every machine; deletions travel as tombstones
+      under `refs/karr-local/foundation-deleted/` with an explicit delete
+      refspec, never a pruning push (k178's rule), and the fleet half runs
+      second and never alone, behind the board's identity (k95) and
+      wholesale-wipe (k82) checks. Foundation also prints plain ASCII when
+      loaded as a module rather than run through `bin/karr-foundation`
+      (k214), its EXIT CODES POD no longer lumps every bad option value under
+      exit 2 (k217), five tests stop reading the runner's real
+      `~/.config/karr-foundation/config.yml` by isolating `$ENV{HOME}`
+      (k222), the `enable_std_utf8()` contract a direct library loader must
+      run is written into `App::karr::Foundation`'s POD (k221), and
+      `enable_std_utf8`'s own POD now names all four readers that decode
+      STDIN themselves (restore, set-refs, `foundation plan`, the delete
+      confirmation) instead of only `karr restore` (k246).
+
+    - A remote that accepts the connection and then goes silent no longer
+      hangs karr (k170, k174). `KARR_TRANSPORT_TIMEOUT` bounded only the
+      git-CLI fallback, which runs after the native call returns, so the one
+      path that could block was the one it could not reach; it now sets
+      libgit2's own network timeouts too, covering git://, http:// and
+      https:// (k170). ssh:// stayed unbounded there because libssh2 does
+      its own reads past libgit2's timeout -- fixed upstream in libgit2
+      1.9.3, enforced by pinning `Alien::Libgit2 0.002` (pkg-config floor
+      1.9.3) so a distribution libgit2 below the fix falls through to the
+      bundled build, with no version switch in the transport (k174).
+      Measured against a silent listener: 3s -> 3.11s, 8s -> 8.07s, 0 waits
+      as documented.
+
+    - The remote-board probe and both transports follow one policy (k203,
+      k204, k208). The `ls-remote` probe in front of a read now takes the
+      native transport first with the CLI as fallback, since the 1.9.3 floor
+      closed the ssh argument that had made it CLI-only, and its budget
+      covers both attempts (k203). `insteadOf` and `pushInsteadOf` are
+      applied by libgit2 itself, so `App::karr::Git`'s DESCRIPTION stops
+      naming `insteadOf` as CLI-only (k204). And a push whose push URL is a
+      local path is taken off the native transport, because libgit2's local
+      transport pushes to the remote's fetch URL rather than the URL it
+      connected to -- writing `refs/karr/*` into the wrong repository and
+      calling it success; the CLI fallback lands at the push URL, and the
+      detection is narrow enough to leave every real transport to libgit2
+      (k208).
+
+    - `karr sync` reports what a fetch moved correctly against libgit2 1.9,
+      by requiring `Git::Native 0.006`. 0.006 takes `git_fetch_options.prune`
+      from `Git::Libgit2::fetch_options_prune_offset` rather than a constant
+      derived from libgit2 1.5; against 1.9 -- where the embedded callbacks
+      struct is 128 bytes, not 120 -- that constant put the prune value eight
+      bytes early, on the `update_refs` callback pointer 1.9 prefers over
+      `update_tips`. `App::karr::Git::_fetch_refspecs` reads the fetch
+      result's `updated` list to decide what a sync moved, so a fetch that
+      did report ref updates was the case that misread it.
+
+    - Parallel writes and fresh clones stopped losing races (k172, k173,
+      k181, k182, k183). Eight `karr create` at once handed id 8 to two
+      cards, because a pull adopted a remote counter behind the local one;
+      the counter is now merged, taken only when ahead and compare-and-swapped
+      so an allocation in between makes the attempt re-read (k172). A per-ref
+      rejection from two pushes creating the same new ref is recognised as
+      contention and spends the existing three attempts rather than ending on
+      the first -- 4 to 5 of 8 creates failed against a real `git daemon`
+      before (k181) -- and `karr sync`, the command karr points every failed
+      sync at, went through the write path with no retry at all until it
+      shared the sync lifecycle (k183). A fresh clone reads the board instead
+      of being told to fetch it: a read finding nothing under `refs/karr/`
+      asks the remote through the bounded `ls-remote` probe and pulls it,
+      one line on STDERR, `KARR_NO_AUTO_FETCH=1` to switch it off (k173); and
+      `karr init` in such a clone asks the remote before writing, so it no
+      longer starts a rival board the next sync refuses as different (k182).
+
+    - A push can no longer delete a card another clone made (k178, k197).
+      Every push sent the board under a pruning refspec, so a card this push
+      did not have -- created in another clone a moment earlier -- was
+      deleted off the remote and then read as a remote deletion on the clone
+      that owned it; a push now publishes only its own refs plus one delete
+      refspec per ref it deleted itself, recorded as tombstones under
+      `refs/karr-local/deleted/` (k178). A repository with no remote settles
+      those tombstones rather than hoarding them, since a backlog published
+      to a remote added later would delete cards at those paths (k197).
+
+    - The activity log no longer rewrites itself on every entry (k171). A
+      log ref held one blob that `log_entry` read and wrote back per line, so
+      10,000 mutating commands wrote ~4.6 GB of objects for a 1 MB log,
+      nearly all immediately unreachable. One identity's log is now a chain
+      of 8 KiB segments under `refs/karr/log/<role>/<email>`, only the newest
+      appended to, so bytes written grow linearly and `last_entry` reads one
+      small ref; nothing migrates, and `karr context` asks the log which refs
+      are its own so a rotated segment is not misread as another agent's
+      activity.
+
+    - `karr set-refs` reads its payload from STDIN when no CONTENT is given,
+      and can no longer write the sync machinery's own refs (k189, k195,
+      k199). Joining arguments with a space collapsed every newline, so a
+      multi-line document was stored corrupted; `karr set-refs REF < file`
+      now stores it verbatim, an empty STDIN is refused, and at a terminal
+      the argument-less form stays a usage error (k195). And
+      `refs/karr-remote/`, `refs/karr-conflict/` (k199) and
+      `refs/karr-foundation/chain/`, `.../log/`, `.../questions/*` (k189)
+      join the blocked namespaces, since a hand-written mirror or chain entry
+      makes the next pull reach the wrong conclusion or the runner treat
+      wreckage as the plan.
+
+    - The POD and shipped docs were swept against the code (k206, k211,
+      k215, k216, k218, k219, k245). POD and `# ABSTRACT` lost their
+      non-ASCII punctuation -- 65 em dashes, ellipses, an arrow and a
+      multiplication sign across 12 files, guarded by a test -- because the
+      many interfaces that render POD do not all handle UTF-8 (k215). A pass
+      over the whole distribution's POD fixed statements the refs rewrite had
+      overtaken (`archive`/`delete` described in terms of files on disk,
+      `repair` as the UTF-8 migration alone) and filled in missing `=attr`
+      (k206). The README, `App::karr` and `karr`'s own DESCRIPTION dropped
+      the false "mutating commands materialize a board view", a POD block
+      written inside the Markdown README, and a quick-start that filtered
+      `pick` for a status the card never has, and the example sandbox got a
+      test that builds it end to end (k216, k218). The shipped skill `karr
+      skill install` writes had its doubly-encoded UTF-8 -- the very
+      corruption `karr repair` migrates a board off -- fixed and scanned, and
+      its stale command descriptions corrected, since an agent in a foreign
+      repo reads it as instruction (k211, k245). And the megabyte repository
+      banner no longer ships inside the tarball (k219).
+
+    - `karr --dir PATH` is a usage error on the commands that never read it,
+      instead of a silent write into the wrong tree (k225, k226). `--dir` is
+      parsed onto the root instance, and `dashboard`, `skill` and their
+      siblings compose neither discovery role, so the option was swallowed
+      and the command ran on the current directory -- a scan, or a `SKILL.md`
+      written wherever the caller stood, under a message naming the directory
+      it ignored. Both `dashboard` (k225) and `skill install`/`--global`
+      (k226) now exit 2; `cd PATH && karr skill install` is the way into
+      another tree, and `skill install`/`init --claude-skill` now print the
+      absolute path they wrote (k226).
+
+    - New `karr dashboard` command (k220): a configuration-free, multi-column
+      overview of every karr board found by recursively searching a directory
+      tree for Git repositories, one entry per repository with a block per
+      open task coloured by status. Status names and which one is terminal
+      come from each board's own config (k67), so two boards side by side may
+      use entirely different status lists. `--depth` bounds the search,
+      `--hide-no-board`/`--show-no-board` control the board-less list, and
+      `--json`/`--compact` follow the rest of the CLI. Read-only and offline;
+      no rendered line exceeds the terminal width.
+
 0.500     2026-08-13 23:57:25Z
 
     - Three karr-foundation fixes (#165, #166, #168). `max_runtime: 0`

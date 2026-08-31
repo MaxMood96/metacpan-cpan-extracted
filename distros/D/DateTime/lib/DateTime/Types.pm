@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use namespace::autoclean;
 
-our $VERSION = '1.66';
+our $VERSION = '1.67';
 
 use parent 'Specio::Exporter';
 
@@ -170,7 +170,7 @@ DateTime::Types - Types used for parameter checking in DateTime
 
 =head1 VERSION
 
-version 1.66
+version 1.67
 
 =head1 DESCRIPTION
 
@@ -195,7 +195,7 @@ Dave Rolsky <autarch@urth.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2003 - 2025 by Dave Rolsky.
+This software is Copyright (c) 2003 - 2026 by Dave Rolsky.
 
 This is free software, licensed under:
 

@@ -4,18 +4,9 @@
 
 use strict;
 use warnings;
-our $VERSION = '0.500';
-use App::karr;
+our $VERSION = '0.600';
 use App::karr::SyncGuard;
-use App::karr::Encoding qw( decode_argv enable_std_utf8 );
-use App::karr::Error qw( is_usage_error );
-
-# The character/octet boundary (ticket #53). Everything above this line is
-# bytes, everything below is Perl characters: @ARGV comes in decoded, STDOUT and
-# STDERR encode on the way out, and no command body encodes anything itself.
-# STDIN stays raw on purpose -- karr restore decodes its own payload.
-enable_std_utf8();
-decode_argv();
+use App::karr::Dispatch qw( dispatch );
 
 # Push insurance, flushed at the last safe moment (ticket #37).
 #
@@ -30,6 +21,9 @@ decode_argv();
 # END is the fix: it runs before global destruction with the interpreter still
 # whole, and unlike the error handler it also covers the exit() calls inside
 # command bodies and the option-parse exits from App::karr::Role::ExitCodes.
+# This stays in the executable rather than moving into App::karr::Dispatch: it
+# is a process-lifecycle hook, and an in-process host that calls dispatch()
+# repeatedly must flush after EACH call, not once at interpreter shutdown.
 #
 # $? is localized because the exit code is a documented contract (see EXIT CODES
 # below) and the push may shell out to `git` on App::karr::Git's CLI-fallback
@@ -41,42 +35,12 @@ END {
     App::karr::SyncGuard->flush_armed;
 }
 
-my $ran = eval { App::karr->new_with_cmd; 1 };
-if ( !$ran ) {
-    my $err = $@;
-
-    # Exit-code contract (ADR 0002): 0 success / 1 runtime failure / 2 usage
-    # error. This is the central handler the ADR calls for: it catches every
-    # uncaught die from a command body and turns it into a deterministic 1 or 2,
-    # replacing the accidental 255 an uncaught die used to leak.
-    #
-    # Usage-error dies carry one of these stable leading markers:
-    #   "Unknown command:"          the dispatch guard in App::karr
-    #   "unexpected extra argument"  surplus positionals (Role::CliArgs)
-    #   "Usage:"                     a missing required positional
-    #   "Usage error:"               anything a command rejects as misuse that
-    #                                is not one of the shapes above -- raised
-    #                                via App::karr::Role::ExitCodes'
-    #                                usage_error(), which is the generic entry
-    #                                point for e.g. an out-of-range option value
-    # Any new usage-error die must start with one of these; prefer usage_error()
-    # over inventing a fifth marker. Everything else -- task not found, board
-    # missing, a Git/sync failure, a refused destructive operation -- is a
-    # runtime failure (1).
-    #
-    # The markers themselves live in App::karr::Error::is_usage_error, because
-    # this handler is no longer their only reader: the batch runner in
-    # App::karr::Role::TaskMutation asks the same question to decide whether a
-    # failure belongs to one id or to the whole invocation (ticket #61).
-    #
-    # Option-parse errors (unknown option, unparseable option value) never reach
-    # here: MooX::Options exits 2 directly via App::karr::Role::ExitCodes (and
-    # the root's _print_help), so those exits bypass this eval.
-    my $is_usage = is_usage_error($err);
-
-    print STDERR $err if defined $err && length $err;
-    exit( $is_usage ? 2 : 1 );
-}
+# Everything between program start and App::karr->new_with_cmd -- the
+# character/octet boundary, the record of the caller's argv, the empty-argument
+# and dashed-option rewrites, and the central exit-code handler (ADR 0002) --
+# lives in App::karr::Dispatch, so this executable and the in-process test
+# runner (t/lib/TestKarr.pm) share one dispatch path rather than two copies.
+dispatch(@ARGV);
 
 __END__
 
@@ -90,7 +54,7 @@ karr - Kanban Assignment & Responsibility Registry
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -107,10 +71,11 @@ Git-native kanban board whose canonical state lives in C<refs/karr/*>, plus
 optional helper payloads in non-protected refs outside that namespace.
 
 Run it from inside a Git repository. Commands discover the repository root,
-pull the current board refs, materialize a temporary board view for the command
-run, and then write changes back to Git refs. In normal use this means you can
-interact with shared task state without checking a persistent F<karr/>
-directory into the work tree.
+pull the current board refs, and read and write task cards directly against
+those refs -- no board files ever touch the work tree for an ordinary
+command. C<karr materialize> and C<karr import> are the two bridge commands
+that write and read a disposable, gitignored F<tasks/> plus F<config.yml>
+view instead, for kanban-md interop and for grepping the board as files.
 
 The script is the best starting point when you want to understand the CLI as a
 user. For architecture notes, Docker background, and Perl-facing examples, see
@@ -241,6 +206,17 @@ Moves work into review and optionally appends a timestamped note.
 
 Prints activity log entries from C<refs/karr/log/*>.
 
+=item * L<App::karr::Cmd::Metrics>
+
+Reports flow metrics -- throughput, lead/cycle time, flow efficiency, and
+aging work -- derived from each task's lifecycle stamps.
+
+=item * L<App::karr::Cmd::Needs>
+
+Reports, and optionally resolves, the cross-board dependencies recorded with
+C<< karr create --needs >> / C<--escalated-from> and C<< karr edit
+--add-needs >>.
+
 =item * L<App::karr::Cmd::AgentName>
 
 Generates short random agent names for multi-agent workflows.
@@ -271,9 +247,21 @@ Deletes the whole board namespace from the repository.
 
 =item * L<App::karr::Cmd::Repair>
 
-Migrates a board written by karr 0.402 or earlier off double-encoded UTF-8.
-Reports by default; C<--yes> rewrites the affected refs. Idempotent, and a
-no-op on a board that is already current.
+Migrates a board off two old karr-writing bugs: double-encoded UTF-8 (boards
+written by karr 0.402 or earlier) and C<started> stamps that precede their
+own card's C<created> (pre-#68 bare-date stamps). Reports by default; C<--yes>
+rewrites the affected refs. Idempotent, and a no-op on a board that is
+already current.
+
+=item * L<App::karr::Cmd::Materialize>
+
+Writes the current C<refs/karr/*> board out as a F<tasks/> file view -- a
+bridge for kanban-md interop and grepping task files, not a storage backend.
+
+=item * L<App::karr::Cmd::Import>
+
+Reads a materialized F<tasks/> file view back into C<refs/karr/*>, the
+reverse of Materialize.
 
 =back
 
@@ -299,14 +287,14 @@ F<docs/adr/0002-exit-code-contract.md>):
 
 =over 4
 
-=item * B<0> — success, including no-op successes such as re-archiving a task
+=item * B<0> -- success, including no-op successes such as re-archiving a task
 that is already archived.
 
-=item * B<1> — runtime failure: a task id was not found, the board is missing,
+=item * B<1> -- runtime failure: a task id was not found, the board is missing,
 a Git or sync operation failed, a destructive command was refused for want of
 C<--yes>, or a batch committed partial work but at least one item failed.
 
-=item * B<2> — usage error: an unknown command, an unknown option, an invalid
+=item * B<2> -- usage error: an unknown command, an unknown option, an invalid
 option value, or a surplus or missing positional argument.
 
 =back
@@ -381,9 +369,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

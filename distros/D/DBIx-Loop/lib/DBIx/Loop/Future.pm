@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use DBIx::Loop;
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 
 1;

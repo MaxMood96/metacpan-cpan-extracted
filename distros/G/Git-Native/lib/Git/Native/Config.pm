@@ -1,6 +1,7 @@
 # ABSTRACT: A libgit2 configuration handle
 
 package Git::Native::Config;
+our $VERSION = '0.006';
 use Moo;
 use Git::Libgit2::FFI ();
 use Git::Libgit2 qw( GIT_ENOTFOUND );
@@ -69,7 +70,7 @@ Git::Native::Config - A libgit2 configuration handle
 
 =head1 VERSION
 
-version 0.005
+version 0.006
 
 =head1 SYNOPSIS
 

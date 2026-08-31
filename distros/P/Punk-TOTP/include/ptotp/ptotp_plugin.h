@@ -1040,9 +1040,27 @@ static SV *pp_render(pTHX_ HV *cfg, SV *c, int error)
         sv_catsv(html, pp_cfg_sv(aTHX_ cfg, "challenge_path"));
         sv_catpvs(html, "\">\n"
             "<input name=\"code\" autofocus autocomplete=\"one-time-code\"\n"
-            "       inputmode=\"numeric\" pattern=\"[0-9A-Za-z-]*\">\n"
+            "       inputmode=\"numeric\" pattern=\"[0-9A-Za-z-]*\">\n");
+        /* The application enabled `csrf` (decided once, at to_app), so its
+         * check will refuse this form's POST without a token. The token is
+         * single-use and minted per ask, so a failed code's re-render
+         * carries a fresh one for free. */
+        if (pp_cfg_iv(aTHX_ cfg, "csrf_on", 0)) {
+            SV *f = sv_2mortal(pp_call(aTHX_ c, "csrf_field", NULL, 0));
+            sv_catsv(html, f);
+            sv_catpvs(html, "\n");
+        }
+        sv_catpvs(html,
             "<button>Verify</button>\n"
             "</form>\n");
+        /* per-session, and now token-bearing: a stored copy is a page some
+         * other visitor cannot use and should never be handed */
+        {
+            SV *argv[2];
+            argv[0] = sv_2mortal(newSVpvs("Cache-Control"));
+            argv[1] = sv_2mortal(newSVpvs("no-store"));
+            SvREFCNT_dec(pp_call(aTHX_ c, "header", argv, 2));
+        }
         return pp_call(aTHX_ c, "html", &html, 1);
     }
 }
@@ -1181,6 +1199,25 @@ XS_INTERNAL(pp_kw_guard)
     PERL_UNUSED_VAR(items);
     ST(0) = sv_2mortal(pp_closure(aTHX_ pp_guard, cfg));
     XSRETURN(1);
+}
+
+/* The to_app callback: whether the application enabled `csrf`, read once
+ * every keyword has recorded, so the answer cannot depend on whether the
+ * `csrf` line sits above or below the `plugin` line. Presence of the key on
+ * the registrar is the fact - `csrf 0` deletes it. */
+XS_INTERNAL(pp_oc_csrf);
+XS_INTERNAL(pp_oc_csrf)
+{
+    dXSARGS;
+    HV *cfg = pp_cfg_of(aTHX_ cv);
+    int on = 0;
+    if (items >= 1) {
+        SV *app = ST(0);
+        if (SvROK(app) && SvTYPE(SvRV(app)) == SVt_PVHV)
+            on = hv_exists((HV *)SvRV(app), "csrf", 4) ? 1 : 0;
+    }
+    (void)hv_stores(cfg, "csrf_on", newSViv(on));
+    XSRETURN_EMPTY;
 }
 
 /* ---- registration ------------------------------------------------------------ */
@@ -1411,6 +1448,26 @@ static void pp_register(pTHX_ SV *app, SV *optsv)
         argv[1] = sv_2mortal(pp_closure(aTHX_ pp_kw_guard, cfg));
         argv[2] = sv_2mortal(newSVpvs("Punk::Plugin::TOTP"));
         SvREFCNT_dec(pp_call(aTHX_ app, "install_kw", argv, 3));
+    }
+
+    {   /* csrf awareness for the default challenge form. Punk 0.31's
+         * on_compile is the right moment - after every keyword has
+         * recorded - so registration order cannot matter. An older Punk
+         * has no on_compile; there the key is read here instead, which
+         * works when `csrf` is declared above the `plugin` line, and when
+         * it is not, the core csrf check refuses the tokenless form's
+         * POST loudly rather than anything failing open. */
+        SV *meth = sv_2mortal(newSVpvs("on_compile"));
+        SV *has  = sv_2mortal(pp_call(aTHX_ app, "can", &meth, 1));
+        if (SvTRUE(has)) {
+            SV *argv[2];
+            argv[0] = sv_2mortal(pp_closure(aTHX_ pp_oc_csrf, cfg));
+            argv[1] = sv_2mortal(newSVpvs("Punk::Plugin::TOTP"));
+            SvREFCNT_dec(pp_call(aTHX_ app, "on_compile", argv, 2));
+        }
+        else if (SvROK(app) && SvTYPE(SvRV(app)) == SVt_PVHV
+                 && hv_exists((HV *)SvRV(app), "csrf", 4))
+            (void)hv_stores(cfg, "csrf_on", newSViv(1));
     }
 }
 

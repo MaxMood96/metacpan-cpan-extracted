@@ -3,6 +3,7 @@ abstract: 'Low-level FFI bindings to libgit2'
 author:
   - 'Torsten Raudssus <getty@cpan.org>'
 build_requires:
+  Path::Tiny: '0'
   Test2::V0: '0'
 configure_requires:
   ExtUtils::MakeMaker: '0'
@@ -16,15 +17,15 @@ name: Git-Libgit2
 provides:
   Git::Libgit2:
     file: lib/Git/Libgit2.pm
-    version: '0.006'
+    version: '0.007'
   Git::Libgit2::Error:
     file: lib/Git/Libgit2/Error.pm
-    version: '0.006'
+    version: '0.007'
   Git::Libgit2::FFI:
     file: lib/Git/Libgit2/FFI.pm
-    version: '0.006'
+    version: '0.007'
 requires:
-  Alien::Libgit2: '0.001'
+  Alien::Libgit2: '0.002'
   Carp: '0'
   Exporter: '0'
   FFI::Platypus: '2.00'
@@ -33,10 +34,10 @@ resources:
   bugtracker: https://github.com/Getty/p5-git-libgit2/issues
   homepage: https://github.com/Getty/p5-git-libgit2
   repository: https://github.com/Getty/p5-git-libgit2.git
-version: '0.006'
+version: '0.007'
 x_Dist_Zilla:
   perl:
-    version: '5.036000'
+    version: '5.040001'
   plugins:
     -
       class: Dist::Zilla::Plugin::Git::GatherDir
@@ -60,10 +61,6 @@ x_Dist_Zilla:
     -
       class: Dist::Zilla::Plugin::MetaYAML
       name: '@Author::GETTY/@Filter/MetaYAML'
-      version: '6.037'
-    -
-      class: Dist::Zilla::Plugin::License
-      name: '@Author::GETTY/@Filter/License'
       version: '6.037'
     -
       class: Dist::Zilla::Plugin::Readme
@@ -105,6 +102,10 @@ x_Dist_Zilla:
       name: '@Author::GETTY/@Filter/UploadToCPAN'
       version: '6.037'
     -
+      class: Dist::Zilla::Plugin::LicenseFile
+      name: '@Author::GETTY/LicenseFile'
+      version: '0.002'
+    -
       class: Dist::Zilla::Plugin::MetaConfig
       name: '@Author::GETTY/MetaConfig'
       version: '6.037'
@@ -136,7 +137,7 @@ x_Dist_Zilla:
           inherit_version: 1
           meta_noindex: 1
         Dist::Zilla::Role::ModuleMetadata:
-          Module::Metadata: '1.000037'
+          Module::Metadata: '1.000038'
           version: '0.006'
       name: '@Author::GETTY/MetaProvides::Package'
       version: '2.004003'
@@ -156,10 +157,10 @@ x_Dist_Zilla:
       class: Dist::Zilla::Plugin::Git::CheckFor::CorrectBranch
       config:
         Dist::Zilla::Role::Git::Repo:
-          git_version: 2.39.5
+          git_version: 2.47.3
           repo_root: .
       name: '@Author::GETTY/Git::CheckFor::CorrectBranch'
-      version: '0.014'
+      version: '0.015'
     -
       class: Dist::Zilla::Plugin::Prereqs::FromCPANfile
       name: '@Author::GETTY/Prereqs::FromCPANfile'
@@ -295,7 +296,7 @@ x_Dist_Zilla:
           allow_dirty_match: []
           changelog: Changes
         Dist::Zilla::Role::Git::Repo:
-          git_version: 2.39.5
+          git_version: 2.47.3
           repo_root: .
         Dist::Zilla::Role::Git::StringFormatter:
           time_zone: local
@@ -308,11 +309,11 @@ x_Dist_Zilla:
           branch: ~
           changelog: Changes
           signed: 0
-          tag: '0.006'
+          tag: '0.007'
           tag_format: '%v'
           tag_message: v%V
         Dist::Zilla::Role::Git::Repo:
-          git_version: 2.39.5
+          git_version: 2.47.3
           repo_root: .
         Dist::Zilla::Role::Git::StringFormatter:
           time_zone: local
@@ -347,10 +348,11 @@ x_Dist_Zilla:
             - Changes
             - Makefile.PL
           allow_dirty_match:
+            - (?^:^bin/)
             - (?^:^lib/.*\.pm$)
           changelog: Changes
         Dist::Zilla::Role::Git::Repo:
-          git_version: 2.39.5
+          git_version: 2.47.3
           repo_root: .
         Dist::Zilla::Role::Git::StringFormatter:
           time_zone: local
@@ -364,14 +366,14 @@ x_Dist_Zilla:
             - origin
           remotes_must_exist: 1
         Dist::Zilla::Role::Git::Repo:
-          git_version: 2.39.5
+          git_version: 2.47.3
           repo_root: .
       name: '@Author::GETTY/Git::Push'
       version: '2.052'
     -
       class: Dist::Zilla::Plugin::GitHub::CreateRelease
       name: '@Author::GETTY/GitHub::CreateRelease'
-      version: '0.0009'
+      version: '0.0012'
     -
       class: Dist::Zilla::Plugin::FinderCode
       name: ':InstallModules'
@@ -422,6 +424,6 @@ x_Dist_Zilla:
       is_trial: 0
     version: '6.037'
 x_authority: cpan:GETTY
-x_generated_by_perl: v5.36.0
-x_serialization_backend: 'YAML::Tiny version 1.74'
+x_generated_by_perl: v5.40.1
+x_serialization_backend: 'YAML::Tiny version 1.76'
 x_spdx_expression: 'Artistic-1.0-Perl OR GPL-1.0-or-later'

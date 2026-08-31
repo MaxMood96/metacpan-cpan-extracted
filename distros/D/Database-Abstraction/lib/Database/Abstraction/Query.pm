@@ -17,11 +17,11 @@ Database::Abstraction::Query - Fluent, chainable query builder for Database::Abs
 
 =head1 VERSION
 
-Version 0.40
+Version 0.41
 
 =cut
 
-our $VERSION = '0.40';
+our $VERSION = '0.41';
 
 =head1 SYNOPSIS
 
@@ -239,8 +239,10 @@ sub order_by
 	# is deliberately permissive so it does not break legitimate multi-column
 	# expressions ("score DESC, name ASC") or SQL functions ("ABS(score) DESC").
 	if(defined $col) {
+		# Block the three primary SQL injection vectors that can appear inside
+		# an ORDER BY expression.  Use m{} to avoid escaping '/' and '\*'.
 		croak("order_by: unsafe ORDER BY expression '$col'")
-			if $col =~ /;|--|\/\*/;
+			if $col =~ m{; | -- | /\*}x;
 	}
 	$self->{'_order_by'} = $col;
 	return $self;
@@ -417,10 +419,11 @@ sub first
 		return $rows->[0];
 	}
 
-	my $saved = $self->{'_limit'};
-	$self->{'_limit'} = 1;
+	# local on a hash element (supported since Perl 5.8.1) is exception-safe:
+	# even if _build_sql() croaks, _limit is automatically restored on unwind.
+	# The previous save/restore pair left _limit permanently at 1 on exception.
+	local $self->{'_limit'} = 1;
 	my ($query, $args, $table) = $self->_build_sql(0);
-	$self->{'_limit'} = $saved;
 
 	$db->_debug("Query->first: $query");
 

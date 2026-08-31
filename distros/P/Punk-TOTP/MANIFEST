@@ -48,6 +48,7 @@ t/06-plugin.t
 t/07-recovery.t
 t/08-challenge.t
 t/09-sqitch.t
+t/10-challenge-csrf.t
 t/manifest.t
 t/pod-coverage.t
 t/pod.t

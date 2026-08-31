@@ -4,15 +4,11 @@ use Test::More;
 use lib 't/lib';
 use TestGit qw( require_git_c );
 require_git_c();
+use TestKarr qw( run_karr run_karr_stdin );
 use File::Temp qw( tempdir );
-use Cwd qw( abs_path getcwd );
-use IPC::Open3 qw( open3 );
-use Symbol qw( gensym );
+use Encode qw( encode_utf8 );
 
 use App::karr::Git;
-
-my $ROOT = abs_path('.');
-my $BIN  = "$ROOT/bin/karr";
 
 sub _git_ok {
     my (@cmd) = @_;
@@ -41,35 +37,12 @@ sub _default_branch {
     return $branch;
 }
 
-sub _run_karr {
-    my ( $cwd, @argv ) = @_;
-    my $old = getcwd();
-    chdir $cwd or die "chdir $cwd: $!";
-
-    my $stderr = gensym;
-    my $pid = open3(
-        undef,
-        my $stdout_fh,
-        $stderr,
-        $^X,
-        "-I$ROOT/lib",
-        $BIN,
-        @argv,
-    );
-
-    my $stdout = do { local $/; <$stdout_fh> };
-    my $stderr_text = do { local $/; <$stderr> };
-    waitpid( $pid, 0 );
-    my $exit = $? >> 8;
-
-    chdir $old or die "chdir $old: $!";
-
-    return {
-        exit   => $exit,
-        stdout => defined $stdout ? $stdout : '',
-        stderr => defined $stderr_text ? $stderr_text : '',
-    };
-}
+# In-process runner (t/lib/TestKarr.pm): same ($cwd, @argv) / ($cwd, $stdin,
+# @argv) signatures and { exit, stdout, stderr } return as the open3 helpers
+# this file used to carry, dispatched through the shared App::karr::Dispatch
+# path. KARR_TEST_SUBPROC=1 restores the old open3 path.
+sub _run_karr { return run_karr(@_) }
+sub _run_karr_stdin { return run_karr_stdin(@_) }
 
 subtest 'git helper API normalizes refs and blocks protected namespaces' => sub {
     my $repo = tempdir( CLEANUP => 1 );
@@ -106,6 +79,14 @@ subtest 'git helper API normalizes refs and blocks protected namespaces' => sub 
         'refs/replace/abc123',
         'refs/karr/tasks/1/data',
         'refs/karr/config',
+        'refs/karr-local/tasks/1/lock',
+        'refs/karr-local/deleted/tasks/1/data',
+        # Ticket #199: the mirror every pull reconciles against, and the
+        # parking lot for the local side of a conflict. A hand-written mirror
+        # entry does not corrupt a payload -- it makes the next pull decide
+        # the wrong one of its four cases and delete or force-push a card.
+        'refs/karr-remote/origin/tasks/1/data',
+        'refs/karr-conflict/tasks/1/data',
         'refs/stash',
         'refs/stash/mine',
       )
@@ -156,6 +137,42 @@ subtest 'set-refs and get-refs roundtrip over a remote' => sub {
     like( $get->{stderr}, qr{refs/superpowers/spec/1234\.md}, 'get-refs reports fetch/read status on stderr' );
 };
 
+subtest 'a multi-line payload goes in on stdin and comes back unchanged' => sub {
+    # Ticket #195: the only way to hand set-refs a document was to make it one
+    # shell argument. Split across arguments -- a heredoc, an unquoted paste --
+    # every newline collapsed into a space and the corrupted payload was stored
+    # without a word. Arguments still join with a space; a call with none reads
+    # stdin, which is the form that was a usage error before and so cannot have
+    # changed anyone's meaning.
+    my $repo = tempdir( CLEANUP => 1 );
+    _init_repo( $repo, 'test@example.com', 'Test User' );
+
+    my $doc = "# Design\n\nFirst paragraph.\n\nZweiter Absatz: \x{e4}\x{f6}\x{fc}.\n";
+
+    my $set = _run_karr_stdin( $repo, encode_utf8($doc), 'set-refs', 'spec/design.md' );
+    is( $set->{exit}, 0, 'set-refs takes the payload from stdin' )
+        or diag $set->{stderr};
+
+    my $get = _run_karr( $repo, 'get-refs', 'spec/design.md' );
+    is( $get->{exit}, 0, 'get-refs reads the ref back' ) or diag $get->{stderr};
+    is( $get->{stdout}, encode_utf8($doc),
+        'every newline survived, and the payload is not double-encoded' );
+
+    # The shape every existing caller uses is untouched.
+    my $args = _run_karr( $repo, 'set-refs', 'spec/words.md', 'draft', 'ready' );
+    is( $args->{exit}, 0, 'the argument form still works' ) or diag $args->{stderr};
+    is( _run_karr( $repo, 'get-refs', 'spec/words.md' )->{stdout}, "draft ready\n",
+        'arguments still join with a single space' );
+
+    # An empty stdin is a mistake, not an empty payload: storing '' for it would
+    # report success for a command that received nothing.
+    my $empty = _run_karr_stdin( $repo, '', 'set-refs', 'spec/void.md' );
+    isnt( $empty->{exit}, 0, 'an empty stdin is refused' );
+    like( $empty->{stderr}, qr/stdin/i, 'and the error names stdin' );
+    isnt( _run_karr( $repo, 'get-refs', 'spec/void.md' )->{exit},
+        0, 'nothing was stored for it' );
+};
+
 subtest 'protected namespaces are rejected from the CLI' => sub {
     my $repo = tempdir( CLEANUP => 1 );
     _init_repo( $repo, 'test@example.com', 'Test User' );
@@ -164,6 +181,23 @@ subtest 'protected namespaces are rejected from the CLI' => sub {
     isnt( $rv->{exit}, 0, 'set-refs fails for protected namespaces' );
     is( $rv->{stdout}, '', 'error path keeps stdout empty' );
     like( $rv->{stderr}, qr/protected|blocked/i, 'stderr explains why the ref is rejected' );
+
+    # Ticket #199: the sync machinery's own namespaces went through. Asserted
+    # end to end rather than only on validate_helper_ref, because the damage is
+    # done by the ref existing afterwards -- the next pull reads it as "the OID
+    # the remote had at the last sync" and reconciles against a lie.
+    for my $ref (
+        'refs/karr-remote/origin/tasks/1/data',
+        'refs/karr-conflict/tasks/1/data',
+      )
+    {
+        my $sync = _run_karr( $repo, 'set-refs', $ref, 'junk' );
+        isnt( $sync->{exit}, 0, "set-refs fails for $ref" );
+        like( $sync->{stderr}, qr/protected|blocked/i,
+            "stderr explains why $ref is rejected" );
+        my $exists = `git -C '$repo' rev-parse --verify --quiet $ref`;
+        is( $exists, '', "$ref was not created" );
+    }
 };
 
 done_testing;

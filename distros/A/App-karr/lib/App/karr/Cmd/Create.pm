@@ -1,7 +1,7 @@
 # ABSTRACT: Create a new task
 
 package App::karr::Cmd::Create;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use MooX::Cmd;
 use MooX::Options (
@@ -11,6 +11,7 @@ use App::karr::Role::BoardAccess;
 use App::karr::Role::DependencyArgs;
 use App::karr::Task;
 use App::karr::Config;
+use App::karr::CrossBoard;
 
 # The set-time half only (ticket #137). A card that does not exist yet cannot be
 # taken up, so create never has a dependency warning to emit and must not
@@ -67,6 +68,18 @@ option depends_on => (
   doc => 'Comma-separated ids of tasks this one depends on',
 );
 
+option needs => (
+  is => 'ro',
+  format => 's',
+  doc => 'Comma-separated BOARD#ID this task waits on in another repository',
+);
+
+option escalated_from => (
+  is => 'ro',
+  format => 's',
+  doc => 'Comma-separated BOARD#ID this task was escalated from',
+);
+
 option class => (
   is => 'ro',
   format => 's',
@@ -88,8 +101,32 @@ sub execute {
   $self->require_board;
 
   my @pos = $self->positional_args($args_ref);
-  my $title = $self->title // $pos[0]
-    or die "Title is required. Use --title or pass as argument.\n";
+
+  # A title given twice is a contradiction, not a preference: the two spellings
+  # can hold different strings, and `create TITLE --title OTHER` used to take
+  # --title and drop the positional without a word (ticket #235). kanban-md
+  # refuses that invocation (resolveCreateTitle, cmd/create.go:113-121,
+  # InvalidInput), and karr answers a self-contradicting invocation that way one
+  # command over already (the --claim/--release guard in App::karr::Cmd::Edit).
+  # Before the required-title guard below, so a caller who named two titles is
+  # told that, not that one is missing.
+  #
+  # length, not truth, on both halves: `--title 0` and a bare `0` are titles
+  # that were given, and an empty one is no title at all -- the same rule the
+  # guard below reads (ticket #230).
+  $self->usage_error('title provided both as an argument and with --title; use one or the other')
+      if ( defined $self->title && length $self->title )
+      && ( defined $pos[0] && length $pos[0] );
+
+  # length, not truth: "0" is one character long and a perfectly good title,
+  # but the assignment below yields it as a false value, so both `--title 0`
+  # and a bare positional `0` were rejected as "Title is required" -- the one
+  # guard in this file ticket #153 left on truth while converting the options
+  # below. kanban-md's resolveCreateTitle tests the flag against "" and the
+  # args against length, and takes "0" (ticket #230).
+  my $title = $self->title // $pos[0];
+  die "Title is required. Use --title or pass as argument.\n"
+    unless defined $title && length $title;
 
   my $ec = $self->store->effective_config;
   my $defaults = $ec->{defaults} // {};
@@ -112,6 +149,20 @@ sub execute {
     $self->assert_dependencies_exist($depends_on);
   }
 
+  # The cross-board half (ticket #192). Only the syntax is checked here, and
+  # that is the whole story rather than a shortcut: the far board may not be on
+  # this machine at all, and whether it is is local configuration, so a create
+  # that refused a link it could not look up would refuse it on one machine and
+  # accept it on the next for the same card. Whether the far card exists and
+  # what state it is in is `karr needs`'s question.
+  my @cross;
+  push @cross, map { App::karr::CrossBoard->needs_tag($_) }
+    @{ App::karr::CrossBoard->parse_refs( '--needs', $self->needs ) }
+    if defined $self->needs && length $self->needs;
+  push @cross, map { App::karr::CrossBoard->escalated_from_tag($_) }
+    @{ App::karr::CrossBoard->parse_refs( '--escalated-from', $self->escalated_from ) }
+    if defined $self->escalated_from && length $self->escalated_from;
+
   my %task_args = (
     id       => $self->allocate_next_id,
     title    => $title,
@@ -125,6 +176,9 @@ sub execute {
   # siblings). --depends_on was already on the #78 pattern (see above).
   $task_args{assignee}   = $self->assignee   if defined $self->assignee   && length $self->assignee;
   $task_args{tags}       = [split /,/, $self->tags] if defined $self->tags && length $self->tags;
+  # Cross-board links live in the tag list (App::karr::CrossBoard explains why),
+  # so they are appended to whatever --tags brought rather than replacing it.
+  push @{ $task_args{tags} //= [] }, @cross if @cross;
   $task_args{depends_on} = $depends_on if $depends_on;
   $task_args{due}        = $self->due        if defined $self->due        && length $self->due;
   $task_args{estimate}   = $self->estimate   if defined $self->estimate   && length $self->estimate;
@@ -153,7 +207,7 @@ App::karr::Cmd::Create - Create a new task
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -161,6 +215,7 @@ version 0.500
     karr create --title "Write release notes" --priority high --status todo
     karr create --title "Review API" --tags docs,review --body "Check CLI help"
     karr create "Ship it" --depends-on 2,3
+    karr create "Wait for the fix" --needs other-repo#7
 
 =head1 DESCRIPTION
 
@@ -175,6 +230,9 @@ class of service, due date, tags, and body text.
 =item * C<--title>
 
 Explicit task title. If omitted, the first positional argument is used.
+Giving the title both ways at once -- C<< karr create TITLE --title OTHER >> --
+is rejected as a usage error (exit 2): the two can hold different strings and
+nothing decides which one was meant.
 
 =item * C<--status>, C<--priority>, C<--class>
 
@@ -191,6 +249,16 @@ Every id must name a task on this board; an unknown or non-numeric id rejects
 the create as a usage error before an id is allocated, so nothing is burned
 (ticket #54). Taking the new card up while a dependency is unfinished warns --
 see L<App::karr::Cmd::Move>.
+
+=item * C<--needs>, C<--escalated-from>
+
+The two ends of a cross-board dependency, comma-separated
+C<< <board>#<id> >> references: C<--needs> for a card that cannot proceed until
+something is fixed in another repository, C<--escalated-from> for the card
+raised in that other repository to record where the escalation came from. Only
+the syntax is validated -- whether the far board is on this machine is local
+configuration, so the lookup belongs to C<karr needs> and not here. See
+L<App::karr::CrossBoard>.
 
 =item * C<--body>
 
@@ -224,9 +292,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

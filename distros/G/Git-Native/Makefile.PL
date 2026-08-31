@@ -18,16 +18,18 @@ my %WriteMakefileArgs = (
   "NAME" => "Git::Native",
   "PREREQ_PM" => {
     "Carp" => 0,
-    "Git::Libgit2" => "0.006",
+    "Git::Libgit2" => "0.007",
     "Moo" => "2.000000",
     "Path::Tiny" => 0,
     "Throwable::Error" => 0,
     "namespace::clean" => 0
   },
   "TEST_REQUIRES" => {
+    "Alien::Libgit2" => 0,
+    "ExtUtils::CBuilder" => 0,
     "Test2::V0" => 0
   },
-  "VERSION" => "0.005",
+  "VERSION" => "0.006",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -35,8 +37,10 @@ my %WriteMakefileArgs = (
 
 
 my %FallbackPrereqs = (
+  "Alien::Libgit2" => 0,
   "Carp" => 0,
-  "Git::Libgit2" => "0.006",
+  "ExtUtils::CBuilder" => 0,
+  "Git::Libgit2" => "0.007",
   "Moo" => "2.000000",
   "Path::Tiny" => 0,
   "Test2::V0" => 0,

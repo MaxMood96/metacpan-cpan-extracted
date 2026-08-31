@@ -8,7 +8,7 @@ use PDF::Make::Builder ();
 use PDF::Make::Parser ();
 use PDF::Make::Reader ();
 
-our $VERSION = '0.12';
+our $VERSION = '0.13';
 
 sub pages {
     my ($class, $bytes) = @_;

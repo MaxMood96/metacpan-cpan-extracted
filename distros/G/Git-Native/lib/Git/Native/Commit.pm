@@ -1,6 +1,7 @@
 # ABSTRACT: A libgit2 commit object
 
 package Git::Native::Commit;
+our $VERSION = '0.006';
 use Moo;
 use Git::Libgit2::FFI ();
 use Git::Native::Error qw( check_rc );
@@ -83,7 +84,7 @@ Git::Native::Commit - A libgit2 commit object
 
 =head1 VERSION
 
-version 0.005
+version 0.006
 
 =head1 SYNOPSIS
 

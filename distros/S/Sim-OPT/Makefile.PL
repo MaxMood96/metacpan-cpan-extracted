@@ -5,8 +5,19 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     NAME              => 'Sim::OPT',
     VERSION_FROM      => 'lib/Sim/OPT.pm', # finds $VERSION
+    EXE_FILES         => ['bin/structuredesign-run'],
     PREREQ_PM         => {
-			'Data::Dumper' => '0',		
+			'Data::Dumper' => '0',
+			'Cwd' => '0',
+			'Digest::SHA' => '0',
+			'Exporter' => '0',
+			'File::Basename' => '0',
+			'File::Find' => '0',
+			'File::Path' => '0',
+			'File::Spec' => '0',
+			'JSON::PP' => '0',
+			'Text::CSV' => '0',
+			'Time::Piece' => '0',
 			'Data::Dump' => '0',
 			'Moose'  => '0',
 			'Math::Round'	=> '0',

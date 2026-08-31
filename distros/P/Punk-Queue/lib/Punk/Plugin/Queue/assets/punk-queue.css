@@ -1,54 +1,22 @@
 /* punk-queue.css - the override layer, served after the vendored Funky
- * css (themes.css included). Three jobs:
+ * css (themes.css included) and after the FontAwesome chunk. Two jobs:
  *
- *   1. The icon-font checkpoint: FontAwesome is NOT vendored. i.fas is
- *      neutralised into a plain inline element and the classes this UI
- *      actually renders get unicode glyphs via ::before. No font files.
- *   2. The Bootstrap checkpoint: Bootstrap is NOT vendored. Funky's
+ *   1. The Bootstrap checkpoint: Bootstrap is NOT vendored. Funky's
  *      modal/toast/buttons emit Bootstrap structural class names; this
  *      file implements exactly the classes these pages render, on the
  *      --pro-* tokens so light/dark follow themes.css.
- *   3. The queue's own layout: nav, panels, state colours.
+ *   2. The queue's own layout: nav, panels, state colours.
+ *
+ * The icons are no longer this file's business. Until 0.08 there was a
+ * third job here - neutralising `i.fas` and approximating each icon with
+ * a unicode glyph - and anything not on that list fell through to a
+ * bullet, which is what a table's cog and a toolbar's plus/minus looked
+ * like. The solid webfont is vendored now; see fontawesome/.
  */
 
-/* ---- 1. FontAwesome neutralisation ------------------------------------- */
-
-i.fas, i.far {
-    font-style: normal;
-    display: inline-block;
-    min-width: 1em;
-    text-align: center;
-    line-height: 1;
-}
-i.fas::before { content: "\2022"; }              /* fallback: bullet */
-
-.fa-check-circle::before        { content: "\2713"; }   /* check */
-.fa-exclamation-circle::before  { content: "\0021"; }   /* ! */
-.fa-exclamation-triangle::before{ content: "\26A0"; }   /* warning */
-.fa-info-circle::before         { content: "\2139"; }   /* info */
-.fa-question-circle::before     { content: "\003F"; }   /* ? */
-.fa-times::before               { content: "\00D7"; }   /* multiply */
-.fa-times-circle::before        { content: "\2297"; }
-.fa-search::before              { content: "\2315"; }   /* magnifier */
-.fa-columns::before             { content: "\25EB"; }
-.fa-file-csv::before,
-.fa-file-excel::before,
-.fa-file-upload::before         { content: "\2913"; }
-.fa-inbox::before               { content: "\2205"; }   /* empty set */
-.fa-filter::before              { content: "\25BD"; }
-.fa-save::before                { content: "\2193"; }
-.fa-check::before               { content: "\2713"; }
-.fa-mouse-pointer::before       { content: "\2196"; }
-.fa-spinner::before             { content: "\27F3"; }
-.fa-redo::before                { content: "\21BB"; }   /* retry */
-.fa-trash::before               { content: "\2326"; }   /* remove */
-.fa-clock::before               { content: "\23F1"; }
-.fa-play-circle::before         { content: "\25B6"; }
-.fa-list::before                { content: "\2261"; }
-.fa-chart-bar::before           { content: "\2593"; }
-.fa-users::before, .fa-user::before { content: "\263A"; }
-.fa-lock::before                { content: "\1F512"; }
-.fa-calendar::before            { content: "\1F4C5"; }
+/* .fa-spin is ours, not upstream's: the animation lives here because the
+ * FontAwesome chunk carries the face and the glyph codes and nothing
+ * else. */
 .fa-spin { animation: pq-spin 1s linear infinite; }
 @keyframes pq-spin { to { transform: rotate(360deg); } }
 

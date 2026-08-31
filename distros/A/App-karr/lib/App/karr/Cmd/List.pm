@@ -1,19 +1,29 @@
 # ABSTRACT: List tasks with filtering and sorting
 
 package App::karr::Cmd::List;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use MooX::Cmd;
 use MooX::Options (
-  usage_string => 'USAGE: karr list [--status LIST] [--priority LIST] [--archived] [--sort FIELD] [options]',
+  usage_string => 'USAGE: karr list [--status LIST] [--priority LIST] [--archived] [--sort FIELD] [--limit N] [options]',
 );
 use App::karr::Role::BoardAccess;
 use App::karr::Role::Output;
+use App::karr::Role::CompactOutput;
+# For --unclaimed, and for nothing else: claim_held is the claim test
+# App::karr::Role::PickRules/pickable applies, so the free cards this command
+# lists are the free cards `karr pick` hands out (ticket #252). The role is
+# composed rather than the predicate rewritten here, which is the whole point
+# of the option. The rest of what it brings -- check_claim and its reporting
+# half -- belongs to the mutating commands; `list` writes nothing and never
+# calls it.
+use App::karr::Role::ClaimTimeout;
 use App::karr::Task;
 use App::karr::Config;
 use App::karr::Error qw( user_error );
 
-with 'App::karr::Role::BoardAccess', 'App::karr::Role::Output';
+with 'App::karr::Role::BoardAccess', 'App::karr::Role::Output',
+     'App::karr::Role::CompactOutput', 'App::karr::Role::ClaimTimeout';
 
 
 option status => (
@@ -55,7 +65,7 @@ option claimed_by => (
 
 # The complete set of --sort keys, in the order the usage message lists them.
 # Single source for the option doc, the usage message, and _comparators.
-my @SORT_FIELDS = qw( id status priority created updated due );
+my @SORT_FIELDS = qw( id title status priority created updated due );
 
 option sort => (
   is => 'ro',
@@ -75,14 +85,50 @@ option archived => (
   doc => 'Show only archived tasks',
 );
 
+option class => (
+  is => 'ro',
+  format => 's',
+  doc => 'Filter by class of service',
+);
+
+option blocked => (
+  is => 'ro',
+  doc => 'Show only blocked tasks',
+);
+
+option not_blocked => (
+  is => 'ro',
+  doc => 'Show only tasks that are not blocked',
+);
+
+option unclaimed => (
+  is => 'ro',
+  doc => 'Show only tasks no live claim holds',
+);
+
+option limit => (
+  is => 'ro',
+  format => 'i',
+  short => 'n',
+  default => sub { 0 },
+  doc => 'Show at most N tasks after filtering and sorting (0 = no limit)',
+);
+
 sub execute {
   my ($self, $args_ref, $chain_ref) = @_;
   # "0 task(s)" and `[]` are answers about a board; a repository with no board
   # has to say that instead of borrowing them (#135).
   $self->require_local_board;
+  $self->_validate_options;
   my @tasks = $self->_load_tasks;
+  # Filter, then sort, then cut. kanban-md's board.List does the three in that
+  # order (internal/board/board.go) and the order is the whole point of the
+  # third: cutting before the sort would keep an arbitrary N and then order
+  # those, so `--sort priority -n 5` would answer with five tasks that are not
+  # the five most urgent ones.
   @tasks = $self->_filter(\@tasks);
   @tasks = $self->_sort(\@tasks);
+  @tasks = $self->_limit(\@tasks);
 
   if ($self->json) {
     # to_json_hash, not to_frontmatter: the body lives below the frontmatter in
@@ -94,9 +140,11 @@ sub execute {
     return;
   }
 
+  # The line itself is L<App::karr::Task/compact_line>, so `show --compact`
+  # prints exactly this and cannot drift from it (#254).
   if ($self->compact) {
     for my $t (@tasks) {
-      printf "#%-4u %10s %s\n", $t->id, $t->status, $t->title;
+      print $t->compact_line . "\n";
     }
     return;
   }
@@ -120,6 +168,66 @@ sub execute {
       $title;
   }
   printf "\n%d task(s)\n", scalar @tasks;
+}
+
+# Every usage error this command can raise that does not need a task in hand,
+# decided in one place before the first ref is read: whether an invocation is
+# well formed is not a question about what happens to be on the board, and an
+# answer that arrives after the load has a chance of arriving after some of the
+# output too.
+sub _validate_options {
+  my ($self) = @_;
+
+  # Ticket #235's rule: an invocation that contradicts itself is refused, not
+  # silently resolved for the caller. kanban-md lets --blocked win over
+  # --not-blocked without a word (cmd/list.go tests `if blocked` first), which
+  # is the same silent pick karr already rejects for `edit --claim/--release`
+  # and `move --next/--prev`. Nobody types both on purpose, so the useful
+  # answer is the one that says so.
+  $self->usage_error('cannot use --blocked and --not-blocked together')
+    if $self->blocked && $self->not_blocked;
+
+  # The pair has a common case, and that is precisely why it is refused rather
+  # than answered. --claimed-by NAME is an exact match on the field and so also
+  # matches a claim of NAME's that has expired; --unclaimed is "nobody holds
+  # this now", which an expired claim satisfies. The two therefore intersect on
+  # "cards NAME claimed and no longer holds" -- a real set, non-empty on a
+  # normal board, and a third question nobody typed. Answering it silently is
+  # worse than answering the contradicting pairs #235 collected, not better: a
+  # plausible, non-empty list comes back for an invocation whose author meant
+  # either "free cards" or "NAME's cards" and got neither. So this follows
+  # `edit --claim/--release`, `move --next/--prev` and --blocked/--not-blocked
+  # above and refuses, which also leaves the door open -- if "which of my
+  # claims did I lose" is wanted, it deserves its own spelling rather than
+  # arriving as the accident of two filters meeting.
+  #
+  # Both orders reach this line. `--unclaimed --claimed-by NAME` did not until
+  # #256 -- a bare boolean in front of a dashed option ate its name, so that
+  # spelling died as `Unknown option: claimed-by` before the check could speak.
+  # `defined`, like the --class check below and unlike the truthy guard the
+  # filter itself uses: a value the caller typed is a value the caller typed
+  # (#153, #239, #244), even when it is empty.
+  $self->usage_error('cannot use --unclaimed and --claimed-by together')
+    if $self->unclaimed && defined $self->claimed_by;
+
+  # 0 is the documented "no limit" and stays legal -- it is the default, and
+  # kanban-md spells unlimited that way too. A negative count is not a smaller
+  # list, it is a typo, and kanban-md's `Limit > 0` guard swallows it back into
+  # "unlimited": the caller asks for at most -1 tasks and gets the whole board.
+  # Rejected here for the reason `show`/`log --last` reject theirs (#76, #151,
+  # ADR 0002) -- note those two reject 0 as well, because a count of zero
+  # entries means nothing there while it means "all of them" here.
+  $self->usage_error( sprintf '--limit must be 0 or greater (got %d)', $self->limit )
+    if $self->limit < 0;
+
+  # A class the board does not configure is a usage error, naming the classes
+  # that exist -- the same answer `create --class` gives and the same answer
+  # --sort gives an unknown field. Deliberate divergence from kanban-md, whose
+  # filter is a bare string equality (internal/board/filter.go): there
+  # `list --class bogus` prints an empty list, which reads as "no such work"
+  # when the truth is "no such class". Validating needs the board's config, so
+  # this one sits after require_local_board rather than before it.
+  $self->config->validate_class( $self->class ) if defined $self->class;
 }
 
 sub _load_tasks {
@@ -167,6 +275,40 @@ sub _filter {
   if ($self->claimed_by) {
     @filtered = grep { $_->has_claimed_by && $_->claimed_by eq $self->claimed_by } @filtered;
   }
+  # The claim test itself is App::karr::Role::ClaimTimeout/claim_held -- the
+  # one App::karr::Role::PickRules/pickable applies -- so this list and `karr
+  # pick` cannot come to disagree about which cards are free (#59, #198, #252).
+  # One window for the whole run, read once here rather than per card: a
+  # board-wide filter that re-read claim_timeout for every card could in
+  # principle straddle a config change mid-list, and would certainly do the
+  # parse N times.
+  #
+  # Claim only, as kanban-md's IsUnclaimed is: pickable goes on to exclude
+  # blocked and terminal cards, and neither is a statement about who holds the
+  # card. --blocked --unclaimed is a real triage query here, not an empty one.
+  if ($self->unclaimed) {
+    my $timeout = $self->claim_timeout_secs;
+    @filtered = grep { !$self->claim_held( $_, $timeout ) } @filtered;
+  }
+  # Plain equality against the card's class, which App::karr::Task always has
+  # (it defaults to `standard`), so there is no unset case to fold in. The
+  # value was checked against the board's classes in _validate_options, so an
+  # empty result here means the board has no card of that class -- not that the
+  # class was misspelled.
+  if (defined $self->class) {
+    @filtered = grep { $_->class eq $self->class } @filtered;
+  }
+  # has_blocked is the whole test on both sides: L<App::karr::Task/BUILD>
+  # normalizes the field so the predicate is true exactly when the card is
+  # blocked, and `blocked: false` from a kanban-md document is not
+  # representable as "set but off" (ticket #58). The pair is mutually
+  # exclusive, rejected in _validate_options, so the elsif cannot hide a
+  # second filter from anybody.
+  if ($self->blocked) {
+    @filtered = grep { $_->has_blocked } @filtered;
+  } elsif ($self->not_blocked) {
+    @filtered = grep { !$_->has_blocked } @filtered;
+  }
   if ($self->search) {
     my $q = lc($self->search);
     @filtered = grep {
@@ -176,6 +318,20 @@ sub _filter {
     } @filtered;
   }
   return @filtered;
+}
+
+# Cut to --limit, last of the three stages and deliberately after the sort.
+# 0 -- the default -- is no limit rather than an empty list, matching
+# kanban-md's `if opts.Limit > 0` (internal/board/board.go); a negative value
+# never reaches here, _validate_options refuses it. The cut is in execute
+# rather than in either output branch so --json, --compact and the table all
+# see the same N tasks: a --limit that only applied to the human table would be
+# a limit exactly where the context it saves does not matter.
+sub _limit {
+  my ($self, $tasks) = @_;
+  my $limit = $self->limit;
+  return @$tasks unless $limit > 0 && @$tasks > $limit;
+  return @{$tasks}[ 0 .. $limit - 1 ];
 }
 
 sub _sort {
@@ -219,6 +375,18 @@ sub _comparators {
   my %priority = $self->_index_of( $self->config->priorities );
   return {
     id       => sub { $_[0]->id <=> $_[1]->id },
+    # Case-insensitively, as kanban-md's compareTasks does via strings.ToLower
+    # (internal/board/sort.go:31). A bare `cmp` would sort every capitalized
+    # title ahead of every lowercase one, which is a second alphabet, not a
+    # sort by title. lc() sees characters here, not octets, so a title outside
+    # ASCII lowercases by Unicode rules -- but cmp still compares codepoints,
+    # so such a title sorts behind every ASCII one rather than beside its
+    # unaccented spelling. No collation is promised, and none is coming: a
+    # collating comparator needs a locale to collate for, boards are read by
+    # agents on machines that share none, and two hosts disagreeing about the
+    # order is worse than one order that is merely not alphabetical. The POD
+    # under FILTERS AND SORTING states this as a non-goal (ticket #237).
+    title    => sub { lc($_[0]->title) cmp lc($_[1]->title) },
     status   => sub { ($status{$_[0]->status}     // -1) <=> ($status{$_[1]->status}     // -1) },
     priority => sub { ($priority{$_[1]->priority} // -1) <=> ($priority{$_[0]->priority} // -1) },
     # created/updated are ISO-8601 UTC stamps, so a string compare is
@@ -269,7 +437,7 @@ App::karr::Cmd::List - List tasks with filtering and sorting
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -277,6 +445,9 @@ version 0.500
     karr list --status todo,in-progress --priority high,critical
     karr list --claimed-by agent-fox --compact
     karr list -s docker --json
+    karr list --sort priority --limit 5 --json
+    karr list --class expedite --not-blocked
+    karr list --unclaimed --sort priority -n 5
 
 =head1 DESCRIPTION
 
@@ -323,11 +494,54 @@ Limit the result set to a specific assignee, tag, or claim owner.
 
 Performs a case-insensitive substring search across title, body, and tags.
 
+=item * C<--class>
+
+Limits the result to one class of service. A class the board does not
+configure is a usage error (exit C<2>) naming the classes it does configure,
+the same answer C<karr create --class> gives -- kanban-md compares the string
+and prints an empty list instead, which reads like "no such work" when the
+truth is "no such class". Note that C<list> does not render the class, so the
+filter narrows on a field only C<--json> and C<karr show> display; the
+validation is what keeps a typo from looking like an empty board.
+
+=item * C<--blocked>, C<--not-blocked>
+
+Show only the blocked cards, or only the unblocked ones. C<blocked> is what
+the meta column already prints, so this narrows on something visible.
+Passing both is a usage error (exit C<2>): kanban-md lets C<--blocked> win
+silently, and karr refuses a self-contradicting invocation instead, as it
+does for C<edit --claim --release> and C<move --next --prev> (ticket #235).
+
+=item * C<--unclaimed>
+
+Shows only the cards nobody is holding right now -- C<claimed_by> unset or
+empty, or set to a claim older than the board's C<claim_timeout>. It is the
+answer to "what is free" that until now only C<karr pick> could give, and
+C<pick> answers it by B<taking> the card.
+
+The test is not a second reading of the field: this filter calls
+L<App::karr::Role::ClaimTimeout/claim_held>, the same method
+L<App::karr::Role::PickRules/pickable> calls, so a card C<list --unclaimed>
+shows is a card C<karr pick> can hand out. It asks about the claim and nothing
+else, matching kanban-md's C<IsUnclaimed>: blocked cards and cards with unmet
+dependencies are unpickable but not claimed, so they are still listed, and
+C<--blocked --unclaimed> is a real query rather than an empty one. On a board
+with C<claim_timeout: 0s> no claim ever expires, so there C<--unclaimed> means
+C<claimed_by> empty and nothing more.
+
+C<--unclaimed> is not the negation of C<--claimed-by>, which is where #237's
+reading of the pair went wrong. C<--claimed-by NAME> is an exact string match
+on the field and matches an B<expired> claim too, because the name stays on
+the card until something re-stamps it; C<--unclaimed> is about who holds the
+card now. Passing both is a usage error (exit C<2>) -- see the comment in
+C<_validate_options> for why that is the answer even though the two do have a
+common case.
+
 =item * C<--sort>, C<--reverse>
 
-Sort by C<id>, C<status>, C<priority>, C<created>, C<updated>, or C<due>, and
-optionally reverse the result order. Any other field is a usage error (exit
-C<2>).
+Sort by C<id>, C<title>, C<status>, C<priority>, C<created>, C<updated>, or
+C<due>, and optionally reverse the result order. Any other field is a usage
+error (exit C<2>).
 
 C<status> follows the board config's own order. C<priority> deliberately
 reads the config list the other way, most urgent first: C<--sort priority>
@@ -336,9 +550,42 @@ the top of a priority-sorted list is the task L<App::karr::Cmd::Pick> would
 hand out, and C<--reverse> gives the least-urgent-first view. kanban-md's
 ascending config order opened the list with the least urgent task when karr
 took this direction; it has since made the same change, so the two agree.
-Tasks without a C<due> date sort last. Ties are broken by C<id>.
+C<title> compares case-insensitively, as kanban-md does, so C<Apple> sorts
+before C<banana> rather than ahead of every lowercase title. The comparison
+is on characters and not collated, so a title starting outside ASCII sorts
+after every ASCII one.
+
+B<Collation is a non-goal, not a gap.> C<--sort title> is C<lc> plus a
+codepoint compare, and it stays that way: C<Aebi>, C<Zebra>, C<Abi> sorts
+C<Abi>, C<Aebi>, C<Zebra> under German rules and C<Abi>, C<Zebra>, C<Aebi>
+here. What the option promises is a stable, reproducible order that agrees
+with kanban-md on the same board -- not a locale-correct one. A collating
+sort would need a locale to collate B<for>, and a board is read by agents on
+machines that share none; two hosts would then disagree about what
+C<--sort title --limit 5> returns. Anyone who needs alphabetical order for a
+human takes C<--json> and sorts it where the locale is known.
+
+Tasks without a C<due> date sort last. Ties are broken by C<id>, and
+C<--reverse> turns the finished list around, tied entries with it.
+
+=item * C<-n>, C<--limit>
+
+Keeps at most N tasks, applied after filtering B<and> after sorting -- so
+C<--sort priority --limit 5> is the five most urgent open cards, not five
+arbitrary ones put in order. C<0>, the default, means no limit. A negative
+value is a usage error (exit C<2>) rather than kanban-md's silent "unlimited".
+The cut applies to C<--json> and C<--compact> exactly as it does to the table.
+
+This is not C<--last>, which C<karr show> and C<karr log> use for a different
+question: C<--last N> is the N most recent by time, C<--limit N> is the head
+of whatever C<--sort> just produced. C<karr list --sort updated --reverse
+--limit 5> is how this command spells the former.
 
 =back
+
+Filters run first, then the sort, then C<--limit>. That is kanban-md's order
+in C<board.List> and it is the only one that makes the last stage mean
+anything.
 
 =head1 SEE ALSO
 
@@ -366,9 +613,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

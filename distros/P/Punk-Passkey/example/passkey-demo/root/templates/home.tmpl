@@ -1,0 +1,75 @@
+{% if user %}
+<h2>Signed in as {% user.email %}</h2>
+
+<p>Nothing was typed to get here. The browser proved it holds a private
+key the server never saw, and the server checked the signature against
+the public key it stored when you enrolled.</p>
+
+<p>You have {% keys.size | default('some') %} passkey(s).
+   <a href="/account/passkeys">Manage them</a>.</p>
+
+<p class="try">Try signing out and back in - and then try deleting your
+only passkey, which the plugin refuses, because in this application
+there is nothing else to sign in with.</p>
+
+<form method="post" action="/signout"><button>Sign out</button></form>
+
+{% else %}
+
+<h2>Sign in with a passkey</h2>
+
+<p>No password exists in this application. A passkey is the whole
+factor, not a second one bolted onto something else.</p>
+
+<p class="row">
+  <button id="signin" hidden>Sign in with a passkey</button>
+  <span id="unsupported" hidden>This browser has no WebAuthn.</span>
+</p>
+
+<h3>Or create an account</h3>
+<p>The account is only somebody for the credential to belong to. You
+will be sent straight to enrolment.</p>
+<form method="post" action="/signup" class="row">
+  <input name="email" type="email" placeholder="an email address"
+         aria-label="email">
+  <button>Create an account</button>
+</form>
+
+<p id="err" class="bad" hidden></p>
+
+<script src="/punk-passkey.js"></script>
+<script>
+(function () {
+  var btn = document.getElementById('signin');
+  var err = document.getElementById('err');
+
+  if (!PunkPasskey.supported()) {
+    document.getElementById('unsupported').hidden = false;
+    return;
+  }
+  btn.hidden = false;
+
+  function fail(e) {
+    err.textContent = e && e.message ? e.message : 'that did not work';
+    err.hidden = false;
+  }
+  function done() { location = '/'; }
+
+  btn.addEventListener('click', function () {
+    err.hidden = true;
+    PunkPasskey.login('/login/passkey').then(done, fail);
+  });
+
+  // Conditional UI: where the browser supports it this offers the
+  // passkey from the autofill menu, with no button pressed at all. It
+  // is feature-detected inside the helper, so a browser without it just
+  // leaves the button above as the way in.
+  //
+  // Note what this means for the button: from here on there is a
+  // credential request outstanding, and a browser allows only one. The
+  // helper's login() aborts this one before opening its own, which is
+  // why both can live on the same page.
+  PunkPasskey.conditional('/login/passkey', done);
+})();
+</script>
+{% end %}

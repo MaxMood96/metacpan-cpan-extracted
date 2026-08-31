@@ -1,6 +1,7 @@
 # ABSTRACT: Per-ref outcomes from a Remote fetch or push
 
 package Git::Native::Remote::Result;
+our $VERSION = '0.006';
 use Moo;
 use Carp ();
 use namespace::clean;
@@ -59,7 +60,7 @@ Git::Native::Remote::Result - Per-ref outcomes from a Remote fetch or push
 
 =head1 VERSION
 
-version 0.005
+version 0.006
 
 =head1 SYNOPSIS
 

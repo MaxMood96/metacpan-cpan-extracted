@@ -1,6 +1,7 @@
 # ABSTRACT: Exception class for Git::Native
 
 package Git::Native::Error;
+our $VERSION = '0.006';
 use Moo;
 use Exporter qw( import );
 use Git::Libgit2::Error ();
@@ -71,7 +72,7 @@ Git::Native::Error - Exception class for Git::Native
 
 =head1 VERSION
 
-version 0.005
+version 0.006
 
 =head1 SYNOPSIS
 

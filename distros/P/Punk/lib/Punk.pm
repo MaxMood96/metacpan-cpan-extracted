@@ -7,19 +7,15 @@ use warnings;
 our $VERSION;
 
 BEGIN {
-    $VERSION = '0.35';
+    $VERSION = '0.38';
     require XSLoader;
     XSLoader::load('Punk', $VERSION);
 }
 
 use Punk::App;
-use Punk::RateLimit;   # adds Punk::App::rate_limit + the key strategies
-use Punk::Upload ();   # ->fh is Perl; the rest of the class is XS
+use Punk::RateLimit;   
+use Punk::Upload ();   
 
-# The application registrars, one per class that says `use Punk`. The C
-# import (punk_import.h) keeps them here rather than anywhere private, so a
-# second `use Punk` in the same package extends that application instead of
-# starting another.
 our %APPS;
 
 1;
@@ -82,6 +78,8 @@ The generated test drives the app through L<Punk::Test>: an in-process
 client with a cookie jar and chained assertions, so sessions, CSRF,
 JSON APIs, server-sent events and websockets are all testable against
 the same frozen coderef a server would run.
+
+L<https://punkperl.com>
 
 =head1 DESCRIPTION
 
@@ -162,6 +160,13 @@ L<Punk::Plugin::Sitemap> is registered.
 application knows cheaply, and an unchanged one answers C<304> B<without
 running the handler>; C<1> hashes the rendered body instead, which saves
 the wire but not the server. Inert unless
+L<Punk::Plugin::ConditionalGet> is registered.
+
+=item * C<last_modified> - the date validator, for the clients that only
+speak C<If-Modified-Since> (feed readers above all). A coderef returns an
+epoch, the C<200> carries C<Last-Modified>, and an unchanged one answers
+C<304> before the handler runs. Coderef only - a rendered body has no
+timestamp to derive, so there is no C<1> form. Inert unless
 L<Punk::Plugin::ConditionalGet> is registered.
 
 =item * C<idempotent> - honour an C<Idempotency-Key> on this route, so a

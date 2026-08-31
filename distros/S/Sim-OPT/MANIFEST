@@ -13,8 +13,16 @@ lib/Sim/OPT/Takechance.pm
 lib/Sim/OPT/Parcoord3d.pm
 lib/Sim/OPT/Modish.pm
 lib/Sim/OPT/Interlinear.pm
+lib/Sim/OPT/Stats.pm
+lib/Sim/OPT/Stats/_Base.pm
+lib/Sim/OPT/Stats/_BinaryBase.pm
+lib/Sim/OPT/Stats/StdDev.pm
+lib/Sim/OPT/Stats/Correlation.pm
 lib/Sim/OPT/CalcMarginals.pm
-lib/Sim::OPT::ClusterMedoid.pm
+lib/Sim/OPT/ClusterMedoid.pm
+lib/Sim/OPT/StructureDesign.pm
+lib/Sim/OPT/StructureDesignProcedure.pm
+bin/structuredesign-run
 examples/optw.zip
 examples/useterm.pl
 META.yml                                 Module YAML meta-data (added by MakeMaker)

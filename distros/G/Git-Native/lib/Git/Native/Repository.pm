@@ -1,6 +1,7 @@
 # ABSTRACT: A libgit2 repository handle
 
 package Git::Native::Repository;
+our $VERSION = '0.006';
 use Moo;
 use Carp ();
 use Git::Libgit2 qw(
@@ -633,7 +634,7 @@ Git::Native::Repository - A libgit2 repository handle
 
 =head1 VERSION
 
-version 0.005
+version 0.006
 
 =head1 SYNOPSIS
 

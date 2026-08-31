@@ -8,9 +8,17 @@ state lives in `refs/karr/*`; the `tasks/` directory is a materialized view.
 **Claim**:
 An active, expiring lease an agent holds on a **Task** while working it —
 recorded as `claimed_by` (+ `claimed_at`). It is *not* authorship: it expires
-(see Pick claim-timeout) and is conceptually released when the Task reaches a
-terminal status. The board hides claims on `done`/`archived` Tasks because the
-board shows live work-in-progress, not history.
+(see Pick claim-timeout) and is released when the Task reaches a terminal
+status — on a `done`/`archived` Task the claim guards nothing, and `edit`,
+`move`, `delete`, `archive` and `handoff` all go through whoever the field
+names. `karr board` shows no claimant on such a Task and leaves it out of its
+claimed count, because the board shows live work-in-progress, not history;
+`karr show` and `--json` still carry the field, as provenance. That provenance
+ends where the work resumes: a Task leaving a terminal status for a working one
+has `claimed_by`/`claimed_at` cleared, unless the reopening command names a
+claimant itself (`move ID todo --claim NAME`, `handoff`), in which case that
+agent holds it. `done` → `archived` keeps the name — archiving does not resume
+anything.
 _Avoid_: owner, lock (the advisory ref lock is a separate mechanism).
 
 **Assignee**:
@@ -28,6 +36,26 @@ the foundation agent's per-run stdout capture).
 **Task lifecycle**:
 A **Task** carries timestamps for each milestone it passes: `claimed_at`,
 `started`, `completed`. `done` and `archived` are the terminal statuses.
+Terminal means *closed*, not *succeeded* — karr has a notion of progress and
+none of outcome. A card given up in the backlog and archived is
+frontmatter-identical to one archived after `done`: `update_timestamps` stamps
+`completed` on every terminal status and backfills `started`, so `karr archive`
+on a never-touched card records both a start and a completion, and no field
+says why the card ended. This is why a cross-board `needs:` link settles as
+soon as the far card is terminal — because that card is *closed*, not because
+it succeeded. Narrowing the rule to the `done` equivalent could only guess, and
+it would guess wrong in the common case, `done` → `archived` being the normal
+way a finished card is put away: the waiting card would stay blocked with
+nothing left on the far board able to unblock it, that card being terminal
+already. A false success that lets work continue is the cheaper error. The
+local `depends_on` side reads the rule the same way, but writes nothing: an
+archived dependency satisfies it silently, and `karr show` keeps printing
+`Depends: 1 (archived)`, so the word stays on the card. `karr needs --resolve`
+does write — tag gone, block gone, in another repository — which is why the
+same reading deserves more caution across boards than within one. Giving a card
+up is therefore something to say on the far board yourself.
+_Avoid_: "settled"/"resolved" read as "succeeded" — both say only that the far
+card is closed.
 
 **Identity**:
 Who is acting, as `<role>/<git-email>`. The git email comes from git config;
@@ -94,7 +122,12 @@ Claim names over time.
 
 - `claimed_by` read as "authorship/who-finished-it" vs. "active lease" —
   resolved: it is an **active lease**. Provenance of who finished a Task comes
-  from the **Activity log**, not from a retained claim. Display hides terminal
-  claims; the data field is intentionally kept for interop/provenance.
+  from the **Activity log**, not from a retained claim. A terminal claim is
+  released: it blocks no command, and `karr board` neither shows nor counts it.
+  The data field is intentionally kept for interop/provenance, so the detail
+  views — `karr show` and every `--json` payload — do still print it. It is
+  kept on a *finished* Task only: a reopen that names no claimant clears it,
+  because a name carried into a working column is a lease again and made the
+  Task unpickable by anyone.
 - "owner" used loosely for both **Assignee** and **Claim** — resolved: these
   are distinct; avoid "owner".

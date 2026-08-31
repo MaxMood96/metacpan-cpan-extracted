@@ -1,5 +1,10 @@
 Revision history for Net-CalDAVTalk
 
+0.18    Mon Aug 31 2026
+   - relicensed from Artistic License 2.0 to the same terms as Perl
+     itself (Artistic License 1.0 or GPL version 1 or later)
+   - include a LICENSE file in the distribution
+
 0.17    Fri May 16 2026
    - Update for jscalendarbis-15 (Text::JSCalendar 0.05):
    - _stripNonICal: delete organizerCalendarAddress instead of replyTo

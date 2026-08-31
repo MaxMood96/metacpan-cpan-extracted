@@ -294,23 +294,6 @@ Files: INSTALL
 Copyright: Unknown
 License: Unknown
 
-Files: dist.ini
- t/OSI.t
- t/S-L-Names-Custom.t
- t/S-L-Names-SPDX.t
- t/SPDX.t
- t/basic-lib-no-RE2.t
- t/devscripts.t
- t/exception.t
- t/fedora.t
- t/flaws.t
- t/grant.t
- t/lib/Test2/Require/TestCorpus.pm
- t/lib/Uncruft.pm
- t/license.t
-Copyright: Copyright 2023 Jonas Smedegaard.
-License: AGPL_3
-
 Files: Changes
  META.json
  META.yml
@@ -319,9 +302,25 @@ Files: Changes
  lib/String/License/Naming.pm
  lib/String/License/Naming/Custom.pm
  lib/String/License/Naming/SPDX.pm
+ t/OSI.t
+ t/S-L-Names-Custom.t
+ t/S-L-Names-SPDX.t
+ t/SPDX.t
  t/Software-License.t
+ t/basic-lib-RE2.t
+ t/basic-lib-no-RE2.t
+ t/dash.t
+ t/devscripts.t
+ t/exception.t
+ t/fedora.t
+ t/flaws.t
+ t/grant.t
+ t/lib/Test2/Require/TestCorpus.pm
+ t/lib/Test2/Require/WorkingUtf8.pm
  t/lib/Test2/ScanCode.pm
-Copyright: Copyright 2024 Jonas Smedegaard.
+ t/lib/Uncruft.pm
+ t/license.t
+Copyright: Copyright 2026 Jonas Smedegaard.
 License: AGPL_3
 
 Files: COPYRIGHT
@@ -342,29 +341,33 @@ Files: t/devscripts/artistic-2-0-modules.pm
 Copyright: Copyright (C) 2009 by Moritz Lenz and the SVG::Plot contributors (see file.
 License: Artistic-2.0
 
+Files: dist.ini
+Copyright: Copyright 2023 Jonas Smedegaard.
 License: AGPL_3
- This software is Copyright (c) 2024 by Jonas Smedegaard.
+
+License: AGPL_3
+ This software is Copyright (c) 2026 by Jonas Smedegaard.
  
  This is free software, licensed under:
  
    The GNU Affero General Public License, Version 3, November 2007
 
 License: Artistic-1.0
- This software is Copyright (c) 2024 by the copyright holder(s).
+ This software is Copyright (c) 2026 by the copyright holder(s).
  
  This is free software, licensed under:
  
    The Artistic License 1.0
 
 License: GPL-1.0
- This software is Copyright (c) 2024 by the copyright holder(s).
+ This software is Copyright (c) 2026 by the copyright holder(s).
  
  This is free software, licensed under:
  
    The GNU General Public License, Version 1, February 1989
 
 License: Artistic-2.0
- This software is Copyright (c) 2024 by the copyright holder(s).
+ This software is Copyright (c) 2026 by the copyright holder(s).
  
  This is free software, licensed under:
  

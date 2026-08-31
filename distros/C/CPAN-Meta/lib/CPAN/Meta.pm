@@ -3,7 +3,7 @@ use strict;
 use warnings;
 package CPAN::Meta;
 
-our $VERSION = '2.150013';
+our $VERSION = '2.150014';
 
 #pod =head1 SYNOPSIS
 #pod
@@ -649,7 +649,7 @@ CPAN::Meta - the distribution metadata for a CPAN dist
 
 =head1 VERSION
 
-version 2.150013
+version 2.150014
 
 =head1 SYNOPSIS
 

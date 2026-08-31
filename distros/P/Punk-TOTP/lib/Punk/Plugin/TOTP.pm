@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk::TOTP ();    # one dist, one bootstrap: the plugin lives in its bundle
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 1;
 
@@ -192,9 +192,17 @@ If the columns are missing the count cannot be kept, and rather than
 guess, every failed attempt then un-answers the first factor and the
 plugin warns once. Deploy the schema (see L</STORAGE>).
 
-An application with the C<csrf> keyword enabled must pass its own
-C<render> that includes the token, or exempt the path; the default
-form carries none.
+The default form is csrf-aware: when the application has the C<csrf>
+keyword enabled, it carries C<< $c->csrf_field >>, decided once at
+C<to_app> so it does not matter whether C<csrf> is written above or
+below the C<plugin> line. The tokens are single-use and minted per
+render, so a wrong code's re-render carries a fresh one, and the
+default page is sent C<Cache-Control: no-store> - it is per-session,
+and now token-bearing. An application passing its own C<render> puts
+the token in that form itself, exactly as it would on any other.
+(Punk 0.31 is where C<to_app> grew the seam this reads; on an older
+Punk the key is read when the plugin registers, so there C<csrf> must
+be declared first.)
 
 =head2 totp_guard
 

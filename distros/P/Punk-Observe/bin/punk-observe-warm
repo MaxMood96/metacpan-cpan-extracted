@@ -1,0 +1,146 @@
+#!/usr/bin/env perl
+# Warm the dashboard chunk cache, by hand.
+#
+# WHAT AN OPERATOR WANTS AFTER A RESTART, and what the tests use. The scheduled
+# version is a Punk::Queue cron task under its own lease
+# (Punk::Observe::Warm::cron_task); this is the same pass with no scheduler, no
+# lease and no worker around it, so "the dashboard is slow for whoever opens it
+# first" is one command.
+#
+#   punk-observe-warm --store var/store --db dbi:SQLite:dbname=var/observe.db
+#   punk-observe-warm --store var/store --db ... --depth 24h --dry-run
+#
+# --dry-run reports what WOULD be walked - the tenants, the queries, and which
+# of them can be split at all - and computes nothing. It is the answer to "is
+# this configured to warm anything", which is a different question from "how
+# long does a pass take".
+use 5.010;
+use strict;
+use warnings;
+use Getopt::Long qw(GetOptions);
+
+use Punk::Observe ();
+use Punk::Observe::Backend ();
+use Punk::Observe::Cache ();
+use Punk::Observe::Retain ();   # parse_keep
+use Punk::Observe::Store ();
+use Punk::Observe::Warm ();
+
+my ($store_dir, $dsn, $tenant, $depth, $refresh, $ttl, $budget, $timeout,
+    $dry, $help);
+GetOptions(
+    'store=s'   => \$store_dir,
+    'db=s'      => \$dsn,
+    'tenant=s'  => \$tenant,
+    'depth=s'   => \$depth,
+    'refresh=s' => \$refresh,
+    'ttl=s'     => \$ttl,
+    'budget=i'  => \$budget,
+    'timeout=i' => \$timeout,
+    'dry-run'   => \$dry,
+    'help'      => \$help,
+) or usage(1);
+usage(0) if $help;
+usage(1, 'a --store directory is required') unless $store_dir;
+usage(1, 'a --db dsn is required - the panel queries to warm live in the '
+       . 'configuration database, not in the store') unless $dsn;
+
+sub usage {
+    my ($rc, $why) = @_;
+    print STDERR "$why\n\n" if $why;
+    print STDERR <<'USAGE';
+usage: punk-observe-warm --store DIR --db DSN [options]
+
+  --store DIR      the telemetry store
+  --db DSN         the configuration database holding the dashboards
+  --tenant NAME    only this tenant; default: every tenant with a dashboard
+  --depth WINDOW   how far back to warm: 7d, 24h (default 7d)
+  --refresh WINDOW the newest window recomputed rather than kept (default 2h)
+  --ttl WINDOW     how long an entry lives (default 8d)
+  --budget N       chunks computed in one pass (default 400)
+  --timeout SECS   seconds one pass may take (default 20)
+  --dry-run        report what would be walked; compute nothing
+USAGE
+    exit $rc;
+}
+
+sub window {
+    my ($name, $text) = @_;
+    return undef unless defined $text && length $text;
+    my $ns = Punk::Observe::Retain::parse_keep($text);
+    usage(1, "--$name '$text' is not a window. A number and a unit: 7d, 24h, "
+            . '90m. The units are the query language\'s own.')
+        unless defined $ns;
+    return $ns;
+}
+
+my $depth_ns   = window('depth', $depth);
+my $refresh_ns = window('refresh', $refresh);
+my $ttl_ns     = window('ttl', $ttl);
+
+my $db = Punk::Observe::Backend->new(dsn => $dsn);
+
+# One cache for every tenant, exactly as the plugin builds it: a cache of one
+# store's history has no meaning beside another's, and an operator moving the
+# store expects its derived files to go too.
+require Punk::Cache;
+require File::Spec;
+my $cache = Punk::Cache->new('file',
+    dir => File::Spec->catdir($store_dir, 'cache'), max_bytes => '256M');
+
+my %stores;
+my $store_for = sub {
+    my ($name) = @_;
+    return undef if defined $tenant && length $tenant && $name ne $tenant;
+    return $stores{$name} ||= Punk::Observe::Store->new(
+        dir => $store_dir, tenant => $name, cache => $cache);
+};
+
+if ($dry) {
+    my $tenants = Punk::Observe::Warm::tenants($db);
+    my ($n, $skipped) = (0, 0);
+    for my $t (@$tenants) {
+        next unless $store_for->($t);
+        print "tenant $t\n";
+        for my $q (@{ Punk::Observe::Warm::queries($db, $t) }) {
+            my $b = Punk::Observe::Cache::bucket_ns($q);
+            printf "  %-9s %s\n", (defined $b ? 'warmable' : 'skipped'), $q;
+            defined $b ? $n++ : $skipped++;
+        }
+    }
+    printf "\n%d quer%s to warm, %d that cannot be split\n",
+        $n, ($n == 1 ? 'y' : 'ies'), $skipped;
+    exit 0;
+}
+
+my $out = Punk::Observe::Warm::run(
+    db    => $db,
+    store => $store_for,
+    (defined $depth_ns   ? (depth_ns   => $depth_ns)   : ()),
+    (defined $refresh_ns ? (refresh_ns => $refresh_ns) : ()),
+    (defined $ttl_ns     ? (ttl => int($ttl_ns / 1_000_000_000)) : ()),
+    (defined $budget     ? (budget  => $budget)  : ()),
+    (defined $timeout    ? (timeout => $timeout) : ()),
+);
+
+printf "%d tenant%s, %d quer%s warmed, %d skipped\n",
+    $out->{tenants}, $out->{tenants} == 1 ? '' : 's',
+    $out->{queries}, $out->{queries} == 1 ? 'y' : 'ies',
+    $out->{skipped};
+printf "%d chunk%s walked: %d computed, %d already warm\n",
+    $out->{chunks}, $out->{chunks} == 1 ? '' : 's',
+    $out->{computed}, $out->{hits};
+printf "stopped early: %s - run again to continue\n", $out->{stopped}
+    if $out->{stopped};
+
+# A chunk the cache refused is one recomputed on every pass and kept by none,
+# which is a cost that is otherwise invisible.
+if ($out->{unstorable}) {
+    printf STDERR "%d chunk%s computed but too large for the cache to keep - "
+                . "raise the cache max_bytes or narrow the panel's grouping\n",
+        $out->{unstorable}, $out->{unstorable} == 1 ? '' : 's';
+    exit 1;
+}
+printf STDERR "%d chunk%s failed to compute\n",
+    $out->{failed}, $out->{failed} == 1 ? '' : 's' if $out->{failed};
+exit 0;

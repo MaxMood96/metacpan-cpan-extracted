@@ -5,7 +5,7 @@ use warnings;
 
 package Text::JSContact;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 # vCard <=> JSContact (RFC 9553) conversion
 # Follows RFC 9555 for vCard mapping and RFC 9554 for extensions
@@ -1680,3 +1680,27 @@ sub _diff_cards {
 }
 
 1;
+
+__END__
+
+=head1 NAME
+
+Text::JSContact - Convert between vCard and JSContact (RFC 9553/9555)
+
+=head1 AUTHOR
+
+Bron Gondwana, C<< <brong at cpan.org> >>
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright 2026 Fastmail Pty Ltd.
+
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself; that is, either the GNU General
+Public License as published by the Free Software Foundation (version 1,
+or at your option any later version), or the Artistic License.
+
+See L<http://dev.perl.org/licenses/> and the LICENSE file included with
+this distribution for more information.
+
+=cut

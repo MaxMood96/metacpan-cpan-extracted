@@ -5,6 +5,7 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     NAME              => 'Text::VCardFast',
     VERSION_FROM      => 'lib/Text/VCardFast.pm', # finds $VERSION
+    LICENSE           => 'Perl_5',
     PREREQ_PM         => {
       'JSON::XS' => '0',        # needed for testing
     }, # e.g., Module::Name => 1.1

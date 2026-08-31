@@ -53,13 +53,13 @@ my %WriteMakefileArgs = (
     CONFIGURE_REQUIRES => {
         'ExtUtils::MakeMaker' => '0',
         'ExtUtils::Depends'   => '0.404',
-        'File::Raw'           => '0.13',
+        'File::Raw'           => '0.15',
     },
     TEST_REQUIRES => {
         'Test::More' => '0',
     },
     PREREQ_PM => {
-        'File::Raw' => '0.13',
+        'File::Raw' => '0.15',
     },
     OBJECT => 'Hash$(OBJ_EXT) hashx$(OBJ_EXT) sha2$(OBJ_EXT) '
             . 'sha1$(OBJ_EXT) md5$(OBJ_EXT) crc32$(OBJ_EXT) '

@@ -1,6 +1,7 @@
 Changes
 ignore.txt
 lib/Net/CardDAVTalk.pm
+LICENSE
 Makefile.PL
 MANIFEST			This list of files
 README

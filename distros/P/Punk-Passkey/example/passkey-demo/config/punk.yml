@@ -1,0 +1,54 @@
+# PasskeyDemo configuration.
+#
+# What is NOT here is as much the point as what is. `host` and `session`
+# stay in lib/PasskeyDemo.pm: the origin is read from an environment
+# variable so the demo can move ports, and the session secret is minted
+# per boot so restarting signs everybody out. A real application declares
+# both here, with the secret referenced rather than written.
+
+views:
+  Stencil:
+    template_dir: root/templates
+    wrapper: layout.tmpl
+
+static:
+  /static: root/static
+
+# SQLite, in a file beside the application. The tables are NOT created
+# here or at boot - `punk sqitch deploy` creates them, from the schema
+# projects the `auth` keyword and the Passkey plugin register. See the
+# README.
+#
+# A credential's public key is stored as the COSE bytes the
+# authenticator sent: arbitrary binary, NUL bytes included. The column
+# is a BLOB and DBD::SQLite returns bytes unless `sqlite_unicode` is
+# turned on - do not turn it on. A handle that decoded those bytes as
+# UTF-8 on the way back would hand the verifier a different key than
+# the one that went in, and every login would fail with nothing
+# obviously wrong anywhere. t/01-basic.t asserts the round trip.
+#
+# NOTE, if you add options here: a key whose value is a HASH is read as
+# a NAMED DATABASE, not as options of the default one. `attr:` nested
+# under `database:` quietly becomes a database called "attr" and your
+# attributes never reach DBI. Name the default explicitly for that:
+#
+#   database:
+#     default:
+#       dsn:  dbi:SQLite:dbname=passkey-demo.db
+#       attr: { ... }
+database:
+  dsn: dbi:SQLite:dbname=passkey-demo.db
+
+models: [ User, Passkey ]
+
+# The plugin is registered in lib/PasskeyDemo.pm rather than here,
+# because four of its options are coderefs and this file is data. An
+# application whose options are all plain values can register it here
+# instead:
+#
+# plugins:
+#   Passkey:
+#     register_path: /account/passkeys
+#     login_path:    /login/passkey
+#     model:         Passkey
+#     sqitch:        1     # deploy the credential table with Punk-Sqitch

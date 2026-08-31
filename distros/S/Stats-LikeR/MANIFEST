@@ -40,6 +40,10 @@ t/col2col.t
 t/colnames_rownames.t
 t/concat.t
 t/cor.t
+t/cor_test.kendall.R.R
+t/cor_test.kendall.R.t
+t/cor_test.pearson.ci.R.R
+t/cor_test.pearson.ci.R.t
 t/cor_test.spearman.R.R
 t/cor_test.spearman.R.t
 t/cor_test.tails.t
@@ -74,6 +78,8 @@ t/glm_families.t
 t/group_by.HoH.filter.t
 t/h2aoh_aoh2h.t
 t/help.t
+t/hist.R.R
+t/hist.R.t
 t/hoa2aoh.t
 t/hoa2hoh.t
 t/hoh2hoa.t
@@ -101,6 +107,7 @@ t/minmax.nan.R.t
 t/model_pvalue_tails.t
 t/ncol.t
 t/nrow.t
+t/numeric.validation.t
 t/nv_width.t
 t/oneway_test.R.scipy.t
 t/oneway_test.bugs.t

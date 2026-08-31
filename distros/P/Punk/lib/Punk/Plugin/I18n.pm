@@ -4,7 +4,7 @@ use 5.010;
 use strict;
 use warnings;
 
-our $VERSION = '0.34';
+our $VERSION = '0.38';
 
 use Punk ();
 use File::Spec ();

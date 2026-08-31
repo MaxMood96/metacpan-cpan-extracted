@@ -1,10 +1,11 @@
-use v5.20;
+use v5.40;
 use utf8;
-use warnings;
-use feature qw(signatures);
-no warnings qw(experimental::signatures);
 
-use Feature::Compat::Class 0.07;
+use feature 'class';
+no warnings 'experimental::class';
+
+use builtin qw(load_module);
+no warnings 'experimental::builtin';
 
 =head1 NAME
 
@@ -12,7 +13,7 @@ String::License - detect source code license statements in a text string
 
 =head1 VERSION
 
-Version v0.0.11
+Version v0.1.1
 
 =head1 SYNOPSIS
 
@@ -35,49 +36,38 @@ and serializes them in a normalized format.
 
 =cut
 
-package String::License v0.0.11;
+class String::License v0.1.1;
 
-use Carp         qw(croak);
-use Log::Any     ();
-use Scalar::Util qw(blessed);
-use List::Util   qw(uniq);
+use Carp       qw(croak);
+use Log::Any   ();
+use List::Util qw(any max uniq);
 use Array::IntSpan;
 use Regexp::Pattern::License 3.4.0;
 use Regexp::Pattern 0.2.12;
 use String::License::Naming::Custom;
 use String::License::Naming::SPDX;
 
-use namespace::clean;
+my $CAN_RE2 = false;
 
-class Tag {
-	field $name : param;
-	field $desc : param;
-	field $begin : param;
-	field $end : param;
+BEGIN {
+	try {
+		load_module('re::engine::RE2');
+		$CAN_RE2 = true;
+	}
+	catch ($e) {
 
-	method data () { return lc __CLASS__, $name, $desc, $begin, $end }
+		# module not compiled in / not installed
+	}
 }
 
-class Exception : isa(Tag) {;}
+use namespace::clean -except => ['new'];
 
-class Flaw : isa(Tag) {;}
+my $make_tag = sub ( $type, $begin, $end, %fields ) {
+	return [ $type, @fields{qw(name desc)}, $begin, $end ];
+};
 
-class Licensing {
-	field $name : param;
-	field $desc : param;
-
-	method data () { return lc __CLASS__, $name, $desc }
-}
-
-class Fulltext : isa(Tag) {;}
-
-class Grant : isa(Tag) {;}
-
-class String::License;
-
-# try enable RE2 engine
-eval { require re::engine::RE2 };
-my @OPT_RE2 = $@ ? () : ( engine => 'RE2' );
+# enable RE2 engine in later Regexp::Pattern imports if enabled here
+my @OPT_RE2 = $CAN_RE2 ? ( engine => 'RE2' ) : ();
 
 field $log;
 
@@ -134,6 +124,34 @@ field %grant;
 
 =cut
 
+my %dash_soup = (
+	"\x{E2}\x{80}\x{93}"       => 'U+2013 EN-DASH (UTF-8 as Latin-1)',
+	"\x{E2}\x{80}\x{94}"       => 'U+2014 EM-DASH (UTF-8 as Latin-1)',
+	"\x{E2}\x{20AC}\x{201C}"   => 'U+2013 EN-DASH (UTF-8 as CP1252)',
+	"\x{E2}\x{20AC}\x{201D}"   => 'U+2014 EM-DASH (UTF-8 as CP1252)',
+	"\x{0432}\x{0402}\x{2019}" => 'U+2013 EN-DASH (UTF-8 as CP1251)',
+	"\x{0432}\x{0402}\x{201D}" => 'U+2014 EM-DASH (UTF-8 as CP1251)',
+);
+my %dash_lookalike = (
+	"\x{2043}" => 'U+2043 HYPHEN BULLET',
+	"\x{02D7}" => 'U+02D7 MODIFIER LETTER MINUS SIGN',
+	"\x{FE32}" => 'U+FE32 PRESENTATION FORM FOR VERTICAL EN DASH',
+	"\x{FF0D}" => 'U+FF0D FULLWIDTH HYPHEN-MINUS',
+);
+my $_build_alt = sub ($table) {
+	join '|',
+		map {
+		join '',
+			map { '\x{' . sprintf( '%X', ord $_ ) . '}' }
+			split //, $_
+		}
+		sort { length $b <=> length $a } keys %$table;
+};
+my $dash_soup_re      = $_build_alt->( \%dash_soup );
+my $dash_lookalike_re = $_build_alt->( \%dash_lookalike );
+my $dash_re           = qr/(?:\p{Dash}|$dash_soup_re|$dash_lookalike_re)/;
+my $html_xml_tags_re  = qr/<\/?(?:p|br|ref)(?:\s[^>]*)?>/i;
+
 ADJUST {
 	$log = Log::Any->get_logger;
 
@@ -145,6 +163,53 @@ ADJUST {
 	}
 	else {
 		$naming = String::License::Naming::SPDX->new;
+	}
+
+	my %changed;
+	my $pre = $string;
+
+	# dash / unicode-soup / lookalike normalization
+	if ( $string =~ s/$dash_re/-/g ) {
+		$changed{dash} = 1;
+		if ( $log->is_trace ) {
+			my %seen;
+			my @notes;
+			for my $c ( $pre =~ /(\p{Dash})/g ) {
+				my $cp = ord $c;
+				next if $cp == 0x2D;    # ASCII hyphen = the target
+				next if $seen{$cp}++;
+				push @notes, sprintf( 'U+%04X', $cp );
+			}
+			$changed{dash} = \@notes if @notes;
+			while ( $pre =~ /$dash_soup_re/g ) {
+				push @{ $changed{soup} //= [] }, $dash_soup{$&};
+			}
+			while ( $pre =~ /$dash_lookalike_re/g ) {
+				push @{ $changed{lookalike} //= [] }, $dash_lookalike{$&};
+			}
+		}
+	}
+
+	if ( ( my $c = $string =~ s/-\r?\n(?=\S)//g ) ) { $changed{unwrap} = $c }
+	$string =~ s/\v+/ /g;       # normalize line endings
+	if ( my $c = $string =~ s{$html_xml_tags_re}{}g ) { $changed{html} = $c }
+	$string =~ tr/\t\r\n/ /;    # tabs/newlines -> space
+
+	$pre = $string;
+	$string =~ tr% A-Za-z.,:@;0-9()/+-%%cd;
+	if ( my $c = length($pre) - length($string) ) { $changed{noise} = $c }
+	$string =~ tr/ //s;         # collapse runs of spaces
+
+	if (%changed) {
+		if ( $log->is_trace ) {
+			$log->trace( 'normalized license string', \%changed );
+		}
+		else {
+			$log->debugf(
+				'normalized license string: %s',
+				join( ', ', sort keys %changed )
+			);
+		}
 	}
 
 	$coverage = Array::IntSpan->new();
@@ -162,7 +227,7 @@ method note ( $name, $begin = undef, $end = undef )
 
 	if ( ref($name) ) {
 		$obj = $name;
-		( undef, $name, undef, $begin, $end ) = $obj->data;
+		( undef, $name, undef, $begin, $end ) = @$obj;
 	}
 
 	$log->tracef(
@@ -179,7 +244,7 @@ method note ( $name, $begin = undef, $end = undef )
 
 method tag ($obj)
 {
-	my ( $type, $name, $desc, $begin, $end ) = $obj->data;
+	my ( $type, $name, $desc, $begin, $end ) = @$obj;
 
 	if ( $type eq 'licensing' ) {
 		push @loose_licensing, [ $type, $name, $desc ];
@@ -582,12 +647,7 @@ method resolve ()
 			$v2    ? "(v$v2)"    : (),
 		);
 		$expr = join( ' or ', sort @spdx );
-		$self->tag(
-			Licensing->new(
-				name => $expr,
-				desc => $L{caption}{$legacy} || $legacy,
-			)
-		);
+		$self->tag( [ licensing => $expr, $L{caption}{$legacy} || $legacy ] );
 	};
 
 	# fulltext
@@ -597,9 +657,8 @@ method resolve ()
 		next unless ( $RE{"LICENSE_$id"} );
 		while ( $string =~ /$RE{"LICENSE_$id"}/g ) {
 			$pos_license{ $-[0] }{obj}{$id} = $self->note(
-				Fulltext->new(
-					%{ $self->name_and_desc($id) },
-					begin => $-[0], end => $+[0]
+				$make_tag->(
+					'fulltext', $-[0], $+[0], %{ $self->name_and_desc($id) }
 				)
 			);
 			$pos_license{ $-[0] }{end}{$id} = $+[0];
@@ -615,8 +674,7 @@ method resolve ()
 	for my $pos ( sort { $a <=> $b } keys %pos_license ) {
 
 		# pick longest or most specific among matched license fulltexts
-		my ($longest)
-			= sort { $b <=> $a } values %{ $pos_license{$pos}{end} };
+		my $longest  = max values %{ $pos_license{$pos}{end} };
 		my @licenses = grep {
 			exists $pos_license{$pos}{end}{$_}
 				and $pos_license{$pos}{end}{$_} eq $longest
@@ -629,6 +687,10 @@ method resolve ()
 	}
 
 	# grant, stepwise
+	my %is_versioned     = map { $_ => 1 } @VERSIONED;
+	my %is_singleversion = map { $_ => 1 } @SINGLEVERSION;
+	my @grant_types_default
+		= ( @COMBO, @UNVERSIONED, @VERSIONED, @SINGLEVERSION, @USAGE );
 	my @prefixes;
 	$log->trace('scan stepwise for license grant');
 	for my $trait ( keys %{ $L{TRAITS_grant_prefix} } ) {
@@ -642,13 +704,7 @@ method resolve ()
 		my $pos = $licensed_under->[1];
 
 		# possible grant names
-		my @grant_types = (
-			@COMBO,
-			@UNVERSIONED,
-			@VERSIONED,
-			@SINGLEVERSION,
-			@USAGE,
-		);
+		my @grant_types = @grant_types_default;
 
 		# optional grant version
 		my ( $version, $suffix );
@@ -704,7 +760,7 @@ method resolve ()
 			my $pos_end = $pos = $match{$name}{name}{$pos}->[1];
 
 			# may include version
-			if ( !$version and grep { $_ eq $name } @VERSIONED ) {
+			if ( !$version and $is_versioned{$name} ) {
 				substr( $string, $pos ) =~ $RE{ANCHORLEFT_NAMED_version};
 				if ( defined $+{version_number} ) {
 					$self->note(
@@ -733,7 +789,7 @@ method resolve ()
 					$pos_end = $pos + $+[0];
 				}
 			}
-			elsif ( !$version and grep { $_ eq $name } @SINGLEVERSION ) {
+			elsif ( !$version and $is_singleversion{$name} ) {
 				substr( $string, $pos )
 					=~ $RE{ANCHORLEFT_NAMED_version_later};
 				if ( defined $+{version_later} ) {
@@ -753,24 +809,24 @@ method resolve ()
 			if ($suffix) {
 				my $latername = "$name$suffix";
 				$grant{$latername} = $self->note(
-					Grant->new(
-						%{ $self->name_and_desc($latername) },
-						begin => $licensed_under->[0], end => $pos_end
+					$make_tag->(
+						'grant', $licensed_under->[0], $pos_end,
+						%{ $self->name_and_desc($latername) }
 					)
 				);
-				next LICENSED_UNDER if grep { $grant{$_} } @NAMES;
+				next LICENSED_UNDER if any { $grant{$_} } @NAMES;
 			}
 			$grant{$name} = $self->note(
-				Grant->new(
-					%{ $self->name_and_desc($name) },
-					begin => $licensed_under->[0], end => $pos_end
+				$make_tag->(
+					'grant', $licensed_under->[0], $pos_end,
+					%{ $self->name_and_desc($name) }
 				)
 			);
 		}
 	}
 
 	# GNU oddities
-	if ( grep { $match{$_}{name} } @agpl, @gpl, @lgpl ) {
+	if ( any { $match{$_}{name} } @agpl, @gpl, @lgpl ) {
 		$log->trace('scan for GNU oddities');
 
 		# address in AGPL/GPL/LGPL
@@ -780,9 +836,9 @@ method resolve ()
 			{
 				if ( defined $+{$id} ) {
 					$self->tag(
-						Flaw->new(
-							%{ $self->name_and_desc($id) },
-							begin => $-[0], end => $+[0]
+						$make_tag->(
+							'flaw', $-[0], $+[0],
+							%{ $self->name_and_desc($id) }
 						)
 					);
 				}
@@ -795,9 +851,8 @@ method resolve ()
 	for my $id (@EXCEPTIONS) {
 		if ( $string =~ $RE{"EXCEPTION_$id"} ) {
 			$self->tag(
-				Exception->new(
-					%{ $self->name_and_desc($id) },
-					begin => $-[0], end => $+[0]
+				$make_tag->(
+					'exception', $-[0], $+[0], %{ $self->name_and_desc($id) }
 				)
 			);
 		}
@@ -809,9 +864,8 @@ method resolve ()
 	# generated file
 	if ( $string =~ $RE{TRAIT_generated} ) {
 		$self->tag(
-			Flaw->new(
-				%{ $self->name_and_desc('generated') },
-				begin => $-[0], end => $+[0]
+			$make_tag->(
+				'flaw', $-[0], $+[0], %{ $self->name_and_desc('generated') }
 			)
 		);
 	}
@@ -821,7 +875,7 @@ method resolve ()
 
 	# LGPL, dual-licensed
 	# FIXME: add test covering this pattern
-	if ( grep { $match{$_}{name} } @lgpl ) {
+	if ( any { $match{$_}{name} } @lgpl ) {
 		$log->trace('scan for LGPL dual-license grant');
 		if ( $string =~ $L{multi_1} ) {
 			$self->note( 'grant(multi#1)', $-[0], $+[0] );
@@ -831,7 +885,7 @@ method resolve ()
 
 	# GPL, dual-licensed
 	# FIXME: add test covering this pattern
-	if ( grep { $match{$_}{name} } @gpl ) {
+	if ( any { $match{$_}{name} } @gpl ) {
 		$log->trace('scan for GPL dual-license grant');
 		if ( $string =~ $L{multi_2} ) {
 			$self->note( 'grant(multi#2)', $-[0], $+[0] );
@@ -849,13 +903,14 @@ method resolve ()
 		if ( $string =~ $L{lgpl_5} ) {
 
 			# TODO: simplify, and require Regexp::Pattern::License v3.11.0
-			my $v2 = $+{version_number_2} // $-{version_number}[1] || next;
+			my $v2 = ( $+{version_number_2} // $-{version_number}[1] );
+			next unless defined $v2 && length $v2;
 
 			$self->tag(
-				Grant->new(
-					name  => "LGPL-$+{version_number} or LGPL-$v2",
-					desc  => "LGPL (v$+{version_number} or v$v2)",
-					begin => $-[0], end => $+[0],
+				$make_tag->(
+					'grant', $-[0], $+[0],
+					name => "LGPL-$+{version_number} or LGPL-$v2",
+					desc => "LGPL (v$+{version_number} or v$v2)",
 				)
 			);
 			$match{ 'lgpl_' . $+{version_number} =~ tr/./_/r }{custom} = 1;
@@ -865,7 +920,7 @@ method resolve ()
 	}
 
 	# GPL or LGPL
-	if ( grep { $match{$_}{name} } @gpl ) {
+	if ( any { $match{$_}{name} } @gpl ) {
 		$log->trace('scan for GPL or LGPL dual-license grant');
 		if ( $string =~ $L{gpl_7} ) {
 			$self->note( "grant(gpl#7)", $-[0], $+[0] );
@@ -922,10 +977,10 @@ method resolve ()
 		and $string =~ $L{fsful} )
 	{
 		$self->tag(
-			Fulltext->new(
-				name  => "FSFUL~$1",
-				desc  => "FSF Unlimited ($1 derivation)",
-				begin => $-[0], end => $+[0],
+			$make_tag->(
+				'fulltext', $-[0], $+[0],
+				name => "FSFUL~$1",
+				desc => "FSF Unlimited ($1 derivation)",
 			)
 		);
 		$match{fsful}{custom} = 1;
@@ -938,10 +993,10 @@ method resolve ()
 		and $string =~ $L{fsfullr} )
 	{
 		$self->tag(
-			Fulltext->new(
-				name  => "FSFULLR~$1",
-				desc  => "FSF Unlimited (with Retention, $1 derivation)",
-				begin => $-[0], end => $+[0],
+			$make_tag->(
+				'fulltext', $-[0], $+[0],
+				name => "FSFULLR~$1",
+				desc => "FSF Unlimited (with Retention, $1 derivation)",
 			)
 		);
 		$match{fsfullr}{custom} = 1;
@@ -959,10 +1014,9 @@ method resolve ()
 				$log->tracef( 'skip grant in covered range: %s', $id );
 			}
 			else {
-				$grant{$id} = $self->tag(
-					Grant->new(
-						%{ $self->name_and_desc($id) },
-						begin => $-[0], end => $+[0]
+				$self->tag(
+					$make_tag->(
+						'grant', $-[0], $+[0], %{ $self->name_and_desc($id) }
 					)
 				);
 			}
@@ -999,10 +1053,9 @@ method resolve ()
 				$log->tracef( 'skip grant in covered range: %s', $id );
 			}
 			else {
-				$grant{$id} = $self->tag(
-					Grant->new(
-						%{ $self->name_and_desc($id) },
-						begin => $-[0], end => $+[0]
+				$self->tag(
+					$make_tag->(
+						'grant', $-[0], $+[0], %{ $self->name_and_desc($id) }
 					)
 				);
 			}
@@ -1025,7 +1078,7 @@ method resolve ()
 	for my $id (@VERSIONED) {
 		next
 			if $match{$id}{custom}
-			or ( $fulltext{rpsl_1} and grep { $id eq $_ } qw(mpl python) )
+			or ( $fulltext{rpsl_1} and any { $id eq $_ } qw(mpl python) )
 			or $fulltext{$id};
 		if (    !$grant{$id}
 			and ( $L_grant_stepwise_incomplete{$id} or $force_atomic )
@@ -1036,10 +1089,9 @@ method resolve ()
 				$log->tracef( 'skip grant in covered range: %s', $id );
 			}
 			else {
-				$grant{$id} = $self->tag(
-					Grant->new(
-						%{ $self->name_and_desc($id) },
-						begin => $-[0], end => $+[0]
+				$self->tag(
+					$make_tag->(
+						'grant', $-[0], $+[0], %{ $self->name_and_desc($id) }
 					)
 				);
 			}
@@ -1072,10 +1124,9 @@ method resolve ()
 				$log->tracef( 'skip grant in covered range: %s', $id );
 			}
 			else {
-				$grant{$id} = $self->tag(
-					Grant->new(
-						%{ $self->name_and_desc($id) },
-						begin => $-[0], end => $+[0]
+				$self->tag(
+					$make_tag->(
+						'grant', $-[0], $+[0], %{ $self->name_and_desc($id) }
 					)
 				);
 			}

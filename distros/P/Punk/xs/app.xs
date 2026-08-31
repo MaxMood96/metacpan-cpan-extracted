@@ -101,6 +101,7 @@ route(self, method, path, target, guards = &PL_sv_undef, opts = &PL_sv_undef)
                 if (!strEQ(k, K_VALIDATE) && !strEQ(k, K_COMPRESS)
                     && !strEQ(k, K_MAX_BODY) && !strEQ(k, K_SITEMAP)
                     && !strEQ(k, K_ETAG) && !strEQ(k, K_IDEMPOTENT)
+                    && !strEQ(k, K_LAST_MODIFIED)
                     && !strEQ(k, K_NAME))
                     croak("Punk: unknown route option '%s'", k);
             }
@@ -185,6 +186,33 @@ route(self, method, path, target, guards = &PL_sv_undef, opts = &PL_sv_undef)
                 av_push(app_av(aTHX_ h, K_ETAG_ROUTES),
                         newRV_noinc((SV *)rec));
                 etag_done: ;
+            }
+            /* last_modified: the other dynamic validator, same arrangement
+             * as `etag` and inert without the same plugin. The coderef
+             * returns an epoch the route knows cheaply - a row's updated_at,
+             * a feed's newest entry - answered before the handler runs.
+             *
+             * There is deliberately no `last_modified => 1`: the body form
+             * of `etag` hashes rendered bytes, and a rendered body has no
+             * timestamp to derive - inventing one (render time, boot time)
+             * would manufacture false freshness. */
+            vp = hv_fetchs(oh, K_LAST_MODIFIED, 0);
+            if (vp && *vp && SvOK(*vp)) {
+                HV *rec;
+                int is_cv = (SvROK(*vp) && SvTYPE(SvRV(*vp)) == SVt_PVCV);
+                if (!is_cv && SvTRUE(*vp))
+                    croak("Punk: last_modified on %s %s takes a coderef "
+                          "returning an epoch; there is no body form - a "
+                          "rendered body has no timestamp to derive",
+                          SvPV_nolen(method), SvPV_nolen(path));
+                if (is_cv) {
+                    rec = newHV();
+                    (void)hv_stores(rec, K_METHOD, newSVsv(method));
+                    (void)hv_stores(rec, K_PATH,   newSVsv(path));
+                    (void)hv_stores(rec, K_LAST_MODIFIED, newSVsv(*vp));
+                    av_push(app_av(aTHX_ h, K_LM_ROUTES),
+                            newRV_noinc((SV *)rec));
+                }
             }
             /* idempotent: honour an Idempotency-Key on this route, inert
              * unless Punk::Plugin::Idempotency is registered - the `sitemap`

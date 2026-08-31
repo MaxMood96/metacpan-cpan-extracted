@@ -16,6 +16,7 @@
 typedef struct ft_timer {
     SV               *cb;
     int               oneshot;
+    UV                id;        /* the token the backend holds; never reused */
     struct ft_timer  *next;
 } ft_timer;
 
@@ -24,11 +25,30 @@ struct hm_loop {                 /* name matches ft_future.h's forward decl */
     SV        **rcb;             /* [HM_MAXFD] read-ready callbacks  */
     SV        **wcb;             /* [HM_MAXFD] write-ready callbacks */
     ft_timer   *timers;          /* live timers, for dispatch + cleanup */
+    UV          last_timer_id;   /* monotonic; see ft_timer_token */
     int         stop;
     int         nio;             /* live fd interests, for the idle check */
 };
+
+/* What the backend is given to identify a timer, and gives back when one
+ * fires. It is a counter, not the ft_timer address, because a cancelled timer
+ * can still have an event in flight - queued in the kernel, or already in a
+ * completion ring - and the freed struct is exactly the right size to be
+ * handed straight back to the next ft_add_timer. Then the stale event names a
+ * live timer and takes that down instead: the next request fails on a deadline
+ * that was never its own. A counter is never reused, so the lookup below
+ * simply does not find it and the event is dropped. */
+#define ft_timer_token(id) INT2PTR(void *, (UV)(id))
+
 typedef struct hm_loop ft_loop;
 /* hm_cur_loop is defined (static) in ft_future.h; we only read/write it. */
+
+static ft_timer *ft_timer_of_token(ft_loop *l, void *token) {
+    UV        id = PTR2UV(token);
+    ft_timer *t;
+    for (t = l->timers; t; t = t->next) if (t->id == id) return t;
+    return NULL;
+}
 
 static ft_loop *ft_loop_new(pTHX_ const char *name) {
     ft_loop *l = (ft_loop *)calloc(1, sizeof(ft_loop));
@@ -98,9 +118,10 @@ static ft_timer *ft_add_timer(pTHX_ ft_loop *l, double secs, SV *cb, int oneshot
     if (!t) croak("Fetch: out of memory");
     t->cb      = SvREFCNT_inc(cb);
     t->oneshot = oneshot ? 1 : 0;
+    t->id      = ++l->last_timer_id;
     t->next    = l->timers;
     l->timers  = t;
-    l->be->add_timer(l->be, secs, oneshot, t);
+    l->be->add_timer(l->be, secs, oneshot, ft_timer_token(t->id));
     return t;
 }
 
@@ -122,7 +143,7 @@ static void ft_timer_unlink(pTHX_ ft_loop *l, ft_timer *dead) {
  * since a oneshot the backend has already dropped.) */
 static void ft_del_timer(pTHX_ ft_loop *l, ft_timer *t) {
     if (!t) return;
-    l->be->del_timer(l->be, t);
+    l->be->del_timer(l->be, ft_timer_token(t->id));
     ft_timer_unlink(aTHX_ l, t);
 }
 
@@ -159,7 +180,7 @@ static void hm_loop_run(pTHX_ struct hm_loop *l, SV *until) {
         for (i = 0; i < n && !l->stop; i++) {
             hm_event *e = &evs[i];
             if (e->kind & HM_EV_TIMER) {
-                ft_timer *t = (ft_timer *)e->udata;
+                ft_timer *t = ft_timer_of_token(l, e->udata);
                 if (t && t->cb) {
                     SV *cb  = SvREFCNT_inc(t->cb);
                     int one = t->oneshot;

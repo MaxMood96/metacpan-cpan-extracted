@@ -66,14 +66,14 @@ static SV *pcg_quote(pTHX_ SV *v) {
     }
 }
 
-/* Set a header on the response object the handler will add to, so the 200
- * carries the tag as well. A client never given a tag can never send one
- * back, which would make the whole feature inert on its second request.
+/* Set a validator header on the response object the handler will add to, so
+ * the 200 carries it as well. A client never given a validator can never send
+ * one back, which would make the whole feature inert on its second request.
  *
  * The response object is FORCED here even when the handler would never have
  * touched it - that is the cost of putting a tag on a plain `$c->text`
  * response, and it is one allocation on a route that opted in. */
-static void pcg_set_etag(pTHX_ SV *c, SV *tag) {
+static void pcg_set_hdr(pTHX_ SV *c, const char *name, SV *val) {
     AV *cav = pcx_av(aTHX_ c);
     SV *resobj;
     AV *res, *hdrs;
@@ -87,8 +87,29 @@ static void pcg_set_etag(pTHX_ SV *c, SV *tag) {
      * most worth having on. This is the accessor $c->header reaches. */
     hdrs = punk_res_headers(aTHX_ res);
     if (!hdrs) return;
-    av_push(hdrs, newSVpvs("ETag"));
-    av_push(hdrs, newSVsv(tag));
+    av_push(hdrs, newSVpv(name, 0));
+    av_push(hdrs, newSVsv(val));
+}
+
+/* Run one validator coderef over $c. Returns the result (+1, or undef);
+ * *errp gets the croak (+1) and the caller answers with the app's 500 -
+ * application code running before the handler must not fail silently. */
+static SV *pcg_run_validator(pTHX_ SV *cb, SV *c, SV **errp) {
+    dSP; int count; SV *val;
+    ENTER; SAVETMPS;
+    PUSHMARK(SP); EXTEND(SP, 1);
+    PUSHs(c);
+    PUTBACK;
+    count = call_sv(cb, G_SCALAR | G_EVAL);
+    SPAGAIN;
+    val = count > 0 ? SvREFCNT_inc(POPs) : &PL_sv_undef;
+    PUTBACK; FREETMPS; LEAVE;
+    if (SvTRUE(ERRSV)) {
+        SvREFCNT_dec(val);
+        *errp = newSVsv(ERRSV);
+        return NULL;
+    }
+    return val;
 }
 
 /* ---- the 304, in one place ---------------------------------------------------
@@ -120,15 +141,19 @@ static int pcg_entity_header(pTHX_ const char *k, STRLEN l) {
         || (l == 16 && foldEQ(k, "Content-Encoding", 16));
 }
 
-/* The 304 triplet (+1), with `tag` (ownership moves) and everything in `src`
- * that a 304 may carry. src may be NULL - a route where nothing set a header
- * before the check ran. */
+/* The 304 triplet (+1), with `tag` (ownership moves; NULL on a route whose
+ * only validator is a date - the Last-Modified travels in `src`, set on the
+ * response object before the check) and everything in `src` that a 304 may
+ * carry. src may be NULL - a route where nothing set a header before the
+ * check ran. */
 static SV *pcg_304(pTHX_ SV *tag, AV *src) {
     AV *resp = newAV(), *hdr = newAV(), *body = newAV();
     SSize_t i, n = src ? av_len(src) + 1 : 0;
 
-    av_push(hdr, newSVpvs("ETag"));
-    av_push(hdr, tag);                            /* ownership moves */
+    if (tag) {
+        av_push(hdr, newSVpvs("ETag"));
+        av_push(hdr, tag);                        /* ownership moves */
+    }
     for (i = 0; i + 1 < n; i += 2) {
         SV **k = av_fetch(src, i, 0);
         SV **v = av_fetch(src, i + 1, 0);
@@ -139,7 +164,7 @@ static SV *pcg_304(pTHX_ SV *tag, AV *src) {
         if (pcg_entity_header(aTHX_ kp, kl)) continue;
         /* the tag just added wins over one already in the source - which is
          * the strong half's own, put there so the 200 would carry it */
-        if (kl == 4 && foldEQ(kp, "ETag", 4)) continue;
+        if (tag && kl == 4 && foldEQ(kp, "ETag", 4)) continue;
         av_push(hdr, newSVsv(*k));
         av_push(hdr, (v && *v) ? newSVsv(*v) : newSV(0));
     }
@@ -162,54 +187,73 @@ static SV *pcg_304(pTHX_ SV *tag, AV *src) {
 static int pcg_check(pTHX_ SV *c, HV *rech, HV *env, const char *method,
                      STRLEN mlen, SV **out, SV **errp) {
     SV **ep = hv_fetchs(rech, K_ETAG, 0);
-    SV *cb, *val, *tag;
-    int matched;
+    SV **lp = hv_fetchs(rech, K_LAST_MODIFIED, 0);
+    int has_et = ep && *ep && SvROK(*ep) && SvTYPE(SvRV(*ep)) == SVt_PVCV;
+    int has_lm = lp && *lp && SvROK(*lp) && SvTYPE(SvRV(*lp)) == SVt_PVCV;
+    SV *val, *tag = NULL;
+    char ldate[64];
+    int have_date = 0, matched;
 
     *out = NULL;
     *errp = NULL;
-    if (!ep || !*ep || !SvROK(*ep) || SvTYPE(SvRV(*ep)) != SVt_PVCV) return 0;
+    if (!has_et && !has_lm) return 0;
     if (!pcg_cond_method(method, mlen)) return 0;
-    cb = *ep;
 
-    {   /* The validator runs on EVERY request to the route, not only the
-         * conditional ones: the 200 needs the tag too, and a client never
-         * given one can never send one back. */
-        dSP; int count;
-        ENTER; SAVETMPS;
-        PUSHMARK(SP); EXTEND(SP, 1);
-        PUSHs(c);
-        PUTBACK;
-        count = call_sv(cb, G_SCALAR | G_EVAL);
-        SPAGAIN;
-        val = count > 0 ? SvREFCNT_inc(POPs) : &PL_sv_undef;
-        PUTBACK; FREETMPS; LEAVE;
-        if (SvTRUE(ERRSV)) {
-            SvREFCNT_dec(val);
-            *errp = newSVsv(ERRSV);
-            return 1;
+    /* The validators run on EVERY request to the route, not only the
+     * conditional ones: the 200 needs its validators too, and a client never
+     * given one can never send one back.
+     *
+     * undef means "I do not know", and that validator contributes nothing. A
+     * validator that cannot answer must not be able to produce a wrong 304,
+     * and saying so has to be cheaper to write than guessing. */
+    if (has_et) {
+        val = pcg_run_validator(aTHX_ *ep, c, errp);
+        if (!val) return 1;
+        if (SvOK(val)) {
+            tag = pcg_quote(aTHX_ val);
+            /* Two characters is an empty tag - nothing the validator
+             * returned survived. Treat it as undef rather than emitting
+             * `""`, which every client would then match against for ever. */
+            if (SvCUR(tag) <= 2) { SvREFCNT_dec(tag); tag = NULL; }
+            if (tag) pcg_set_hdr(aTHX_ c, "ETag", tag);
         }
+        SvREFCNT_dec(val);
     }
-
-    /* undef means "I do not know", and the request proceeds with no ETag at
-     * all. A validator that cannot answer must not be able to produce a wrong
-     * 304, and saying so has to be cheaper to write than guessing. */
-    if (!SvOK(val)) { SvREFCNT_dec(val); return 0; }
-
-    tag = pcg_quote(aTHX_ val);
-    SvREFCNT_dec(val);
-
-    /* Two characters is an empty tag - nothing the validator returned
-     * survived. Treat it as undef rather than emitting `""`, which every
-     * client would then match against for ever. */
-    if (SvCUR(tag) <= 2) { SvREFCNT_dec(tag); return 0; }
-
-    pcg_set_etag(aTHX_ c, tag);
-
-    {   STRLEN tl;
-        const char *tp = SvPV_const(tag, tl);
-        matched = psf_not_modified(aTHX_ env, tp, tl, NULL);
+    if (has_lm) {
+        val = pcg_run_validator(aTHX_ *lp, c, errp);
+        if (!val) { if (tag) SvREFCNT_dec(tag); return 1; }
+        if (SvOK(val)) {
+            /* An epoch, clamped to now: a Last-Modified in the future is a
+             * clock-skew statement no cache can use well, and RFC 9110
+             * 8.8.2 says a recipient replaces one with the response's Date
+             * anyway - clamping at generation is the same answer, earlier. */
+            time_t when = (time_t)SvIV(val);
+            time_t now = time(NULL);
+            if (when > now) when = now;
+            ps_http_date(ldate, sizeof ldate, when);
+            have_date = 1;
+            {
+                SV *dsv = sv_2mortal(newSVpv(ldate, 0));
+                pcg_set_hdr(aTHX_ c, "Last-Modified", dsv);
+            }
+        }
+        SvREFCNT_dec(val);
     }
-    if (!matched) { SvREFCNT_dec(tag); return 0; }
+    if (!tag && !have_date) return 0;
+
+    /* One function holds the whole decision, and it is the file path's:
+     * If-None-Match wins over If-Modified-Since (RFC 9110 13.1.3), and the
+     * date comparison is exact - the date they were given is the date we
+     * would send. Exact is deliberate: there is no date parser in this
+     * dist, an unrecognised or stale date simply fails to match, and the
+     * failure direction is a re-send, never a wrong 304. The cost is the
+     * one-second grain any HTTP date already has. */
+    {   STRLEN tl = tag ? SvCUR(tag) : 0;
+        const char *tp = tag ? SvPV_const(tag, tl) : NULL;
+        matched = psf_not_modified(aTHX_ env, tp, tl,
+                                   have_date ? ldate : NULL);
+    }
+    if (!matched) { if (tag) SvREFCNT_dec(tag); return 0; }
 
     {   /* A 304 is a RESPONSE, not an absence of one. It goes back as an
          * ordinary triplet and through punk_finish_c like any other, so
@@ -415,11 +459,17 @@ XS_INTERNAL(pcg_after_cb) {
         rech = (HV *)SvRV(*rp);
     }
     {   /* the body ETag is `etag => 1`; a coderef is the strong validator,
-         * which answered for itself before the handler ran and only wants
-         * the cache-safety pass below */
+         * and `last_modified` is always one - both answered for themselves
+         * before the handler ran and only want the cache-safety pass below.
+         * A route with last_modified alone still hands out a validator a
+         * cache will key on, so it is not exempt from saying what that
+         * depends on. */
         SV **et = hv_fetchs(rech, K_ETAG, 0);
-        if (!(et && *et && SvOK(*et))) XSRETURN_EMPTY;
-        strong = SvROK(*et) ? 1 : 0;
+        SV **lm = hv_fetchs(rech, K_LAST_MODIFIED, 0);
+        int has_et = et && *et && SvOK(*et);
+        int has_lm = lm && *lm && SvOK(*lm);
+        if (!has_et && !has_lm) XSRETURN_EMPTY;
+        strong = (has_et && SvROK(*et)) || !has_et ? 1 : 0;
     }
 
     {   /* GET and HEAD. Only a 200 is hashed - an error response is not the

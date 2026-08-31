@@ -7,12 +7,11 @@ package Mail::JMAPTalk;
 
 use HTTP::Tiny;
 use JSON;
-use Convert::Base64;
-use File::LibMagic;
+use MIME::Base64;
 use Carp qw(confess);
 use Data::Dumper;
 
-our $VERSION = '0.17';
+our $VERSION = '0.18';
 
 our $CLIENT = "Mail-JMAPTalk";
 our $AGENT = "$CLIENT/$VERSION";
@@ -25,7 +24,7 @@ Mail::JMAPTalk - Basic interface to talk to JMAP Servers
 
 =head1 VERSION
 
-Version 0.17
+Version 0.18
 
 =head1 SYNOPSIS
 
@@ -514,6 +513,10 @@ sub Call {
 sub _get_type {
   my $data = shift;
   # XXX - escape file names?
+  # File::LibMagic is optional - it needs the C libmagic library, and every
+  # known caller passes an explicit type anyway, so only load it if we're
+  # actually asked to guess.
+  return 'application/octet-stream' unless eval { require File::LibMagic; 1 };
   my $magic = File::LibMagic->new();
   my $info = $magic->info_from_string($data);
   return $info->{mime_type};
@@ -524,8 +527,12 @@ sub _get_type {
 If the first argument is a hash reference, it will be shifted
 and used as additional headers.
 
-Uploads the bytes in $data with either the given mimetype or
-if the mimetype is not given, the type picked by File::LibMagic.
+Uploads the bytes in $data with either the given mimetype or, if the
+mimetype is not given, the type picked by File::LibMagic.
+
+File::LibMagic is optional.  If it isn't installed, an unspecified
+mimetype falls back to "application/octet-stream", so pass $mimetype
+explicitly if you care what the blob is typed as.
 
 The POST request is authenticated with either the basic auth
 parameters given at creation, or the token obtained via Login.
@@ -688,12 +695,16 @@ https://jmap.io/ - protocol documentation and client guide.
 
 Bron Gondwana, E<lt>brong@E<gt>
 
-=head1 COPYRIGHT AND LICENSE
+=head1 LICENSE AND COPYRIGHT
 
-Copyright (C) 2015-2020 by Fastmail Pty Ltd.
+Copyright 2015-2026 Fastmail Pty Ltd.
 
-This library is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself, either Perl version 5.20.1 or,
-at your option, any later version of Perl 5 you may have available.
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself; that is, either the GNU General
+Public License as published by the Free Software Foundation (version 1,
+or at your option any later version), or the Artistic License.
+
+See L<http://dev.perl.org/licenses/> and the LICENSE file included with
+this distribution for more information.
 
 =cut

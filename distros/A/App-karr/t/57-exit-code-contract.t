@@ -4,10 +4,8 @@ use Test::More;
 use lib 't/lib';
 use TestGit qw( require_git_c );
 require_git_c();
+use TestKarr qw( run_karr );
 use File::Temp qw( tempdir );
-use Cwd qw( abs_path getcwd );
-use IPC::Open3 qw( open3 );
-use Symbol qw( gensym );
 
 # Exit-code contract matrix for ticket #22 / ADR 0002
 # (docs/adr/0002-exit-code-contract.md).
@@ -26,38 +24,11 @@ use Symbol qw( gensym );
 #   - App::karr::Role::ExitCodes (and the root's _print_help) remap
 #     MooX::Options option-parse errors from 1 to 2.
 
-my $ROOT = abs_path('.');
-my $BIN  = "$ROOT/bin/karr";
-
-sub _run_karr {
-    my ( $cwd, @argv ) = @_;
-    my $old = getcwd();
-    chdir $cwd or die "chdir $cwd: $!";
-
-    my $stderr = gensym;
-    my $pid = open3(
-        undef,
-        my $stdout_fh,
-        $stderr,
-        $^X,
-        "-I$ROOT/lib",
-        $BIN,
-        @argv,
-    );
-
-    my $stdout      = do { local $/; <$stdout_fh> };
-    my $stderr_text = do { local $/; <$stderr> };
-    waitpid( $pid, 0 );
-    my $exit = $? >> 8;
-
-    chdir $old or die "chdir $old: $!";
-
-    return {
-        exit   => $exit,
-        stdout => defined $stdout      ? $stdout      : '',
-        stderr => defined $stderr_text ? $stderr_text : '',
-    };
-}
+# In-process runner (t/lib/TestKarr.pm): same ($cwd, @argv) signature and
+# { exit, stdout, stderr } return as the open3 helper this file used to carry,
+# dispatched through the shared App::karr::Dispatch path. KARR_TEST_SUBPROC=1
+# restores the old open3 path.
+sub _run_karr { return run_karr(@_) }
 
 sub _git_repo {
     my $repo = tempdir( CLEANUP => 1 );
@@ -181,6 +152,152 @@ subtest 'unknown option exits 2 on every command shape' => sub {
         2, 'unknown option on agent-name exits 2' );
     is( _run_karr( $repo, 'skill', '--totally-bogus' )->{exit},
         2, 'unknown option on skill exits 2' );
+};
+
+# ------------------------------------------------------- 1 vs 2 for the id "0"
+
+# Ticket #239. `my $id = $pos[0] or die "Usage: ..."` in move, archive, delete,
+# edit and handoff read the given-but-false id "0" as "no id was passed at all"
+# and answered a usage error (2), while `show` -- which never had that guard --
+# called it a missing task (1). Card numbers start at 1, so no reachable card
+# was lost; what split was this contract, and ADR 0002 makes it a promise to
+# agents that script the CLI. An agent whose id arithmetic produced a 0 heard
+# "no such card" from one command and "you mistyped" from five others -- the
+# one distinction the two codes exist to draw, landing on the wrong side. Third
+# instance of the truthiness-guard root behind #153 and #230, and fixed the
+# same way there: `defined && length`.
+subtest 'the id 0 is a missing task (1), never a usage error (2)' => sub {
+    my $repo = _board_repo();
+
+    my @invocations = (
+        [ 'show',    '0' ],
+        [ 'move',    '0', 'todo' ],
+        [ 'archive', '0' ],
+        [ 'delete',  '0', '--yes' ],
+        [ 'edit',    '0', '--title', 'x' ],
+        [ 'handoff', '0', '--claim', 'some-agent' ],
+    );
+
+    for my $argv (@invocations) {
+        my $label = join ' ', @$argv;
+        my $rv = _run_karr( $repo, @$argv );
+        is( $rv->{exit}, 1, "karr $label exits 1 (runtime: no such task)" )
+            or diag $rv->{stderr};
+        like( $rv->{stderr}, qr/\QTask 0 not found\E/,
+            "karr $label names the id it could not find" );
+        unlike( $rv->{stderr}, qr/^Usage:/m,
+            "karr $label does not answer with a usage line" );
+    }
+};
+
+subtest 'the single id and the comma list agree about 0' => sub {
+    my $repo = _board_repo();
+
+    # parse_ids('0') has always returned the one-element list ("0"), so the
+    # emptiness guard under it (ticket #152, `die ... unless @ids`) never fired
+    # for a 0 either: `karr move 0,1 todo` already reported "Task 0 not found"
+    # and exited 1 while `karr move 0 todo` exited 2. Two spellings of the same
+    # argument, two contradictory answers -- now one.
+    my $single = _run_karr( $repo, 'move', '0',   'todo' );
+    my $list   = _run_karr( $repo, 'move', '0,1', 'todo' );
+
+    is( $single->{exit}, 1, 'karr move 0 todo exits 1' )
+        or diag $single->{stderr};
+    is( $list->{exit}, 1, 'karr move 0,1 todo exits 1' )
+        or diag $list->{stderr};
+    like( $list->{stderr}, qr/\QTask 0 not found\E/,
+        'the list form still reports the 0 as missing' );
+};
+
+subtest 'what stays a usage error: no id at all, and an id list that is empty' => sub {
+    my $repo = _board_repo();
+
+    # The branch the "0" was wrongly falling into is for a genuinely absent id.
+    for my $argv (
+        ['move'], ['archive'], [ 'edit', '--title', 'x' ],
+        [ 'delete', '--yes' ], [ 'handoff', '--claim', 'some-agent' ],
+    ) {
+        my $label = join ' ', @$argv;
+        my $rv = _run_karr( $repo, @$argv );
+        is( $rv->{exit}, 2, "karr $label (no id) still exits 2" )
+            or diag $rv->{stderr};
+        like( $rv->{stderr}, qr/^Usage:/m, "karr $label answers a Usage: line" );
+    }
+
+    # And, via the #152 guard below it, for an id argument that is present but
+    # splits to no ids -- the shell-built list that came out empty.
+    for my $argv (
+        [ 'move', ',', 'todo' ], ['archive', ','],
+        [ 'edit', ',', '--title', 'x' ], [ 'delete', ',', '--yes' ],
+    ) {
+        my $label = join ' ', @$argv;
+        my $rv = _run_karr( $repo, @$argv );
+        is( $rv->{exit}, 2, "karr $label (empty id list) still exits 2" )
+            or diag $rv->{stderr};
+    }
+
+    # A non-numeric id is NOT that branch and never was: "abc" is truthy, so it
+    # passed the old guard too, reached find_task and came back as a missing
+    # task (1). Pinned because #239 asked whether the conversion could tip it
+    # into a usage error -- it cannot. These guards only ever see the argument
+    # that is absent and the one that names no ids; deciding whether a present
+    # id exists is find_task's job, and its answer is a runtime failure.
+    my $abc = _run_karr( $repo, 'move', 'abc', 'todo' );
+    is( $abc->{exit}, 1, 'karr move abc todo exits 1: a bad id is not a typo' )
+        or diag $abc->{stderr};
+    like( $abc->{stderr}, qr/\QTask abc not found\E/,
+        'and reports it as a task that does not exist' );
+    unlike( $abc->{stderr}, qr/^Usage:/m, 'not as a usage error' );
+};
+
+# ------------------------------------------ 1 vs 2 for the config key "0"
+
+# Ticket #244, the last site of the shape above: `my $key = $pos[1] or die
+# "Usage: ..."` in Cmd::Config, once for `get` and once for `set`. Same split
+# as the ids -- `karr config get 0` answered a usage error (2) where every
+# other unknown key answers "Unknown key" (1) -- but a key, not an id, which is
+# why #239 left it standing rather than taking it along.
+#
+# Pinned here even though the class is already pinned three times, because
+# nothing else can fail when these two lines change: the ids above are a
+# different command surface with a different message pair, and the second of
+# the two sites (set) is exactly the kind that gets fixed halfway. The last
+# assertion is the reason the value below it is guarded with // and not with
+# `or`: "0" is a legal value for foundation.enabled, so a falsy value must
+# still be written.
+subtest 'the config key 0 is an unknown key (1), never a usage error (2)' => sub {
+    my $repo = _board_repo();
+
+    my $get = _run_karr( $repo, 'config', 'get', '0' );
+    is( $get->{exit}, 1, 'karr config get 0 exits 1 (runtime: no such key)' )
+        or diag $get->{stderr};
+    like( $get->{stderr}, qr/\QUnknown key: 0\E/,
+        'and names the key it could not resolve' );
+    unlike( $get->{stderr}, qr/^Usage:/m, 'not a usage line' );
+
+    my $set = _run_karr( $repo, 'config', 'set', '0', 'x' );
+    is( $set->{exit}, 1, 'karr config set 0 x exits 1 (runtime: not writable)' )
+        or diag $set->{stderr};
+    unlike( $set->{stderr}, qr/^Usage:/m, 'not a usage line either' );
+
+    # The branch those two were wrongly falling into is for a key that is
+    # genuinely absent, and it stays a usage error.
+    for my $argv ( [ 'config', 'get' ], [ 'config', 'set' ],
+        [ 'config', 'set', 'claim_timeout' ] )
+    {
+        my $label = join ' ', @$argv;
+        my $rv = _run_karr( $repo, @$argv );
+        is( $rv->{exit}, 2, "karr $label (nothing to act on) still exits 2" )
+            or diag $rv->{stderr};
+        like( $rv->{stderr}, qr/^Usage:/m, "karr $label answers a Usage: line" );
+    }
+
+    # A falsy *value* is a value, and always was: the guard on $pos[2] is //.
+    is( _run_karr( $repo, 'config', 'set', 'foundation.enabled', '0' )->{exit},
+        0, 'karr config set foundation.enabled 0 still writes the falsy value' );
+    my $read = _run_karr( $repo, 'config', 'get', 'foundation.enabled' );
+    is( $read->{exit},   0,     'and reading it back exits 0' );
+    like( $read->{stdout}, qr/\A0\s*\z/, 'with the 0 that was written' );
 };
 
 done_testing;

@@ -4,7 +4,7 @@ use 5.010;
 use strict;
 use warnings;
 
-our $VERSION = '0.34';
+our $VERSION = '0.38';
 
 use Test::Builder ();
 use Scalar::Util ();
@@ -140,7 +140,15 @@ sub _build_env {
     ($path, $query) = ($1, $2) if !length $query && $path =~ /\A([^?]*)\?(.*)\z/s;
 
     my ($body, $type) = ('', $o{type});
-    if (exists $o{json}) {
+    my ($in, $clen);
+    if (exists $o{upload}) {
+        for my $k (qw(json body type)) {
+            die "Punk::Test: upload and $k do not combine - an upload "
+              . "is multipart/form-data\n" if exists $o{$k};
+        }
+        ($in, $clen, $type) = $self->_multipart_input($o{form}, $o{upload});
+    }
+    elsif (exists $o{json}) {
         $body = file_json_encode($o{json});
         $type //= 'application/json';
     }
@@ -154,7 +162,10 @@ sub _build_env {
         $body = $o{body};
     }
 
-    open my $in, '<', \$body or die "Punk::Test: $!";
+    unless ($in) {
+        open $in, '<', \$body or die "Punk::Test: $!";
+        $clen = length $body if length $body or defined $type;
+    }
     my $env = {
         REQUEST_METHOD    => $method,
         PATH_INFO         => $path,
@@ -166,9 +177,10 @@ sub _build_env {
         'psgi.input'      => $in,
         'psgi.errors'     => \*STDERR,
         'psgi.version'    => [ 1, 1 ],
+        'psgi.streaming'  => 1,
     };
-    if (length $body or defined $type) {
-        $env->{CONTENT_LENGTH} = length $body;
+    if (defined $clen) {
+        $env->{CONTENT_LENGTH} = $clen;
         $env->{CONTENT_TYPE}   = $type // '';
     }
     # Sticky headers first, so a single request's `headers` can still override
@@ -198,6 +210,126 @@ sub _build_env {
     if (my $jar = $self->_jar_header) { $env->{HTTP_COOKIE} = $jar }
     %$env = (%$env, %{ $o{env} }) if $o{env};
     return $env;
+}
+
+# ---- multipart ---------------------------------------------------------------
+
+# The `upload` option: form pairs and upload specs encoded as
+# multipart/form-data. The body is never assembled - the parts become a
+# list of items (header strings whole, file parts read a buffer at a
+# time) drained through psgi.input - so a test of the server's spill
+# path costs this process one read buffer, not the file.
+
+my @_BND = ('0' .. '9', 'A' .. 'Z', 'a' .. 'z');
+sub _mp_boundary { join '', 'PunkTest', map { $_BND[int rand @_BND] } 1 .. 16 }
+
+# A name or filename into a Content-Disposition quoted-string: quotes and
+# newlines percent-encoded, everything else (UTF-8 included) sent raw,
+# which is RFC 7578 and what browsers do. The server-side parser stores
+# what arrives; it does not decode.
+sub _mp_name {
+    my ($s) = @_;
+    $s = '' unless defined $s;
+    utf8::encode($s) if utf8::is_utf8($s);
+    $s =~ s/(["\r\n])/sprintf '%%%02X', ord $1/ge;
+    return $s;
+}
+
+# Whether one content source contains the boundary. A file is scanned in
+# chunks with a boundary-length overlap, because the hit this exists to
+# catch is exactly the one that straddles a read.
+sub _mp_contains {
+    my ($src, $bnd) = @_;
+    return index($$src, $bnd) >= 0 if ref $src;
+    open my $fh, '<:raw', $src or die "Punk::Test: cannot open '$src': $!";
+    my ($tail, $keep) = ('', length($bnd) - 1);
+    while (read $fh, my $chunk, 65536) {
+        $chunk = $tail . $chunk;
+        return 1 if index($chunk, $bnd) >= 0;
+        $tail = length $chunk > $keep ? substr($chunk, -$keep) : $chunk;
+    }
+    return 0;
+}
+
+sub _multipart_input {
+    my ($self, $form, $upload) = @_;
+    die "Punk::Test: upload takes a hashref of field => arrayref\n"
+        unless ref $upload eq 'HASH';
+    my (@parts, @scan);
+    for my $k (sort keys %{ $form || {} }) {
+        my $val = $form->{$k};
+        $val = '' unless defined $val;
+        utf8::encode($val) if utf8::is_utf8($val);
+        push @parts, { name => $k, content => $val };
+        push @scan, \$val;
+    }
+    for my $field (sort keys %$upload) {
+        my $v = $upload->{$field};
+        die "Punk::Test: upload => { $field => ... } takes an arrayref: "
+          . "a path or a scalar ref of content, then optional filename "
+          . "and type\n" unless ref $v eq 'ARRAY' && @$v;
+        for my $spec (ref $v->[0] eq 'ARRAY' ? @$v : $v) {
+            my ($src, $fname, $ftype) = @$spec;
+            my %p = (name => $field,
+                     type => $ftype // 'application/octet-stream');
+            if (ref $src eq 'SCALAR') {
+                my $bytes = $$src // '';
+                utf8::encode($bytes) if utf8::is_utf8($bytes);
+                $p{content}  = $bytes;
+                $p{filename} = $fname // $field;
+                push @scan, \$bytes;
+            }
+            else {
+                die "Punk::Test: upload => { $field => ... }: no file at '"
+                  . ($src // '') . "'\n" unless defined $src && -f $src;
+                $p{path}     = $src;
+                $p{size}     = -s $src;
+                $p{filename} = $fname // ($src =~ m{([^/\\]+)\z})[0];
+                push @scan, $src;
+            }
+            push @parts, \%p;
+        }
+    }
+
+    # The boundary must not appear in any part. Verified, not hoped:
+    # scanning also proves every named file readable before the request
+    # starts, so a bad path fails here and not as a truncated body.
+    my $bnd = _mp_boundary();
+    for (my $tries = 1; grep { _mp_contains($_, $bnd) } @scan; $tries++) {
+        die "Punk::Test: could not pick a boundary absent from the "
+          . "content\n" if $tries >= 16;
+        $bnd = _mp_boundary();
+    }
+
+    my ($len, @items) = (0);
+    for my $p (@parts) {
+        my $hdr = "--$bnd\r\nContent-Disposition: form-data; name=\""
+                . _mp_name($p->{name}) . '"';
+        if (exists $p->{filename}) {
+            $hdr .= '; filename="' . _mp_name($p->{filename}) . '"'
+                  . "\r\nContent-Type: $p->{type}";
+        }
+        $hdr .= "\r\n\r\n";
+        if (defined $p->{path}) {
+            open my $fh, '<:raw', $p->{path}
+                or die "Punk::Test: cannot open '$p->{path}': $!";
+            push @items, $hdr, { fh => $fh };
+            $len += $p->{size};
+        }
+        else {
+            push @items, $hdr, $p->{content};
+            $len += length $p->{content};
+        }
+        push @items, "\r\n";
+        $len += length($hdr) + 2;
+    }
+    push @items, "--$bnd--\r\n";
+    $len += length $items[-1];
+
+    push @Punk::Test::_MPInput::QUEUE, \@items;
+    open my $in, '<:via(Punk::Test::_MPInput)', \(my $empty = '')
+        or die "Punk::Test: $!";
+    return ($in, $len, "multipart/form-data; boundary=$bnd");
 }
 
 sub _request_ok {
@@ -885,8 +1017,35 @@ sub DESTROY {
     return;
 }
 
+# psgi.input for a multipart request: a real PerlIO handle - the parser
+# reads it with PerlIO_read, which a tied handle never sees - whose FILL
+# drains the item list built by _multipart_input. @QUEUE hands the list
+# to PUSHED, because open() gives a via layer no arguments of ours.
+package
+    Punk::Test::_MPInput;
+
+our @QUEUE;
+sub PUSHED { bless { items => shift @QUEUE }, $_[0] }
+sub FILL {
+    my ($self) = @_;
+    my $items = $self->{items};
+    while (@$items) {
+        my $it = $items->[0];
+        unless (ref $it) {
+            shift @$items;
+            return $it if length $it;
+            next;
+        }
+        my $n = read $it->{fh}, my $chunk, 65536;
+        return $chunk if $n;
+        close $it->{fh};
+        shift @$items;
+    }
+    return undef;
+}
+
 # The psgi.streaming writer handed to a delayed response.
-package 
+package
     Punk::Test::_Writer;
 sub new   { bless { w => $_[1], c => $_[2] }, $_[0] }
 sub write { $_[0]{w}->($_[1]) }
@@ -978,11 +1137,37 @@ C<csrf> keyword that renames things).
 One request; the assertion is that the application answered at all (a
 die fails and diags the error). Options: C<form> (a hashref,
 url-encoded), C<json> (encoded, C<application/json>), C<body> + C<type>
-(raw), C<query> (overrides any C<?query> in the path), C<headers> (a
-hashref of request headers), C<csrf> (send the jar's CSRF token in the
-configured header), C<env> (raw PSGI env keys, merged last), C<name>
-(the test name). A C<psgi.streaming> response is driven to completion
-and its writes become the body.
+(raw), C<upload> (multipart file parts - see below), C<query> (overrides
+any C<?query> in the path), C<headers> (a hashref of request headers),
+C<csrf> (send the jar's CSRF token in the configured header), C<env>
+(raw PSGI env keys, merged last), C<name> (the test name). A
+C<psgi.streaming> response is driven to completion and its writes
+become the body.
+
+=head3 Uploads
+
+    $t->post_ok('/avatar',
+        form   => { title => 'me' },
+        upload => { file => [ 't/data/face.png' ] },
+    )->status_is(303);
+
+    upload => { file  => [ \$bytes, 'face.png', 'image/png' ] }
+    upload => { multi => [ [ 't/a.png' ], [ 't/b.png' ] ] }
+
+C<upload> makes the request C<multipart/form-data>; C<form> pairs become
+ordinary parts alongside the files. Each field takes an arrayref - a
+path, or a scalar ref of content, then an optional filename and type.
+The filename defaults to the path's basename (to the field name for a
+content ref), the type to C<application/octet-stream>; an arrayref of
+arrayrefs repeats the field. C<json>, C<body> and C<type> conflict with
+it and croak; C<< csrf => 1 >> composes - the token travels in the
+header, which is where the server-side check reads it for a multipart
+body.
+
+The body is streamed, never assembled: a file part passes through one
+read buffer whatever its size, so a test of the spill path costs
+kilobytes, not the file. The boundary is generated and then verified
+absent from every part, re-rolled until it is.
 
 =head3 Naming a route instead of typing its path
 

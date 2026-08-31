@@ -1139,4 +1139,136 @@ note '=== P. Query builder + BerkeleyDB cross-module workflow ===';
 	is($qb->first()->{'value'}, 'physicist', 'P8b: second query returns correct value');
 }
 
+# ---------------------------------------------------------------------------
+# SECTION Q — XLSX backend end-to-end workflow
+#
+# Builds a temporary .xlsx fixture (two worksheets) at runtime using
+# Spreadsheet::WriteExcel and verifies every core public method via the
+# DBD::Excel driver.  Covers: type detection, count(), selectall_arrayref(),
+# fetchrow_hashref(), AUTOLOAD, columns(), schema(), the 'table' constructor
+# override for worksheet selection, no_entry mode, multi-instance isolation,
+# and the table-name injection guard.
+# ---------------------------------------------------------------------------
+
+note '';
+note '=== Q. XLSX backend end-to-end ===';
+
+my $have_excel = do { local $@;
+	eval { require DBD::Excel; require Spreadsheet::WriteExcel; 1 }
+};
+
+SKIP: {
+	skip 'DBD::Excel or Spreadsheet::WriteExcel not available', 28
+		unless $have_excel;
+
+	do {
+		package Database::integ_xlsx;
+		use parent -norequire, 'Database::Abstraction';
+	};
+
+	my $xlsx_dir = tempdir(CLEANUP => 1);
+	my $xlsx_file = File::Spec->catfile($xlsx_dir, 'integ_xlsx.xlsx');
+
+	# Build a two-worksheet workbook:
+	#   integ_xlsx — entry / name / score  (3 data rows; matches class-derived table name)
+	#   summary    — entry / total          (2 data rows; used for 'table' override tests)
+	{
+		my $wb  = Spreadsheet::WriteExcel->new($xlsx_file);
+		my $ws1 = $wb->add_worksheet('integ_xlsx');
+		$ws1->write(0, 0, 'entry');  $ws1->write(0, 1, 'name');   $ws1->write(0, 2, 'score');
+		$ws1->write(1, 0, 'alice'); $ws1->write(1, 1, 'Alice');  $ws1->write(1, 2, 90);
+		$ws1->write(2, 0, 'bob');   $ws1->write(2, 1, 'Bob');    $ws1->write(2, 2, 70);
+		$ws1->write(3, 0, 'carol'); $ws1->write(3, 1, 'Carol');  $ws1->write(3, 2, 85);
+		my $ws2 = $wb->add_worksheet('summary');
+		$ws2->write(0, 0, 'entry'); $ws2->write(0, 1, 'total');
+		$ws2->write(1, 0, 'q1');    $ws2->write(1, 1, 100);
+		$ws2->write(2, 0, 'q2');    $ws2->write(2, 1, 200);
+		$wb->close();
+	}
+
+	ok(-r $xlsx_file, 'Q0: XLSX fixture created and readable');
+
+	my $db = new_ok('Database::integ_xlsx' => [ directory => $xlsx_dir ],
+		'Q1: new() with XLSX directory returns correct object');
+
+	# Q2 — type is set lazily; count() triggers _open()
+	is($db->count(), 3, 'Q2: count() returns 3 rows from XLSX');
+
+	# Q3 — type is 'Excel' after first query
+	is($db->{'type'}, 'Excel', 'Q3: type is "Excel" after first query');
+
+	# Q4 — selectall_arrayref() returns an arrayref of hashrefs
+	my $q_all = $db->selectall_arrayref();
+	is(ref($q_all), 'ARRAY',           'Q4a: selectall_arrayref returns arrayref');
+	is(scalar @{$q_all}, 3,            'Q4b: selectall_arrayref returns 3 rows');
+	is(ref($q_all->[0]), 'HASH',       'Q4c: each element is a hashref');
+
+	# Q5 — fetchrow_hashref by entry key
+	my $q_row = $db->fetchrow_hashref(entry => 'alice');
+	ok(defined($q_row),                'Q5a: fetchrow_hashref defined for "alice"');
+	is($q_row->{'name'},  'Alice',     'Q5b: name == Alice');
+	is($q_row->{'score'}, 90,          'Q5c: score == 90');
+
+	# Q6 — fetchrow_hashref miss returns undef
+	ok(!defined($db->fetchrow_hashref(entry => '__missing__')),
+		'Q6: fetchrow_hashref miss returns undef');
+
+	# Q7 — AUTOLOAD column lookup
+	is($db->score('alice'), 90, 'Q7a: AUTOLOAD score(alice) == 90');
+	is($db->name('bob'),  'Bob', 'Q7b: AUTOLOAD name(bob) == Bob');
+
+	# Q8 — columns() includes the expected column names
+	my $q_cols = $db->columns();
+	ok(ref($q_cols) eq 'ARRAY',                        'Q8a: columns() returns arrayref');
+	ok(scalar(grep { $_ eq 'entry' } @{$q_cols}),      'Q8b: columns() includes "entry"');
+	ok(scalar(grep { $_ eq 'name'  } @{$q_cols}),      'Q8c: columns() includes "name"');
+	ok(scalar(grep { $_ eq 'score' } @{$q_cols}),      'Q8d: columns() includes "score"');
+
+	# Q9 — schema() returns a hashref (Excel's DBI driver may not expose full PRAGMA
+	#        metadata, so we only verify the return type and not exact key coverage)
+	my $q_sch = $db->schema();
+	ok(ref($q_sch) eq 'HASH', 'Q9: schema() returns hashref for XLSX backend');
+
+	# Q10 — 'table' constructor override selects the 'summary' worksheet
+	#        The file opened is still integ_xlsx.xlsx (class-name derived),
+	#        only the active worksheet changes.
+	my $db2 = Database::integ_xlsx->new(
+		directory => $xlsx_dir,
+		table     => 'summary',
+	);
+	isa_ok($db2, 'Database::integ_xlsx', 'Q10: table-override object created');
+	is($db2->count(), 2, 'Q10: summary worksheet has 2 rows');
+
+	# Q11 — AUTOLOAD against the alternate worksheet
+	is($db2->total('q1'), 100, 'Q11: table-override AUTOLOAD total(q1) == 100');
+
+	# Q12 — Multi-instance isolation: two objects on the same file are independent
+	my $db3 = Database::integ_xlsx->new(directory => $xlsx_dir);
+	my $db4 = Database::integ_xlsx->new(directory => $xlsx_dir);
+	$db3->count(); $db4->count();    # both trigger _open_table
+	isnt($db3, $db4, 'Q12a: two objects are distinct references');
+
+	# Q13 — no_entry mode works on XLSX (SQL path; slurp not supported for binary formats)
+	my $db_ne = Database::integ_xlsx->new(
+		directory     => $xlsx_dir,
+		no_entry      => 1,
+		max_slurp_size => 0,
+	);
+	cmp_ok($db_ne->count(), '>', 0, 'Q13: no_entry XLSX count() > 0');
+
+	# Q14 — count() == scalar(selectall_arrayref()) for XLSX backend
+	my $q_cnt = $db->count();
+	my $q_sar = scalar @{$db->selectall_arrayref()};
+	is($q_cnt, $q_sar, 'Q14: count() == scalar(selectall_arrayref()) for XLSX');
+
+	# Q15 — table injection guard: hostile table name is rejected before any I/O
+	throws_ok {
+		Database::integ_xlsx->new(
+			directory => $xlsx_dir,
+			table     => 'bad; DROP TABLE x--',
+		)
+	} qr/unsafe table name/i,
+		'Q15: hostile table name causes croak before any object is returned';
+}
+
 done_testing();

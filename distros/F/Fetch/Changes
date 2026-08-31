@@ -1,5 +1,12 @@
 Revision history for Fetch
 
+0.20    2026-08-31
+        - A cancelled deadline can no longer fail the next request on
+          any backend: the loop names timers by a counter, not by the
+          watcher address the allocator recycles.
+        - t/09-timeout.t: scale the deadlines off the measured round
+          trip, and say what the failure was when one fires early.
+
 0.19    2026-08-23
         - io_uring: cancelling a request deadline could crash the loop.
 

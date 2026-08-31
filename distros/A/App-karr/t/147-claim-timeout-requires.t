@@ -28,8 +28,18 @@ use App::karr::Role::ClaimTimeout;
 
 # What the role declares, and who supplies it: store is
 # App::karr::Role::BoardDiscovery's attribute, which consumers get through
-# App::karr::Role::BoardAccess.
-my @DECLARED = qw( store );
+# App::karr::Role::BoardAccess; json is App::karr::Role::Output's option and
+# quiet is App::karr::Role::SyncLifecycle's, both of which every consumer of
+# this role composes.
+#
+# json and quiet arrived with ticket #177, which gave check_claim a second job:
+# it records the expired claim it lets a caller step over, and
+# expired_claim_report emits that on the channels every other karr warning uses
+# (STDERR, the --json payload, silenced by --quiet). That is a widening of a
+# one-name contract, deliberately -- see the comment on the requires line
+# itself for why it did not have to become the kind of role split ticket #137
+# made of App::karr::Role::DependencyCheck.
+my @DECLARED = qw( store json quiet );
 
 # Unlike App::karr::Role::TaskMutation, this role composes no role at all (the
 # fourth subtest checks that, since it is what makes the list this short), so
@@ -129,9 +139,10 @@ subtest 'every declared name is load-bearing' => sub {
     # promise and is not one. That is how #141's proposed list of six turned out
     # to be five.
     #
-    # With one name this loop is the bare case again, which is the honest state
-    # of a one-method contract rather than a reason to skip it: it is the check
-    # that catches the second name, on the day someone adds one.
+    # This loop was the bare case while the list held one name; ticket #177
+    # added the second and third, which is the day it was written for -- each of
+    # json and quiet now has to be the difference between composing and not, on
+    # its own.
     for my $missing (@ALL) {
         my @supplied = grep { $_ ne $missing } @ALL;
         my ( $ok, $err ) = compose_with(@supplied);
@@ -149,10 +160,11 @@ subtest 'the parsing and claim helpers are the role\'s own' => sub {
     # role reaches a sub defined in the role, so a consumer is never asked for
     # one -- and must not be, per the subtest above.
     my ( $ok, $err, $pkg ) = compose_with(@ALL);
-    ok $ok, 'a consumer supplying only store composes' or diag $err;
+    ok $ok, 'a consumer supplying the declared names composes' or diag $err;
 
     my @OWN = qw( _parse_timeout _parse_claim_stamp _claim_expired
-                  claim_timeout_secs check_claim );
+                  claim_timeout_secs claim_held check_claim
+                  expired_claim_report _expired_claims );
 
     ok( $pkg->can($_), "...and is handed ->$_ by the composition" ) for @OWN;
 
@@ -180,12 +192,19 @@ subtest 'every consumer of the role supplies it' => sub {
     # have breaks `karr <cmd>` outright, not just this file. The ->can loop is
     # what says which name, instead of leaving it to a compile error.
     #
-    # Pick and Unlock compose App::karr::Role::ClaimTimeout by name; the rest
-    # get it through App::karr::Role::TaskMutation, and Role::Tiny hands an
+    # Pick, Unlock and List compose App::karr::Role::ClaimTimeout by name; the
+    # rest get it through App::karr::Role::TaskMutation, and Role::Tiny hands an
     # unmet requires of a composed role up to whoever composes the composer, so
     # the requirement reaches them just the same. All of them satisfy it the
     # same way, via App::karr::Role::BoardAccess.
-    for my $cmd (qw( Pick Unlock Move Edit Handoff Delete Archive )) {
+    #
+    # List is the one that writes nothing: it composes the role for claim_held
+    # alone, so `karr list --unclaimed` and `karr pick` cannot disagree about
+    # which cards are free (#252). It still has to supply all three names, and
+    # json and quiet are the interesting ones there -- a read-only command has
+    # no use for expired_claim_report and could plausibly have been given the
+    # role without them.
+    for my $cmd (qw( Pick Unlock List Move Edit Handoff Delete Archive )) {
         my $pkg = "App::karr::Cmd::$cmd";
         require_ok($pkg) or next;
         ok( $pkg->can($_), "$cmd supplies ->$_" ) for @ALL;

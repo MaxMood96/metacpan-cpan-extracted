@@ -1,7 +1,7 @@
 # ABSTRACT: Modify an existing task
 
 package App::karr::Cmd::Edit;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use MooX::Cmd;
 use MooX::Options (
@@ -13,6 +13,7 @@ use App::karr::Role::TaskMutation;
 use App::karr::Role::DependencyArgs;
 use App::karr::Task;
 use App::karr::Config;
+use App::karr::CrossBoard;
 use Time::Piece;
 
 # Both halves of the dependency pair, and the only command that needs both:
@@ -73,6 +74,18 @@ option remove_depends_on => (
   doc => 'Remove dependency ids (comma-separated)',
 );
 
+option add_needs => (
+  is => 'ro',
+  format => 's',
+  doc => 'Add cross-board dependencies (comma-separated BOARD#ID)',
+);
+
+option remove_needs => (
+  is => 'ro',
+  format => 's',
+  doc => 'Remove cross-board dependencies (comma-separated BOARD#ID)',
+);
+
 option due => (
   is => 'ro',
   format => 's',
@@ -90,6 +103,18 @@ option append_body => (
   format => 's',
   short => 'a',
   doc => 'Append text to body',
+);
+
+# Opt-in, exactly as on karr handoff, and for the same reason it is opt-in
+# there: --append-body appends arbitrary Markdown, not only notes, and the
+# stamp is an inline prefix -- forced on every append it would turn
+# `-a "## Findings"` into a line that is no longer a heading, with no way to
+# say no. kanban-md's edit has the same flag (cmd/edit.go:38); the format is
+# handoff's UTC one, not kanban-md's local-time wiki link (ticket #238).
+option timestamp => (
+  is => 'ro',
+  short => 't',
+  doc => 'Prefix the appended text with the current UTC timestamp',
 );
 
 option claim => (
@@ -114,6 +139,36 @@ option unblock => (
   doc => 'Clear blocked state',
 );
 
+# Every option above that can change a card, in the order they are declared:
+# the ones that carry a value, and the two that are flags. --json and --quiet
+# are deliberately absent -- they decide how the result is printed, not what it
+# is, so `karr edit 5 --json` asks for a change just as little as `karr edit 5`
+# does. (--compact stood here too until #254, when this command stopped taking
+# it: it never rendered one, and an option accepted and thrown away is not a
+# rendering.) --timestamp is absent for the same reason on the write
+# side: it decorates the text --append-body appends and appends nothing of its
+# own, so `karr edit 5 --timestamp` names no change either (ticket #238). A new
+# field option belongs on one of these lists; leaving it off makes it invisible
+# to the check below, which would then reject an invocation that does have
+# something to do.
+my @FIELD_OPTIONS = qw(
+  title status priority assignee add_tag remove_tag add_depends_on
+  remove_depends_on add_needs remove_needs due body append_body claim block
+);
+my @FIELD_FLAGS = qw( release unblock );
+
+sub _has_field_change {
+  my ($self) = @_;
+  for my $option (@FIELD_OPTIONS) {
+    my $value = $self->$option;
+    return 1 if defined $value && length $value;
+  }
+  for my $flag (@FIELD_FLAGS) {
+    return 1 if $self->$flag;
+  }
+  return 0;
+}
+
 sub execute {
   my ($self, $args_ref, $chain_ref) = @_;
 
@@ -123,11 +178,46 @@ sub execute {
   $self->require_board;
 
   my @pos = $self->positional_args($args_ref);
-  my $id_str = $pos[0] or die "Usage: karr edit ID[,ID,...] [FLAGS]\n";
-  # See the note in Cmd::Move: a comma with no ids around it is truthy here and
+  my $id_str = $pos[0];
+  # See the note in Cmd::Move: length, not truth, or the id "0" is read as no
+  # id at all and answered with a usage error instead of "not found" (#239).
+  die "Usage: karr edit ID[,ID,...] [FLAGS]\n"
+    unless defined $id_str && length $id_str;
+  # And a comma with no ids around it passes that guard and
   # splits to nothing, so the command used to exit 0 having done nothing.
   my @ids = $self->parse_ids($id_str);
   die "Usage: karr edit ID[,ID,...] [FLAGS]\n" unless @ids;
+
+  # An edit that names no field asks for nothing, so there is nothing to do and
+  # nothing to write. It used to run the whole path with an empty callback:
+  # `updated` was stamped (App::karr::BoardStore/save_task_cas), an `edit` entry
+  # was appended to the activity log, and stdout said "Updated task N" about a
+  # card nothing had touched -- the same false signal `karr move` gave on a
+  # same-status move, and the effect t/153-falsy-option-values.t already names
+  # as the bug for a value the length guards below discard (#231).
+  #
+  # A usage error (exit 2), where the same-status move is a success (exit 0),
+  # and the two answers come from opposite sides of ADR 0002. A move to the
+  # status a card already has is a request whose outcome already holds -- "a
+  # no-op like re-archiving an archived task", which the ADR files under 0.
+  # This is not a request at all: no field is named, so there is no state to
+  # reach and nothing that could have held. That is "an argument list that is
+  # syntactically fine but semantically empty", which is what
+  # App::karr::Role::ExitCodes/usage_error exists for, and the same answer
+  # `karr move , todo` gets one command over. kanban-md refuses it too
+  # (internal/board/mutate.go:413-415, "no changes specified"); it exits 1
+  # there only because cobra exits 1 for everything.
+  #
+  # length, not defined, so this asks the same question the write path answers:
+  # every guard inside the callback below is `defined && length` (tickets #78,
+  # #153), so an empty value sets nothing, and an option whose value the write
+  # path discards has not named a change. On the command line MooX::Options
+  # refuses an empty value first ("Option title requires an argument", exit 2
+  # through App::karr::Role::ExitCodes), so this half of the rule is for an
+  # in-process caller -- and for the two lists staying in step rather than
+  # drifting into disagreeing about what counts.
+  $self->usage_error('no changes specified -- karr edit needs at least one field option')
+      unless $self->_has_field_change;
 
   # Once, before any task is touched: these are plain option values, so a bad
   # one must not update the first half of a batch (ticket #54). --status is not
@@ -141,6 +231,27 @@ sub execute {
   # rejects the pair at the flag layer too (cmd/edit.go:128-130); we match.
   $self->usage_error('cannot use --claim and --release together')
       if (defined $self->claim && length $self->claim) && $self->release;
+
+  # The two pairs kanban-md rejects on the same layer for the same reason, which
+  # this command had left running instead (ticket #235). Both used to take the
+  # write callback below through both branches and let the second one win:
+  # `--block "waiting" --unblock` left the card unblocked, and
+  # `--body neu --append-body note` left it holding "neu\nnote" -- a body the
+  # caller asked for neither half of. A caller naming both halves of a pair has
+  # contradicted themselves, and the guard above already says what karr does
+  # about that. (cmd/edit.go:366-369 and cmd/edit.go:202-206, both
+  # StatusConflict; ADR 0002 makes it exit 2 here.)
+  #
+  # length, not truth, on every value-carrying half, exactly as above: an empty
+  # --block names no reason and sets nothing in the callback, so it is not a
+  # change for --unblock to contradict (tickets #78, #153) -- the same rule
+  # _has_field_change reads one guard up.
+  $self->usage_error('cannot use --block and --unblock together')
+      if (defined $self->block && length $self->block) && $self->unblock;
+
+  $self->usage_error('cannot use --body and --append-body together')
+      if (defined $self->body && length $self->body)
+      && (defined $self->append_body && length $self->append_body);
 
   my $config = App::karr::Config->from_merged( $self->store->effective_config );
   $config->validate_priority( $self->priority ) if defined $self->priority;
@@ -158,6 +269,19 @@ sub execute {
   my $remove_depends;
   if ( defined $self->remove_depends_on && length $self->remove_depends_on ) {
     $remove_depends = $self->parse_dependency_ids( '--remove-depends-on', $self->remove_depends_on );
+  }
+
+  # The cross-board pair (ticket #192), under the same rule: a malformed
+  # BOARD#ID is wrong for every id in the batch at once, so it is checked here
+  # and condemns the invocation. Nothing checks whether the far card exists --
+  # that is local configuration's question and `karr needs` asks it.
+  my $add_needs;
+  if ( defined $self->add_needs && length $self->add_needs ) {
+    $add_needs = App::karr::CrossBoard->parse_refs( '--add-needs', $self->add_needs );
+  }
+  my $remove_needs;
+  if ( defined $self->remove_needs && length $self->remove_needs ) {
+    $remove_needs = App::karr::CrossBoard->parse_refs( '--remove-needs', $self->remove_needs );
   }
 
   # Every id is attempted, whatever the ones before it did: a missing id used to
@@ -208,13 +332,14 @@ sub execute {
       $task->due($self->due)           if defined $self->due && length $self->due;
       $task->body($self->body)         if defined $self->body && length $self->body;
 
-      if (defined $self->append_body && length $self->append_body) {
-        # length, not truth: appending to a body of "0" must not replace it
-        # (ticket #78). The outer guard had drifted back to truth while the
-        # comment still read length-not-truth (ticket #153).
-        my $have = defined $task->body && length $task->body;
-        $task->body(($have ? $task->body . "\n" : '') . $self->append_body);
-      }
+      # length, not truth: appending to a body of "0" must not replace it
+      # (ticket #78). The outer guard had drifted back to truth while the
+      # comment still read length-not-truth (ticket #153). What the append
+      # itself does -- blank-line separator, no leading separator on an empty
+      # body, optional UTC stamp -- lives in App::karr::Task::append_body,
+      # shared with handoff, which held a copy of it (ticket #238).
+      $task->append_body( $self->append_body, $self->timestamp )
+        if defined $self->append_body && length $self->append_body;
 
       if (defined $self->add_tag && length $self->add_tag) {
         my @new = split /,/, $self->add_tag;
@@ -239,6 +364,13 @@ sub execute {
         $task->depends_on([grep { !$remove{$_} } @{$task->depends_on}]);
       }
 
+      # Same shape once more, one field over: a cross-board link is a tag, so
+      # append-unique and remove are literally the tag rules (see
+      # App::karr::CrossBoard for why the link lives there and not in a
+      # frontmatter field of its own).
+      App::karr::CrossBoard->add_needs( $task, $add_needs )       if $add_needs;
+      App::karr::CrossBoard->remove_needs( $task, $remove_needs ) if $remove_needs;
+
       if (defined $self->claim && length $self->claim) {
         $task->claimed_by($self->claim);
         $task->claimed_at(gmtime->datetime . 'Z');
@@ -258,7 +390,12 @@ sub execute {
     # up gets the same dependency warning `karr move` does, for free and by
     # construction -- the #55 point again (ticket #123). An edit that changes
     # anything else records nothing, so this adds no key.
+    # --release skips check_claim entirely, so an edit that breaks a claim on
+    # purpose records nothing and adds no key here either: it is not an override
+    # that went unnoticed, it is the one command whose whole job is saying so
+    # (App::karr::Role::ClaimTimeout/expired_claim_report, #177).
     return { id => $task->id, title => $task->title,
+             $self->expired_claim_report( $task->id ),
              $self->dependency_report( $task->id ) };
   });
 
@@ -283,14 +420,16 @@ App::karr::Cmd::Edit - Modify an existing task
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
     karr edit 5 --title "Updated title"
     karr edit 5 --add-tag urgent --remove-tag stale
     karr edit 5 --add-depends-on 2,3 --remove-depends-on 4
+    karr edit 5 --add-needs other-repo#7 --block "needs other-repo#7: API change first"
     karr edit 5 -a "Waiting for review"
+    karr edit 5 -a "Handed the API question upstream" --timestamp
     karr edit 5 --claim agent-fox --block "waiting on API"
 
 =head1 DESCRIPTION
@@ -298,6 +437,13 @@ version 0.500
 Updates one or more existing tasks in place. Use it to adjust metadata, append
 notes, manage tags, claim or release ownership, and mark tasks as blocked or
 unblocked without changing the task id.
+
+At least one field option is required. C<karr edit 5> on its own, or with only
+output options such as C<--json>, names nothing to change and is rejected as a
+usage error (exit 2) before any task is read -- it used to report C<Updated
+task 5>, bump C<updated> and append an activity-log entry for a card nothing
+had touched. An option carrying an empty value counts as no option at all here,
+matching the write path, which discards such a value rather than storing it.
 
 =head1 COMMON OPERATIONS
 
@@ -317,13 +463,25 @@ is exempt, since breaking a stale claim is what it is for.
 
 =item * Body updates
 
-C<--body> replaces the entire body; C<-a>/C<--append-body> appends a new line
-to the existing body text.
+C<--body> replaces the entire body; C<-a>/C<--append-body> appends text to the
+existing body as a paragraph of its own, separated from it by a blank line, so
+a note reads as a note and not as a continuation of the line above it. An empty
+body gains no separator. C<-t>/C<--timestamp> prefixes the appended text with
+the current UTC time (C<YYYY-MM-DD HH:MM>), the same stamp
+L<App::karr::Cmd::Handoff> writes; without it the text is appended verbatim, so
+appending Markdown structure stays possible. C<--body> and C<--append-body> are
+alternatives, not a sequence: naming both is rejected as a usage error (exit 2)
+before any task is read, rather than writing the one concatenated body neither
+of them asked for. Existing cards are not rewritten: the separator rule applies
+to appends made from here on.
 
 =item * Claims and blocking
 
 C<--claim> refreshes claim ownership and timestamp, C<--release> clears the
-claim, C<--block> records a blocking reason, and C<--unblock> removes it.
+claim, C<--block> records a blocking reason, and C<--unblock> removes it. Each
+of those two pairs contradicts itself, so C<--claim> with C<--release> and
+C<--block> with C<--unblock> are rejected as usage errors (exit 2) before any
+task is read.
 
 =item * Tag management
 
@@ -340,12 +498,23 @@ self-reference fails only the id it is wrong for and lets the rest of the
 batch proceed. Removing an id the board no longer has stays legal -- it is
 how a dependency on a deleted task is cleaned up.
 
+=item * Cross-board dependency management
+
+C<--add-needs> and C<--remove-needs> accept comma-separated
+C<< <board>#<id> >> references naming a card in another repository of the
+fleet, and follow the tag rule as well. Only the syntax is checked: whether
+that board is on this machine is local configuration, which is
+L<App::karr::Cmd::Needs>'s question, not this command's. A reference that is
+not C<< <board>#<id> >> -- a path in particular -- rejects the whole
+invocation.
+
 =back
 
 =head1 SEE ALSO
 
 L<karr>, L<App::karr>, L<App::karr::Cmd::Show>, L<App::karr::Cmd::Move>,
-L<App::karr::Cmd::Handoff>, L<App::karr::Cmd::List>
+L<App::karr::Cmd::Handoff>, L<App::karr::Cmd::List>,
+L<App::karr::Cmd::Needs>, L<App::karr::CrossBoard>
 
 =head1 SUPPORT
 
@@ -368,9 +537,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

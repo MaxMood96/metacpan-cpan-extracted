@@ -1,6 +1,6 @@
 package Database::BI::Controller::Dashboard;
 
-our $VERSION = '0.005.0';
+our $VERSION = '0.005.1';
 
 use Mojo::Base 'Mojolicious::Controller', -strict, -signatures;
 
@@ -2061,7 +2061,9 @@ sub graph_view ($self) {
 		my $x = $row->{$x_col} // '';
 		my $y = $row->{$y_col} // '';
 		next unless length($x) && length($y);
+		my $is_acct_neg = ($y =~ /\A\s*\(/);   # (value) = accounting negative
 		(my $y_num = $y) =~ s/[^\d.\-]//g;
+		$y_num = "-$y_num" if $is_acct_neg && $y_num =~ /\A\d/;
 		next unless $y_num =~ /\A-?\d+(?:\.\d+)?\z/;
 		my %extra = map { $_ => $row->{$_} } grep { $_ ne $x_col && $_ ne $y_col } @{$columns};
 		push @pairs, [$x, $y_num + 0, \%extra];

@@ -1,14 +1,10 @@
 package Uncruft;
 
-use v5.20;
-use strict;
-use warnings;
-use feature qw(signatures);
-no warnings qw(experimental::signatures);
+use v5.40;
 
 my $CLASS = __PACKAGE__;
 
-use base qw(Exporter);
+use parent qw(Exporter);
 our @EXPORT = qw(uncruft);
 
 my $html_xml_tags_re = qr/<\/?(?:p|br|ref)(?:\s[^>]*)?>/i;

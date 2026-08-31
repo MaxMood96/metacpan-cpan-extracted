@@ -6,8 +6,8 @@ allowed-tools: Read, Bash, Glob, Grep
 briefing:
   skills:
     - libgit2-core
-    - perl-core
-    - perl-release-author-getty
+    - getty-perl-core
+    - getty-perl-release-author-getty
     - perl-release-dist-ini
 ---
 
@@ -18,8 +18,9 @@ Audit only — you report findings; the worker fixes them and the maintainer
 releases. **Never** run `dzil release`.
 
 1. **`cpanfile`** — `Alien::Libgit2` is the hard runtime dep and must be
-   pinned to its latest released CPAN version (do **not** copy the repo's
-   `$VERSION` into a Getty-authored dep). `FFI::Platypus` and `perl` also
+   pinned to what the code needs. A pin above the CPAN release
+   (`cpanm --info Alien::Libgit2`) is a release blocker until the sibling
+   ships: report it as such, not as a typo. `FFI::Platypus` and `perl` also
    declared. Test-only deps under `on test => sub { … }`.
 2. **`dist.ini`** — uses `[@Author::GETTY]` bundle, `version_finder = :MainModule`.
    `copyright_year` is current. Any version bumps honour the

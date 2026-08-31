@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use namespace::autoclean;
 
-our $VERSION = '1.66';
+our $VERSION = '1.67';
 
 use Carp ();
 use DateTime;
@@ -362,7 +362,7 @@ DateTime::Duration - Duration objects for date math
 
 =head1 VERSION
 
-version 1.66
+version 1.67
 
 =head1 SYNOPSIS
 
@@ -658,7 +658,7 @@ C<DateTime::Format::Duration> module.
 
 =head2 Overloading
 
-This class overloads addition, subtraction, and mutiplication.
+This class overloads addition, subtraction, and multiplication.
 
 Comparison is B<not> overloaded. If you attempt to compare durations using C<<
 <=> >> or C<cmp>, then an exception will be thrown!  Use the C<compare> class
@@ -688,7 +688,7 @@ Dave Rolsky <autarch@urth.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2003 - 2025 by Dave Rolsky.
+This software is Copyright (c) 2003 - 2026 by Dave Rolsky.
 
 This is free software, licensed under:
 

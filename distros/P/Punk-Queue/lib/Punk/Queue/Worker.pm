@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk::Queue ();
 
-our $VERSION = '0.02';
+our $VERSION = '0.08';
 
 1;
 

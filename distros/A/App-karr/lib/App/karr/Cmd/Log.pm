@@ -1,17 +1,19 @@
 # ABSTRACT: Show activity log
 
 package App::karr::Cmd::Log;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use MooX::Cmd;
 use MooX::Options (
-    usage_string => 'USAGE: karr log [--agent NAME] [--task ID] [--last N] [--json]',
+    usage_string => 'USAGE: karr log [--agent NAME] [--task ID] [--last N] [--json] [--compact]',
 );
 use App::karr::Role::BoardAccess;
 use App::karr::Role::Output;
+use App::karr::Role::CompactOutput;
 use App::karr::Encoding qw( json_decode );
 
-with 'App::karr::Role::BoardAccess', 'App::karr::Role::Output';
+with 'App::karr::Role::BoardAccess', 'App::karr::Role::Output',
+     'App::karr::Role::CompactOutput';
 
 
 option agent => (
@@ -46,16 +48,25 @@ sub execute {
         sprintf '--last must be 1 or greater (got %d)', $self->last )
       if $self->last < 1;
 
-    # "No log entries." is what a board with no activity says; a repository
-    # with no board has to say something else (#135).
+    # This is where the empty answers are told apart, and all three are
+    # settled before a single ref is read. "No log entries." is what a board
+    # with no activity says; a repository with no board says something else
+    # and exits 1 (#135), and a directory that is no repository at all never
+    # gets this far, because $self->store builds from git_root and git_root
+    # answers "Not a git repository. karr requires Git." itself.
+    #
+    # That last one used to be answered here, with a local `unless
+    # ($git->is_repo)` printing "Not a git repository. No log available." It
+    # was live only while this command built its own Git handle on an
+    # arbitrary directory; the refs-first refactor made $self->git come from
+    # git_root, which cannot return a non-repository, and the branch has been
+    # unreachable ever since. Removed with #253 -- it was also the one line in
+    # any --json-capable command that would have put plain text on STDOUT
+    # under --json (#248), so anything re-added here belongs on STDERR or in
+    # the payload, not in a bare print.
     $self->require_local_board;
 
     my $git = $self->git;
-
-    unless ($git->is_repo) {
-        print "Not a git repository. No log available.\n";
-        return;
-    }
 
     # Read all log refs (refs/karr/log/*) natively via Git::Native.
     my @entries;
@@ -89,8 +100,28 @@ sub execute {
         return;
     }
 
+    # One line, so --compact has nothing to shorten here and says the same
+    # thing. Silence would be a worse compact answer than a short sentence.
     unless (@entries) {
         print "No log entries.\n";
+        return;
+    }
+
+    # No column padding: single spaces, `#12` for the task the way `list
+    # --compact` spells an id, and no trailing space when an entry has no
+    # detail. Until #254 this command took --compact from
+    # App::karr::Role::Output and printed the padded table for it regardless.
+    if ($self->compact) {
+        for my $e (@entries) {
+            my $line = sprintf '%s %s %s #%s',
+                $e->{ts}      // '?',
+                $e->{agent}   // '?',
+                $e->{action}  // '?',
+                $e->{task_id} // '?';
+            $line .= ' ' . $e->{detail}
+                if defined $e->{detail} && length $e->{detail};
+            print $line . "\n";
+        }
         return;
     }
 
@@ -118,19 +149,27 @@ App::karr::Cmd::Log - Show activity log
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
     karr log
     karr log --agent agent-fox
     karr log --task 12 --last 50 --json
+    karr log --compact
 
 =head1 DESCRIPTION
 
 Reads activity entries stored in C<refs/karr/log/*> and prints a merged view of
 recent actions. The command is only available when the board is inside a Git
 repository because the log lives in Git refs, not in local task files.
+
+The default rendering pads the agent and action into columns so a run of
+entries reads as a table. C<--compact> drops the padding and prints one
+space-separated line per entry -- timestamp, agent, action, C<#id>, detail --
+which is shorter, survives a long agent name without pushing the rest of the
+line right, and cuts on whitespace. The detail is omitted entirely when the
+entry carries none, rather than leaving a trailing space behind.
 
 =head1 FILTERS
 
@@ -176,9 +215,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

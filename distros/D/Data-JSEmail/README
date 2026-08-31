@@ -1,0 +1,100 @@
+Data::JSEmail - Convert between RFC 5322 messages and the RFC 8621 Email format
+
+DESCRIPTION
+
+Data::JSEmail provides bidirectional conversion between RFC 5322 / MIME
+messages and the JSON Email object defined by RFC 8621 (JMAP for Mail).
+
+Parsing decomposes a message into the RFC 8621 representation: the typed
+convenience properties (from, to, subject, sentAt and so on), the raw
+headers, the bodyStructure tree, and the textBody / htmlBody / attachments
+lists derived from it, with decoded content in bodyValues.
+
+Building goes the other way, taking an Email/set create object and
+producing a message.  Header precedence follows RFC 8621 and matches
+Cyrus: header:* properties win, then the convenience properties, then
+defaults.
+
+Parsing and building are handled by Email::MIME.
+
+FUNCTIONS
+
+Nothing is exported; call the functions fully qualified.
+
+  Data::JSEmail::parse($rfc822, $id?)
+
+    Parse an RFC 5322 message and return an RFC 8621 Email hashref.
+
+    $id becomes the returned object's "id" and is used to construct the
+    blobId of each body part ("m-$id-$partId").  It defaults to the SHA-256
+    hex digest of $rfc822.
+
+    The returned hashref has these RFC 8621 Email properties: id, size,
+    from, to, cc, bcc, sender, replyTo, subject, sentAt, messageId,
+    inReplyTo, references, preview, hasAttachment, headers, bodyStructure,
+    bodyValues, textBody, htmlBody and attachments.
+
+  Data::JSEmail::make($args, $getblob, $defaults_cb?)
+
+    Build an RFC 5322 message from an RFC 8621 Email/set create object.
+    Returns the message as a string with CRLF line endings.
+
+    $args is the create object: the convenience properties, any header:*
+    overrides, bodyValues, and textBody / htmlBody / attachments (or a
+    full bodyStructure).
+
+    $getblob is a callback invoked as $getblob->($blobId) for each part
+    that references one.  It must return a two element list of
+    ($type, $content).
+
+    $defaults_cb is an optional callback invoked as $defaults_cb->($name)
+    to supply a header that neither a header:* property nor a convenience
+    property provided.  It defaults to default_header_defaults below.
+
+  Data::JSEmail::default_header_defaults($name)
+
+    The default $defaults_cb.  Returns a current date for "date" and a
+    freshly generated address for "message-id"; undef for anything else.
+
+    Callers supplying their own callback can fall back to this one for the
+    names they do not handle themselves.
+
+EXAMPLE
+
+  use Data::JSEmail;
+
+  # message -> RFC 8621 Email
+  my $email = Data::JSEmail::parse($rfc822);
+  print $email->{subject};
+  print $email->{bodyValues}{ $email->{textBody}[0]{partId} }{value};
+
+  # RFC 8621 Email/set create -> message
+  my $rfc822 = Data::JSEmail::make({
+    from       => [{ name => 'Alice', email => 'alice@example.com' }],
+    to         => [{ name => 'Bob',   email => 'bob@example.com' }],
+    subject    => 'Hello',
+    bodyValues => { 1 => { value => "Hi there.\n" } },
+    textBody   => [{ partId => '1', type => 'text/plain' }],
+  }, sub { my $blobId = shift; return $store->fetch($blobId) });
+
+SPECIFICATIONS
+
+  RFC 5322  - Internet Message Format
+  RFC 8620  - The JSON Meta Application Protocol (JMAP)
+  RFC 8621  - JMAP for Mail
+
+AUTHOR
+
+  Bron Gondwana <brong@cpan.org>
+
+LICENSE
+
+  Copyright 2026 Fastmail Pty Ltd.
+
+  This program is free software; you can redistribute it and/or modify it
+  under the same terms as Perl itself; that is, either the GNU General
+  Public License as published by the Free Software Foundation (version 1,
+  or at your option any later version), or the Artistic License.
+
+  See http://dev.perl.org/licenses/ and the LICENSE file included with
+  this distribution for more information.

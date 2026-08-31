@@ -70,6 +70,8 @@ my %ledger = (
 	'POST./upload.400'               => 'POST /upload no file -> 400 JSON {error}',
 	'POST./upload.413'               => 'POST /upload oversized -> 413 JSON {error}',
 	'POST./upload.415'               => 'POST /upload bad ext -> 415 JSON {error}',
+	'GET./graph.accounting'          => 'GET /graph with accounting amounts: 200, negatives plotted',
+	'GET./graph.no_numeric'          => 'GET /graph with all-text Y column: 200 No plottable data',
 );
 
 # ---------------------------------------------------------------------------
@@ -506,6 +508,32 @@ subtest 'POST /upload -- unsupported extension returns 415 JSON {error}' => sub 
 	})->status_is(415)
 	  ->json_has('/error');
 	delete $ledger{'POST./upload.415'};
+};
+
+subtest 'GET /graph -- accounting amounts are plotted with correct sign' => sub {
+	# Regression: parenthesised values like ($450.00) were treated as +450
+	# before the fix.  A valid graph page must be returned and negatives must
+	# appear in the embedded chart data.
+	SKIP: {
+		eval { require HTML::D3 } or skip 'HTML::D3 not available', 3;
+		my $dir  = tempdir(CLEANUP => 1);
+		my $file = Mojo::File->new($dir, 'acct.csv');
+		$file->spew("month,amount\nJan,\$500.00\nFeb,(\$250.00)\nMar,-100.00\n");
+		$t->get_ok('/graph?l=path:' . url_escape($file->to_string) . '&x=month&y=amount')
+		  ->status_is(200, 'graph with accounting amounts returns 200')
+		  ->content_like(qr/-250\b/, 'accounting negative ($250.00) present in chart data');
+	}
+	delete $ledger{'GET./graph.accounting'};
+};
+
+subtest 'GET /graph -- all-text Y column returns 200 with No plottable data' => sub {
+	my $dir  = tempdir(CLEANUP => 1);
+	my $file = Mojo::File->new($dir, 'text.csv');
+	$file->spew("month,label\nJan,Alfa\nFeb,Beta\n");
+	$t->get_ok('/graph?l=path:' . url_escape($file->to_string) . '&x=month&y=label')
+	  ->status_is(200, 'all-text Y returns 200 not 500')
+	  ->content_like(qr/No plottable data/i, 'no-numeric Y shows No plottable data message');
+	delete $ledger{'GET./graph.no_numeric'};
 };
 
 # ---------------------------------------------------------------------------

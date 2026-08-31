@@ -1,5 +1,8 @@
 Revision history for File-Raw-Hash
 
+0.06    2026-08-31
+        - Fix: build failures on Windows perls
+
 0.05    2026-08-22
         - Adds: frh_abi.h, a C ABI for other XS distributions
 

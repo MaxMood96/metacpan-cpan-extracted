@@ -30,7 +30,7 @@ name: App-Netdisco
 provides:
   App::Netdisco:
     file: lib/App/Netdisco.pm
-    version: '2.105004'
+    version: '2.105005'
   App::Netdisco::AnyEvent::Nbtstat:
     file: lib/App/Netdisco/AnyEvent/Nbtstat.pm
   App::Netdisco::Backend::Job:
@@ -328,6 +328,8 @@ provides:
     file: lib/App/Netdisco/Util/Python.pm
   App::Netdisco::Util::SNMP:
     file: lib/App/Netdisco/Util/SNMP.pm
+  App::Netdisco::Util::SiteLocal:
+    file: lib/App/Netdisco/Util/SiteLocal.pm
   App::Netdisco::Util::Snapshot:
     file: lib/App/Netdisco/Util/Snapshot.pm
   App::Netdisco::Util::Statistics:
@@ -500,6 +502,8 @@ provides:
     file: lib/App/Netdisco/Worker/Plugin/Arpnip/Subnets.pm
   App::Netdisco::Worker::Plugin::Arpwalk:
     file: lib/App/Netdisco/Worker/Plugin/Arpwalk.pm
+  App::Netdisco::Worker::Plugin::CheckSiteLocal:
+    file: lib/App/Netdisco/Worker/Plugin/CheckSiteLocal.pm
   App::Netdisco::Worker::Plugin::Contact:
     file: lib/App/Netdisco/Worker/Plugin/Contact.pm
   App::Netdisco::Worker::Plugin::Delete:
@@ -737,5 +741,5 @@ resources:
   homepage: http://netdisco.org/
   license: http://opensource.org/licenses/BSD-3-Clause
   repository: https://github.com/netdisco/netdisco
-version: '2.105004'
+version: '2.105005'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

@@ -33,13 +33,13 @@ Files: COPYRIGHT
 Copyright: None
 License: public-domain
 
-Files: Makefile.PL
-Copyright: Copyright 2020 Toby Inkster.
-License: GPL-1.0+ or Artistic-1.0
-
 Files: dist.ini
 Copyright: Copyright 2023 Jonas Smedegaard.
 License: AGPL_3
+
+Files: Makefile.PL
+Copyright: Copyright 2020 Toby Inkster.
+License: GPL-1.0+ or Artistic-1.0
 
 License: AGPL_3
  This software is Copyright (c) 2026 by Jonas Smedegaard.

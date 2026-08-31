@@ -1,7 +1,7 @@
 # ABSTRACT: Low-level FFI bindings to libgit2
 
 package Git::Libgit2;
-our $VERSION = '0.006';
+our $VERSION = '0.007';
 use strict;
 use warnings;
 use Carp ();
@@ -17,6 +17,8 @@ our @EXPORT_OK = qw(
   check_rc
   oid_from_hex
   oid_to_hex
+  fetch_options_prune_offset
+  cert_hostkey_offsets
 
   GIT_OBJECT_ANY
   GIT_OBJECT_INVALID
@@ -32,6 +34,8 @@ our @EXPORT_OK = qw(
   GIT_OID_MINPREFIXLEN
 
   GIT_OPT_SET_SEARCH_PATH
+  GIT_OPT_SET_SERVER_CONNECT_TIMEOUT
+  GIT_OPT_SET_SERVER_TIMEOUT
   GIT_CONFIG_LEVEL_PROGRAMDATA
   GIT_CONFIG_LEVEL_SYSTEM
   GIT_CONFIG_LEVEL_XDG
@@ -102,6 +106,9 @@ our @EXPORT_OK = qw(
   GIT_EAPPLYFAIL
   GIT_EOWNER
   GIT_TIMEOUT
+  GIT_EUNCHANGED
+  GIT_ENOTSUPPORTED
+  GIT_EREADONLY
 );
 our %EXPORT_TAGS = ( all => \@EXPORT_OK );
 
@@ -119,10 +126,24 @@ use constant {
   GIT_OID_HEXSZ        => 40,
   GIT_OID_MINPREFIXLEN => 4,
 
-  # git_libgit2_opt_t (include/git2/common.h). Only SET_SEARCH_PATH is
-  # exported for now — the variadic git_libgit2_opts binding covers just the
-  # (int, string) form. Add siblings on demand.
+  # git_libgit2_opt_t (include/git2/common.h). Unnumbered enum, so every value
+  # is positional — only options whose vararg shape one of the two
+  # git_libgit2_opts bindings can express are exported. Add siblings on demand.
   GIT_OPT_SET_SEARCH_PATH => 5,
+
+  # opts(GIT_OPT_SET_SERVER_CONNECT_TIMEOUT, int timeout_in_milliseconds) and
+  # opts(GIT_OPT_SET_SERVER_TIMEOUT, int timeout_in_milliseconds): how long
+  # libgit2 waits to establish a connection to a remote, and how long it waits
+  # on any single read from or write to one. Both default to 0, which means no
+  # limit at all — a peer that accepts the connection and then says nothing
+  # hangs the process forever, and no callback fires in the meantime.
+  #
+  # Both were appended to the enum in libgit2 1.8, and the ssh transport
+  # ignored the server timeout until 1.9.3; against an older library
+  # these are simply out of range and git_libgit2_opts returns -1 ("invalid
+  # option") without acting.
+  GIT_OPT_SET_SERVER_CONNECT_TIMEOUT => 39,
+  GIT_OPT_SET_SERVER_TIMEOUT         => 41,
 
   # git_config_level_t (include/git2/config.h).
   GIT_CONFIG_LEVEL_PROGRAMDATA => 1,
@@ -208,6 +229,9 @@ use constant {
   GIT_EAPPLYFAIL      => -35,
   GIT_EOWNER          => -36,
   GIT_TIMEOUT         => -37,
+  GIT_EUNCHANGED      => -38,
+  GIT_ENOTSUPPORTED   => -39,
+  GIT_EREADONLY       => -40,
 };
 
 my $initialised = 0;
@@ -265,6 +289,61 @@ sub oid_to_hex {
 }
 
 
+sub cert_hostkey_offsets {
+  # git_cert_hostkey is { git_cert parent; git_cert_ssh_t type; unsigned
+  # char hash_md5[16]; hash_sha1[20]; hash_sha256[32]; ... }. git_cert is
+  # a lone enum, git_cert_ssh_t is an enum, and enums are int-sized on
+  # every ABI libgit2 supports; the hash fields are char arrays with no
+  # alignment demands of their own. The layout up to the end of
+  # hash_sha256 is therefore padding-free and follows from sizeof(int)
+  # alone -- unlike git_fetch_options.prune there is nothing here that
+  # moves between libgit2 releases, and libgit2 has no
+  # git_cert_hostkey_init that would give a marker to probe for.
+  # Cross-checked against the real offsetof() by Git::Native's
+  # t/75-cert-hostkey-layout.t wherever a C compiler is available.
+  my $int = Git::Libgit2::FFI::ffi()->sizeof('int');
+  return (
+    type   => $int,
+    sha1   => $int + $int + 16,
+    sha256 => $int + $int + 16 + 20,
+  );
+}
+
+
+my $FETCH_OPTIONS_PRUNE_OFFSET;
+
+sub fetch_options_prune_offset {
+  return $FETCH_OPTIONS_PRUNE_OFFSET if defined $FETCH_OPTIONS_PRUNE_OFFSET;
+
+  # git_fetch_options is { int version; git_remote_callbacks callbacks;
+  # git_fetch_prune_t prune; unsigned int update_fetchhead; ... }. The embedded
+  # callbacks struct gained fields between releases -- 120 bytes in 1.5, 128 in
+  # 1.9 -- so prune moves with it, and a hardcoded offset does not fail loudly:
+  # it writes the prune value into whichever callback pointer took its place.
+  #
+  # git_fetch_options_init fills the struct with libgit2's own defaults, which
+  # give us a marker to find: everything in callbacks past its version field is
+  # a NULL pointer, prune is GIT_FETCH_PRUNE_UNSPECIFIED (0), and the field
+  # directly behind it, update_fetchhead, is GIT_REMOTE_UPDATE_FETCHHEAD (1).
+  # So the first non-zero int past the callbacks version field is
+  # update_fetchhead, and prune is the int in front of it.
+  my $size = 512;
+  my $buf  = "\0" x $size;
+  my $ptr  = _scalar_ptr($buf);
+  check_rc( Git::Libgit2::FFI::git_fetch_options_init( $ptr, 1 ) );  # 1 = GIT_FETCH_OPTIONS_VERSION
+
+  for ( my $off = 16 ; $off + 4 <= $size ; $off += 4 ) {
+    next unless unpack( 'l', substr( $buf, $off, 4 ) ) == 1;
+    return $FETCH_OPTIONS_PRUNE_OFFSET = $off - 4;
+  }
+
+  Carp::croak 'cannot locate git_fetch_options.prune: libgit2 '
+    . version()
+    . ' left update_fetchhead unset after git_fetch_options_init';
+}
+
+
+
 # Get a raw pointer to a Perl scalar's bytes (for passing as 'opaque').
 sub _scalar_ptr {
   my ($p) = scalar_to_buffer($_[0]);
@@ -285,14 +364,14 @@ Git::Libgit2 - Low-level FFI bindings to libgit2
 
 =head1 VERSION
 
-version 0.006
+version 0.007
 
 =head1 SYNOPSIS
 
   use Git::Libgit2 qw( init_lib version check_rc );
 
   init_lib();
-  printf "libgit2 %s\n", version();
+  printf "libgit2 %s\n", scalar version();   # list context would give (1, 9, 0)
 
   # Direct FFI calls live in Git::Libgit2::FFI
   use Git::Libgit2::FFI;
@@ -358,19 +437,46 @@ still needs the OID.
 Convert a C<git_oid> pointer into its 40-character hex string (wraps
 C<git_oid_tostr>).
 
+=head2 cert_hostkey_offsets
+
+    my %off = cert_hostkey_offsets();   # type => 4, sha1 => 24, sha256 => 44
+
+Byte offsets of the C<type>, C<hash_sha1> and C<hash_sha256> fields inside
+C<git_cert_hostkey>, for reading the host key hashes out of the certificate
+handed to a C<certificate_check> callback. Derived from the ABI's C<int>
+size — the struct is padding-free up to the end of C<hash_sha256>.
+
+=head2 fetch_options_prune_offset
+
+    my $offset = fetch_options_prune_offset();
+
+Return the byte offset of C<prune> within C<git_fetch_options>, probed from the
+libgit2 this process is linked against and cached after the first call.
+
+C<prune> sits directly behind the embedded C<git_remote_callbacks> struct, and
+that struct is not layout-stable across libgit2 releases: it was 120 bytes in
+1.5 and is 128 in 1.9. Writing the prune value at a compiled-in offset is
+therefore not merely wrong but silently dangerous — under 1.9 the stale 1.5
+offset lands on C<update_refs>, a function pointer that libgit2 prefers over
+C<update_tips> and will call.
+
+Dies if libgit2 leaves C<update_fetchhead> unset, because without that marker
+the offset cannot be established and guessing it would corrupt the struct.
+
 =head1 EXPORTS
 
 Nothing is exported by default. Functions available on request:
 C<init_lib>, C<shutdown_lib>, C<version>, C<check_rc>, C<oid_from_hex>,
-C<oid_to_hex>.
+C<oid_to_hex>, C<fetch_options_prune_offset>, C<cert_hostkey_offsets>.
 
 Constants, by group: object type (C<GIT_OBJECT_*>), repository init
 (C<GIT_REPOSITORY_INIT_BARE>), OID sizes and the abbreviated-OID minimum
 (C<GIT_OID_RAWSZ>, C<GIT_OID_HEXSZ>, C<GIT_OID_MINPREFIXLEN>), error codes
 (C<GIT_OK>, C<GIT_ERROR>, the
 C<GIT_E*> family plus C<GIT_PASSTHROUGH>, C<GIT_ITEROVER>, C<GIT_RETRY>,
-C<GIT_TIMEOUT>), the C<git_libgit2_opts> option and config levels
-(C<GIT_OPT_SET_SEARCH_PATH>, C<GIT_CONFIG_LEVEL_*>,
+C<GIT_TIMEOUT>), the C<git_libgit2_opts> options and config levels
+(C<GIT_OPT_SET_SEARCH_PATH>, C<GIT_OPT_SET_SERVER_CONNECT_TIMEOUT>,
+C<GIT_OPT_SET_SERVER_TIMEOUT>, C<GIT_CONFIG_LEVEL_*>,
 C<GIT_CONFIG_HIGHEST_LEVEL>), revwalk sort (C<GIT_SORT_*>), remote
 direction (C<GIT_DIRECTION_*>), branch type (C<GIT_BRANCH_*>), tree entry
 filemode (C<GIT_FILEMODE_*>) and status flags (C<GIT_STATUS_*>).

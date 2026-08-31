@@ -11,6 +11,18 @@
 #include "perl.h"
 #include "XSUB.h"
 
+/* Under PERL_IMPLICIT_SYS (every Strawberry perl) XSUB.h rewrites the
+ * plain names malloc/calloc/realloc/free into PerlMem_* macros that
+ * dereference my_perl. The frh_abi_* entry points below are plain C
+ * with no interpreter to hand, so they fail to compile there; and the
+ * runner they allocate is fed to hashx.c, which allocates with the
+ * libc names, so mixing the two pools would free to the wrong one.
+ * Undef the four so this file matches hashx.c. No-op on Unix. */
+#undef malloc
+#undef calloc
+#undef realloc
+#undef free
+
 #include "file_plugin.h"
 #include "hashx.h"
 

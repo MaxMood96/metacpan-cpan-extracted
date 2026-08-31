@@ -146,6 +146,8 @@ static int pk_require_once(pTHX_ const char *mod, int fatal) {
 #define K_SITEMAP_ROUTES    "sitemap_routes"
 #define K_ETAG     "etag"
 #define K_ETAG_ROUTES       "etag_routes"
+#define K_LAST_MODIFIED     "last_modified"
+#define K_LM_ROUTES         "last_modified_routes"
 #define K_CGET     "conditional_get"   /* the plugin's on-switch */
 #define K_IDEMPOTENT "idempotent"
 #define K_IDEM_ROUTES "idempotent_routes"

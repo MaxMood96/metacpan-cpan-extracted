@@ -1232,6 +1232,23 @@ note '--- A28: new() injection guards';
 	lives_ok {
 		Database::test1->new(directory => $DATA_DIR, id => 'my_entry_col')
 	} 'new(): underscored id does not croak';
+
+	# table parameter: SQL injection in worksheet/table name must be rejected at
+	# construction time, before any file I/O or DBI connect attempt.
+	throws_ok {
+		Database::test1->new(directory => $DATA_DIR, table => "scores; DROP TABLE t--")
+	} qr/unsafe table name/i,
+	'new(): table with SQL injection → croak at construction time';
+
+	# A dotted qualified name (e.g. schema.table for DSN backends) must pass
+	lives_ok {
+		Database::test1->new(directory => $DATA_DIR, table => 'schema.my_table')
+	} 'new(): dot-qualified table name does not croak';
+
+	# A plain valid table name must pass without error
+	lives_ok {
+		Database::test1->new(directory => $DATA_DIR, table => 'sheet1')
+	} 'new(): plain table name does not croak';
 }
 
 # ---- A29: columns() and schema() — SQLite DBI path -------------------------
@@ -1309,6 +1326,95 @@ note '--- A31: selectall_hashref / selectall_hash aliases';
 	my @arr2 = $db->selectall_array();
 	is(scalar @arr1, scalar @arr2,
 		'selectall_hash(): returns same count as selectall_array()');
+}
+
+# ---- A32: XLSX / DBD::Excel backend ----------------------------------------
+# Verify the _open() xlsx branch: lazy DBD::Excel require, type='Excel',
+# DBI handle stored under the worksheet table name, count/fetch/selectall work,
+# and the table-override constructor param queries a different worksheet while
+# the filename stem still comes from the class name (not the table override).
+note '--- A32: XLSX / DBD::Excel backend';
+SKIP: {
+	my $have_excel = eval { require DBD::Excel; require Spreadsheet::WriteExcel; 1 };
+	skip 'DBD::Excel or Spreadsheet::WriteExcel not available', 18
+		unless $have_excel;
+
+	my $xdir = tempdir(CLEANUP => 1);
+	my $xlsx = File::Spec->catfile($xdir, 'test1.xlsx');
+
+	# Build a two-worksheet fixture.
+	# worksheet 'test1' — matches the class-derived table name for Database::test1
+	# worksheet 'alt'   — used to verify the table-override path
+	{
+		my $wb = Spreadsheet::WriteExcel->new($xlsx);
+
+		my $ws1 = $wb->add_worksheet('test1');
+		$ws1->write(0, 0, 'entry'); $ws1->write(0, 1, 'score');
+		$ws1->write(1, 0, 'a');     $ws1->write(1, 1, 10);
+		$ws1->write(2, 0, 'b');     $ws1->write(2, 1, 20);
+		$ws1->write(3, 0, 'c');     $ws1->write(3, 1, 30);
+
+		my $ws2 = $wb->add_worksheet('alt');
+		$ws2->write(0, 0, 'entry'); $ws2->write(0, 1, 'val');
+		$ws2->write(1, 0, 'x');     $ws2->write(1, 1, 99);
+
+		$wb->close();
+	}
+
+	ok(-r $xlsx, 'A32 pre-cond: test1.xlsx fixture created');
+
+	# --- 32a: basic connection via class-derived table name --------------------
+	# The first query triggers _open(); type must be 'Excel' afterwards.
+	my $db = Database::test1->new($xdir);
+	my $n = $db->count();
+	is($n, 3, 'XLSX _open(): count() returns 3 rows from test1 worksheet');
+	is($db->{'type'}, 'Excel', 'XLSX _open(): type is set to Excel after first query');
+
+	# The DBI handle must be stored under the worksheet name ('test1'), not undef
+	ok(defined($db->{'test1'}), 'XLSX _open(): DBI handle stored under worksheet name');
+
+	# DBD::Excel must now be in %INC (lazy-loaded by _open())
+	ok(exists $INC{'DBD/Excel.pm'}, 'XLSX _open(): DBD::Excel lazy-loaded into %INC');
+
+	# --- 32b: fetchrow_hashref ---------------------------------------------------
+	my $row = $db->fetchrow_hashref(entry => 'a');
+	isa_ok($row, 'HASH', 'XLSX fetchrow_hashref(): returns hashref');
+	is($row->{'score'}, 10, 'XLSX fetchrow_hashref(): correct column value returned');
+
+	# Miss → undef
+	my $miss = $db->fetchrow_hashref(entry => '__none__');
+	ok(!defined($miss), 'XLSX fetchrow_hashref(): miss returns undef');
+
+	# --- 32c: selectall_arrayref ------------------------------------------------
+	my $all = $db->selectall_arrayref();
+	isa_ok($all, 'ARRAY', 'XLSX selectall_arrayref(): returns arrayref');
+	is(scalar @{$all}, 3, 'XLSX selectall_arrayref(): all 3 rows returned');
+
+	# --- 32d: constructor table override — multi-worksheet access ---------------
+	# Database::test1 has class name 'test1', so dbname must fall back to 'test1'
+	# even when table => 'alt' is given, opening test1.xlsx and querying 'alt'.
+	# If dbname had incorrectly been derived from the table override, _open()
+	# would look for 'alt.xlsx' (which does not exist) and croak.
+	my $alt_db = Database::test1->new(directory => $xdir, table => 'alt');
+	my $n_alt = $alt_db->count();
+	is($n_alt, 1, 'XLSX table override: alt worksheet has 1 row');
+	is($alt_db->{'type'}, 'Excel',
+		'XLSX table override: type is Excel (test1.xlsx opened, not alt.xlsx)');
+
+	# Verify the cached table name is 'alt', not 'test1'
+	is($alt_db->{'_table_name'}, 'alt',
+		'XLSX table override: _table_name cached as alt');
+
+	# The handle must be stored under 'alt' (the overridden table name)
+	ok(defined($alt_db->{'alt'}), 'XLSX table override: DBI handle stored under alt');
+
+	# Fetch from the alt worksheet using the overridden table
+	my $alt_row = $alt_db->fetchrow_hashref(entry => 'x');
+	isa_ok($alt_row, 'HASH', 'XLSX table override: fetchrow_hashref returns hashref');
+	is($alt_row->{'val'}, 99, 'XLSX table override: correct column value from alt worksheet');
+
+	# --- 32e: memory cycle check ------------------------------------------------
+	memory_cycle_ok($db, 'XLSX: no memory cycles in connected object');
 }
 
 done_testing();

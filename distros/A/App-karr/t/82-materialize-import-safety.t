@@ -4,10 +4,8 @@ use Test::More;
 use lib 't/lib';
 use TestGit qw( require_git_c );
 require_git_c();
+use TestKarr qw( run_karr );
 use File::Temp qw( tempdir );
-use Cwd qw( abs_path getcwd );
-use IPC::Open3 qw( open3 );
-use Symbol qw( gensym );
 use Path::Tiny qw( path );
 use YAML::XS qw( LoadFile );
 
@@ -30,30 +28,11 @@ use App::karr::Task;
 #        mid-write and left the board half updated, with the offending file
 #        never named.
 
-my $ROOT = abs_path('.');
-my $BIN  = "$ROOT/bin/karr";
-
-sub _run_karr {
-  my ( $cwd, @argv ) = @_;
-  my $old = getcwd();
-  chdir $cwd or die "chdir $cwd: $!";
-
-  my $stderr = gensym;
-  my $pid = open3( my $in, my $out, $stderr, $^X, "-I$ROOT/lib", $BIN, @argv );
-  close $in;
-
-  my $stdout      = do { local $/; <$out> };
-  my $stderr_text = do { local $/; <$stderr> };
-  waitpid( $pid, 0 );
-  my $exit = $? >> 8;
-
-  chdir $old or die "chdir $old: $!";
-  return {
-    exit   => $exit,
-    stdout => ( defined $stdout      ? $stdout      : '' ),
-    stderr => ( defined $stderr_text ? $stderr_text : '' ),
-  };
-}
+# In-process runner (t/lib/TestKarr.pm): same ($cwd, @argv) signature and
+# { exit, stdout, stderr } return as the open3 helper this file used to carry,
+# dispatched through the shared App::karr::Dispatch path. KARR_TEST_SUBPROC=1
+# restores the old open3 path.
+sub _run_karr { return run_karr(@_) }
 
 sub _init_repo {
   my $repo = tempdir( CLEANUP => 1 );
@@ -188,8 +167,14 @@ subtest 'the materialized config is one kanban-md can load' => sub {
   # `true` from a YAML `1`.
   like( $raw, qr/^\s*(?:-\s*)?require_claim:\s*true\s*$/m,
     'require_claim is a YAML boolean' );
-  like( $raw, qr/^\s*(?:-\s*)?bypass_column_wip:\s*true\s*$/m,
-    'bypass_column_wip is a YAML boolean' );
+  # bypass_column_wip used to be checked here as well -- it sat on the default
+  # expedite class until #227 removed the class WIP keys karr never enforced, so
+  # a default board's view no longer carries one. The key is still typed as a
+  # boolean for the boards that do carry it (t/227 pins that); what stands in for
+  # it here is karr's own boolean, which kanban-md ignores but go-yaml still has
+  # to parse.
+  like( $raw, qr/^\s*(?:-\s*)?enabled:\s*true\s*$/m,
+    'foundation.enabled is a YAML boolean' );
   unlike( $raw, qr/^\s*(?:-\s*)?(?:require_claim|bypass_column_wip|enabled):\s*[01]\s*$/m,
     'no boolean key is written as an integer' );
 

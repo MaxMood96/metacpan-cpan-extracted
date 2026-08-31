@@ -1,48 +1,69 @@
 # Alien::Libgit2
 
-Provides the libgit2 C library for CPAN modules that link against it via
-FFI or XS.
+Provides the C library [libgit2](https://libgit2.org/) to CPAN modules that link against
+it. Consumers are `Git::Libgit2` (low-level FFI::Platypus bindings) and `Git::Native`
+(Moo wrapper on top of it), both via `Alien::Libgit2->dynamic_libs`; `->cflags` / `->libs`
+exist for XS consumers.
 
-## What It Does
+Two install paths, decided at install time: a system libgit2 found by
+`pkg-config libgit2` (>= 1.9.3), or a CMake build of the bundled source tarball. The
+share build needs no network — suitable for air-gapped installs.
 
-Alien::Libgit2 follows the Alien::Build pattern:
+## Layout
 
-1. First checks if a system libgit2 (>= 1.5) is available via `pkg-config libgit2`
-2. If not, builds libgit2 from source (bundled tarball — no network required)
+| Path | Holds |
+|---|---|
+| `alienfile` | every decision: the `PkgConfig` probe and the CMake share build |
+| `share/libgit2-1.9.3.tar.gz` | the bundled source, exactly one tarball |
+| `lib/Alien/Libgit2.pm` | `use parent 'Alien::Base'` + `$VERSION` + POD, no logic |
+| `t/01-alien.t` | `alien_ok` + `ffi_ok` on `git_libgit2_init` / `_shutdown` / `_version` |
+| `.github/workflows/` | four jobs — system and share, on linux and macOS |
 
-## Used By
+Packaging is `[@Author::GETTY]` with `alien_build = 1`. `dzil test` covers whichever path
+the probe lands on here, so anything touching the build runs both explicitly:
 
-- `Git::Libgit2` — low-level FFI::Platypus bindings against libgit2
-- `Git::Native` — high-level Moo wrapper on top of `Git::Libgit2`
+```bash
+env ALIEN_INSTALL_TYPE=share  dzil test
+env ALIEN_INSTALL_TYPE=system dzil test
+```
 
-Other consumers should call `Alien::Libgit2->dynamic_libs` (for FFI) or
-`->cflags`/`->libs` (for XS).
+The share build needs cmake, a C compiler, pkg-config, OpenSSL headers and libssh2
+headers.
 
-## Bundled Source
+## The 1.9.3 floor
 
-Ships `libgit2-1.9.3.tar.gz` in `share/`. No network access required
-during `cpanm` install — suitable for air-gapped environments.
+A system libgit2 is preferred — faster, and it picks up distro security patches — but
+only from 1.9.3 up: below that, libgit2's ssh transport hangs forever on a silent peer
+(libgit2 PR #7165), so older distro libs fall through to the share build. Mechanism,
+measurements, ABI pinning and the procedure for bundling a new libgit2: skill
+`alien-libgit2-core`.
 
-## Build Config
+## Delegation
 
-Uses `[@Author::GETTY]` Dist::Zilla bundle with `alien_build = 1`.
+Delegate behavior-relevant work to the right agent instead of touching it yourself —
+principle and lane are in `.claude/rules/alien-libgit2-rules.md`.
 
-Build requirements (for the share-install path only):
-- `cmake` (libgit2 uses CMake)
-- C compiler
-- `pkg-config` (for system lib detection)
-- OpenSSL headers (HTTPS backend)
-- libssh2 headers (SSH transport)
+| Task | Agent |
+|---|---|
+| alienfile, `share/` tarball, CI workflows, `t/`, `lib/Alien/`, POD | `alien-libgit2-worker` (default) |
+| Pre-release audit before a CPAN release | `alien-libgit2-release-checker` |
 
-## alienfile
+The agents carry their skills via `briefing.skills` (see `.claude/agents/`); the main
+agent delegates rather than loading them. Tickets live on the repo's `karr` board.
 
-The `alienfile` at the root defines the probe/build/install steps. Uses
-`Alien::Build::Plugin::Build::CMake`. Build flags pin REGEX_BACKEND=builtin
-so we don't pick up an inconsistent regex lib at runtime.
+## Skills
 
-## Key Details
+`alien-libgit2-core` is project-owned; every other skill under `.claude/skills/` is a
+hardlink into the shared library — `manage-skills sync` re-establishes the links after a
+fresh clone, and a hardlinked `SKILL.md` is edited in place, never with `Edit`/`Write`.
 
-- System install preferred — faster, picks up distro security patches
-- Share install builds libgit2 in the local Alien dir, no system pollution
-- Pinned to a single bundled libgit2 version per Alien::Libgit2 release
-  (ABI bumps between minor versions of libgit2)
+| Skill | Covers |
+|---|---|
+| `alien-libgit2-core` | this distribution: the two paths, the floor, bundling, the CI matrix |
+| `perl-alien` | Alien::Build itself: `probe`/`share`, `PkgConfig`, `install_prop` vs `runtime_prop`, `Test::Alien` |
+| `getty-perl-core` | house Perl conventions |
+| `getty-perl-release-author-getty`, `perl-release-dist-ini` | the `[@Author::GETTY]` bundle and `dist.ini` |
+| `kanban-issues-karr-cli` | the karr board |
+
+`perl-xs` is deliberately not linked: every consumer reaches libgit2 through FFI, so
+this distribution has no Perl/C boundary. Link it if an XS consumer ever appears.

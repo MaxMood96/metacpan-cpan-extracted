@@ -837,4 +837,107 @@ subtest 'stat_api IP-security: non-data file /etc/passwd returns exists:false' =
 	  ->json_is('/exists', 0);
 };
 
+# ======================================================================
+# DOMAIN 10: graph_view Y-value accounting notation
+#
+# The Y-column parser in graph_view must recognise accounting notation
+# (parentheses = negative) as well as plain numerics and dash-negatives.
+#
+# Equivalence Partitions:
+#   VP-plain-pos  : "$1,234.56"    -> valid, plotted as  1234.56
+#   VP-plain-neg  : "-15.00"       -> valid, plotted as   -15.00
+#   VP-acct-neg   : "($450.00)"    -> valid, plotted as  -450.00
+#   VP-acct-nodol : "(148.00)"     -> valid (no $ prefix), plotted as -148
+#   IP-text       : "Hello"        -> non-numeric, row skipped
+#   IP-all-text   : entire column  -> No plottable data (200, not 500)
+#
+# Boundary Values:
+#   BV-acct-zero  : "($0.00)"      -> valid, plotted as 0 (not skipped)
+#   BV-acct-large : "($28,800.00)" -> valid, thousands separator inside parens
+#   BV-mixed      : mix of VP forms -> all rows plotted, none skipped
+# ======================================================================
+
+subtest 'graph Y-value VP-plain-pos: $1,234.56 is numeric' => sub {
+	SKIP: {
+		eval { require HTML::D3 } or skip 'HTML::D3 not available', 2;
+		my $file = Mojo::File->new($TMPDIR, 'vp_pos.csv');
+		$file->spew("month,amount\nJan,\$1234.00\nFeb,\$500.00\n");
+		$t->get_ok('/graph?l=path:' . url_escape($file->to_string) . '&x=month&y=amount')
+		  ->status_is(200)
+		  ->content_unlike(qr/No plottable data/i, 'plain positive amount is plottable');
+	}
+};
+
+subtest 'graph Y-value VP-acct-neg: ($450.00) plotted as -450' => sub {
+	SKIP: {
+		eval { require HTML::D3 } or skip 'HTML::D3 not available', 3;
+		my $file = Mojo::File->new($TMPDIR, 'vp_acct.csv');
+		$file->spew("month,amount\nJan,\$500.00\nFeb,(\$450.00)\n");
+		$t->get_ok('/graph?l=path:' . url_escape($file->to_string) . '&x=month&y=amount')
+		  ->status_is(200)
+		  ->content_like(qr/-450\b/, 'accounting negative is plotted as -450, not +450')
+		  ->content_unlike(qr/No plottable data/i, 'accounting column is plottable');
+	}
+};
+
+subtest 'graph Y-value VP-acct-nodol: (148.00) plotted as -148' => sub {
+	# No currency symbol inside parens: (148.00) must still be treated as -148.
+	SKIP: {
+		eval { require HTML::D3 } or skip 'HTML::D3 not available', 2;
+		my $file = Mojo::File->new($TMPDIR, 'vp_nodol.csv');
+		$file->spew("month,amount\nJan,200.00\nFeb,(148.00)\n");
+		$t->get_ok('/graph?l=path:' . url_escape($file->to_string) . '&x=month&y=amount')
+		  ->status_is(200)
+		  ->content_like(qr/-148\b/, 'no-dollar accounting parens parsed as negative');
+	}
+};
+
+subtest 'graph Y-value IP-all-text: non-numeric Y returns 200 No plottable data' => sub {
+	my $file = Mojo::File->new($TMPDIR, 'ip_text.csv');
+	$file->spew("month,label\nJan,Alpha\nFeb,Beta\n");
+	$t->get_ok('/graph?l=path:' . url_escape($file->to_string) . '&x=month&y=label')
+	  ->status_is(200, 'all-text Y column is 200, not 500')
+	  ->content_like(qr/No plottable data/i, 'all-text Y column shows No plottable data');
+};
+
+subtest 'graph Y-value BV-acct-zero: ($0.00) is valid (not skipped)' => sub {
+	SKIP: {
+		eval { require HTML::D3 } or skip 'HTML::D3 not available', 2;
+		my $file = Mojo::File->new($TMPDIR, 'bv_zero.csv');
+		$file->spew("month,amount\nJan,(\$0.00)\nFeb,\$100.00\n");
+		$t->get_ok('/graph?l=path:' . url_escape($file->to_string) . '&x=month&y=amount')
+		  ->status_is(200)
+		  ->content_unlike(qr/No plottable data/i, '($0.00) is valid and not skipped');
+	}
+};
+
+subtest 'graph Y-value BV-acct-large: ($28,800.00) with thousands separator' => sub {
+	SKIP: {
+		eval { require HTML::D3 } or skip 'HTML::D3 not available', 2;
+		my $file = Mojo::File->new($TMPDIR, 'bv_large.csv');
+		$file->spew("month,amount\nJan,\$5000.00\nFeb,(\$28800.00)\n");
+		$t->get_ok('/graph?l=path:' . url_escape($file->to_string) . '&x=month&y=amount')
+		  ->status_is(200)
+		  ->content_like(qr/-28800\b/, 'large accounting value parsed correctly');
+	}
+};
+
+subtest 'graph Y-value BV-mixed: mix of positive, dash-negative, accounting-negative' => sub {
+	# All three forms must be recognised as numeric; the graph must plot all rows.
+	SKIP: {
+		eval { require HTML::D3 } or skip 'HTML::D3 not available', 3;
+		my $file = Mojo::File->new($TMPDIR, 'bv_mixed.csv');
+		$file->spew(
+			"month,amount\n" .
+			"Jan,\$1000.00\n" .    # plain positive
+			"Feb,-200.00\n" .       # dash negative
+			"Mar,(\$350.00)\n"      # accounting negative
+		);
+		$t->get_ok('/graph?l=path:' . url_escape($file->to_string) . '&x=month&y=amount')
+		  ->status_is(200)
+		  ->content_like(qr/Plotting 3 points?/, 'all three notation styles produce 3 plotted points')
+		  ->content_unlike(qr/No plottable data/i, 'mixed-notation column is fully plottable');
+	}
+};
+
 done_testing;

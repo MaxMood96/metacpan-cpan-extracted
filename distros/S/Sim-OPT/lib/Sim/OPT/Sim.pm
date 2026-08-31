@@ -365,7 +365,6 @@ XXX
 
 c
 $shortresfile
-$shortflfile
 $begin
 $end
 $before
@@ -760,6 +759,13 @@ XXX
         chomp $line;
         $line =~ s/\n/°/g;
         $line =~ s/°/\n/g;
+
+        # ESP-r aligns percentages in a fixed-width field. Report.pm turns
+        # alignment whitespace into commas, so values shorter than the field
+        # arrive as "(,69.6%)" while a full-width value such as 100.0 arrives
+        # as "(100.0%)".  Normalise the latter form before stripping
+        # punctuation so configured keepcolumn indices remain invariant.
+        $line =~ s/\((?=[+-]?(?:\d+(?:\.\d*)?|\.\d+)%\))/\(,/g;
         $line =~ s/[()%]//g;
         $line =~ s/,?//;
         $line =~ s/,?//;
@@ -767,10 +773,19 @@ XXX
         $line =~ s/ ?//;
         $line =~ s/ ?//;
 
+        #my @elts = split(/,/, $line); 
+        #my $touse = $elts[0];
+#
+        #$touse = Sim::OPT::clean( $touse, $mypath, $file );
+        
+        
         my @elts = split(/,/, $line); 
-        my $touse = $elts[0];
+	my $touse = $elts[0];
+	say "BEFORE CLEAN: <$touse>";
+	$touse = Sim::OPT::clean( $touse, $mypath, $file );
+	
 
-        $touse = Sim::OPT::clean( $touse, $mypath, $file );
+say "AFTER CLEAN:  <$touse>";
 
         if ( ( ( $dowhat{names} eq "short" ) or ( $dowhat{names} eq "medium" ) ) and ( $touse =~ /^\d+$/ ) )
         {

@@ -511,6 +511,31 @@ compile(self)
             }
         }
 
+        {   /* last_modified routes: stamp the validator, the etag walk */
+            SV **ec = hv_fetchs(h, K_LM_ROUTES, 0);
+            AV *recs = (all_recs && SvROK(all_recs)) ? (AV *)SvRV(all_recs) : NULL;
+            if (ec && *ec && SvROK(*ec) && SvTYPE(SvRV(*ec)) == SVt_PVAV) {
+                AV *ecr = (AV *)SvRV(*ec);
+                SSize_t ci, cn = av_len(ecr) + 1;
+                for (ci = 0; ci < cn; ci++) {
+                    HV *w = (HV *)SvRV(*av_fetch(ecr, ci, 0));
+                    SV **wm = hv_fetchs(w, K_METHOD, 0);
+                    SV **wp = hv_fetchs(w, K_PATH, 0);
+                    SV **wv = hv_fetchs(w, K_LAST_MODIFIED, 0);
+                    SSize_t ri, rn = recs ? av_len(recs) + 1 : 0;
+                    if (!(wm && *wm && wp && *wp && wv && *wv)) continue;
+                    for (ri = 0; ri < rn; ri++) {
+                        HV *rr = (HV *)SvRV(*av_fetch(recs, ri, 0));
+                        SV **rm = hv_fetchs(rr, K_METHOD, 0);
+                        SV **rp = hv_fetchs(rr, K_PATH, 0);
+                        if (rm && *rm && rp && *rp
+                            && sv_eq(*rm, *wm) && sv_eq(*rp, *wp))
+                            (void)hv_stores(rr, K_LAST_MODIFIED, newSVsv(*wv));
+                    }
+                }
+            }
+        }
+
         {   /* idempotent routes: stamp the record, the same walk as etag */
             SV **ic = hv_fetchs(h, K_IDEM_ROUTES, 0);
             AV *recs = (all_recs && SvROK(all_recs)) ? (AV *)SvRV(all_recs) : NULL;
@@ -971,8 +996,11 @@ compile(self)
             if (ic && *ic && SvROK(*ic) && SvTYPE(SvRV(*ic)) == SVt_PVHV) {
                 AV *cap = newAV();
                 SV **t = hv_fetchs((HV *)SvRV(*ic), "ttl", 0);
+                SV **m = hv_fetchs((HV *)SvRV(*ic), "max_record", 0);
                 av_push(cap, (t && *t && SvOK(*t)) ? newSVnv(SvNV(*t))
                                                    : newSVnv(86400));
+                av_push(cap, (m && *m && SvOK(*m)) ? newSViv(SvIV(*m))
+                                                   : newSViv(1048576));
                 av_push(after_out, punk_closure(aTHX_ pi_record_cb, cap));
             }
         }

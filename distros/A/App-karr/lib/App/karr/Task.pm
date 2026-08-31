@@ -1,7 +1,7 @@
 # ABSTRACT: Task object representing a single kanban card
 
 package App::karr::Task;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use Path::Tiny;
 use Time::Piece;
@@ -170,6 +170,39 @@ sub unblock {
 }
 
 
+# kanban-md's AppendBody (internal/board/mutate.go:571): the trailing newlines
+# come off the existing body and the two halves are joined with a blank line.
+# karr joined with a single "\n" until ticket #238, and Markdown folds a single
+# newline into a space -- so every note appended by `karr edit -a` or
+# `karr handoff --note` was rendered into the paragraph above it, and a card
+# that collected notes over a session ended up as one block.
+#
+# Emptiness is measured *after* the trim, which is where this parts company with
+# the reference: Go tests `existing != ""` first, so a body that is nothing but
+# newlines still gets the separator and comes back with a leading blank line.
+# That body cannot arrive from the board -- _parse_content strips trailing
+# newlines, the normal form ticket #78 settled -- but it can arrive from a
+# caller in process, and "an empty body gains no separator" is the whole point
+# of the branch. Only newlines are trimmed, never other whitespace: an indented
+# last line is content.
+#
+# length, not truth, on the trimmed body: appending to a body of "0" must
+# preserve it (ticket #78).
+sub append_body {
+  my ( $self, $text, $timestamp ) = @_;
+  # The handoff form, deliberately not kanban-md's: karr writes every stamp in
+  # UTC (App::karr::Role::ClaimTimeout says why), and `[[2006-01-02]]` is
+  # wiki-link syntax that means nothing here. Opt-in at both call sites -- an
+  # inline prefix would turn `-a "## Findings"` into a line that is no longer a
+  # heading, so it cannot be forced on every append.
+  $text = gmtime->strftime('%Y-%m-%d %H:%M') . ' ' . $text if $timestamp;
+  my $body = defined $self->body ? $self->body : '';
+  $body =~ s/\n+\z//;
+  $self->body( length $body ? $body . "\n\n" . $text : $text );
+  return $self;
+}
+
+
 sub update_timestamps {
   my ( $self, $old_status, $new_status, $first_status, $config ) = @_;
   my $now = gmtime->datetime . 'Z';
@@ -300,6 +333,23 @@ sub to_markdown {
 }
 
 
+# One card, one line. The format is `list --compact`'s, and it lives here
+# rather than in that command because `show --compact` prints the same line
+# (#254) and two commands spelling one printf out separately is how two
+# renderings of the same thing start to drift. Callers add the newline.
+#
+# Fixed-width on the two fields whose width is bounded, free on the one whose
+# width is not: the id column pads to four so short and long ids stay aligned
+# and a five-digit board simply widens the row, and the status is
+# right-aligned to the width of the longest default status name. The title is
+# printed as it stands, never truncated -- what a compact rendering saves is
+# lines, not the content of a line.
+sub compact_line {
+  my ($self) = @_;
+  return sprintf '#%-4u %10s %s', $self->id, $self->status, $self->title;
+}
+
+
 sub _parse_content {
   my ($class, $content) = @_;
   # The closing delimiter is anchored to the start of a line (/m), the way
@@ -402,7 +452,7 @@ App::karr::Task - Task object representing a single kanban card
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -512,11 +562,14 @@ the most urgent class being the first entry.
 =head2 parent
 
 Optional parent-task id, round-tripped through the frontmatter like any
-other modelled field. Nothing in karr currently sets or reads it: no command
-offers a C<--parent> option, and no filtering, rendering, or dependency logic
-consults it. A document carrying a C<parent> key survives a karr write
-unchanged, but today it is inert data as far as karr's own commands are
-concerned.
+other modelled field. Nothing in karr sets it: no command offers a
+C<--parent> option, and no filtering, rendering or sorting consults it. One
+command reads it -- C<karr delete> names a card carrying the id it is about to
+remove as its parent, beside the cards that name it in C<depends_on>
+(L<App::karr::Cmd::Delete/DEPENDENTS>, ticket #236) -- because C<karr import>
+brings real values in from a kanban-md board, which does set the field. A
+document carrying a C<parent> key otherwise survives a karr write unchanged
+and stays inert as far as karr's own commands are concerned.
 
 =head2 depends_on
 
@@ -647,6 +700,23 @@ C<< $task->blocked($reason) >> is what ticket #58 was about.
 
 Clears the blocked flag and any reason with it.
 
+=head2 append_body
+
+  $task->append_body('Waiting for review');
+  $task->append_body('Handed off', 1);   # prefixed with the current UTC time
+
+Appends C<$text> to the body as a paragraph of its own, separated from the
+existing text by one blank line, and returns the task. Trailing newlines on the
+existing body are trimmed first, so repeated appends never accumulate blank
+lines; a body that is empty (or nothing but newlines) gains no separator, so an
+appended note never starts with one. With a true second argument the text is
+prefixed inline with the current UTC time as C<YYYY-MM-DD HH:MM>, the form
+C<karr handoff --note --timestamp> writes.
+
+This is the one implementation behind C<karr edit --append-body> and
+C<karr handoff --note> (ticket #238); they had a copy each, joined with a
+single newline, which Markdown renders as a continuation of the previous line.
+
 =head2 update_timestamps
 
   $task->update_timestamps( $old_status, $new_status, $first_status, $config );
@@ -737,6 +807,14 @@ as YAML between C<---> delimiters, followed by the body. The body is
 terminated with a single trailing newline, added only when it does not
 already end in one, to match kanban-md's own writer byte-for-byte.
 
+=head2 compact_line
+
+  print $task->compact_line . "\n";
+
+Renders the task as the single line C<karr list --compact> and
+C<karr show --compact> print for it -- id, status, title -- with no trailing
+newline.
+
 =head2 from_string
 
   my $task = App::karr::Task->from_string($markdown_content);
@@ -808,9 +886,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

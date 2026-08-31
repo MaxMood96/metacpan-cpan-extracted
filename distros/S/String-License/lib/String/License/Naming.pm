@@ -1,10 +1,8 @@
-use v5.20;
+use v5.40;
 use utf8;
-use warnings;
-use feature qw(signatures);
-no warnings qw(experimental::signatures);
 
-use Feature::Compat::Class 0.07;
+use feature 'class';
+no warnings 'experimental::class';
 
 =head1 NAME
 
@@ -12,7 +10,7 @@ String::License::Naming - base class for names of licenses and license naming sc
 
 =head1 VERSION
 
-Version v0.0.11
+Version v0.1.1
 
 =head1 DESCRIPTION
 
@@ -25,7 +23,7 @@ e.g. L<String::License::Naming::SPDX>.
 
 =cut
 
-package String::License::Naming v0.0.11;
+package String::License::Naming v0.1.1;
 
 use namespace::clean;
 

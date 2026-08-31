@@ -1,7 +1,7 @@
 # ABSTRACT: Show flow metrics: throughput, lead/cycle time, flow efficiency, aging work
 
 package App::karr::Cmd::Metrics;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use MooX::Cmd;
 use MooX::Options (
@@ -10,9 +10,11 @@ use MooX::Options (
 use Time::Piece;
 use App::karr::Role::BoardAccess;
 use App::karr::Role::Output;
+use App::karr::Role::CompactOutput;
 use App::karr::Config;
 
-with 'App::karr::Role::BoardAccess', 'App::karr::Role::Output';
+with 'App::karr::Role::BoardAccess', 'App::karr::Role::Output',
+     'App::karr::Role::CompactOutput';
 
 
 option since => (
@@ -346,7 +348,7 @@ App::karr::Cmd::Metrics - Show flow metrics: throughput, lead/cycle time, flow e
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -618,9 +620,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

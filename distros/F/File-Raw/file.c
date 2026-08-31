@@ -2439,14 +2439,87 @@ static IV file_mode_internal(const char *path) {
     return st.st_mode & 07777;  /* Return permission bits only */
 }
 
+#ifdef _WIN32
+/* The CRT's stat() reports st_ino as 0 and st_dev as the drive index, so
+ * the pair cannot tell two files apart on Windows. The volume serial
+ * number and the 64-bit file index are the real identity. They need an
+ * open handle, which is why this is called only from the full stat()
+ * hash, where ino is actually published, and never from the single-field
+ * accessors. FILE_FLAG_BACKUP_SEMANTICS is what lets a directory be
+ * opened at all; FILE_READ_ATTRIBUTES opens a file others hold open. */
+static int file_win32_identity(const char *path, DWORD *dev,
+                               DWORD *ino_hi, DWORD *ino_lo)
+{
+    BY_HANDLE_FILE_INFORMATION bhfi;
+    HANDLE h;
+    int ok = 0;
+
+    h = CreateFileA(path, FILE_READ_ATTRIBUTES,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                    NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        return 0;
+    }
+    if (GetFileInformationByHandle(h, &bhfi)) {
+        *dev    = bhfi.dwVolumeSerialNumber;
+        *ino_hi = bhfi.nFileIndexHigh;
+        *ino_lo = bhfi.nFileIndexLow;
+        ok = 1;
+    }
+    CloseHandle(h);
+    return ok;
+}
+
+/* A 32-bit UV cannot hold a file index, so fall back to an NV rather than
+ * truncate. The indexes a real volume hands out stay far below 2**53,
+ * where a double is still exact. */
+static SV *file_ino_sv(pTHX_ DWORD hi, DWORD lo)
+{
+#if UVSIZE >= 8
+    return newSVuv(((UV)hi << 32) | (UV)lo);
+#else
+    if (hi == 0) {
+        return newSVuv((UV)lo);
+    }
+    return newSVnv((NV)hi * 4294967296.0 + (NV)lo);
+#endif
+}
+#else
+/* st_ino is 64 bits on filesystems an ivsize=4 perl still has to read. */
+static SV *file_ino_sv(pTHX_ Stat_t *st)
+{
+    if ((NV)st->st_ino <= (NV)UV_MAX) {
+        return newSVuv((UV)st->st_ino);
+    }
+    return newSVnv((NV)st->st_ino);
+}
+#endif
+
 /* Combined stat - returns all attributes in one syscall */
 static HV* file_stat_all_internal(pTHX_ const char *path) {
     Stat_t st;
     HV *result;
+    SV *ino_sv;
+    UV dev;
 
     if (cached_stat(path, &st) < 0) {
         return NULL;
     }
+
+    dev = (UV)st.st_dev;
+#ifdef _WIN32
+    {
+        DWORD wdev, whi, wlo;
+        if (file_win32_identity(path, &wdev, &whi, &wlo)) {
+            dev = (UV)wdev;
+            ino_sv = file_ino_sv(aTHX_ whi, wlo);
+        } else {
+            ino_sv = newSVuv(0);
+        }
+    }
+#else
+    ino_sv = file_ino_sv(aTHX_ &st);
+#endif
 
     result = newHV();
     hv_store(result, "size", 4, newSViv(st.st_size), 0);
@@ -2456,8 +2529,8 @@ static HV* file_stat_all_internal(pTHX_ const char *path) {
     hv_store(result, "mode", 4, newSViv(st.st_mode & 07777), 0);
     hv_store(result, "is_file", 7, S_ISREG(st.st_mode) ? &PL_sv_yes : &PL_sv_no, 0);
     hv_store(result, "is_dir", 6, S_ISDIR(st.st_mode) ? &PL_sv_yes : &PL_sv_no, 0);
-    hv_store(result, "dev", 3, newSViv(st.st_dev), 0);
-    hv_store(result, "ino", 3, newSViv(st.st_ino), 0);
+    hv_store(result, "dev", 3, newSVuv(dev), 0);
+    hv_store(result, "ino", 3, ino_sv, 0);
     hv_store(result, "nlink", 5, newSViv(st.st_nlink), 0);
     hv_store(result, "uid", 3, newSViv(st.st_uid), 0);
     hv_store(result, "gid", 3, newSViv(st.st_gid), 0);

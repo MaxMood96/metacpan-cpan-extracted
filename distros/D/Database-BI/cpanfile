@@ -6,7 +6,7 @@ requires 'CGI::Info';
 requires 'CGI::Lingua';
 requires 'Carp';
 requires 'DBI';
-requires 'Database::Abstraction', '0.38';
+requires 'Database::Abstraction', '0.41';
 requires 'File::Spec', '3.40';
 requires 'File::Temp', '0.22';
 requires 'HTML::D3', '0.10';

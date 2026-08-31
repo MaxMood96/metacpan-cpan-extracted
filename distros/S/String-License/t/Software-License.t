@@ -1,3 +1,5 @@
+use v5.40;
+
 use Test2::V0;
 use Test2::Require::Module 'Regexp::Pattern::License' => '3.11.0';
 use Test2::Require::Module 'Software::LicenseUtils'   => '0.104006';
@@ -35,11 +37,12 @@ my %LICENSES = (
 	'MPL-1.1'                               => undef,
 	'MPL-2.0'                               => undef,
 	'OpenSSL'                               => 'OpenSSL and/or SSLeay',
-	'Artistic-1.0-Perl OR GPL-1.0-or-later' => 'Artistic-1.0-Perl and/or GPL',
-	'PostgreSQL'                            => undef,
-	'QPL-1.0'                               => undef,
-	'SISSL'                                 => undef,
-	'Zlib'                                  => undef,
+	'Artistic-1.0-Perl OR GPL-1.0-or-later' =>
+		'Artistic-1.0-Perl and/or GPL-1.0 and/or Perl',
+	'PostgreSQL' => undef,
+	'QPL-1.0'    => undef,
+	'SISSL'      => undef,
+	'Zlib'       => undef,
 );
 
 my %crufty = (

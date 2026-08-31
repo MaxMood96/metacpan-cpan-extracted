@@ -123,11 +123,11 @@ subtest 'lone soup byte pair does not trigger a copyright (guarded)' => sub {
 	}
 };
 
-subtest 'warn fires when soup is normalized (label present)' => sub {
+subtest 'debug fires when soup is normalized (label present)' => sub {
 	$log->clear;
 	copyright("Copyright \xA1\xA4 1999 $BW");
 	$log->contains_ok(
-		qr/normalized sign-soup/i,
+		qr/normalized copyright string/i,
 		'warn describes soup'
 	);
 	$log->clear;
@@ -137,8 +137,45 @@ subtest 'no warn on clean input (hot path stays silent)' => sub {
 	$log->clear;
 	copyright("Copyright © 1999 $BW");
 	$log->does_not_contain_ok(
-		qr/normalized sign-soup/i,
-		'no such warn on clean input'
+		qr/normalized copyright string/i,
+		'no warn on clean input'
+	);
+	$log->clear;
+};
+
+subtest 'dash-soup normalized: year ranges get a clean hyphen' => sub {
+	my @soup = (
+		[ "\x{E2}\x{80}\x{93}",       'EN-DASH, UTF-8 as Latin-1' ],
+		[ "\x{E2}\x{80}\x{94}",       'EM-DASH, UTF-8 as Latin-1' ],
+		[ "\x{E2}\x{20AC}\x{201C}",   'EN-DASH, UTF-8 as CP1252' ],
+		[ "\x{E2}\x{20AC}\x{201D}",   'EM-DASH, UTF-8 as CP1252' ],
+		[ "\x{0432}\x{0402}\x{2019}", 'EN-DASH, UTF-8 as CP1251' ],
+		[ "\x{0432}\x{0402}\x{201D}", 'EM-DASH, UTF-8 as CP1251' ],
+	);
+	for my $pair (@soup) {
+		my ( $soup, $what ) = @$pair;
+		my $c = copyright("Copyright 1999${soup}2000 $BW");
+		like "$c",   qr/1999-2000/, "$what -> hyphenated range";
+		unlike "$c", qr/\Q$soup\E/, "$what bytes gone";
+		ok length($c), 'statement still detected';
+	}
+};
+
+subtest 'lone dash-soup does not fabricate a copyright (guarded)' => sub {
+	for my $s ( "\x{E2}\x{80}\x{93}", "\x{E2}\x{20AC}\x{201C}" ) {
+		my $c = copyright("Some prose with $s and no sign context");
+		ok( defined($c), 'no crash on lone dash-soup' );
+		my $out = defined $c ? "$c" : '';
+		unlike $out, qr/©/, 'no fabricated © from lone dash-soup';
+	}
+};
+
+subtest 'warn fires when dash-soup is normalized' => sub {
+	$log->clear;
+	copyright("Copyright 1999\x{E2}\x{80}\x{93}2000 $BW");
+	$log->contains_ok(
+		qr/normalized copyright string/i,
+		'debug describes the normalization'
 	);
 	$log->clear;
 };

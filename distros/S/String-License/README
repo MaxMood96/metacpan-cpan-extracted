@@ -2,7 +2,7 @@ NAME
     String::License - detect source code license statements in a text string
 
 VERSION
-    Version v0.0.11
+    Version v0.1.1
 
 SYNOPSIS
         use String::License;

@@ -46,15 +46,15 @@
    "release_status" : "stable",
    "resources" : {
       "bugtracker" : {
-         "web" : "https://github.com/jlapeyre/PDL-Fit-Levmar/issues"
+         "web" : "https://github.com/PDLPorters/PDL-Fit-Levmar/issues"
       },
       "repository" : {
          "type" : "git",
-         "url" : "git://github.com/jlapeyre/PDL-Fit-Levmar.git",
-         "web" : "https://github.com/jlapeyre/PDL-Fit-Levmar"
+         "url" : "git://github.com/PDLPorters/PDL-Fit-Levmar.git",
+         "web" : "https://github.com/PDLPorters/PDL-Fit-Levmar"
       },
       "x_IRC" : "irc://irc.perl.org/#pdl"
    },
-   "version" : "0.0109",
+   "version" : "0.0110",
    "x_serialization_backend" : "JSON::PP version 4.04"
 }

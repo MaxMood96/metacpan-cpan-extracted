@@ -5,7 +5,12 @@ use ExtUtils::MakeMaker;
 use ExtUtils::Depends;
 use File::Find ();
 
-my $has_xsmulti = eval { ExtUtils::MakeMaker->VERSION('7.12'); 1 };
+# Apophis.xs sits at the top of the dist and the build is the plain
+# single-extension one MakeMaker defaults to. An XSMULTI build from
+# lib/Apophis.xs writes its linker export list to lib/Apophis.def, while the
+# import-library rule Strawberry adds for MinGW reads $(EXPORT_LIST), which is
+# always $(BASEEXT).def in the top directory - the two names never met and
+# dlltool failed the build (CPAN Testers, 5.42 Strawberry).
 
 # Resolve Horus include directory:
 #   1. Try installed Horus module (CPAN / system)
@@ -54,21 +59,12 @@ my %WriteMakefileArgs = (
 
     # MakeMaker does not scan XS #includes, so an edit to include/*.h would
     # otherwise rebuild nothing and the change would silently not happen.
-    depend   => { 'lib/Apophis$(OBJ_EXT)' =>
+    depend   => { 'Apophis$(OBJ_EXT)' =>
                   'include/ap_abi.h include/ap_abi_impl.h' },
 
     dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
-    clean => { FILES => 'Apophis-* lib/*.o lib/*.c lib/*.bs Install' },
+    clean => { FILES => 'Apophis-* Apophis.c Apophis.bs Install' },
 );
-
-if ($has_xsmulti) {
-    $WriteMakefileArgs{XSMULTI} = 1;
-    $WriteMakefileArgs{XS}      = { 'lib/Apophis.xs' => 'lib/Apophis.c' };
-    $WriteMakefileArgs{OBJECT}  = 'lib/Apophis$(OBJ_EXT)';
-} else {
-    $WriteMakefileArgs{XS}     = { 'lib/Apophis.xs' => 'lib/Apophis.c' };
-    $WriteMakefileArgs{OBJECT} = 'lib/Apophis$(OBJ_EXT)';
-}
 
 # Compatibility with old versions of ExtUtils::MakeMaker
 unless (eval { ExtUtils::MakeMaker->VERSION('6.64'); 1 }) {
@@ -116,11 +112,3 @@ File::Find::find(sub {
 %WriteMakefileArgs = (%WriteMakefileArgs, %dep);
 
 WriteMakefile(%WriteMakefileArgs);
-
-sub MY::postamble {
-    return '' if $has_xsmulti;
-    return <<'MAKE';
-lib/Apophis$(OBJ_EXT): lib/Apophis.c
-	$(CCCMD) $(CCCDLFLAGS) "-I$(PERL_INC)" $(PASTHRU_DEFINE) $(DEFINE) $< -o $@
-MAKE
-}

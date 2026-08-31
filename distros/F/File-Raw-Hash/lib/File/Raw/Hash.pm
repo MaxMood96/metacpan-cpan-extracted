@@ -4,7 +4,7 @@ use 5.008003;
 use strict;
 use warnings;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 use base 'File::Raw';
 
@@ -21,7 +21,7 @@ File::Raw::Hash - Cryptographic and integrity digests as a File::Raw plugin
 
 =head1 VERSION
 
-Version 0.02
+Version 0.06
 
 =head1 SYNOPSIS
 

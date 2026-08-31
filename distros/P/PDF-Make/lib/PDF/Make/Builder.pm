@@ -47,7 +47,7 @@ use PDF::Make::Signature;
 use PDF::Make::Structure;
 use PDF::Make::Watermark;
 
-our $VERSION = '0.12';
+our $VERSION = '0.13';
 
 BEGIN {
     Object::Proto::define('PDF::Make::Builder',

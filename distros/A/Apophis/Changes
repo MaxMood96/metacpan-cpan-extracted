@@ -1,8 +1,18 @@
 Revision history for Apophis
 
+0.06    2026-08-31
+        - Move Apophis.xs to the top of the dist and drop the XSMULTI
+          build, which dlltool could not link on Strawberry.
+        - Pair the stat call with its struct on Windows.
+        - Replace an existing file on rename on Windows.
+
 0.05    2026-08-20
         - ADDS: a public C ABI, ap_abi.h, reached through
-          ExtUtils::Depends and Apophis::_abi_ptr. 
+          ExtUtils::Depends and Apophis::_abi_ptr.
+        - Regenerate ppport.h with Devel::PPPort 3.73. The old copy
+          undef'd perl's STMT_START/STMT_END to force the gcc
+          brace-group form, which is what every XopENTRY_set warned
+          about under clang. 102 warnings, none of them ours.
 
 0.04	2026-07-11
 	- Remove pax headers

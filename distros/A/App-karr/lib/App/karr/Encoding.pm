@@ -1,11 +1,12 @@
 # ABSTRACT: The character/octet boundary for karr
 
 package App::karr::Encoding;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use strict;
 use warnings;
 use Exporter qw( import );
 use Encode qw( encode decode FB_CROAK LEAVE_SRC );
+use IO::Handle;
 use YAML::XS ();
 use JSON::MaybeXS ();
 
@@ -65,6 +66,11 @@ sub decode_argv {
 sub enable_std_utf8 {
   binmode STDOUT, ':encoding(UTF-8)';
   binmode STDERR, ':encoding(UTF-8)';
+  # After the binmode, and on both handles: see above (#249). The layer takes
+  # STDERR's unbuffered default away, and flushing only STDERR would invert the
+  # commands that print their outcome before they warn.
+  STDOUT->autoflush(1);
+  STDERR->autoflush(1);
   return;
 }
 
@@ -143,7 +149,7 @@ App::karr::Encoding - The character/octet boundary for karr
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -164,32 +170,34 @@ The edges, and who guards them:
 
 =over 4
 
-=item * B<C<@ARGV>> — L</decode_argv>, called from F<bin/karr> and
+=item * B<C<@ARGV>> -- L</decode_argv>, called from F<bin/karr> and
 F<bin/karr-foundation>.
 
-=item * B<C<STDOUT>/C<STDERR>> — L</enable_std_utf8>, likewise called from the
+=item * B<C<STDOUT>/C<STDERR>> -- L</enable_std_utf8>, likewise called from the
 two scripts. An in-process caller that captures output (a test, say) has to put
 the same layer on its capture handle, because reopening C<STDOUT> drops the
-layer the script installed.
+layer the script installed. The same is true of a caller that loads
+L<App::karr::Foundation> directly instead of running F<bin/karr-foundation> --
+see L<App::karr::Foundation/DESCRIPTION> for what that means in practice.
 
-=item * B<Git refs> — L<App::karr::Git/write_ref> and
+=item * B<Git refs> -- L<App::karr::Git/write_ref> and
 L<App::karr::Git/read_ref> call L</to_octets> and L</from_octets>. Blobs hold
 UTF-8 octets; everything above C<read_ref> sees characters.
 
-=item * B<Files> — L<Path::Tiny>'s C<slurp_utf8>/C<spew_utf8>, which are
+=item * B<Files> -- L<Path::Tiny>'s C<slurp_utf8>/C<spew_utf8>, which are
 already character-level. Nothing extra is needed, and nothing extra may be
 added: an C<Encode::encode> in front of a C<spew_utf8> is a double encode.
 
-=item * B<YAML> — L</yaml_dump> and L</yaml_load>. C<YAML::XS::Dump> emits
+=item * B<YAML> -- L</yaml_dump> and L</yaml_load>. C<YAML::XS::Dump> emits
 octets and C<YAML::XS::Load> expects them, which is the opposite of the rule
 above, so those two functions are never called directly. (C<DumpFile> and
 C<LoadFile> B<are> character-level and are used unwrapped.)
 
-=item * B<JSON> — L</json_encode> and L</json_decode>. The C<encode_json> and
+=item * B<JSON> -- L</json_encode> and L</json_decode>. The C<encode_json> and
 C<decode_json> functions are octet-level for the same reason and are likewise
 not used directly.
 
-=item * B<C<%ENV>> — L</to_octets_for_env> and L</from_octets_from_env>.
+=item * B<C<%ENV>> -- L</to_octets_for_env> and L</from_octets_from_env>.
 Perl's C<%ENV> is a byte boundary: assigning a character string warns
 C<Wide character in setenv>, and C<$ENV{NAME}> reads back whatever bytes
 were stored. The crossing is named here so neither side is handled ad hoc
@@ -203,7 +211,7 @@ karr up to and including 0.402 mixed the two levels, and every board written by
 those versions has UTF-8 octets encoded a second time in its task frontmatter,
 its config, and its activity log. Task bodies are unaffected: they never passed
 through C<Dump>. L</repair_mojibake> undoes exactly that second encoding, and
-L<App::karr::Git/board_encoding_version> decides when to apply it — see
+L<App::karr::Git/board_encoding_version> decides when to apply it -- see
 L<App::karr::Cmd::Repair> for the migration.
 
 =head1 SEE ALSO
@@ -271,10 +279,49 @@ left as they arrived.
   enable_std_utf8();
 
 Puts a C<:encoding(UTF-8)> layer on C<STDOUT> and C<STDERR> so command bodies
-can C<print> character strings.
+can C<print> character strings, and turns autoflush on for both.
 
-C<STDIN> is deliberately left alone. Only L<App::karr::Cmd::Restore> reads it,
-and it decodes its own payload, so a layer here would decode it twice.
+The autoflush is not a convenience -- it pays back what the layer costs. A bare
+C<STDERR> is unbuffered, so a warning printed before a result also arrives in
+a combined stream before it; the C<:encoding(UTF-8)> layer buffers, and that
+stops being true. Both handles then flushed at exit, C<STDOUT> first, so a
+combined stream carried every warning karr wrote B<after> every result it
+wrote: C<< karr delete 1 --yes 2>&1 >> reported C<Deleted task 1> above the
+warning that the deletion orphaned a dependent (#249).
+
+Both handles carry the autoflush, not just the one the layer broke.
+Autoflushing C<STDERR> alone would only turn the inversion around: L<karr
+move|App::karr::Cmd::Move> prints its outcome first and warns after, so its
+combined output would then read warning-before-outcome. With both handles
+flushed at every C<print>, a combined stream shows what the code printed, in
+the order it printed it -- which is what a terminal shows anyway, C<STDOUT>
+being line buffered and C<STDERR> unbuffered there. That is why this was never
+visible interactively and hit only whoever reads both streams as one: a
+C<< 2>&1 >> pipeline, or an agent harness capturing combined output.
+
+The price is a C<write> per C<print> instead of one per full buffer, which for
+a command that prints a board is a few hundred small writes. The one caller
+that prints steadily is L<App::karr::Foundation>, whose runner tees agent
+output; there it is a gain rather than a cost -- an operator's
+C<< karr-foundation ... > run.log >> now fills as the run happens instead of in
+4k jumps, the per-board C<fork> can no longer inherit a half-full buffer and
+write it twice (the hand-written flushes around that C<fork> stay, now as
+cheap no-ops), and parallel boards interleave at whole prints rather than at
+buffer boundaries that can split a line.
+
+C<STDIN> is deliberately left alone, and the rule is that every reader of it
+decodes what it read itself. L<App::karr::Cmd::Restore>,
+L<App::karr::Cmd::SetRefs> and L<App::karr::Foundation> slurp a whole payload,
+each setting C<binmode STDIN, ':raw'> first and passing the octets through
+L</from_octets> exactly once. A layer installed here would buy those three
+nothing -- C<:raw> pops it straight back off -- and would silently decode twice
+for a reader that ever forgot that C<binmode>. The fourth reader,
+L<App::karr::Cmd::Delete>, is the odd one out: it reads one line of typed
+answer to its confirmation. That line stays octets, which is without
+consequence only because nothing keeps it -- it is matched against C</^y/i>
+and dropped, never stored, echoed or written to a ref. A reader that starts
+using an answer as text has to decode it like the other three, rather than
+expect a layer here.
 
 =head2 yaml_dump
 
@@ -326,8 +373,8 @@ afterwards and the repair is safe to run over a whole board;
 misread as characters, so it is already correct and is left alone;
 
 =item * what remains must additionally form valid UTF-8 when read back as
-bytes. Ordinary Latin-1 text almost never does — C<"\x{fc}ber"> is C<fc 62>,
-which is not valid UTF-8 — whereas C<"\x{c3}\x{bc}ber"> is C<c3 bc 65 72>,
+bytes. Ordinary Latin-1 text almost never does -- C<"\x{fc}ber"> is C<fc 62>,
+which is not valid UTF-8 -- whereas C<"\x{c3}\x{bc}ber"> is C<c3 bc 65 72>,
 which decodes to C<"\x{fc}ber">.
 
 =back
@@ -358,9 +405,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

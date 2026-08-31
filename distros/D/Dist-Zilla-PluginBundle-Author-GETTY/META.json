@@ -36,7 +36,7 @@
             "Dist::Zilla::Plugin::AlienBuild" : "0.33",
             "Dist::Zilla::Plugin::Authority" : "1.006",
             "Dist::Zilla::Plugin::Deprecated" : "0.007",
-            "Dist::Zilla::Plugin::Docker::API" : "0.103",
+            "Dist::Zilla::Plugin::Docker::API" : "0.104",
             "Dist::Zilla::Plugin::Git::CheckFor::CorrectBranch" : "0.014",
             "Dist::Zilla::Plugin::GitHub::CreateRelease" : "0.0012",
             "Dist::Zilla::Plugin::GithubMeta" : "0.58",
@@ -69,23 +69,23 @@
    "provides" : {
       "Dist::Zilla::Plugin::Author::GETTY::GiteaMeta" : {
          "file" : "lib/Dist/Zilla/Plugin/Author/GETTY/GiteaMeta.pm",
-         "version" : "0.320"
+         "version" : "0.321"
       },
       "Dist::Zilla::PluginBundle::Author::GETTY" : {
          "file" : "lib/Dist/Zilla/PluginBundle/Author/GETTY.pm",
-         "version" : "0.320"
+         "version" : "0.321"
       },
       "Dist::Zilla::PluginBundle::Author::GETTY::Docker" : {
          "file" : "lib/Dist/Zilla/PluginBundle/Author/GETTY/Docker.pm",
-         "version" : "0.320"
+         "version" : "0.321"
       },
       "Pod::Elemental::Transformer::Author::GETTY" : {
          "file" : "lib/Pod/Elemental/Transformer/Author/GETTY.pm",
-         "version" : "0.320"
+         "version" : "0.321"
       },
       "Pod::Weaver::PluginBundle::Author::GETTY" : {
          "file" : "lib/Pod/Weaver/PluginBundle/Author/GETTY.pm",
-         "version" : "0.320"
+         "version" : "0.321"
       }
    },
    "release_status" : "stable",
@@ -100,7 +100,7 @@
          "web" : "https://github.com/Getty/p5-dist-zilla-pluginbundle-author-getty"
       }
    },
-   "version" : "0.320",
+   "version" : "0.321",
    "x_Dist_Zilla" : {
       "perl" : {
          "version" : "5.040001"
@@ -203,7 +203,7 @@
          {
             "class" : "Dist::Zilla::Plugin::LicenseFile",
             "name" : "@Author::GETTY/LicenseFile",
-            "version" : "0.001"
+            "version" : "0.002"
          },
          {
             "class" : "Dist::Zilla::Plugin::MetaConfig",
@@ -470,7 +470,7 @@
                   "branch" : null,
                   "changelog" : "Changes",
                   "signed" : 0,
-                  "tag" : "0.320",
+                  "tag" : "0.321",
                   "tag_format" : "%v",
                   "tag_message" : "v%V"
                },

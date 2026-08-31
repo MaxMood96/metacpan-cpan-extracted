@@ -1,5 +1,8 @@
 Revision history for File-Raw
 
+0.16    2026-08-31
+        - Report a real dev and ino on Windows, which stat() leaves at 0.
+
 0.15    2026-08-24
         - Windows/MSVC: export the plugin registry and dispatch API from
           Raw.dll.

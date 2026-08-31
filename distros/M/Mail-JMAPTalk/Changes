@@ -1,5 +1,18 @@
 Revision history for Perl extension Mail::JMAPTalk.
 
+0.18    Mon Aug 31 2026
+    - clarify licensing: same terms as Perl itself (Artistic License 1.0
+      or GPL version 1 or later)
+    - include a LICENSE file in the distribution
+    - use core MIME::Base64 instead of Convert::Base64
+    - File::LibMagic is now optional: it is loaded only when Upload() is
+      called without an explicit mimetype, and falls back to
+      "application/octet-stream" if it isn't installed.  Moved from
+      requires to recommends
+    - declare Test::More in TEST_REQUIRES
+    - uncomment LICENSE => Perl_5 in Makefile.PL (metadata previously
+      said "unknown")
+
 0.17  Sun Jan 26 23:31:00 AEST 2025
     - pass through SSL_options to HTTP::Tiny
 

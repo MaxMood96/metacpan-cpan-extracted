@@ -28,16 +28,16 @@ optional_features: {}
 provides:
   String::License:
     file: lib/String/License.pm
-    version: v0.0.11
+    version: v0.1.1
   String::License::Naming:
     file: lib/String/License/Naming.pm
-    version: v0.0.11
+    version: v0.1.1
   String::License::Naming::Custom:
     file: lib/String/License/Naming/Custom.pm
-    version: v0.0.11
+    version: v0.1.1
   String::License::Naming::SPDX:
     file: lib/String/License/Naming/SPDX.pm
-    version: v0.0.11
+    version: v0.1.1
 recommends:
   re::engine::RE2: '0'
 requires:
@@ -49,16 +49,16 @@ requires:
   Regexp::Pattern: v0.2.12
   Regexp::Pattern::License: v3.4.0
   namespace::clean: '0'
-  perl: '5.020000'
+  perl: '5.040000'
 resources:
   Identifier: http://purl.org/NET/cpan-uri/dist/String-License/project
   bugtracker: https://rt.cpan.org/Dist/Display.html?Queue=String-License
   homepage: https://metacpan.org/pod/String::License
   license: http://www.gnu.org/licenses/agpl-3.0.txt
   repository: https://salsa.debian.org/build-common-team/p5-string-license
-version: v0.0.11
+version: v0.1.1
 x_help_wanted:
-  - tester
   - documenter
-x_serialization_backend: 'CPAN::Meta::YAML version 0.018'
+  - tester
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'
 x_static_install: 1

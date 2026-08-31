@@ -887,6 +887,199 @@ subtest 'EC15: filesystem hostility' => sub {
 };
 
 # ===========================================================================
+# EC18 — 'table' parameter: comprehensive injection and boundary tests
+# Purpose: new() validates the 'table' constructor parameter against
+# $SAFE_QUALIFIED at construction time for both direct and clone invocations.
+# A hostile table name must croak before any DBI or filesystem call.
+# The SAFE_QUALIFIED regex is: \A[a-zA-Z_][a-zA-Z0-9_.]*\z
+# Dots are intentionally allowed for schema.table notation.
+# ===========================================================================
+
+subtest 'EC18: table parameter security and boundary conditions' => sub {
+	plan tests => 12;
+
+	{ package Database::ec18; use parent 'Database::Abstraction'; }
+
+	# EC18.1 — plain valid table name accepted (no injection risk)
+	lives_ok { Database::ec18->new(directory => $DATA_DIR, table => 'test1') }
+		'EC18.1 valid table name "test1" accepted at new()';
+
+	# EC18.2 — dotted table name is allowed by SAFE_QUALIFIED (schema.table notation)
+	lives_ok { Database::ec18->new(directory => $DATA_DIR, table => 'myschema.mytable') }
+		'EC18.2 dotted table name "myschema.mytable" accepted by SAFE_QUALIFIED';
+
+	# EC18.3 — underscore-prefixed name: valid identifier
+	lives_ok { Database::ec18->new(directory => $DATA_DIR, table => '_private') }
+		'EC18.3 underscore-prefixed table name accepted';
+
+	# EC18.4 — semicolon: classic statement-terminator injection
+	throws_ok {
+		Database::ec18->new(directory => $DATA_DIR, table => 'bad; DROP TABLE ec18--')
+	} qr/unsafe table name/i,
+		'EC18.4 semicolon in table name croaks at new()';
+
+	# EC18.5 — SQL single-quote: value-boundary escape injection
+	throws_ok {
+		Database::ec18->new(directory => $DATA_DIR, table => "tbl'OR'1'='1")
+	} qr/unsafe table name/i,
+		"EC18.5 single-quote in table name croaks at new()";
+
+	# EC18.6 — space: allows keyword injection via identifier interpolation
+	throws_ok {
+		Database::ec18->new(directory => $DATA_DIR, table => 'my table')
+	} qr/unsafe table name/i,
+		'EC18.6 space in table name croaks at new()';
+
+	# EC18.7 — leading digit: not a valid SQL identifier start
+	throws_ok {
+		Database::ec18->new(directory => $DATA_DIR, table => '1invalid')
+	} qr/unsafe table name/i,
+		'EC18.7 leading-digit table name croaks at new()';
+
+	# EC18.8 — empty string: fails the leading [a-zA-Z_] anchor
+	throws_ok {
+		Database::ec18->new(directory => $DATA_DIR, table => '')
+	} qr/unsafe table name/i,
+		'EC18.8 empty string table name croaks at new()';
+
+	# EC18.9 — NUL byte: must be rejected (regex \z anchor does not match mid-string NUL)
+	throws_ok {
+		Database::ec18->new(directory => $DATA_DIR, table => "Sheet1\x00injection")
+	} qr/unsafe table name/i,
+		'EC18.9 NUL byte in table name croaks at new()';
+
+	# EC18.10 — CRLF injection: embedded newline attempts header injection
+	throws_ok {
+		Database::ec18->new(directory => $DATA_DIR, table => "Sheet1\r\ninjection")
+	} qr/unsafe table name/i,
+		'EC18.10 CRLF in table name croaks at new()';
+
+	# EC18.11 — parenthesis: SQL function-call injection attempt
+	throws_ok {
+		Database::ec18->new(directory => $DATA_DIR, table => 'drop()')
+	} qr/unsafe table name/i,
+		'EC18.11 parenthesis in table name croaks at new()';
+
+	# EC18.12 — clone path: ->new() on a blessed instance must validate 'table'.
+	# This mirrors the clone-path id bypass fixed in 0.37 (see EC14.6) and asserts
+	# the same guard now applies to the 'table' parameter in the clone branch.
+	my $base = Database::ec18->new(directory => $DATA_DIR);
+	throws_ok { $base->new(table => 'bad; inject') }
+		qr/unsafe table name/i,
+		'EC18.12 clone-path new() validates table parameter';
+};
+
+# ===========================================================================
+# EC19 — XLSX backend: hostile conditions and boundary cases
+# Purpose: exercise the DBD::Excel-backed XLSX path under corrupted files,
+# worksheet isolation failures, and resource lifecycle edge cases.  The goal
+# is to ensure no segfaults, no data bleed between worksheets, and that the
+# DESTROY lifecycle is clean.
+# ===========================================================================
+
+my $have_xlsx_ec = eval {
+	require DBD::Excel;
+	require Spreadsheet::WriteExcel;
+	1;
+};
+
+SKIP: {
+	skip 'DBD::Excel or Spreadsheet::WriteExcel not available for EC19', 10
+		unless $have_xlsx_ec;
+
+	{ package Database::ec19; use parent 'Database::Abstraction'; }
+
+	# Build a two-worksheet fixture:
+	#   ec19  — entry / value   (2 rows)
+	#   other — entry / score   (1 row)
+	my $ec19_dir  = tempdir(CLEANUP => 1);
+	my $ec19_xlsx = File::Spec->catfile($ec19_dir, 'ec19.xlsx');
+	{
+		my $wb  = Spreadsheet::WriteExcel->new($ec19_xlsx);
+		my $ws1 = $wb->add_worksheet('ec19');
+		$ws1->write(0, 0, 'entry'); $ws1->write(0, 1, 'value');
+		$ws1->write(1, 0, 'alpha'); $ws1->write(1, 1, 10);
+		$ws1->write(2, 0, 'beta');  $ws1->write(2, 1, 20);
+		my $ws2 = $wb->add_worksheet('other');
+		$ws2->write(0, 0, 'entry'); $ws2->write(0, 1, 'score');
+		$ws2->write(1, 0, 'gamma'); $ws2->write(1, 1, 99);
+		$wb->close();
+	}
+
+	my $db_prim = Database::ec19->new(directory => $ec19_dir);
+	my $db_over = Database::ec19->new(directory => $ec19_dir, table => 'other');
+
+	# EC19.1 — primary worksheet: count == 2
+	is($db_prim->count(), 2, 'EC19.1 XLSX primary worksheet count() == 2');
+
+	# EC19.2 — type is set to 'Excel' after the first query
+	is($db_prim->{'type'}, 'Excel',
+		'EC19.2 XLSX backend type is "Excel" after first query');
+
+	# EC19.3 — table-override worksheet returns a different row count,
+	# proving the active worksheet changed and is independent of the primary.
+	is($db_over->count(), 1,
+		'EC19.3 table-override worksheet "other" has 1 row (no bleed from primary)');
+
+	# EC19.4 — data isolation: the override worksheet does not expose the 'value'
+	# column defined in the primary worksheet; fetchrow_hashref by 'alpha' returns
+	# undef because 'alpha' exists only in the 'ec19' worksheet.
+	my $bleed_row = $db_over->fetchrow_hashref(entry => 'alpha');
+	ok(!defined($bleed_row),
+		'EC19.4 table-override: primary entry "alpha" is not visible in override worksheet');
+
+	# EC19.5 — two independent objects: data for one does not overwrite the other.
+	# Both run queries concurrently to stress-test internal handle isolation.
+	my $p1 = $db_prim->fetchrow_hashref(entry => 'beta');
+	my $p2 = $db_over->fetchrow_hashref(entry => 'gamma');
+	ok(defined($p1) && defined($p2) && $p1->{'value'} == 20 && $p2->{'score'} == 99,
+		'EC19.5 concurrent queries on independent objects return correct isolated data');
+
+	# EC19.6 — 0-byte file named ec19zero.xlsx must not segfault.
+	# DBD::Excel is expected to croak at connect time; that is acceptable.
+	# We only assert that the process does not die unexpectedly (segfault, SIGABRT).
+	{
+		{ package Database::ec19zero; use parent 'Database::Abstraction'; }
+		my $zero_dir = tempdir(CLEANUP => 1);
+		open my $fh, '>', File::Spec->catfile($zero_dir, 'ec19zero.xlsx'); close $fh;
+		eval { Database::ec19zero->new(directory => $zero_dir)->count() };
+		ok(1, 'EC19.6 0-byte .xlsx file does not segfault (croak at connect is acceptable)');
+		diag "EC19.6 error was: $@" if $@ && $ENV{TEST_VERBOSE};
+	}
+
+	# EC19.7 — random-bytes file masquerading as .xlsx must not segfault.
+	{
+		{ package Database::ec19junk; use parent 'Database::Abstraction'; }
+		my $junk_dir  = tempdir(CLEANUP => 1);
+		my $junk_path = File::Spec->catfile($junk_dir, 'ec19junk.xlsx');
+		open my $fh, '>', $junk_path;
+		print {$fh} "\xde\xad\xbe\xef" x 256;  # garbage bytes; not a real XLSX
+		close $fh;
+		eval { Database::ec19junk->new(directory => $junk_dir)->count() };
+		ok(1, 'EC19.7 garbage-bytes .xlsx does not segfault');
+		diag "EC19.7 error was: $@" if $@ && $ENV{TEST_VERBOSE};
+	}
+
+	# EC19.8 — columns() returns a non-empty arrayref after a query on XLSX.
+	my $cols19 = $db_prim->columns();
+	ok(ref($cols19) eq 'ARRAY' && scalar(@{$cols19}) > 0,
+		'EC19.8 XLSX columns() returns non-empty arrayref after query');
+
+	# EC19.9 — DESTROY on an XLSX-backed object does not throw.
+	{
+		my $tmp_db = Database::ec19->new(directory => $ec19_dir);
+		$tmp_db->count();    # trigger _open() so type / handle are set
+		lives_ok { $tmp_db->DESTROY() }
+			'EC19.9 DESTROY on XLSX-backed object does not throw';
+	}
+
+	# EC19.10 — fetchrow_hashref miss on XLSX returns undef, not a crash.
+	my $miss = $db_prim->fetchrow_hashref(entry => '__no_such_entry_xyz__');
+	ok(!defined($miss),
+		'EC19.10 fetchrow_hashref miss on XLSX returns undef (not a crash)');
+}
+
+# ===========================================================================
 # EC16 — Pathological criteria values
 # Purpose: criteria values containing NUL bytes, shell metacharacters,
 # SQL injection payloads, or extreme lengths must not crash the module or

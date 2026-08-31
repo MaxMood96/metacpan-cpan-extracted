@@ -32,6 +32,27 @@ ok(!$st->{is_dir}, 'is_dir is false');
 ok($st->{ino} > 0, 'ino is positive');
 ok($st->{nlink} >= 1, 'nlink is at least 1');
 
+# dev+ino must identify a file: stable across calls for one file, and
+# different between two files. Windows' stat() leaves both 0, which passes
+# a "looks like a number" check but makes every file compare equal.
+{
+    my ($fh2, $other_file) = tempfile(UNLINK => 1);
+    print $fh2 "a different file\n";
+    close $fh2;
+
+    File::Raw::clear_stat_cache();
+    my $a = File::Raw::stat($test_file);
+    File::Raw::clear_stat_cache();
+    my $b = File::Raw::stat($test_file);
+    File::Raw::clear_stat_cache();
+    my $c = File::Raw::stat($other_file);
+
+    is("$a->{dev}:$a->{ino}", "$b->{dev}:$b->{ino}",
+       'dev+ino is stable across calls for the same file');
+    isnt("$a->{dev}:$a->{ino}", "$c->{dev}:$c->{ino}",
+         'dev+ino differs between two files');
+}
+
 # Test stat on directory
 my $test_dir = tempdir(CLEANUP => 1);
 my $st_dir = File::Raw::stat($test_dir);

@@ -1,7 +1,7 @@
 # ABSTRACT: Internal FFI::Platypus instance for Git::Libgit2
 
 package Git::Libgit2::FFI;
-our $VERSION = '0.006';
+our $VERSION = '0.007';
 use strict;
 use warnings;
 use FFI::Platypus 2.00;
@@ -79,16 +79,26 @@ sub _attach_all {
   _attach git_libgit2_version  => [ 'int*', 'int*', 'int*' ]  => 'int';
 
   # git_libgit2_opts is variadic (int option, ...). FFI::Platypus requires the
-  # variable-argument types to be fixed at attach time, so this single function
-  # object serves exactly the two-vararg (int, string) form — i.e. only
-  # GIT_OPT_SET_SEARCH_PATH. Every option with a different vararg signature
-  # needs its own function object via $ffi->function(...) at the call site;
-  # that explicitly includes the one-string options such as
-  # GIT_OPT_SET_TEMPLATE_PATH, not just obviously different ones like
-  # SET_MWINDOW_SIZE (size_t). A mismatched argument list is not reported as
-  # a return code — libgit2 va_arg's whatever is on the stack. Not wrapped via
-  # _attach because the helper takes one args array, not a fixed/var split.
+  # variable-argument types to be fixed at attach time, so one function object
+  # serves exactly one vararg shape. Two are bound here, under two Perl names:
+  # the (int, string) form — i.e. only GIT_OPT_SET_SEARCH_PATH — and the
+  # (int, int) form, which covers the millisecond timeouts
+  # GIT_OPT_SET_SERVER_CONNECT_TIMEOUT and GIT_OPT_SET_SERVER_TIMEOUT (and the
+  # int-valued switches such as GIT_OPT_ENABLE_CACHING). Every option whose
+  # varargs match neither still needs its own function object via
+  # $ffi->function(...) at the call site; that explicitly includes the
+  # one-string options such as GIT_OPT_SET_TEMPLATE_PATH, not just obviously
+  # different ones like SET_MWINDOW_SIZE (size_t). A mismatched argument list
+  # is not reported as a return code — libgit2 va_arg's whatever is on the
+  # stack. Not wrapped via _attach because the helper takes one args array,
+  # not a fixed/var split.
+  #
+  # The GET_* counterparts are deliberately absent: their vararg is an out
+  # pointer, and FFI::Platypus 2.11 segfaults on a pointer type in a variadic
+  # argument list (`int*` here), rather than returning a value.
   $ffi->attach( 'git_libgit2_opts' => [ 'int' ] => [ 'int', 'string' ] => 'int' );
+  $ffi->attach( [ 'git_libgit2_opts' => 'git_libgit2_opts_int' ]
+      => [ 'int' ] => [ 'int', 'int' ] => 'int' );
 
   # ========================
   # Error
@@ -501,7 +511,7 @@ Git::Libgit2::FFI - Internal FFI::Platypus instance for Git::Libgit2
 
 =head1 VERSION
 
-version 0.006
+version 0.007
 
 =head1 SYNOPSIS
 
@@ -527,9 +537,7 @@ first call: it opens the L<Alien::Libgit2> dynamic library, registers the
 libgit2 opaque types and callback signatures, and attaches every bound
 function. Internal — consumers should use L<Git::Libgit2> instead.
 
-=head1 GROUPS
-
-=head2 Library Init / Shutdown
+=head1 LIBRARY INIT / SHUTDOWN
 
 =head2 git_libgit2_init
 
@@ -548,7 +556,7 @@ Decrement the libgit2 reference count. Returns the remaining count.
 
     Git::Libgit2::FFI::git_libgit2_version(\my $maj, \my $min, \my $rev);
 
-Store the library version into the three Integer references.
+Store the library version into the three integer references.
 
 =head2 git_libgit2_opts
 
@@ -573,9 +581,32 @@ C<opts(GIT_OPT_SET_TEMPLATE_PATH, const char *path)>, one vararg, not two —
 as much as the obviously different ones like C<SET_MWINDOW_SIZE> (a
 C<size_t>). A mismatched argument list is B<not> reported back as an error
 code: libgit2 C<va_arg>s whatever sits on the stack, so a surplus leading
-C<int> would be consumed as the C<const char *> and dereferenced.
+C<int> would be consumed as the C<const char *> and dereferenced. The
+C<(int, int)> shape has its own binding, C<git_libgit2_opts_int>.
 
-=head2 Error
+=head2 git_libgit2_opts_int
+
+    Git::Libgit2::FFI::git_libgit2_opts_int(GIT_OPT_SET_SERVER_TIMEOUT, 30_000);
+
+The same C function as C<git_libgit2_opts>, attached under a second name for
+the C<(int, int)> vararg shape — one C<int> option followed by one C<int>
+value. It covers the two network timeouts, C<GIT_OPT_SET_SERVER_CONNECT_TIMEOUT>
+and C<GIT_OPT_SET_SERVER_TIMEOUT> (both in milliseconds, both C<0> for no
+limit at all), and the C<int>-valued switches such as
+C<GIT_OPT_ENABLE_CACHING>. Returns C<0> on success.
+
+The two timeouts arrived in libgit2 1.8, though the ssh transport ignored
+C<GIT_OPT_SET_SERVER_TIMEOUT> until 1.9.3. Against an older library their
+option values are past the end of the enum, and libgit2 answers C<-1>
+("invalid option") rather than acting — worth checking, because the default
+of no limit means a remote that accepts the connection and then stops talking
+blocks the calling thread indefinitely, with no callback in between.
+
+The matching C<GIT_OPT_GET_*> options are not reachable from Perl at all:
+their vararg is an out pointer, and FFI::Platypus 2.11 segfaults when a
+pointer type appears in a variadic argument list.
+
+=head1 ERROR
 
 =head2 git_error_last
 
@@ -589,7 +620,7 @@ Return the current thread-local error struct pointer.
 
 Clear the current thread-local error state.
 
-=head2 Repository
+=head1 REPOSITORY
 
 =head2 git_repository_open
 
@@ -599,7 +630,7 @@ Open a repository at the given path. Free with C<git_repository_free>.
 
 =head2 git_repository_open_ext
 
-    Git::Libgit2::FFI::git_repository_open_ext(\my $repo, $path, $flags, $ceiled_paths);
+    Git::Libgit2::FFI::git_repository_open_ext(\my $repo, $path, $flags, $ceiling_dirs);
 
 Open a repository with extended options. See libgit2 docs for flag values.
 
@@ -689,7 +720,7 @@ Get a snapshot of the repository's config. Free with C<git_config_free>.
 
 Get the repository's object database. Free with C<git_odb_free>.
 
-=head2 Config
+=head1 CONFIG
 
 =head2 git_config_open_default
 
@@ -728,7 +759,7 @@ Write a string config value.
 
 Free the config handle.
 
-=head2 OID
+=head1 OID
 
 =head2 git_oid_fromstr
 
@@ -748,7 +779,7 @@ Write the OID as a 40-char hex string into the buffer.
 
 Compare two OIDs. Returns <0, 0, or >0.
 
-=head2 Reference
+=head1 REFERENCE
 
 =head2 git_reference_lookup
 
@@ -913,7 +944,7 @@ Return true if the reference lives under C<refs/remotes/>.
 
 Return true if the reference lives under C<refs/tags/>.
 
-=head2 Object
+=head1 OBJECT
 
 =head2 git_object_lookup
 
@@ -950,7 +981,7 @@ Get the type of an object.
 
 Free the object handle.
 
-=head2 Blob
+=head1 BLOB
 
 =head2 git_blob_create_from_buffer
 
@@ -990,7 +1021,7 @@ Return true if the blob appears to be binary data.
 
 Free the blob handle.
 
-=head2 Tree
+=head1 TREE
 
 =head2 git_tree_lookup
 
@@ -1046,7 +1077,7 @@ Return the object type of the entry (C<GIT_OBJECT_BLOB>, etc.).
 
 Free the tree handle.
 
-=head2 TreeBuilder
+=head1 TREEBUILDER
 
 =head2 git_treebuilder_new
 
@@ -1078,7 +1109,7 @@ Write the tree and return its OID.
 
 Free the tree builder.
 
-=head2 Commit
+=head1 COMMIT
 
 =head2 git_commit_lookup
 
@@ -1165,7 +1196,7 @@ line).
 
 Free the commit handle.
 
-=head2 Signature
+=head1 SIGNATURE
 
 =head2 git_signature_new
 
@@ -1191,7 +1222,7 @@ Create a signature from the repository config. Free with C<git_signature_free>.
 
 Free the signature handle.
 
-=head2 Remote
+=head1 REMOTE
 
 =head2 git_remote_lookup
 
@@ -1241,6 +1272,27 @@ Fetch using the remote. See also C<git_fetch_options_init>.
 
 Push using the remote. See also C<git_push_options_init>.
 
+=head2 git_fetch_options_init
+
+    Git::Libgit2::FFI::git_fetch_options_init($opts_ptr, 1);   # GIT_FETCH_OPTIONS_VERSION
+
+Fill a caller-allocated C<git_fetch_options> struct with libgit2's defaults.
+Allocate generously (the struct embeds C<git_remote_callbacks> and has grown
+across releases) and zero the buffer first.
+
+The struct is B<not> layout-stable between libgit2 versions, so do not compile
+in field offsets. For the C<prune> field there is
+L<Git::Libgit2/fetch_options_prune_offset>, which probes the offset from the
+library this process is linked against.
+
+=head2 git_push_options_init
+
+    Git::Libgit2::FFI::git_push_options_init($opts_ptr, 1);   # GIT_PUSH_OPTIONS_VERSION
+
+Fill a caller-allocated C<git_push_options> struct with libgit2's defaults.
+Same allocation caveat as C<git_fetch_options_init>: it embeds
+C<git_remote_callbacks> too.
+
 =head2 git_remote_connect
 
     Git::Libgit2::FFI::git_remote_connect($remote, $direction, $callbacks, $options, $resolved_url);
@@ -1265,7 +1317,7 @@ Disconnect from the remote.
 
 Free the remote handle.
 
-=head2 Credentials
+=head1 CREDENTIALS
 
 =head2 git_credential_userpass_plaintext_new
 
@@ -1303,7 +1355,7 @@ Create a username-only credential.
 
 Free the credential handle.
 
-=head2 Clone
+=head1 CLONE
 
 =head2 git_clone_options_init
 
@@ -1317,7 +1369,7 @@ Initialize clone options struct.
 
 Clone a repository. Free the repo with C<git_repository_free>.
 
-=head2 Strarray
+=head1 STRARRAY
 
 =head2 git_strarray_free
 
@@ -1325,7 +1377,7 @@ Clone a repository. Free the repo with C<git_repository_free>.
 
 Free a strarray (used by tag list, branch list iteration, etc.).
 
-=head2 Revwalk
+=head1 REVWALK
 
 =head2 git_revwalk_new
 
@@ -1417,7 +1469,7 @@ Simplify the walk to first-parent only.
 
 Free the revision walker.
 
-=head2 Branch
+=head1 BRANCH
 
 =head2 git_branch_create
 
@@ -1473,7 +1525,7 @@ Return true if the branch is HEAD.
 
 Rename a branch. Free with C<git_reference_free>.
 
-=head2 Status
+=head1 STATUS
 
 =head2 git_status_options_init
 
@@ -1499,7 +1551,7 @@ Like C<git_status_foreach> but with extended options.
 
 Get the status flags for a single file.
 
-=head2 Tag
+=head1 TAG
 
 =head2 git_tag_create
 
@@ -1579,7 +1631,7 @@ Return the tagger signature.
 
 Free the tag handle.
 
-=head2 Diff
+=head1 DIFF
 
 =head2 git_diff_options_init
 
@@ -1629,7 +1681,7 @@ Return the delta at the given index.
 
 Free the diff handle.
 
-=head2 Index
+=head1 INDEX
 
 =head2 git_index_open
 
@@ -1752,7 +1804,7 @@ C<git_index_find> instead.
 
 Free the index handle.
 
-=head2 Checkout
+=head1 CHECKOUT
 
 =head2 git_checkout_options_init
 
@@ -1778,7 +1830,7 @@ Checkout the index (or a given tree) to the working directory.
 
 Checkout an arbitrary treeish object to the working directory.
 
-=head2 Revparse
+=head1 REVPARSE
 
 =head2 git_revparse_single
 
@@ -1792,7 +1844,7 @@ Resolve a revision spec to a single object. Free with C<git_object_free>.
 
 Resolve a revision spec to an object and its reference.
 
-=head2 Reset
+=head1 RESET
 
 =head2 git_reset
 
@@ -1806,7 +1858,7 @@ Reset a repository to a given state.
 
 Reset specific paths in the index.
 
-=head2 Merge
+=head1 MERGE
 
 =head2 git_annotated_commit_lookup
 
@@ -1856,7 +1908,7 @@ Analyze a merge situation.
 
 Initialize merge options struct.
 
-=head2 Graph
+=head1 GRAPH
 
 =head2 git_graph_ahead_behind
 
@@ -1870,7 +1922,7 @@ Count commits that are ahead and behind a given commit.
 
 Return true if C<$commit> is a descendant of C<$ancestor>.
 
-=head2 Stash
+=head1 STASH
 
 =head2 git_stash_save
 
@@ -1890,7 +1942,7 @@ Apply a stash by index.
 
 Drop a stash by index.
 
-=head2 Reflog
+=head1 REFLOG
 
 =head2 git_reflog_read
 
@@ -1928,7 +1980,7 @@ Return the message of the entry.
 
 Free the reflog handle.
 
-=head2 Rebase
+=head1 REBASE
 
 =head2 git_rebase_init
 
@@ -2020,7 +2072,7 @@ Return the onto reference name.
 
 Return the onto OID.
 
-=head2 Cherry-pick
+=head1 CHERRY-PICK
 
 =head2 git_cherrypick
 
@@ -2054,7 +2106,7 @@ fails with "mainline branch specified but ... is not a merge commit".
 
 Initialize cherry-pick options struct.
 
-=head2 Revert
+=head1 REVERT
 
 =head2 git_revert
 
@@ -2084,7 +2136,7 @@ ordinary commit, the parent index for a merge.
 
 Initialize revert options struct.
 
-=head2 ODB
+=head1 ODB
 
 =head2 git_odb_new
 

@@ -81,6 +81,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sched.h>
+#include <poll.h>
 #endif
 #include <string.h>
 #include <stdint.h>
@@ -101,6 +102,22 @@
 #  define hm_bus_yield() SwitchToThread()
 #else
 #  define hm_bus_yield() sched_yield()
+#endif
+
+/* Give the CPU back for a fixed LENGTH OF TIME, which a yield does not.
+ *
+ * sched_yield returns as soon as nothing else wants the CPU, so a budget of
+ * ten thousand of them can be spent in a few milliseconds - and a publisher on
+ * an oversubscribed box is descheduled for longer than that. A yield bounds
+ * the wait in run-queue turns; only a sleep bounds it in the units the delay
+ * is actually measured in. */
+/* poll(2) with nothing to poll, rather than nanosleep: nanosleep lives in
+ * librt on the older Solaris toolchains and this header is published for
+ * consumers that link nothing but libc. */
+#ifdef _WIN32
+#  define hm_bus_nap() Sleep(1)
+#else
+#  define hm_bus_nap() poll((struct pollfd *)0, (nfds_t)0, 1)
 #endif
 
 #if !defined(MAP_ANONYMOUS) && defined(MAP_ANON)
@@ -133,6 +150,20 @@
  * killed between reserving a sequence and writing it costs one gap rather
  * than a wedged pool. */
 #define HM_BUS_CLAIM_YIELD 10000
+/* ... and then sleeps, because the yield budget is not a length of time.
+ *
+ * The same smoker signature came back after the yields went in - 39 of 40
+ * handled, one gap, in a ring with 24 slots free and nothing that could have
+ * lapped. Ten thousand yields against three other spinning claimers is a few
+ * milliseconds of wall clock, and a publisher on a loaded box loses the CPU
+ * for longer than that between reserving its sequence and writing the slot.
+ *
+ * 1000 x 1ms is a second of real time before the message is written off, so
+ * the wait now outlasts a scheduling delay rather than a run-queue turn. The
+ * cost when a publisher really did die mid-write is that one claimer stalls
+ * for a second, once, per lost message - paid only in a case that has already
+ * gone wrong, and cheaper than the silent loss it replaces. */
+#define HM_BUS_CLAIM_NAP 1000
 #define HM_BUS_WAKERS     256      /* one per worker; the pool is smaller */
 #define HM_BUS_SUBS       64       /* registrations per process */
 
@@ -709,7 +740,7 @@ static long hm_bus_claim(int gidx, hm_bus_cb cb, void *ud) {
              * discard a message nobody else can pick up. The wait is bounded,
              * because the publisher is doing one memcpy and a store, and a
              * publisher that died mid-write must not wedge the pool. */
-            int r, spin = 0, yields = 0;
+            int r, spin = 0, yields = 0, naps = 0;
 
             while ((r = hm_bus_read_slot(a, mine, &tl, &pl))
                        == HM_BUS_READ_PENDING && ++spin < HM_BUS_CLAIM_SPIN)
@@ -733,13 +764,19 @@ static long hm_bus_claim(int gidx, hm_bus_cb cb, void *ud) {
              * smokers caught: 39 of 40 handled, one gap, in a ring that had
              * 24 free slots and could not have lapped anything.
              *
-             * So yield, and keep yielding. The bound stays - a publisher
-             * killed mid-write must not wedge the pool forever - but it is
-             * now a bound on SCHEDULER time rather than on instructions, and
-             * a gap is counted only once a real publisher has had every
-             * chance to finish. */
+             * So yield, and then SLEEP. The bound stays - a publisher killed
+             * mid-write must not wedge the pool forever - but it is now a
+             * bound on real time rather than on instructions or on run-queue
+             * turns, and a gap is counted only once a live publisher has had
+             * every chance to finish. Yields first because the common case is
+             * a publisher one memcpy from done, and a millisecond of sleep is
+             * an eternity to pay for that. */
             while (r == HM_BUS_READ_PENDING && ++yields < HM_BUS_CLAIM_YIELD) {
                 hm_bus_yield();
+                r = hm_bus_read_slot(a, mine, &tl, &pl);
+            }
+            while (r == HM_BUS_READ_PENDING && ++naps < HM_BUS_CLAIM_NAP) {
+                hm_bus_nap();
                 r = hm_bus_read_slot(a, mine, &tl, &pl);
             }
 

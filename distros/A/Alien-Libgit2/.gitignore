@@ -1,17 +1,18 @@
-# Claude Code — commit: skills/, agents/, hooks/, settings.json
+# Claude Code — commit: skills/, agents/, rules/, hooks/, settings.json
 # Ignore: local overrides, credentials, session data
 
 # Tracked: shared config & extensibility
 !/.claude/
 .claude/*
 !.claude/settings.json
-!.claude/settings.local.json
 !.claude/agents/
 !.claude/agents/**
 !.claude/skills/
 !.claude/skills/**
 !.claude/hooks/
 !.claude/hooks/**
+!.claude/rules/
+!.claude/rules/**
 
 # Local overrides (machine-specific)
 .claude/*.local.*
@@ -40,8 +41,12 @@ blib/
 # Coverage
 /cover_db/
 
-# Release artifacts (Dist-Name-X.Y.Z)
-[Dd]ist-*/
+# Release artifacts (dzil build / dzil release)
+/Alien-Libgit2-*/
+/Alien-Libgit2-*.tar.gz
+
+# Alien share-build workdir
+/_alien/
 
 # Carton / Dependency Manager
 /local/
@@ -64,8 +69,11 @@ blib/
 # Environment
 .env
 .envrc
-.build/
-Alien-Libgit2-*/
-Alien-Libgit2-*.tar.gz
-_alien/
+
+# Other agent harnesses — Claude Code config is tracked above
 AGENTS.md
+
+
+# karr materialized task view -- never commit
+tasks/
+config.yml

@@ -1,0 +1,48 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use FindBin qw($RealBin);
+use lib "$RealBin/../lib";
+use Getopt::Long qw(GetOptions);
+use Sim::OPT::StructureDesignProcedure qw(load_procedure run_procedure);
+
+my ($commit, $from, $only, $force, $accept_runtime_change, $accept_tail_change, $help) = (0, '', '', 0, 0, 0, 0);
+GetOptions(
+    'commit!' => \$commit,
+    'from=s'  => \$from,
+    'only=s'  => \$only,
+    'force!'  => \$force,
+    'accept-runtime-change!' => \$accept_runtime_change,
+    'accept-tail-change!'    => \$accept_tail_change,
+    'help|h'  => \$help,
+) or die usage();
+
+if ($help || @ARGV != 1) {
+    print usage();
+    exit($help ? 0 : 2);
+}
+
+my $file = $ARGV[0];
+my $p = load_procedure($file);
+run_procedure($p,
+    commit => $commit,
+    (length($from) ? (from => $from) : ()),
+    (length($only) ? (only => $only) : ()),
+    force => $force,
+    accept_runtime_change => $accept_runtime_change,
+    accept_tail_change => $accept_tail_change,
+);
+
+sub usage {
+    return <<'TXT';
+Usage:
+  structuredesign-run [--commit] [--from STEP] [--only STEP] [--force] [--accept-runtime-change] [--accept-tail-change] procedure.pl
+
+Without --commit the procedure is only planned; OPT and filesystem transformations
+are not executed. With --commit, completed unchanged steps are checkpointed and
+skipped on restart. --accept-runtime-change is only for an explicit --from resume
+after an intentional runtime-only bugfix; prerequisite step signatures are still checked.
+--accept-tail-change permits an explicit --from resume after changing only the named
+step or later procedure declarations; all completed prerequisite step signatures are checked.
+TXT
+}

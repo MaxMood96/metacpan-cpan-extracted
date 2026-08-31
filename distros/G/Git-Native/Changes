@@ -1,5 +1,55 @@
 Revision history for Git-Native
 
+0.006     2026-08-30 14:35:09Z
+  - Remote: read the git_cert_hostkey field offsets from
+    Git::Libgit2::cert_hostkey_offsets (new in 0.007) instead of
+    compiling in the 1.5.x numbers. The values are identical on every
+    supported ABI; the difference is one source of truth next to the
+    binding, derived from the ABI, with t/75-cert-hostkey-layout.t still
+    cross-checking against offsetof() wherever a compiler is available.
+  - Git::Native: drop `use Moo` from the entry-point package, which takes
+    the constructor away with it. The package declares no attributes and
+    every sub in it is a class method, so Git::Native->new returned an
+    object no method ever read - indistinguishable from passing the class
+    name, which is what every caller did anyway. Nothing in this
+    distribution or in its only known consumer ever called it. The
+    wrapper classes under Git::Native:: are untouched and still Moo.
+  - All modules now carry their own $VERSION. Only the main module had
+    one, so Git::Native::Repository->VERSION and its siblings answered
+    undef while META provides and the generated POD both claimed the
+    dist version. dist.ini drops version_finder = :MainModule, which had
+    confined the version rewrite to the main module.
+  - Remote: take the git_fetch_options.prune offset from
+    Git::Libgit2::fetch_options_prune_offset instead of a compiled-in
+    constant. That constant was derived from libgit2 1.5, where the
+    embedded callbacks struct is 120 bytes; against 1.9 (128 bytes) the
+    prune value landed 8 bytes early, on the `update_refs` callback
+    pointer that 1.9 prefers over `update_tips`. Fetch therefore never
+    pruned, and a fetch that did report ref updates would have jumped to
+    address 1 or 2. Requires Git::Libgit2 0.007.
+  - t/60-config-snapshot.t: assert GIT_EREADONLY instead of matching
+    libgit2 prose, whose wording moved from "readonly" to "read-only".
+    The constant is likewise new in Git::Libgit2 0.007.
+  - t/75-cert-hostkey-layout.t: new network-free probe pinning the
+    git_cert_hostkey field offsets Remote compiles in. They are read only
+    from the SSH certificate_check callback, so t/40-remote-ssh.t was
+    their sole coverage and it skips without TEST_GIT_NATIVE_SSH_URL -
+    the same blind spot the git_fetch_options.prune offset had. The test
+    compiles offsetof() against the git2.h Alien::Libgit2 installs and
+    compares the measurement with the constants, along with the
+    git_cert_t and git_cert_ssh_t values the callback branches on. It
+    skips, with the reason, when there is no C compiler, when git2.h is
+    not reachable, or when the header's LIBGIT2_VERSION disagrees with
+    the loaded library. Adds Alien::Libgit2 and ExtUtils::CBuilder as
+    test prerequisites.
+
+  - dist.ini: exclude .claude/ and CLAUDE.md from the gathered dist. The
+    [@Author::GETTY] bundle runs Git::GatherDir with include_dotfiles, so
+    the agent instructions - five agent files, seven skills, the house
+    rules - shipped in the CPAN tarball alongside the code. They are
+    working material for this repository, not documentation for
+    consumers; nothing in lib/ or t/ reads them at runtime.
+
 0.005     2026-08-11 03:39:12Z
   - Repository: new index accessor returning a Git::Native::Index, the
     first native access to the staging area in this distribution. It

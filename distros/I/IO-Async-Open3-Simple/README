@@ -1,0 +1,265 @@
+NAME
+
+    IO::Async::Open3::Simple - Interface to open3 under IO::Async
+
+VERSION
+
+    version 0.01
+
+SYNOPSIS
+
+     use v5.42;
+     use IO::Async::Loop;
+     use IO::Async::Open3::Simple;
+    
+     my $loop = IO::Async::Loop->new;
+     my $done = $loop->new_future;
+    
+     my $ipc = IO::Async::Open3::Simple->new(
+       on_start => sub ($proc, $program, @args) {
+         # $proc    isa IO::Async::Open3::Simple::Process
+         # $program is a string
+         # @args    is the list of arguments
+         say 'child PID: ', $proc->pid;
+       },
+       on_stdout => sub ($proc, $line) {
+         say 'out: ', $line;
+       },
+       on_stderr => sub ($proc, $line) {
+         say 'err: ', $line;
+       },
+       on_exit => sub ($proc, $exit_value, $signal) {
+         say 'exit value: ', $exit_value;
+         say 'signal:     ', $signal;
+         $done->done;
+       },
+       on_error => sub ($error, $program, @args) {
+         # $error is the exception thrown by IPC::Open3::open3
+         warn "error: $error";
+         $done->done;
+       },
+     );
+    
+     $ipc->run('echo', 'hello there');
+     $done->get;
+
+DESCRIPTION
+
+    This module provides an interface to open3 while running under
+    IO::Async that delivers data from stdout and stderr as lines are
+    written by the subprocess. The interface is reminiscent of
+    IPC::Open3::Simple, although this module does provide a somewhat
+    different API, so it cannot be used as a drop in replacement for that
+    module.
+
+    It is intended as a drop in replacement for AnyEvent::Open3::Simple,
+    for code that would rather use IO::Async as its event loop. Aside from
+    the AnyEvent specific parts (the implementation attribute and the
+    ANYEVENT_OPEN3_SIMPLE environment variable, neither of which apply
+    here), the API is the same.
+
+    IO::Async comes with a robust interface to do the same thing as this
+    module: IO::Async::Process, which you more than likely want to use
+    instead. This module is primarily intended for applications that are
+    already using AnyEvent::Open3::Simple and only want to change the
+    underlying event loop.
+
+CONSTRUCTOR
+
+    Constructor takes a hash or hashref of event callbacks and attributes.
+    Event callbacks have an on_ prefix, attributes do not.
+
+ ATTRIBUTES
+
+      * loop
+
+      The IO::Async::Loop to use. If not provided the shared loop returned
+      by IO::Async::Loop->new is used, which is almost always what you
+      want.
+
+      * implementation
+
+      Accepted and ignored for compatibility with AnyEvent::Open3::Simple.
+      Under IO::Async there is only one implementation: an
+      IO::Async::Stream for each of stdout and stderr, and
+      $loop->watch_process to detect process termination.
+
+ EVENTS
+
+    These events will be triggered by the subprocess when the run method is
+    called. Each event callback (except on_error) gets passed in an
+    instance of IO::Async::Open3::Simple::Process as its first argument
+    which can be used to get the PID of the subprocess, or to write to it.
+    on_error does not get a process object because it indicates an error in
+    the creation of the process.
+
+    Not all of these events will fire depending on the execution of the
+    child process. In the very least exactly one of on_start or on_error
+    will be called.
+
+      * on_start ($proc, $program, @arguments)
+
+      Called after the process is created, but before the run method
+      returns (that is, it does not wait to re-enter the event loop first).
+
+      This event also gets the program name and arguments passed into the
+      run method.
+
+      * on_error ($error, $program, @arguments)
+
+      Called when there is an execution error, for example, if you ask to
+      run a program that does not exist. No process is passed in because
+      the process failed to create. The error passed in is the error thrown
+      by IPC::Open3 (typically a string which begins with "open3: ...").
+
+      In some environments open3 is unable to detect exec errors in the
+      child, so you may not be able to rely on this event. It does seem to
+      work consistently on Perl 5.14 or better though.
+
+      Different environments have different ways of handling it when you
+      ask to run a program that doesn't exist. On Linux and Cygwin, this
+      will raise an on_error event, on MSWin32 it will not trigger a
+      on_error and instead cause a normal exit with a exit value of 1.
+
+      This event also gets the program name and arguments passed into the
+      run method.
+
+      * on_stdout ($proc, $line)
+
+      Called on every line printed to stdout by the child process.
+
+      * on_stderr ($proc, $line)
+
+      Called on every line printed to stderr by the child process.
+
+      * on_exit ($proc, $exit_value, $signal)
+
+      Called when the processes completes, either because it called exit,
+      or if it was killed by a signal.
+
+      * on_success ($proc)
+
+      Called when the process returns zero exit value and is not terminated
+      by a signal.
+
+      * on_signal ($proc, $signal)
+
+      Called when the processes is terminated by a signal.
+
+      * on_fail ($proc, $exit_value)
+
+      Called when the process returns a non-zero exit value.
+
+METHODS
+
+ run
+
+     $ipc->run($program, @arguments);
+     $ipc->run($program, @arguments, \$stdin);
+     $ipc->run($program, @arguments, \@stdin);
+     $ipc->run($program, @arguments, sub {...});
+     $ipc->run($program, @arguments, \$stdin, sub {...});
+     $ipc->run($program, @arguments, \@stdin, sub {...});
+
+    Start the given program with the given arguments. Returns immediately
+    (it returns the IO::Async::Open3::Simple instance). Any events that
+    have been specified in the constructor (except for on_start) will not
+    be called until the process re-enters the event loop.
+
+    You may optionally provide the full content of standard input as a
+    string reference or list reference as the last argument (or second to
+    last if you are providing a callback below). If provided as a list
+    reference, it will be joined by new lines in whatever format is native
+    to your Perl. Currently on (non cygwin) Windows (Strawberry,
+    ActiveState) this is the only way to provide standard input to the
+    subprocess.
+
+    Do not mix the use of passing standard input to run and
+    IO::Async::Open3::Simple::Process#print or
+    IO::Async::Open3::Simple::Process#say, otherwise bad things may happen.
+
+    You may provide a callback as the last argument which is called before
+    on_start, and takes the process object as its only argument. For
+    example:
+
+     foreach my $i (1..10)
+     {
+       $ipc->run($prog, @args, \$stdin, sub ($proc) {
+         $proc->user({ iteration => $i });
+       });
+     }
+
+    This is useful for making data accessible to $ipc object's callbacks
+    that may be out of scope otherwise.
+
+CAVEATS
+
+    There are some traps for the unwary relating to buffers and deadlocks,
+    IPC::Open3 is recommended reading.
+
+    Unlike AnyEvent::Open3::Simple, this module waits for the child's
+    stdout and stderr pipes to reach end of file (in addition to the child
+    process being reaped) before firing on_exit. This guarantees that every
+    line of output is delivered before on_exit, but a grandchild process
+    which inherits and holds open the pipes can delay the event.
+
+    If you register a call back for on_exit, but not on_error then use a
+    Future (or condition variable, or $loop->run / $loop->stop) to wait for
+    the process to complete as in this:
+
+     my $done = $loop->new_future;
+     my $ipc = IO::Async::Open3::Simple->new(
+       on_exit => sub (@) { $done->done },
+     );
+     $ipc->run('command_not_found');
+     $done->get;
+
+    You might be waiting forever if there is an error starting the process
+    (if for example you give it a bad command). To handle this situation
+    you might fail the Future in the event of error:
+
+     my $done = $loop->new_future;
+     my $ipc = IO::Async::Open3::Simple->new(
+       on_exit => sub (@) { $done->done },
+       on_error => sub ($error, @) {
+         $done->fail($error);
+       },
+     );
+     $ipc->run('command_not_found');
+     $done->get;
+
+    This will cause the get to die, printing a useful diagnostic if the
+    exception isn't caught somewhere else.
+
+    Writing to a subprocesses stdin with
+    IO::Async::Open3::Simple::Process#print or
+    IO::Async::Open3::Simple::Process#say is unsupported on Microsoft
+    Windows (it does work under Cygwin though).
+
+SEE ALSO
+
+    IO::Async::Open3::Simple::Process
+
+      Represents a process being run by this module, typically passed into
+      the callbacks.
+
+    AnyEvent::Open3::Simple
+
+      The module this one is based on, for use with AnyEvent instead of
+      IO::Async.
+
+    IO::Async::Process
+
+      Alternative to this module included with IO::Async.
+
+AUTHOR
+
+    Graham Ollis <plicease@cpan.org>
+
+COPYRIGHT AND LICENSE
+
+    This software is copyright (c) 2026 by Graham Ollis.
+
+    This is free software; you can redistribute it and/or modify it under
+    the same terms as the Perl 5 programming language system itself.
+

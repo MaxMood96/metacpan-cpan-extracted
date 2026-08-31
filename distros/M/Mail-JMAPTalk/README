@@ -29,12 +29,12 @@ This module requires these other modules and libraries:
 
 COPYRIGHT AND LICENCE
 
-Put the correct copyright and licence information here.
+Copyright 2015-2026 Fastmail Pty Ltd.
 
-Copyright (C) 2015 by Bron Gondwana
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself; that is, either the GNU General
+Public License as published by the Free Software Foundation (version 1,
+or at your option any later version), or the Artistic License.
 
-This library is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself, either Perl version 5.20.1 or,
-at your option, any later version of Perl 5 you may have available.
-
-
+See http://dev.perl.org/licenses/ and the LICENSE file included with
+this distribution for more information.

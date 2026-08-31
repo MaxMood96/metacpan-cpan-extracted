@@ -1,0 +1,49 @@
+{
+   "abstract" : "Local formatting-residue cleanup helper for copied text.",
+   "author" : [
+      "unknown"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "ExtUtils::MakeMaker version 7.62, CPAN::Meta::Converter version 2.150010",
+   "license" : [
+      "mit"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Aitextcleaner-FormattingResidue",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "runtime" : {
+         "requires" : {}
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://aitextcleaner.pro/"
+      },
+      "homepage" : "https://aitextcleaner.pro/",
+      "repository" : {
+         "url" : "https://aitextcleaner.pro/"
+      }
+   },
+   "version" : "v0.2.0",
+   "x_serialization_backend" : "JSON::PP version 4.06"
+}

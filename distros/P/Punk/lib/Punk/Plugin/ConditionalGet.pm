@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk ();
 
-our $VERSION = '0.34';
+our $VERSION = '0.38';
 
 1;
 
@@ -13,7 +13,7 @@ __END__
 
 =head1 NAME
 
-Punk::Plugin::ConditionalGet - ETags and 304s for dynamic responses
+Punk::Plugin::ConditionalGet - ETags, Last-Modified and 304s for dynamic responses
 
 =head1 SYNOPSIS
 
@@ -29,6 +29,11 @@ Punk::Plugin::ConditionalGet - ETags and 304s for dynamic responses
 
     # or from the rendered bytes: saves the wire, not the server
     get '/dashboard' => sub { ... }, { etag => 1 };
+
+    # or a timestamp, for the clients that only speak dates
+    get '/feed' => sub { ... }, {
+        last_modified => sub { $_[0]->model('Post')->max_updated_at },
+    };
 
 =head1 DESCRIPTION
 
@@ -64,6 +69,50 @@ given one can never send one back.
 
 It is application code, so it runs where application errors go - a croak
 in it is the app's C<500>, not a response that quietly got slower.
+
+=head2 The date validator
+
+C<last_modified> takes a coderef returning an epoch the route knows
+cheaply - the same shapes as C<etag>, when what you have is a timestamp
+rather than a version:
+
+    get '/feed' => sub { ... }, {
+        last_modified => sub { $_[0]->model('Post')->max_updated_at },
+    };
+
+It behaves exactly as the strong validator does: it runs on every
+request, the C<200> carries C<Last-Modified>, an unchanged resource
+answers C<304> B<before the handler runs>, C<undef> contributes nothing,
+and a croak is the app's C<500>. It exists for the clients that only
+speak dates - feed readers above all, which revalidate with
+C<If-Modified-Since> and nothing else.
+
+Three things worth knowing:
+
+=over 4
+
+=item * B<The comparison is exact.> The date the client was given is the
+date we would send - the convention the file path has always used. A
+stale, obsolete-form or unparseable date simply fails to match, and the
+failure direction is always a re-send, never a wrong C<304>. The cost is
+the one-second grain any HTTP date has: a resource modified twice within
+one second revalidates as unchanged. Where sub-second writes are real,
+use the C<etag> validator - on the same route, if you like.
+
+=item * B<C<If-None-Match> wins.> A request carrying both conditionals is
+answered by the tag alone (RFC 9110 13.1.3); the date is only consulted
+when no tag was sent.
+
+=item * B<A future epoch is clamped to now.> A C<Last-Modified> ahead of
+the clock is a skew statement no cache can use, and RFC 9110 has
+recipients replace one with the response's own date anyway.
+
+=back
+
+There is deliberately no C<< last_modified => 1 >>. The body form of
+C<etag> hashes rendered bytes; a rendered body has no timestamp to
+derive, and inventing one - render time, boot time - would manufacture
+false freshness. The asymmetry is correct.
 
 =head2 What a 304 does not skip
 
@@ -220,9 +269,10 @@ pass through untouched.
 
 =back
 
-C<< etag => 0 >> is the same as saying nothing. C<etag> is not an option
-on a C<websocket> or C<sse> route, and those keywords refuse it where it
-is written rather than at C<to_app>.
+C<< etag => 0 >> and C<< last_modified => 0 >> are the same as saying
+nothing. Neither is an option on a C<websocket> or C<sse> route, and
+those keywords refuse them where they are written rather than at
+C<to_app>.
 
 =head1 OPTIONS
 

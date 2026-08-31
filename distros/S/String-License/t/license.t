@@ -1,6 +1,4 @@
-use v5.20;
-use feature qw(signatures);
-no warnings qw(experimental::signatures);
+use v5.40;
 
 use Test2::V0;
 use Test2::Require::Module 'Regexp::Pattern::License' => '3.9.0';
@@ -44,11 +42,11 @@ my $naming
 	= String::License::Naming::Custom->new(
 	schemes => [qw(debian spdx internal)] );
 
-sub parse ($path_string)
+sub parse ($path_to_parse)
 {
 	my ( $path, $string, $license );
 
-	$path   = path($path_string);
+	$path   = path($path_to_parse);
 	$string = $path->slurp_utf8;
 	$string = uncruft($string)
 		if exists $crufty{ $path->relative('t/devscripts') };

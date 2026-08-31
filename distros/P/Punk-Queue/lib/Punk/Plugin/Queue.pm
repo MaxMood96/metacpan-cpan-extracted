@@ -9,7 +9,7 @@ use File::Spec ();
 use File::Raw::JSON ();
 use Punk::Queue ();
 
-our $VERSION = '0.02';
+our $VERSION = '0.08';
 
 my %STATE;
 
@@ -45,14 +45,12 @@ sub _install_keywords {
     # plugin never registered, compiling the app is the moment to say so
     if (!$st->{tripwire}) {
         $st->{tripwire} = 1;
-        $app->middleware(sub {
-            my ($inner) = @_;
+        _at_compile($app, sub {
             if ($st->{keywords_used} && !$st->{registered}) {
                 require Carp;
                 Carp::croak("cron used but plugin 'Queue' was never "
                           . "registered (add plugin 'Queue' => {...})");
             }
-            return $inner;
         });
     }
 
@@ -176,19 +174,33 @@ sub register {
     }, __PACKAGE__);
     $app->helper(job => sub { $q->job_info($_[1]) }, __PACKAGE__);
 
-    # the compile point: middleware construction runs exactly once at
-    # to_app, after every keyword has recorded - resolve targets there so
-    # a typo croaks at boot, matching Punk's compile-at-boot promise
-    $app->middleware(sub {
-        my ($inner) = @_;
-        _compile($st) unless $st->{compiled};
-        return $inner;
-    });
+    # the compile point: to_app, after every keyword has recorded - resolve
+    # targets there so a typo croaks at boot, matching Punk's compile-at-boot
+    # promise
+    _at_compile($app, sub { _compile($st) unless $st->{compiled} });
 
     $st->{registered} = 1;
 
     _register_admin($st)     if $opts->{admin};
     _register_inserver($st)  if $opts->{in_server};
+    return;
+}
+
+# Run $code once at to_app. Punk 0.31 has $app->on_compile for exactly this;
+# before it the one moment a plugin could reach was the construction of a
+# middleware, which happens once at compile - a middleware that wraps
+# nothing, kept only for the older Punk.
+sub _at_compile {
+    my ($app, $code) = @_;
+    if ($app->can('on_compile')) {
+        $app->on_compile(sub { $code->() }, __PACKAGE__);
+        return;
+    }
+    $app->middleware(sub {
+        my ($inner) = @_;
+        $code->();
+        return $inner;
+    });
     return;
 }
 
@@ -320,9 +332,21 @@ sub _build_assets {
             map { _slurp(File::Spec->catfile($d, $_)) } @files;
         push @order, [$name, \@files];
     }
+    # FontAwesome's solid face, then our override layer. Order matters
+    # twice over: the icon rules must beat the vendored css that assumes
+    # an icon font, and punk-queue.css must still be able to beat both.
+    $bundle{'funky.css'} .= "\n"
+        . _slurp(File::Spec->catfile($dir, 'fontawesome', 'fontawesome.css'));
     $bundle{'funky.css'} .= "\n"
         . _slurp(File::Spec->catfile($dir, 'punk-queue.css'));
     $bundle{'app.js'} = _slurp(File::Spec->catfile($dir, 'app.js'));
+
+    # The webfont itself: bytes, not text, and served under its own name
+    # because the @font-face url() is relative to the stylesheet. _slurp
+    # reads :raw, so length() below is a byte count and the ETag hashes
+    # the real octets.
+    $bundle{'fa-solid-900.woff2'} =
+        _slurp(File::Spec->catfile($dir, 'fontawesome', 'fa-solid-900.woff2'));
 
     for my $ext ([css => 'funky.css'], [js => 'app.js']) {
         my ($opt, $name) = @$ext;
@@ -497,9 +521,12 @@ sub _register_admin {
     });
 
     # ---- assets (memory-served, ETagged) ----
+    # no charset on the webfont: it is not text, and a charset parameter
+    # on a binary type is what makes a proxy think it may transcode it
     for my $asset (['funky.js', 'application/javascript; charset=utf-8'],
                    ['funky.css', 'text/css; charset=utf-8'],
-                   ['app.js', 'application/javascript; charset=utf-8']) {
+                   ['app.js', 'application/javascript; charset=utf-8'],
+                   ['fa-solid-900.woff2', 'font/woff2']) {
         my ($name, $type) = @$asset;
         $s->get("/assets/$name" => sub {
             my ($c) = @_;

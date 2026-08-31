@@ -1,12 +1,12 @@
 # ABSTRACT: Generate board context summary for embedding
 
 package App::karr::Cmd::Context;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use MooX::Cmd;
 use MooX::Options (
   usage_string => 'USAGE: karr context [--write-to FILE] [--sections LIST] [--days N] '
-    . '[--activity-limit N] [--json]',
+    . '[--activity-limit N] [--json] [--compact]',
 );
 use Path::Tiny ();
 use App::karr::Error qw( user_error clean_error );
@@ -14,10 +14,12 @@ use App::karr::Encoding qw( json_decode );
 use Time::Piece;
 use App::karr::Role::BoardAccess;
 use App::karr::Role::Output;
+use App::karr::Role::CompactOutput;
 use App::karr::Task;
 use App::karr::Config;
 
-with 'App::karr::Role::BoardAccess', 'App::karr::Role::Output';
+with 'App::karr::Role::BoardAccess', 'App::karr::Role::Output',
+     'App::karr::Role::CompactOutput';
 
 
 option write_to => (
@@ -72,15 +74,37 @@ sub execute {
   # Determine terminal and first statuses
   my $first_status = $statuses[0];
 
-  # Exclude archived from all operations
-  my @active_tasks = grep { !$self->store->is_terminal_status($_->status) } @tasks;
+  # Archived, and nothing else. The boundary is kanban-md's IsArchivedStatus
+  # (cmd/context.go filters the list with it), and that is literally
+  # `s == "archived"` -- not "terminal". A finished card is still part of what
+  # the board reports about itself: it counts in the header total, and it is
+  # still listed as blocked if someone blocked it before it got there. Only
+  # filed-away work drops out of the briefing entirely.
+  #
+  # karr excluded every terminal status here between 85f6e9f (a sweep that
+  # replaced the original `ne 'archived'` while claiming only to centralize
+  # config knowledge) and ticket #229, so on the default board `done` was
+  # missing from both those numbers -- while this comment already described the
+  # narrower rule. Widening it again would also break the sentinel interop
+  # contract explained in _render_markdown below: karr and kanban-md maintain
+  # one block in a shared host file, so the same board has to put the same
+  # numbers in it.
+  #
+  # The values below that must NOT see terminal cards test the status
+  # themselves, as kanban-md's computeSummary does: `active`, `_is_overdue` and
+  # the in-progress section each carry their own is_terminal_status check.
+  my @context_tasks = grep { $_->status ne App::karr::Config->ARCHIVED_STATUS } @tasks;
 
   # Build summary
   my $board_name = $ec->{board}{name} // 'Kanban Board';
-  my $total = scalar @active_tasks;
-  my $active = grep { $_->status ne $first_status && !$self->store->is_terminal_status($_->status) } @active_tasks;
-  my $blocked = grep { $_->has_blocked } @active_tasks;
-  my $overdue = $self->_count_overdue(\@active_tasks);
+  my $total = scalar @context_tasks;
+  # "Active" is kanban-md's computeSummary rule -- not the first status, not a
+  # terminal one -- so it counts the same span the "In Progress" section renders
+  # below, blocked cards included. See there for why that span is wider than the
+  # heading sounds.
+  my $active = grep { $_->status ne $first_status && !$self->store->is_terminal_status($_->status) } @context_tasks;
+  my $blocked = grep { $_->has_blocked } @context_tasks;
+  my $overdue = $self->_count_overdue(\@context_tasks);
 
   # Build sections
   my %wanted_sections;
@@ -96,25 +120,39 @@ sub execute {
     my @items;
 
     if ($sec eq 'in-progress') {
+      # Wider than its heading: everything between the first status and the
+      # terminal ones, minus the blocked -- on the default board that is `todo`,
+      # `in-progress` and `review`, not the column of the same name alone. Both
+      # halves are kanban-md's: the three conditions from buildInProgressSection,
+      # the "In Progress" title from its sectionTitle, and computeSummary counts
+      # that same span as "active" in the header above.
+      #
+      # Narrowing the section to the literal `in-progress` column would break the
+      # sentinel interop contract explained in _render_markdown below: karr and
+      # kanban-md maintain one block in a shared host file, so they have to agree
+      # on what goes in it, heading included.
       @items = map { $self->_task_item($_) }
         sort { $self->_pri_order($a) <=> $self->_pri_order($b) }
         grep { $_->status ne $first_status && !$self->store->is_terminal_status($_->status) && !$_->has_blocked }
-        @active_tasks;
+        @context_tasks;
     } elsif ($sec eq 'blocked') {
       @items = map { $self->_task_item($_, 'blocked: ' . ($_->has_block_reason ? $_->block_reason : '')) }
         grep { $_->has_blocked }
-        @active_tasks;
+        @context_tasks;
     } elsif ($sec eq 'overdue') {
       my $now = gmtime->strftime('%Y-%m-%d');
       @items = map { $self->_task_item($_, 'due ' . $_->due) }
         grep { $self->_is_overdue($_, $now) }
-        @active_tasks;
+        @context_tasks;
     } elsif ($sec eq 'recently-completed') {
-      # Over every task, not @active_tasks: that list is by definition the
-      # non-terminal ones, so intersecting it with the terminal statuses was
-      # empty by construction and this section had never once had an entry on
-      # any board (ticket #99). kanban-md's buildRecentlyCompletedSection scans
-      # the whole task list too.
+      # Over every task, not @context_tasks. When ticket #99 was written that
+      # list was the non-terminal cards, so intersecting it with the terminal
+      # statuses was empty by construction and this section had never once had
+      # an entry on any board. It now holds everything but the archived (#229),
+      # which makes the two spans equal -- the `ne archived` test below is what
+      # keeps filed-away work out either way, and is why this branch did not
+      # move with that fix. kanban-md's buildRecentlyCompletedSection likewise
+      # scans the whole list it is handed.
       #
       # "Recently" is bounded by the completion stamp, as it is there, but to
       # the day rather than to the second: `completed` is a string here and an
@@ -124,7 +162,9 @@ sub execute {
       my $cutoff = (gmtime() - ($self->days * 86400))->strftime('%Y-%m-%d');
       @items = map { $self->_task_item($_, 'completed ' . ($_->completed // '')) }
         sort { ($b->completed // '') cmp ($a->completed // '') }
-        grep { $self->store->is_terminal_status($_->status) && $_->status ne 'archived' && $_->has_completed && $_->completed ge $cutoff }
+        grep { $self->store->is_terminal_status($_->status)
+                 && $_->status ne App::karr::Config->ARCHIVED_STATUS
+                 && $_->has_completed && $_->completed ge $cutoff }
         @tasks;
     } elsif ($sec eq 'activity') {
       @items = $self->_recent_activity;
@@ -132,6 +172,27 @@ sub execute {
 
     push @section_data, { name => $sec, items => \@items } if @items;
   }
+
+  # --write-to is a SIDE EFFECT and the output flags decide stdout; the two
+  # were never in conflict (ticket #260). --write-to does not redirect the
+  # output, it maintains a block delimited by sentinels karr shares with
+  # kanban-md inside a host file. What goes between those sentinels is
+  # Markdown by that interop contract and is not the caller's to choose, so
+  # neither --json nor --compact has anything to say about the FILE -- and
+  # neither is a reason to skip the write.
+  #
+  # Both were getting that wrong from opposite sides. --json answered and
+  # returned before --write-to was read at all: no file, exit 0, and nothing
+  # said -- the option whose only job is to write, accepted and dropped, the
+  # class #225/#226/#254 are about. --compact wrote the file and dropped its
+  # own rendering instead. One rule now covers both.
+  my $stdout_wants_markdown = !( $self->json || $self->compact );
+  my $md =
+    ( $self->write_to || $stdout_wants_markdown )
+    ? $self->_render_markdown($board_name, $total, $active, $blocked, $overdue, \@section_data)
+    : undef;
+
+  $self->_write_to_file($md) if $self->write_to;
 
   if ($self->json) {
     my $out = {
@@ -148,14 +209,20 @@ sub execute {
     return;
   }
 
-  # Render markdown
-  my $md = $self->_render_markdown($board_name, $total, $active, $blocked, $overdue, \@section_data);
-
-  if ($self->write_to) {
-    $self->_write_to_file($md);
-  } else {
-    print $md;
+  # The header numbers alone, keyed the way the --json summary keys them so a
+  # reader does not have to learn two vocabularies for the same four counts.
+  # Below --json and above the Markdown, the place `pick` cuts (#251): the
+  # payload is never reshaped by --compact, the prose is.
+  if ($self->compact) {
+    printf "board_name=%s\n", $board_name;
+    printf "total_tasks=%d\n", $total;
+    printf "active=%d\n", $active;
+    printf "blocked=%d\n", $blocked;
+    printf "overdue=%d\n", $overdue;
+    return;
   }
+
+  print $md;
 }
 
 sub _render_markdown {
@@ -231,7 +298,18 @@ sub _write_to_file {
   eval { $file->spew_utf8($out); 1 }
     or user_error( "Could not write $file: ", clean_error($@) );
 
-  printf "Context written to %s\n", $self->write_to;
+  # stdout belongs to the payload when an output flag claims it, so the
+  # confirmation goes to stderr there. Same answer #248 gave for `delete`'s
+  # prompt and for the same reason: `karr context --json --write-to AGENTS.md
+  # > ctx.json` has to leave behind a file that decodes whole, and a
+  # key=value rendering that carries one line of prose is not key=value.
+  # Without an output flag stdout is prose anyway, so the line stays put.
+  if ( $self->json || $self->compact ) {
+    printf STDERR "Context written to %s\n", $self->write_to;
+  }
+  else {
+    printf "Context written to %s\n", $self->write_to;
+  }
 }
 
 sub _task_item {
@@ -262,17 +340,23 @@ sub _task_item {
 # truncating a merged view blindly. An agent about to pick up work already
 # knows what it itself just did -- `karr show --me` is the tool for that --
 # so what changes its decision is what *other* identities have been doing.
-# Only the current-scheme ref is excluded; entries left on a pre-#75 legacy
+# Only the current-scheme refs are excluded; entries left on a pre-#75 legacy
 # ref (see App::karr::ActivityLog) are rare enough, and old enough, that
 # counting them as "someone else" costs nothing in practice.
+#
+# "The current-scheme refs" is plural and asked of the log itself (owns_ref),
+# not compared against one ref name: since #171 an identity's log rotates into
+# refs/karr/log/<role>/<email>+NNNNNN segments, and an equality test would have
+# started reporting this agent's own older entries as another agent's the
+# moment its log outgrew one segment.
 sub _recent_activity {
   my ($self) = @_;
   my $git = $self->git;
-  my $self_ref = 'refs/karr/log/' . $self->activity_log->identity;
+  my $log = $self->activity_log;
 
   my @entries;
   for my $ref ($git->list_refs('refs/karr/log/')) {
-    next if $ref eq $self_ref;
+    next if $log->owns_ref($ref);
     my $content = $git->read_ref($ref);
     next unless defined $content && length $content;
     for my $line (split /\n/, $content) {
@@ -353,7 +437,7 @@ App::karr::Cmd::Context - Generate board context summary for embedding
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -362,12 +446,50 @@ version 0.500
     karr context --write-to AGENTS.md --days 14
     karr context --activity-limit 10
     karr context --json
+    karr context --compact
 
 =head1 DESCRIPTION
 
 Builds a concise board summary suitable for embedding into agent context files
 such as F<AGENTS.md>. The command can print Markdown directly, emit structured
 JSON, or update an existing file between sentinel comments.
+
+C<--compact> prints the board's four numbers and nothing else -- one
+C<key=value> per line, under the same names the C<--json> summary uses, with no
+headings, no sections and no sentinels:
+
+    board_name=karr
+    total_tasks=41
+    active=7
+    blocked=1
+    overdue=0
+
+That is the reading of a briefing that fits in a prompt header or a status
+line, and it is what C<context --compact> was silently failing to do while
+C<--compact> was declared for every command in L<App::karr::Role::Output>
+(#254). It shapes what is printed, not what is written: with C<--write-to> the
+file still receives the Markdown block, because those sentinels are an interop
+contract with kanban-md (see L</FILE UPDATE MODE>) and a compacted block would
+be one neither tool could find again.
+
+C<--json> and C<--compact> do not compete with C<--write-to> and never did
+(#260). C<--write-to> is a side effect; the output flags decide what stdout
+carries. All three combinations write the same Markdown block to the file and
+differ only in what is printed:
+
+    karr context --write-to AGENTS.md              Context written to AGENTS.md
+    karr context --json    --write-to AGENTS.md    the JSON payload
+    karr context --compact --write-to AGENTS.md    the four numbers
+
+With an output flag the C<Context written to ...> confirmation goes to
+B<stderr>, so C<< karr context --json --write-to AGENTS.md > ctx.json >>
+leaves behind a file that decodes whole -- the channel rule C<delete>'s prompt
+follows for the same reason (#248). Without one, stdout is prose anyway and
+the line stays there.
+
+Only C<archived> tasks are left out of the summary. Finished work still counts
+towards the reported total and is still reported as blocked if it is, which is
+the rule kanban-md applies to the same block.
 
 =head1 SECTIONS
 
@@ -381,11 +503,23 @@ bounded by C<--activity-limit> (default 5). An agent reading its own briefing
 already knows what it just did -- C<karr show --me> is the tool for that --
 so what belongs in a briefing is what everyone *else* has been doing.
 
+C<recently-completed> looks back C<--days> days (default 7) from now; a task
+qualifies when its C<completed> stamp falls on or after that cutoff, compared
+to day granularity rather than to the second so the comparison stays correct
+whether the stamp is a bare C<YYYY-MM-DD> or a full RFC3339 timestamp.
+
 =head1 FILE UPDATE MODE
 
 When C<--write-to> is used, the command replaces the content between
 C<BEGIN kanban-md context> and C<END kanban-md context> if those sentinels are
-already present; otherwise it appends the generated block to the file.
+already present; otherwise it appends the generated block to the file. A file
+that does not exist yet is created carrying the block alone.
+
+It is a file update and not a redirection: the rest of the host file is left
+as it was, and a later run rewrites the same block in place rather than adding
+a second one. That is why the block is always Markdown, whatever C<--json> or
+C<--compact> ask for on stdout -- both tools find their block by these
+sentinels, and a payload between them is one neither could update again.
 
 =head1 SEE ALSO
 
@@ -413,9 +547,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

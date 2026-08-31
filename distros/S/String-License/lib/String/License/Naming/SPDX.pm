@@ -1,10 +1,8 @@
-use v5.20;
+use v5.40;
 use utf8;
-use warnings;
-use feature qw(signatures);
-no warnings qw(experimental::signatures);
 
-use Feature::Compat::Class 0.07;
+use feature 'class';
+no warnings 'experimental::class';
 
 =head1 NAME
 
@@ -12,7 +10,7 @@ String::License::Naming::SPDX - licenses as named by SPDX
 
 =head1 VERSION
 
-Version v0.0.11
+Version v0.1.1
 
 =head1 SYNOPSIS
 
@@ -45,7 +43,7 @@ or as fallback by an internal name.
 
 =cut
 
-package String::License::Naming::SPDX v0.0.11;
+package String::License::Naming::SPDX v0.1.1;
 
 use Carp       qw(croak);
 use Log::Any   ();

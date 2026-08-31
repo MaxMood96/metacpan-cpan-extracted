@@ -1,11 +1,15 @@
 # ABSTRACT: Kanban Assignment & Responsibility Registry
 
 package App::karr;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use MooX::Cmd;
 use MooX::Options;
 use Term::ANSIColor qw( colored );
+# Loaded without importing: this is a command class and runs no namespace::clean
+# (MooX::Options forbids it), so `use ... qw( command_hint )` would compose
+# command_hint as a method on the root. Called fully qualified below instead.
+use App::karr::Error ();
 use App::karr::Role::BoardAccess;
 use App::karr::Cmd::Board;
 
@@ -20,7 +24,7 @@ with 'App::karr::Role::BoardAccess';
 # `karr board --done`.
 option done => (
   is => 'ro',
-  doc => 'Include the Done section in the default board view',
+  doc => 'Include the board\'s final column in the default board view',
 );
 
 # MooX::Cmd derives a command name from the class basename, so
@@ -57,6 +61,7 @@ my @COMMANDS = (
   [ list      => 'List and filter tasks' ],
   [ show      => 'Show full task details' ],
   [ board     => 'Show board summary' ],
+  [ dashboard => 'Multi-board overview of boards under a directory' ],
   [ move      => 'Change task status' ],
   [ edit      => 'Modify task fields' ],
   [ delete    => 'Delete a task' ],
@@ -64,6 +69,7 @@ my @COMMANDS = (
   [ unlock    => 'Show or break pick locks' ],
   [ archive   => 'Archive a task (soft-delete)' ],
   [ handoff   => 'Hand off a task for review' ],
+  [ needs     => 'Report or resolve cross-board dependencies' ],
   [ destroy   => 'Delete the entire refs/karr/* board' ],
   [ config    => 'View or modify board config' ],
   [ disable   => 'Disable automated agent runs on this board' ],
@@ -111,7 +117,12 @@ sub _print_help {
   $out .= "\n" . colored("OPTIONS:", 'bold') . "\n";
   $out .= "  --dir PATH   Starting path for Git repository discovery\n";
   $out .= "  --json       JSON output (most commands)\n";
-  $out .= "  --compact    Compact output (list, board)\n";
+  # Named in full rather than "(list, board)": --compact is declared by
+  # App::karr::Role::CompactOutput, which exactly these nine commands compose,
+  # and anywhere else it is an unknown option that exits 2 (#254). The old
+  # parenthesis named two of them and read like a shortened list.
+  $out .= "  --compact    Compact output (board, config, context, dashboard,\n";
+  $out .= "               list, log, metrics, pick, show)\n";
   $out .= "\n" . colored("EXAMPLES:", 'bold') . "\n";
   $out .= "  karr init --name \"My Project\"\n";
   $out .= "  karr create --title \"Fix login bug\" --priority high\n";
@@ -124,12 +135,23 @@ sub _print_help {
   $out .= "  karr board\n";
   $out .= "\nRun " . colored("karr <command> --help", 'bold') . " for command-specific options.\n";
 
-  if ($code > 0) { warn $out } else { print $out }
   # Exit-code contract (ADR 0002): a positive code here is a usage/option-parse
   # error from MooX::Options (unknown option, bad value on the root command), so
   # normalize it to 2. Help requests (-h/--help) arrive with code 0 -> exit 0.
   # A negative code means "print, do not exit" and is left untouched.
   $code = 2 if $code > 0;
+
+  # The root reaches this instead of App::karr::Role::ExitCodes' options_usage
+  # wrapper (the `around` below hands it $code and never calls $orig), so the
+  # reordering of ticket k263 is asked for here by name: the diagnostic
+  # MooX::Options already wrote is buffered, and this puts it back AFTER the
+  # block above with the invocation that would have worked under it, then exits.
+  # It returns 0 when there is nothing to move -- a help request, or a call
+  # that did not come out of option parsing at all -- and has then printed
+  # whatever was buffered unchanged, which is what the two lines below expect.
+  $self_or_class->_usage_error_last( $out, $code );
+
+  if ($code > 0) { warn $out } else { print $out }
   exit $code if $code >= 0;
 }
 
@@ -151,7 +173,13 @@ sub execute {
   # through to the board summary below.
   my ($unknown) = $self->positional_args($args_ref);
   if (defined $unknown) {
-    die "Unknown command: $unknown\nRun 'karr --help' to see the available commands.\n";
+    # The way out was prose ("Run 'karr --help' ...") where it could be a line to
+    # copy (ticket k264). The "Unknown command:" marker MUST stay at the start of
+    # the first line -- App::karr::Error::is_usage_error and bin/karr classify the
+    # exit code on it (ADR 0002, exit 2) -- so the hint goes on the line after it,
+    # last, the way every k263 suggestion does. `--help` is a real token, not a
+    # placeholder, so the line is printed rather than withheld.
+    die "Unknown command: $unknown\n" . App::karr::Error::command_hint('--help') . "\n";
   }
 
   # Default action: show board summary. The default Board is constructed
@@ -186,7 +214,7 @@ App::karr - Kanban Assignment & Responsibility Registry
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -205,10 +233,14 @@ task cards are Markdown payloads and board configuration is sparse YAML kept in
 refs rather than in checked-in work tree files.
 
 The distribution is intended for repositories that want Git to remain the
-transport and source of truth. Commands materialize a temporary board view only
-for the lifetime of a command, then serialize changes back into refs and push
-them onward. This keeps the repository free of a persistent F<karr/> board tree
-and avoids ordinary file-level merge conflicts for shared task state.
+transport and source of truth. Ordinary commands read and write task cards
+directly against refs through L<App::karr::BoardStore>; no board file is ever
+written to the work tree for the lifetime of a command. C<karr materialize>
+and C<karr import> are the two dedicated bridge commands that write and read
+a disposable, gitignored F<tasks/> plus F<config.yml> view instead, for
+kanban-md interop and for grepping the board as files. This keeps the
+repository free of ordinary file-level merge conflicts for shared task
+state.
 
 This module gives the architectural overview. If you want day-to-day command
 usage, command groups, and command-by-command navigation, start with L<karr>.
@@ -328,6 +360,11 @@ target repository, not necessarily its root. If no Git repository is found from
 the given path, the command fails loudly rather than falling back to the current
 directory.
 
+Two commands are the exception and B<refuse> C<--dir> in both positions, each
+exiting C<2>: C<dashboard> and C<skill>. Both are board-less, and neither one's
+target is the result of an upward search -- see
+L<App::karr::Cmd::Dashboard> and L<App::karr::Cmd::Skill> for the details.
+
 =head1 DEFAULT BEHAVIOUR
 
 Running C<karr> without a subcommand shows the board summary, which makes the
@@ -359,9 +396,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

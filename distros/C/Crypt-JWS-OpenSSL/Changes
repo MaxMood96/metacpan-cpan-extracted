@@ -1,0 +1,9 @@
+
+0.003    2026-08-31
+         No changes since 0.002_01       
+
+0.002_01 2026-08-30
+         Testing replacement of get_affine_coordinates_GF2m
+
+0.001    2026-08-30
+         Initial release

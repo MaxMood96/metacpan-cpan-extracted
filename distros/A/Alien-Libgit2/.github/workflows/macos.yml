@@ -24,8 +24,19 @@ jobs:
           perl-version: '5.40'
       - name: perl -V
         run: perl -V
-      - name: dzil test
+      # Homebrew is currently the only packaged libgit2 at or above the 1.9.3
+      # floor, so this job is the real coverage for the probe path. Check the
+      # version up front: if brew ever drops below the floor, this says so
+      # instead of the dzil step failing on a share build with no cmake.
+      - name: Verify pkg-config sees libgit2 >= 1.9.3
+        run: |
+          set -eux
+          pkg-config --modversion libgit2
+          pkg-config --atleast-version=1.9.3 libgit2
+      - name: dzil test (system libgit2)
         uses: Getty/p5-dist-zilla-pluginbundle-author-getty/.github/actions/dzil-test@main
+        with:
+          install-type: system
 
   # Share build (vendored libgit2).
   share-build:

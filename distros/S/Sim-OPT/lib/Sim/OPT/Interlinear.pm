@@ -54,7 +54,7 @@ eval { use Sim::OPTcue::Endogen::NeuralBoltzmann; 1 };
 
 # NOTE: TO USE THE PROGRAM AS A SCRIPT, THE ABOVE "use Sim::OPT..." lines should be deleted or commented.
 
-$VERSION = '0.199';
+$VERSION = '0.200';
 $ABSTRACT = 'Interlinear is a program for building metamodels from incomplete multivariate discrete dataseries on the basis of nearest-neighbouring gradients weighted by distance.';
 
 #######################################################################
@@ -2294,7 +2294,7 @@ sub interlinear
       close SOURCEFILE;
   }
   chomp @lines; 
-  say "LINES! " . dump ( @lines );
+  say "LINES: " . scalar( @lines );
   
   
   say  "Preparing the dataseries, IN INTERLINEAR: \$countblock $countblock";
@@ -2456,28 +2456,33 @@ sub interlinear
       last;
     }
 
+    # %nears already indexes every design-space instance by its clear name via
+    # $nears{$name}{all}.  Reuse that index here instead of scanning the whole
+    # @arr for every newly interpolated point.  This changes lookup complexity
+    # from O(@limbo * @arr) to O(@limbo) without changing interpolation or
+    # update semantics; $elt is the same array reference held in @arr.
     foreach my $el ( @limbo )
     {
-      foreach $elt ( @arr )
+      my $elt = $nears{$el->[0]}{all};
+      next unless defined $elt;
+
+      if ( $elt->[2] eq "" )
       {
-        if ( $el->[0] eq $elt->[0] )
+        push ( @{ $elt }, $el->[2], $el->[3] );
+      }
+      else
+      {
+        my ( $soughtval, $totstrength ) = weightvals_merge(
+          [ $elt->[2], $el->[2] ],
+          [ $elt->[3], $el->[3] ],
+          $minreq_formerge,
+          $maxdist
+        );
+        if ( ( $soughtval ne "" ) and ( $totstrength ne "" ) )
         {
-          if ( $elt ->[2] eq "" )
-          {
-              push ( @{ $elt }, $el->[2], $el->[3] );
-          }
-          else
-          {
-            {
-              my ( $soughtval, $totstrength ) = weightvals_merge( [ $elt->[2], $el->[2] ], [ $elt->[3], $el->[3] ], $minreq_formerge, $maxdist  );
-              if ( ( $soughtval ne "" ) and ( $totstrength ne "" ) )
-              {
-                pop @{ $elt };
-                pop @{ $elt };
-                push ( @{ $elt }, $soughtval, $totstrength );
-              }
-            }
-          }
+          pop @{ $elt };
+          pop @{ $elt };
+          push ( @{ $elt }, $soughtval, $totstrength );
         }
       }
     }

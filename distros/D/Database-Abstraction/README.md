@@ -4,13 +4,14 @@ Database::Abstraction - Read-only Database Abstraction Layer (ORM)
 
 # VERSION
 
-Version 0.40
+Version 0.41
 
 # DESCRIPTION
 
 `Database::Abstraction` is a read-only ORM for Perl that gives a uniform
-interface over CSV, PSV, XML, SQLite, DBM::Deep, and BerkeleyDB files - without writing
-any SQL.
+interface over CSV, PSV, XML, SQLite, DBM::Deep, BerkeleyDB, and Excel (XLSX)
+files - local, remote (via SSH), or fetched from a URL - without writing any
+SQL.
 
 Key features:
 
@@ -42,7 +43,7 @@ A CHI-compatible cache layer is also supported.
     use parent 'Database::Abstraction';
 
     # 2. Open the database - file is auto-detected from the class name
-    #    (looks for foo.sql / foo.psv / foo.csv / foo.xml / foo.db)
+    #    (looks for foo.sql / foo.psv / foo.csv / foo.xlsx / foo.xml / foo.db)
     my $db = Database::Foo->new(directory => '/path/to/data');
 
     # 3. Simple lookups -----------------------------------------------
@@ -163,15 +164,24 @@ The module probes the `directory` for files in this priority order:
     gzipped.  **Note:** the default separator is `!` not `,` for historical
     reasons - pass `sep_char => ','` for standard CSVs.
 
-- 5. `XML`
+- 5. `Excel`
+
+    Excel workbook ending `.xlsx`.  Each worksheet is a separate SQL table;
+    the active worksheet is determined by the class-derived table name (or the
+    `table` constructor parameter - see ["SUBROUTINES/METHODS"](#subroutines-methods)).  Requires
+    [DBD::Excel](https://metacpan.org/pod/DBD%3A%3AExcel) (loaded lazily); [Spreadsheet::ParseXLSX](https://metacpan.org/pod/Spreadsheet%3A%3AParseXLSX) is used
+    automatically for modern `.xlsx` files when installed.  No slurp path:
+    `max_slurp_size` has no effect on the Excel backend.
+
+- 6. `XML`
 
     File ending `.xml`
 
-- 6. `BerkeleyDB`
+- 7. `BerkeleyDB`
 
     Binary key-value file ending `.db`
 
-- 7. `HTML`
+- 8. `HTML`
 
     Remote HTML page fetched via a URL.  Pass `url` instead of `directory`; the
     module fetches the page with [LWP::UserAgent](https://metacpan.org/pod/LWP%3A%3AUserAgent), parses all `<table>`
@@ -312,6 +322,18 @@ string which is taken to be `directory`.
 
     Override the filename stem searched in `directory` (default: the table
     name derived from the class name).
+
+- `table`
+
+    Override the table (or worksheet) name used in SQL queries for this object.
+    Default is the class-name-derived table name (e.g. `Database::Foo` =>
+    `foo`).  Particularly useful for Excel workbooks where a single `.xlsx`
+    file contains multiple worksheets: pass `table => 'Summary'` to query
+    the `Summary` worksheet without creating a dedicated subclass.  Also works
+    with SQLite/DSN connections to select a table other than the class-derived
+    default.  The filename stem (`dbname`) continues to fall back to the class
+    name, so the correct file is opened regardless of this override.  The value
+    is validated against `$SAFE_QUALIFIED` at construction time.
 
 - `filename`
 
@@ -676,7 +698,7 @@ triggers it, and how to resolve it.
 
 - `Can't find a file called '_name_' for the table _T_ in _dir_`
 
-    None of the probe extensions (`.sql`, `.psv`, `.csv`, `.db`, `.xml`)
+    None of the probe extensions (`.sql`, `.psv`, `.csv`, `.xlsx`, `.db`, `.xml`)
     matched in `directory`.
 
 - `_Class_: prepare failed: _$errstr_`

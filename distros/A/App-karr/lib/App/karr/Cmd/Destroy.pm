@@ -1,17 +1,20 @@
 # ABSTRACT: Destroy the ref-backed karr board
 
 package App::karr::Cmd::Destroy;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use MooX::Cmd;
 use MooX::Options (
   usage_string => 'USAGE: karr destroy --yes',
 );
+use App::karr::Error qw( command_hint );
 use App::karr::Role::BoardDiscovery;
+use App::karr::Role::CliArgs;
 use App::karr::Role::SyncLifecycle;
 
 with 'App::karr::Role::BoardDiscovery';
 with 'App::karr::Role::SyncLifecycle';
+with 'App::karr::Role::CliArgs';
 
 
 option yes => (
@@ -32,10 +35,14 @@ sub execute {
 
   # Destroy deletes refs/karr/*: run the full sync lifecycle so the pull (which
   # may bring a remote-only board into view before we decide it is missing) and
-  # the pruning push both retry, and the guard insures the push on a crash.
+  # the push that publishes those deletions both retry, and the guard insures
+  # the push on a crash.
   $self->sync_before;
 
-  die "No karr board found. Run 'karr init' to create one.\n"
+  # The one spelling of this sentence, shared with require_board and with
+  # destroy/materialize/repair: the way out is a command on its own last line
+  # (ticket k263).
+  die "No karr board found:\n" . command_hint('init') . "\n"
     unless $store->has_board_refs;
 
   $store->delete_all_karr_refs;
@@ -59,7 +66,7 @@ App::karr::Cmd::Destroy - Destroy the ref-backed karr board
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -71,8 +78,14 @@ Deletes the complete C<refs/karr/*> namespace for the current repository. This
 is the destructive inverse of C<karr init> and removes board config, tasks,
 logs, metadata, and any other refs kept under the board namespace.
 
-If the repository has a configured remote, the command also pushes the empty
-namespace so the remote board state is pruned to match.
+If the repository has a configured remote, the command also pushes, carrying
+one delete refspec for every ref it removed -- read off the tombstones each
+delete leaves under C<refs/karr-local/deleted/> -- so the remote board state is
+emptied to match. It is those recorded deletions that clear the remote, not a
+pruning push: a push publishes what this clone deleted and never claims that
+nothing else exists (L<App::karr::Git/push>). Without a remote the tombstones
+are settled locally instead of kept, so a destroyed board leaves nothing behind
+either way.
 
 =head1 OPTIONS
 
@@ -110,9 +123,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

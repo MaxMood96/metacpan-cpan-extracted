@@ -1,7 +1,7 @@
 # ABSTRACT: Export the ref-backed karr board as YAML
 
 package App::karr::Cmd::Backup;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use MooX::Cmd;
 use MooX::Options (
@@ -9,12 +9,14 @@ use MooX::Options (
 );
 use Path::Tiny;
 use App::karr::Encoding qw( yaml_dump );
-use App::karr::Error qw( user_error clean_error );
+use App::karr::Error qw( user_error clean_error command_hint );
 use App::karr::Role::BoardDiscovery;
+use App::karr::Role::CliArgs;
 use App::karr::Role::SyncLifecycle;
 
 with 'App::karr::Role::BoardDiscovery';
 with 'App::karr::Role::SyncLifecycle';
+with 'App::karr::Role::CliArgs';
 
 
 option output => (
@@ -35,7 +37,10 @@ sub execute {
   my $guard = $self->sync_before;
   $guard->done;
 
-  die "No karr board found. Run 'karr init' to create one.\n"
+  # The one spelling of this sentence, shared with require_board and with
+  # destroy/materialize/repair: the way out is a command on its own last line
+  # (ticket k263).
+  die "No karr board found:\n" . command_hint('init') . "\n"
     unless $store->has_board_refs;
 
   # Characters all the way: spew_utf8 encodes for the --output file, and the
@@ -70,7 +75,7 @@ App::karr::Cmd::Backup - Export the ref-backed karr board as YAML
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -119,9 +124,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

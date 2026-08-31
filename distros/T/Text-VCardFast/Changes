@@ -1,5 +1,13 @@
 Revision history for Perl extension Text::VCardFast.
 
+0.12  2026-08-31
+	- clarify licensing: same terms as Perl itself (Artistic License 1.0
+	  or GPL version 1 or later)
+	- include a LICENSE file in the distribution
+	- add LICENSE => Perl_5 to Makefile.PL (metadata previously said
+	  "unknown")
+	- align README copyright holder with the module POD
+
 0.11  2016-11-21
 	- don't override CFLAGS
 

@@ -7,7 +7,7 @@ use Punk::Request;
 use Punk::Response;
 use Punk ();
 
-our $VERSION = '0.34';
+our $VERSION = '0.38';
 
 1;
 
@@ -237,6 +237,29 @@ unreadable path instead of croaking).
 The path is served as given - if any part of it came from the request,
 the traversal guard is yours.
 
+=head2 stream($content_type, $cb) / stream($content_type, \%opts, $cb)
+
+    get '/export' => sub {
+        my $c = shift;
+        $c->stream('text/csv', sub {
+            my ($c, $w) = @_;
+            while (my $chunk = $rows->next_chunk) {
+                $w->write($chunk);
+                my ($ok) = $c->await($w->drain);
+                return unless $ok;
+            }
+        });
+    };
+
+A response body of unknown length, emitted as it is produced - the
+handler returns what C<stream> returns. The callback gets the context
+and a writer; C<< $w->drain >> is the backpressure future. Bytes never
+accumulate beyond one chunk, and on a Hyperman worker the await keeps
+serving other requests. The whole story - the three transports, chunked
+framing, how a die differs from a clean end, and every option - is
+L<Punk::Stream>. For a body that already exists as a file or a scalar,
+L</send_file> is the finished version of this.
+
 =head2 origin
 
     my $base = $c->origin;            # 'https://acme.example.com'
@@ -336,8 +359,40 @@ arguments C<status> returns the pending status.
 
 With one argument, read a request cookie. With a value, set a C<Set-Cookie> on
 the response (an C<undef> value deletes it); options C<path> (default C</>),
-C<domain>, C<max_age>, C<secure>, C<httponly>, C<samesite>. The set form
-chains.
+C<domain>, C<max_age>, C<secure>, C<httponly>, C<samesite>, C<signed>. The
+options may also be given as one trailing hashref; the set form chains.
+
+=head3 Signed cookies
+
+    $c->cookie(theme => 'dark', { signed => 1, max_age => 31536000 });
+
+    my $theme = $c->cookie('theme', { signed => 1 });
+
+B<Signed is not secret.> The value is readable by anyone who holds the
+cookie; the signature only proves this server wrote it and that nobody
+changed it since. A value that must be unreadable does not belong in a
+cookie at all - it belongs in the session, whose store keeps it
+server-side.
+
+What signing buys is tamper evidence without the session's lifetime or
+write pattern: a remember-me selector, an A/B assignment, a "seen the
+banner" flag that must not be forgeable into someone else's. Reading
+with C<< signed => 1 >> verifies (in constant time) and returns the
+value, or returns C<undef> - an unsigned, tampered or swapped cookie
+fails exactly as a missing one does, and never croaks, because the
+input is the network's. The cookie's B<name is under the signature>, so
+two signed cookies cannot be swapped for each other by the client.
+
+The key is the C<session> keyword's C<secret> - the machinery and the
+key path are the session's own, so there is nothing new to configure or
+rotate; asking for a signed cookie without a configured session croaks.
+Reading a signed cookie without the option returns the raw signed form
+(two base64url runs joined by a dot), not the value.
+
+The signature costs about 43 bytes on the wire per cookie, plus the
+base64url expansion of the value itself, against a browser's ~4KB
+budget per cookie - nothing enforced, but worth knowing before signing
+something large.
 
 =head2 session
 

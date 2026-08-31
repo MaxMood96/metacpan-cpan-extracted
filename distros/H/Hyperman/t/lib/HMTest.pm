@@ -11,6 +11,21 @@ use POSIX ();
 our @ISA       = 'Exporter';
 our @EXPORT_OK = qw(free_ports quiet_child server_status server_reap slurp);
 
+# SIGPIPE, for the test process itself.
+#
+# Half of these tests exist to prove the server REFUSES something - a body
+# over max_body, a smuggled request - and a refusal is a response followed by
+# a close. The client is still writing the body it was told not to send, so
+# its next write gets EPIPE, and EPIPE's default action kills the writer. That
+# is a dead test file after every assertion in it has already passed: the
+# smokers report `Wstat: 13 (Signal: PIPE)` with `0/476 subtests failed` and
+# no plan, because done_testing never ran.
+#
+# Ignoring it turns the write into an undef return, which every write loop
+# here already handles. The forked server is unaffected either way - it sets
+# SIG_IGN itself, as any server must.
+$SIG{PIPE} = 'IGNORE';
+
 # Test helpers shared by the tests that fork a real server.
 #
 # Ports: every one of these tests used to derive its port from $$, which is

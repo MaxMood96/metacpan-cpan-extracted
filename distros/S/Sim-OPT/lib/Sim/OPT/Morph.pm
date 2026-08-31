@@ -70,7 +70,7 @@ no strict;
 no warnings;
 
 
-$VERSION = '0.175'; # our $VERSION = '';
+$VERSION = '0.177'; # our $VERSION = '';
 $ABSTRACT = 'Sim::OPT::Morph is a morphing program for performing parametric variations on model for simulation programs.';
 
 ################################################# MORPH
@@ -1037,6 +1037,104 @@ sub setpickedinsts
 }
 
 
+# Build a named source only when the ordinary Morph path is about to copy from
+# a model directory that is absent.  The existing OPTcue named-instance path is
+# used unchanged: the requested clear name is passed through ./passnames_.txt.
+sub _make_missing_named_source
+{
+  my %a = @_;
+
+  my $orig = $a{orig};
+  return 1 if defined($orig) && $orig ne "" && -d $orig;
+
+  my $origin = $a{origin};
+  return 0 unless defined($orig) && $orig ne "";
+  return 0 unless defined($origin) && $origin =~ /^\d+-\d+(?:_\d+-\d+)*$/;
+
+  my $mypath = $a{mypath};
+  my $file = $a{file};
+  my $dowhat_r = $a{dowhat};
+  my %dowhat = %{ $dowhat_r || {} };
+
+  # Only named model directories belong to this recovery path.  In particular,
+  # do not intercept the unsuffixed root or any transient -trans- directory.
+  my @expected = ( "$mypath/$file" . "_" . $origin );
+  if ( ( $dowhat{names} || "" ) eq "short" )
+  {
+    push @expected, "$mypath/$file" . "_" . Sim::OPT::encrypt1( $origin );
+  }
+  elsif ( ( $dowhat{names} || "" ) eq "medium" )
+  {
+    push @expected, "$mypath/$file" . "_" . Sim::OPT::encrypt0( $origin );
+  }
+
+  my $is_named_path = 0;
+  foreach my $candidate ( @expected )
+  {
+    if ( $orig eq $candidate )
+    {
+      $is_named_path = 1;
+      last;
+    }
+  }
+  return 0 unless $is_named_path;
+
+  die "MORPH: required named source '$origin' is absent and OPTcue is unavailable\n"
+    unless Sim::OPT::checkOPTcue();
+
+  my $from = $a{from};
+  die "MORPH: source instance name is empty while recovering '$origin'\n"
+    unless defined($from) && $from =~ /^\d+-\d+(?:_\d+-\d+)*$/;
+
+  # Fixed hand-off interface used by makenamedinstances().
+  open( my $pass_fh, ">", "./passnames_.txt" )
+    or die "MORPH: cannot write ./passnames_.txt: $!\n";
+  say $pass_fh $origin;
+  close( $pass_fh )
+    or die "MORPH: cannot close ./passnames_.txt: $!\n";
+
+  die "MORPH: ./passnames_.txt was not created; refusing to call makenamedinstances\n"
+    unless -f "./passnames_.txt";
+
+  say "MORPH: missing named source '$origin'; calling makenamedinstances.";
+
+  my $instance = $a{instance};
+  my @seed_instances = ( $instance );
+  my $inst_r = $a{inst};
+
+  # %dowhat is already a local copy of the caller's hash.  For recovery, keep
+  # Morph active but suppress the nested simulation/report/descent cycle.
+  $dowhat{simulate}  = "n";
+  $dowhat{newreport} = "n";
+  $dowhat{descend}   = "n";
+
+  my %ctx = (
+    configfile  => $a{configfile},
+    precious    => undef,
+    instances   => \@seed_instances,
+    dirfiles    => $a{dirfiles},
+    inst        => $inst_r,
+    precedents  => $a{precedents},
+    dowhat      => \%dowhat,
+    vehicles    => $a{vehicles},
+    varnums     => $a{varnums},
+    blockelts   => $a{blockelts},
+    from        => $from,
+    mypath      => $mypath,
+    file        => $file,
+    countcase   => $a{countcase},
+    countblock  => $a{countblock},
+  );
+
+  Sim::OPTcue::OPTcue::makenamedinstances( \%ctx, $inst_r );
+
+  die "MORPH: makenamedinstances returned but required source '$orig' is still absent\n"
+    unless -d $orig;
+
+  return 1;
+}
+
+
 sub morph
 {
 	my ( $configfile, $instances_r, $dirfiles_r, $dowhat_r, $vehicles_r, $inst_r, $precedents_r ) = @_;
@@ -1400,6 +1498,60 @@ sub morph
         my %carrier = %{ $d{carrier} };
 		my $rootname = Sim::OPT::getrootname( \@rootnames, $countcase );
 
+        # A star point is an absolute coordinate in the block lattice.  For a
+        # multi-position star search, the current %mids is the star position,
+        # not necessarily the physical root model.  The ordinary Morph path
+        # applies one variable to its source model; using a non-root star
+        # position as that source therefore either leaves another coordinate at
+        # the root value or applies an absolute offset on top of an already
+        # shifted model.  Materialize the complete named target through the
+        # existing OPTcue multi-variable recovery path instead.  The nested
+        # recovery Morph runs in laxmode and is deliberately excluded here.
+        my $starttarget = Sim::OPT::giveback( \%mids );
+        my $star_exact_target = 0;
+        my $multi_star = ( ( $dirfiles{starsign} || "" ) eq "y" )
+          && ( ( $dirfiles{starnumber} || 0 ) > 1 );
+
+        $dowhat{actonmodels} = "y"
+          if !defined($dowhat{actonmodels}) || $dowhat{actonmodels} eq "";
+
+        if ( $multi_star
+          and ( $laxmode ne "y" )
+          and ( $dowhat{actonmodels} eq "y" ) )
+        {
+          die "MORPH STAR ABSOLUTE: target instance name is invalid: '$is'\n"
+            unless defined($is) && $is =~ /^\d+-\d+(?:_\d+-\d+)*$/;
+
+          my $star_target_path = $to{crypto};
+          die "MORPH STAR ABSOLUTE: target path is empty for '$is'\n"
+            unless defined($star_target_path) && $star_target_path ne "";
+
+          _make_missing_named_source(
+            orig        => $star_target_path,
+            origin      => $is,
+            from        => $starttarget,
+            mypath      => $mypath,
+            file        => $file,
+            configfile  => $configfile,
+            instance    => $instance,
+            inst        => \%inst,
+            dirfiles    => \%dirfiles,
+            dowhat      => \%dowhat,
+            vehicles    => \%vehicles,
+            precedents  => \@precedents,
+            varnums     => \%varnums,
+            blockelts   => \@blockelts,
+            countcase   => $countcase,
+            countblock  => $countblock,
+          );
+
+          die "MORPH STAR ABSOLUTE: exact target '$star_target_path' was not materialized\n"
+            unless -d $star_target_path;
+
+          $star_exact_target = 1;
+          say "MORPH STAR ABSOLUTE: materialized '$is' as a full block coordinate.";
+        }
+
 		my $varnumber = $countvar;
 		my $countcaseplus1 = ( $countcase + 1 );
 		my $countblockplus1 = ( $countblock + 1 );
@@ -1501,12 +1653,10 @@ sub morph
                 my $target = $to{crypto};
                 my $orig = $orig{crypto};
 
-                my $starttarget = Sim::OPT::giveback( \%mids );  #say  "STARTTARGET $starttarget";#DDD#HERE
-
                 my $starttarget_path = "$mypath/$file" . "_" . "$starttarget";
 
                 my $semph = 0;
-                unless ( ( $exeonfiles eq "n" ) or ( $semph > 0 ) )
+                unless ( ( $star_exact_target ) or ( $exeonfiles eq "n" ) or ( $semph > 0 ) )
                 {
                   if ( not ( -e $starttarget_path ) )
                   {
@@ -1551,7 +1701,8 @@ sub morph
 
 						print MORPHLIST "$to{cleanto}\n";
 
-						unless ( ( $exeonfiles eq "n") 
+						unless ( ( $star_exact_target )
+                          or ( $exeonfiles eq "n") 
                           or ( ( $laxmode eq "y" ) and ( $countp > 0 ) ) 
                           ) #HERE I.
 						{
@@ -1759,6 +1910,31 @@ sub morph
 
 								if ( not ( -e $target ) )
 								{
+                                  if ( not ( -d $orig ) )
+                                  {
+                                    _make_missing_named_source(
+                                      orig        => $orig,
+                                      origin      => $origin,
+                                      from        => $starttarget,
+                                      mypath      => $mypath,
+                                      file        => $file,
+                                      configfile  => $configfile,
+                                      instance    => $instance,
+                                      inst        => \%inst,
+                                      dirfiles    => \%dirfiles,
+                                      dowhat      => \%dowhat,
+                                      vehicles    => \%vehicles,
+                                      precedents  => \@precedents,
+                                      varnums     => \%varnums,
+                                      blockelts   => \@blockelts,
+                                      countcase   => $countcase,
+                                      countblock  => $countblock,
+                                    );
+                                  }
+
+                                  die "MORPH LEVEL 1g: source '$orig' does not exist for target '$target'\n"
+                                    unless -d $orig;
+
 									`cp -R $orig $target`;
 									say "LEVEL 1g: cp -R $orig $target \n";
                                 }
@@ -1772,7 +1948,7 @@ sub morph
                         if ( !defined $to ) { say "EXITING: \$to is not assigned."; }
                         if ( !defined $from ) { say "EXITING: \$from is not assigned."; }
 
-						if ( $dowhat{actonmodels} eq "y" )
+						if ( ( $dowhat{actonmodels} eq "y" ) and ( not $star_exact_target ) )
 						{ #if ( $d{treated} eq "treated" ){ print  "TREATED: $d{treated} "; }; say  "ARRIVED IN MORPH 6";
 							#if ( ( $laxmode eq "y" ) and ( $dirfiles{prelaxmode} eq "y" ) )
                             #{
@@ -2704,6 +2880,10 @@ c
 -
 -
 YYY
+
+exit
+
+exit
 ";
 
 		unless ($exeonfiles eq "n")
@@ -2842,6 +3022,8 @@ c
 -
 -
 YYY
+
+exit
 ";
 				unless ($exeonfiles eq "n")
 				{
@@ -2931,6 +3113,8 @@ c
 -
 -
 YYY
+
+exit
 ";
 
 				unless ($exeonfiles eq "n")
@@ -3033,6 +3217,8 @@ c
 -
 -
 YYY
+
+exit
 ";
 			unless ($exeonfiles eq "n")
 			{
@@ -3182,6 +3368,8 @@ c
 -
 -
 YYY
+
+exit
 ";
 		unless ($exeonfiles eq "n")
 		{
@@ -3270,6 +3458,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 				unless ($exeonfiles eq "n")
 				{
@@ -3317,6 +3507,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 				unless ($exeonfiles eq "n")
 				{
@@ -3403,6 +3595,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 
 		unless ($exeonfiles eq "n")
@@ -3689,6 +3883,8 @@ a
 -
 -
 YYY
+
+exit
 ";
 		unless ($exeonfiles eq "n")
 		{
@@ -3790,6 +3986,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 		    }
 				else
@@ -3829,6 +4027,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 				}
 
@@ -3849,61 +4049,194 @@ $printthis";
 } # END sub change_thickness
 
 
+sub _parse_obs_record
+{
+	my ( $line ) = @_;
+
+	return undef unless defined $line;
+	return undef unless $line =~ /^\s*\*obs\s*,/;
+
+	# The obstruction identifier in both current and older ESP-r GEO files
+	# is the semantic trailer "# block N".  Its token offset is not stable.
+	my ( $obsnum ) = $line =~ /#\s*block\s+(\d+)\s*$/;
+	return undef unless defined $obsnum;
+
+	my $body = $line;
+	$body =~ s/\s*#\s*block\s+\d+\s*$//;
+	my @fields = split( /\s*,\s*/, $body, -1 );
+
+	my %obs = (
+		denomination => $fields[0],
+		obsnum       => $obsnum,
+		origin       => [ @fields[ 1..3 ] ],
+		dimensions   => [ @fields[ 4..6 ] ],
+	);
+
+	# Current ESP-r GEO format:
+	# *obs,x,y,z,dx,dy,dz,rotation,opacity,name construction  # block N
+	if ( scalar( @fields ) == 10 )
+	{
+		$obs{record_format} = "current";
+		$obs{rotation}      = $fields[7];
+		$obs{opacity}       = $fields[8];
+
+		my $tail = $fields[9];
+		$tail = "" unless defined $tail;
+		$tail =~ s/^\s+//;
+		$tail =~ s/\s+$//;
+		my ( $name, $construction ) = split( /\s+/, $tail, 2 );
+		$obs{name}         = defined( $name ) ? $name : "";
+		$obs{construction} = defined( $construction ) ? $construction : "";
+	}
+	# Legacy layout expected by the old obs_modify code:
+	# *obs,x,y,z,dx,dy,dz,zrot,yrot,xrot,opacity,name,construction,# block N
+	elsif ( scalar( @fields ) >= 13 )
+	{
+		$obs{record_format} = "legacy";
+		$obs{rotation}      = $fields[7];
+		$obs{y_rotation}    = $fields[8];
+		$obs{x_rotation}    = $fields[9];
+		$obs{opacity}       = $fields[10];
+		$obs{name}          = $fields[11];
+		$obs{construction}  = $fields[12];
+	}
+	else
+	{
+		return undef;
+	}
+
+	return \%obs;
+}
+
+
+sub _format_obs_record
+{
+	my ( $obs_r ) = @_;
+	my %obs = %{ $obs_r };
+
+	my @origin = @{ $obs{origin} };
+	my @dims   = @{ $obs{dimensions} };
+	my $num    = $obs{obsnum};
+
+	if ( $obs{record_format} eq "legacy" )
+	{
+		return join( ",",
+			$obs{denomination}, @origin, @dims,
+			$obs{rotation}, $obs{y_rotation}, $obs{x_rotation},
+			$obs{opacity}, $obs{name}, $obs{construction}
+		) . ",  # block  $num";
+	}
+
+	my $tail = $obs{name};
+	$tail = "" unless defined $tail;
+	if ( defined( $obs{construction} ) and $obs{construction} ne "" )
+	{
+		$tail .= " " . $obs{construction};
+	}
+
+	return join( ",",
+		$obs{denomination}, @origin, @dims,
+		$obs{rotation}, $obs{opacity}, $tail
+	) . "  # block   $num";
+}
+
+
 sub readobsfile
 {    # THIS READS A GEO FILE TO GET THE DATA OF THE REQUESTED OBSTRUCTIONS
-	my ( $fullgeopath ) = @_; #say  "\$fullgeopath: $fullgeopath";
+	my ( $fullgeopath ) = @_;
 
 	open( GEOF, "$fullgeopath" ) or die;
 	my @lines = <GEOF>;
 	close GEOF;
 
-	my $countelt = 0;
 	my %obs_letter = ( 1 => "e", 2 => "f", 3 => "g", 4 => "h", 5 => "i", 6 => "j", 7 => "k", 8 => "l", 9 => "m", 10 => "n", 11 => "o" ); # RE-CHECK
 
 	my %obsts;
-	foreach my $line (@lines)
+	foreach my $line ( @lines )
 	{
 		chomp $line;
-		if ( $line =~ m/^\*obs/ )
-		{
-			my @elts = split( /\s+|,/, $line );
-			my $obsnum = $elts[15];
-			my $obsletter = $obs_letter{$obsnum};
-			$obsts{$obsletter}{denomination} = $elts[0];
-			$obsts{$obsnum}{denomination} = $elts[0];
+		my $obs_r = _parse_obs_record( $line );
+		next unless defined $obs_r;
 
-			$obsts{$obsletter}{obsnum} = $obsnum;
-			$obsts{$obsnum}{obsnum} = $obsnum;
+		my $obsnum = $obs_r->{obsnum};
+		my $obsletter = $obs_letter{$obsnum};
+		next unless defined $obsletter;
 
-			$obsts{$obsletter}{origin} = [ @elts[ 1..3 ] ];
-			$obsts{$obsnum}{origin} = [ @elts[ 1..3 ] ];
-
-			$obsts{$obsletter}{dimensions} = [ @elts[ 4..6 ] ];
-			$obsts{$obsnum}{dimensions} = [ @elts[ 4..6 ] ];
-
-			$obsts{$obsletter}{z_rotation} = $elts[7];
-			$obsts{$obsnum}{z_rotation} = $elts[7];
-
-			$obsts{$obsletter}{y_rotation} = $elts[8];
-			$obsts{$obsnum}{y_rotation} = $elts[8];
-
-			$obsts{$obsletter}{x_rotation} = $elts[9];
-			$obsts{$obsnum}{x_rotation} = $elts[9];
-
-			$obsts{$obsletter}{opacity} = $elts[10];
-			$obsts{$obsnum}{opacity} = $elts[10];
-
-			$obsts{$obsletter}{name} = $elts[11];
-			$obsts{$obsnum}{name} = $elts[11];
-
-			$obsts{$obsletter}{construction} = $elts[12];
-			$obsts{$obsnum}{construction} = $elts[12];
-
-			$obsts{$obsletter}{num} = $elts[15];
-			$obsts{$obsletter}{num} = $elts[15];
-		}
+		$obsts{$obsnum}    = { %{ $obs_r } };
+		$obsts{$obsletter} = { %{ $obs_r } };
 	}
+
 	return( %obsts );
+}
+
+
+sub _obs_vector_value
+{
+	my ( $base_r, $values_r, $stepsvar, $countstep ) = @_;
+	my @base = @{ $base_r };
+	my ( $x_base, $y_base, $z_base ) = @base;
+	my ( $x_value, $y_value, $z_value );
+
+	my $nofspaces = $stepsvar - 1;
+	if ( $nofspaces <= 0 )
+	{
+		return [ sprintf( "%.4f", $x_base ), sprintf( "%.4f", $y_base ), sprintf( "%.4f", $z_base ) ];
+	}
+
+	if ( ref( $values_r->[0] ) )
+	{
+		my @coord1 = @{ $values_r->[0] };
+		my @coord2 = @{ $values_r->[1] };
+		my ( $x_begin, $y_begin, $z_begin ) = @coord1;
+		my ( $x_end, $y_end, $z_end ) = @coord2;
+
+		$x_value = $x_base + $x_begin + ( ( $x_end - $x_begin ) / $nofspaces * ( $countstep - 1 ) );
+		$y_value = $y_base + $y_begin + ( ( $y_end - $y_begin ) / $nofspaces * ( $countstep - 1 ) );
+		$z_value = $z_base + $z_begin + ( ( $z_end - $z_begin ) / $nofspaces * ( $countstep - 1 ) );
+	}
+	else
+	{
+		my ( $x_end, $y_end, $z_end ) = @{ $values_r };
+		$x_end = 0 unless defined $x_end;
+		$y_end = 0 unless defined $y_end;
+		$z_end = 0 unless defined $z_end;
+
+		$x_value = $x_base + $x_end - ( ( 2 * $x_end ) / $nofspaces * ( $countstep - 1 ) );
+		$y_value = $y_base + $y_end - ( ( 2 * $y_end ) / $nofspaces * ( $countstep - 1 ) );
+		$z_value = $z_base + $z_end - ( ( 2 * $z_end ) / $nofspaces * ( $countstep - 1 ) );
+	}
+
+	return [ sprintf( "%.4f", $x_value ), sprintf( "%.4f", $y_value ), sprintf( "%.4f", $z_value ) ];
+}
+
+
+sub _obs_scalar_value
+{
+	my ( $base, $values_r, $stepsvar, $countstep ) = @_;
+	my $nofspaces = $stepsvar - 1;
+	return sprintf( "%.4f", $base ) if $nofspaces <= 0;
+
+	my ( $begin, $end );
+	if ( ref( $values_r->[0] ) )
+	{
+		if ( defined( $values_r->[1] ) and ref( $values_r->[1] ) )
+		{
+			$begin = $values_r->[0][0];
+			$end   = $values_r->[1][0];
+		}
+		else
+		{
+			$begin = $values_r->[0][0];
+			$end   = $values_r->[0][1];
+		}
+		$begin = 0 unless defined $begin;
+		$end   = $begin unless defined $end;
+		return sprintf( "%.4f", $base + $begin + ( ( $end - $begin ) / $nofspaces * ( $countstep - 1 ) ) );
+	}
+
+	my $swing = $values_r->[0];
+	$swing = 0 unless defined $swing;
+	return sprintf( "%.4f", $base + $swing - ( ( 2 * $swing ) / $nofspaces * ( $countstep - 1 ) ) );
 }
 
 
@@ -3912,254 +4245,131 @@ sub obs_modify
 	my ( $to, $stepsvar, $countop, $countstep, $applytype_ref, $obs_modify_ref, $countvar, $fileconfig, $mypath, $file, $countmorphing, $launchline, $menus_ref, $countinstance ) = @_;
 	my @applytype = @$applytype_ref;
 	my $geofile = $applytype[$countop][2];
-	my $zone_letter = $applytype[$countop][3];
 
-	my @menus = @$menus_ref;
-	my %numvertmenu = %{ $menus[0] };
-	my %vertnummenu = %{ $menus[1] };
-
-	my %obsn = ( "e" => 1, "f" => 2, "g" => 3, "h" => 4, "i" => 5, "j" => 6, "k" => 7, "l" => 8, "m" => 9 , "n" => 10, "o"  => 11); # RE-CHECK
+	my %obsn = ( "e" => 1, "f" => 2, "g" => 3, "h" => 4, "i" => 5, "j" => 6, "k" => 7, "l" => 8, "m" => 9 , "n" => 10, "o" => 11 ); # RE-CHECK
 
 	say  "Modifying obstructions for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
+
 	my $case_cycle_ref = $obs_modify_ref->[$countop];
-	my $configfile = $geofile;
 	my $fullgeopath = "$to/zones/$geofile";
-	my @obsrefs = @{ $case_cycle_ref };
+
+	# Accept both the current form
+	#   [ [ "e" ], "b", [ 1.5, 0, 0 ] ]
+	# and the older extra-grouped form containing several such entries.
+	my @obsrefs;
+	if ( ref( $case_cycle_ref ) eq "ARRAY"
+	     and ref( $case_cycle_ref->[0] ) eq "ARRAY"
+	     and defined( $case_cycle_ref->[1] )
+	     and !ref( $case_cycle_ref->[1] ) )
+	{
+		@obsrefs = ( $case_cycle_ref );
+	}
+	else
+	{
+		@obsrefs = @{ $case_cycle_ref };
+	}
 
 	my %obsts = readobsfile( $fullgeopath );
+	my %rewrite;
+
+	foreach my $obs ( @obsrefs )
+	{
+		next unless ref( $obs ) eq "ARRAY";
+		my @obsletters = @{ $obs->[0] };
+		my $modification_type = $obs->[1];
+		my $values_ref = $obs->[2];
+
+		foreach my $obsletter ( @obsletters )
+		{
+			my $obsnumber = $obsn{$obsletter};
+			next unless defined $obsnumber;
+			next unless exists $obsts{$obsnumber};
+
+			if ( $modification_type eq "a" )
+			{
+				my $new_r = _obs_vector_value( $obsts{$obsnumber}{origin}, $values_ref, $stepsvar, $countstep );
+				$obsts{$obsnumber}{origin} = [ @{ $new_r } ];
+				$obsts{$obsletter}{origin} = [ @{ $new_r } ];
+			}
+			elsif ( $modification_type eq "b" )
+			{
+				my $new_r = _obs_vector_value( $obsts{$obsnumber}{dimensions}, $values_ref, $stepsvar, $countstep );
+				$obsts{$obsnumber}{dimensions} = [ @{ $new_r } ];
+				$obsts{$obsletter}{dimensions} = [ @{ $new_r } ];
+			}
+			elsif ( $modification_type eq "c" )
+			{
+				my $new = _obs_scalar_value( $obsts{$obsnumber}{rotation}, $values_ref, $stepsvar, $countstep );
+				$obsts{$obsnumber}{rotation} = $new;
+				$obsts{$obsletter}{rotation} = $new;
+			}
+			elsif ( $modification_type eq "d" )
+			{
+				# Field d existed only in the legacy wide record.  The current
+				# GEO record has a single rotation field (c), so do not silently
+				# overwrite another current-format field.
+				if ( $obsts{$obsnumber}{record_format} eq "legacy" )
+				{
+					my $new = _obs_scalar_value( $obsts{$obsnumber}{y_rotation}, $values_ref, $stepsvar, $countstep );
+					$obsts{$obsnumber}{y_rotation} = $new;
+					$obsts{$obsletter}{y_rotation} = $new;
+				}
+				else
+				{
+					die "obs_modify type 'd' is not present in current ESP-r GEO obstruction records";
+				}
+			}
+			elsif ( $modification_type eq "f" )
+			{
+				my $new = $values_ref->[ $countstep - 1 ];
+				$new = $values_ref->[0] unless defined $new;
+				$obsts{$obsnumber}{name} = $new;
+				$obsts{$obsletter}{name} = $new;
+			}
+			elsif ( $modification_type eq "g" )
+			{
+				my $new = $values_ref->[ $countstep - 1 ];
+				$new = $values_ref->[0] unless defined $new;
+				$obsts{$obsnumber}{construction} = $new;
+				$obsts{$obsletter}{construction} = $new;
+			}
+			elsif ( $modification_type eq "h" )
+			{
+				my $new = _obs_scalar_value( $obsts{$obsnumber}{opacity}, $values_ref, $stepsvar, $countstep );
+				$obsts{$obsnumber}{opacity} = $new;
+				$obsts{$obsletter}{opacity} = $new;
+			}
+
+			$rewrite{$obsnumber} = 1;
+		}
+	}
 
 	open( OBSFILE, "$fullgeopath" ) or die;
 	my @obslines = <OBSFILE>;
 	close OBSFILE;
+
 	`cp -f $fullgeopath $fullgeopath.old`;
 	say  "mv -f $fullgeopath $fullgeopath.old";
 
 	open( NEWOBSFILE, ">$fullgeopath" ) or die;
-
-	my ( @obsbag );
-
-	$semaphore = 0;
-	my $countl = 1;
 	foreach my $obsline ( @obslines )
 	{
 		chomp $obsline;
-		my @elts = split( /\s+|,/, $obsline );
-
-		if ( $semaphore == 0 )
+		my $obs_r = _parse_obs_record( $obsline );
+		if ( defined( $obs_r ) and $rewrite{ $obs_r->{obsnum} } )
 		{
-			if ( $obsline =~ /\*obs = obstructions/ )
-			{
-				$semaphore = 1;
-			}
-			say NEWOBSFILE $obsline;
-			say  $obsline;
+			my $obsnum = $obs_r->{obsnum};
+			my $newline = _format_obs_record( $obsts{$obsnum} );
+			say NEWOBSFILE $newline;
+			say "obs_modify rewrote block $obsnum: $newline";
 		}
-		elsif ( $semaphore == 1 )
+		else
 		{
-			unless ( $obsline =~ /\*block_start/ )
-			{
-				foreach my $obs ( @obsrefs )
-				{
-					my @obsletters = @{ $obs->[0] };
-
-					foreach $o ( @obsletters )
-					{
-						my $onum = $obsn{$o};
-						push ( @obsbag, $onum );
-					}
-
-					my $modification_type = $obs->[1];
-					my $values_ref = $obs->[2];
-
-					my $countobs = 0;
-					foreach my $obsletter ( @obsletters )
-					{
-						my $obsnumber = $obsn{$obsletter};
-
-						if ( $elts[15] eq $obsnumber )
-						{
-
-							my ( $value, $basevalue, $swing, $low, $high );
-							my ( $x_end, $y_end, $z_end, $zory_end, $x_base, $base, $y_base, $z_base, $end_value, $base_value, $swing, $x_swing,
-							$y_swing, $z_swing, $pace, $value, $x_pace, $x_value, $y_pace, $y_value, $z_pace, $z_value,
-							$x_begin, $y_begin, $z_begin, $x_newbase, $y_newbase, $z_newbase );
-							my ( @base, @values, @coord1, @coord2 );
-
-							my $nofspaces = ( $stepsvar - 1 );
-
-							if ( $modification_type eq "a" )
-							{
-								@base = @{ $obsts{$obsletter}{origin} };
-							}
-							elsif ( $modification_type eq "b" )
-							{
-								@base = @{ $obsts{$obsletter}{dimensions} };
-							}
-							elsif ( $modification_type eq "c" )
-							{
-								@base = ( $obsts{$obsletter}{z_rotation} );
-							}
-							elsif ( $modification_type eq "d" )
-							{
-								@base = ( $obsts{$obsletter}{y_rotation} );
-							}
-							elsif ( $modification_type eq "f" )
-							{
-								@base = ( $obsts{$obsletter}{name} );
-							}
-							elsif ( $modification_type eq "g" )
-							{
-								@base = ( $obsts{$obsletter}{construction} );
-							}
-							elsif ( $modification_type eq "h" )
-							{
-								@base = ( $obsts{$obsletter}{opacity} );
-							}
-
-							if ( ( $modification_type eq "a" ) or ( $modification_type eq "b" ) )
-							{
-								my ( $x_base, $y_base, $z_base ) = @base;
-
-								if ( ref( $values_ref->[0] ) )
-								{
-
-									@coord1 = @{ $values_ref->[0] };
-									@coord2 = @{ $values_ref->[1] };
-									( $x_begin, $y_begin, $z_begin ) = @coord1;
-									( $x_end, $y_end, $z_end ) = @coord2;
-
-									$x_swing = ( $x_end - $x_begin );
-									$y_swing = ( $y_end - $y_begin );
-									$z_swing = ( $z_end - $z_begin );
-
-									$x_newbase = ( $x_base + $x_begin );
-									$y_newbase = ( $y_base + $y_begin );
-									$z_newbase = ( $z_base + $z_begin );
-
-									$x_pace = ( $x_swing / $nofspaces );
-									$y_pace = ( $y_swing / $nofspaces );
-									$z_pace = ( $z_swing / $nofspaces );
-
-									$x_value = ( $x_newbase + ( $x_pace * ( $countstep - 1) ) );
-									$y_value = ( $y_newbase + ( $y_pace * ( $countstep - 1) ) );
-									$z_value = ( $z_newbase + ( $z_pace * ( $countstep - 1) ) );
-
-								}
-								else
-								{
-									$values = $values_ref;
-									$x_end = $values->[0];
-									$x_swing = ( 2 * $x_end );
-									$x_base = $base[0];
-
-									$y_end = $values->[1];
-									$y_swing = ( 2 * $y_end );
-									$y_base = $base[1];
-
-									$z_end = $values->[2];
-									$z_swing = ( 2 * $z_end );
-									$z_base = $base[2];
-
-									$x_pace = ( $x_swing / $nofspaces );
-									$x_value = ($x_base + ( $x_end - ( $x_pace * ( $countstep - 1 ) ) ));
-									$y_pace = ( $y_swing / $nofspaces );
-									$y_value = ($y_base + ( $y_end - ( $y_pace * ( $countstep - 1 ) ) ));
-									$z_pace = ( $z_swing / $nofspaces );
-									$z_value = ($z_base + ( $z_end - ( $z_pace * ( $countstep - 1 ) ) ));
-								}
-
-								$x_value = sprintf( "%.4f", $x_value );
-								$y_value = sprintf( "%.4f", $y_value );
-								$z_value = sprintf( "%.4f", $z_value );
-
-								if ( $modification_type eq "a" )
-							       {
-									$obsts{$obsletter}{origin} = [ ( $x_value, $y_value, $z_value ) ];
-							                $obsts{$obsnumber}{origin} = [ ( $x_value, $y_value, $z_value ) ];
-							       }
-							       elsif ( $modification_type eq "b" )
-							       {
-									$obsts{$obsletter}{dimensions} = [ ( $x_value, $y_value, $z_value ) ];
-							                $obsts{$obsnumber}{dimensions} = [ ( $x_value, $y_value, $z_value ) ];
-							       }
-						       }
-
-
-							if ( ($modification_type eq "c") or ($modification_type eq "d") or ($modification_type eq "h") )
-							{
-								my $base = $base[0];
-								$zory_end = $value;
-
-								if ( ref ( $zory_end ) )
-								{
-									my $min = $zory_end->[0];
-									my $max = $zory_end->[1];
-									$swingtranslate = ( $max - $min );
-								}
-								else
-								{
-									$swingtranslate = ( 2 * $zory_end );
-								}
-
-								my $zory_base = $base;
-								my $zory_pace = ( $swingtranslate / ( $stepsvar - 1 ) );
-								my $zory_value = ($zory_base + ( $zory_end - ( $zory_pace * ( $countstep - 1 ) ) ));
-								$zory_value = sprintf( "%.4f", $zory_value );
-
-								if ( $modification_type eq "c" )
-							       {
-									$obsts{$obsletter}{z_rotation} = $zory_value;
-									$obsts{$obsnumber}{z_rotation} = $zory_value;
-							       }
-							       elsif ( $modification_type eq "d" )
-							       {
-									$obsts{$obsletter}{y_rotation} = $zory_value;
-									$obsts{$obsnumber}{y_rotation} = $zory_value;
-							       }
-							       elsif ( $modification_type eq "h" )
-							       {
-									$obsts{$obsletter}{opacity} = $zory_value;
-									$obsts{$obsnumber}{opacity} = $zory_value;
-							       }
-							}
-
-							if ($modification_type eq "g")
-							{
-								my $base = $base[0];
-								my @constrs = @{ $values_ref };
-								my $constr = $constrs[ $countstep - 1 ];
-
-								$obsts{$obsletter}{construction} = $elts[10];
-								$obsts{$obsnumber}{construction} = $elts[10];
-							}
-						}
-					}
-					$countobs++;
-				}
-			}
-
-			@obsbag = uniq( @obsbag );
-			my $obsnum = $elts[15];
-
-			if ( ( $obsline =~ /\*end_block/ ) or ( $obsline =~ /block_start/ ) )
-			{
-				say NEWOBSFILE $obsline;
-				#say  $obsline;
-			}
-			elsif (  $obsnum ~~ @obsbag )
-			{
-				say NEWOBSFILE "$obsts{$obsnum}{denomination},$obsts{$obsnum}{origin}->[0],$obsts{$obsnum}{origin}->[1],$obsts{$obsnum}{origin}->[2],$obsts{$obsnum}{dimensions}->[0],$obsts{$obsnum}{dimensions}->[1],$obsts{$obsnum}{dimensions}->[2],$obsts{$obsnum}{z_rotation},$obsts{$obsnum}{y_rotation},$obsts{$obsnum}{x_rotation},$obsts{$obsnum}{opacity},$obsts{$obsnum}{name}, $obsts{$obsnum}{construction},  # block  $obsts{$obsnum}{obsnum}" ;
-				say  "$obsts{$obsnum}{denomination},$obsts{$obsnum}{origin}->[0],$obsts{$obsnum}{origin}->[1],$obsts{$obsnum}{origin}->[2],$obsts{$obsnum}{dimensions}->[0],$obsts{$obsnum}{dimensions}->[1],$obsts{$obsnum}{dimensions}->[2],$obsts{$obsnum}{z_rotation},$obsts{$obsnum}{y_rotation},$obsts{$obsnum}{x_rotation},$obsts{$obsnum}{opacity},$obsts{$obsnum}{name}, $obsts{$obsnum}{construction},  # block  $obsts{$obsnum}{obsnum}" ;
-			}
-			else
-			{
-				say NEWOBSFILE "$obsline";
-				#say  "$obsline";
-			}
-			$countl++;
+			say NEWOBSFILE $obsline;
 		}
 	}
-} # END SUB obs_modify.
+	close NEWOBSFILE;
+}
 
 
 sub recalculateish
@@ -4203,6 +4413,8 @@ a
 -
 -
 YYY
+
+exit
 ";
 	}
 	elsif ( $whatto eq "noins" )
@@ -4233,6 +4445,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 
 	  }
@@ -4311,6 +4525,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 	  unless ($exeonfiles eq "n")
 	  {
@@ -4407,6 +4623,8 @@ a
 -
 -
 YYY
+
+exit
 \n\n
 cd $mypath
 ";
@@ -4649,7 +4867,7 @@ sub change_climate ### THIS SIMPLE SCRIPT HAS TO BE DEBUGGED. WHY DOES IT BLOCK 
 	my ( $oldfile, $climatefolder );
 	foreach my $line ( @lines )
 	{
-		if ( $line =~ /^\*clm/ )
+		if ( ( $line =~ /^\*clm/ ) or ( $line =~ /^\*stdclm/ ) )
 		{
 			my @row = split ( /\s+/ , $line );
 			$climatefile = $row[1];
@@ -4868,6 +5086,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 				unless ($exeonfiles eq "n")
 				{
@@ -4915,6 +5135,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 					unless ($exeonfiles eq "n")
 					{
@@ -4959,6 +5181,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 			unless ($exeonfiles eq "n")
 			{
@@ -5000,6 +5224,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 			unless ($exeonfiles eq "n")
 			{
@@ -5495,6 +5721,8 @@ c
 -
 -
 YYY
+
+exit
 ";
 			  unless ($exeonfiles eq "n")
 			  {
@@ -5556,6 +5784,8 @@ c
 -
 YYY
 
+exit
+
 cd $to/cfg/
 prj -file $fileconfig -mode script<<YYY
 m
@@ -5578,6 +5808,8 @@ c
 -
 -
 YYY
+
+exit
 ";
 			    unless ($exeonfiles eq "n")
 			    {
@@ -5630,6 +5862,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 				unless ($exeonfiles eq "n")
 				{
@@ -5667,6 +5901,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 				unless ($exeonfiles eq "n")
 				{
@@ -5715,6 +5951,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 				unless ($exeonfiles eq "n")
 				{
@@ -5747,6 +5985,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 				unless ($exeonfiles eq "n")
 				{
@@ -5778,6 +6018,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 				unless ($exeonfiles eq "n")
 				{
@@ -5944,6 +6186,8 @@ c
 -
 -
 YYY
+
+exit
 ";
 							unless ($exeonfiles eq "n")
 							{
@@ -6042,6 +6286,8 @@ c
 -
 -
 YYY
+
+exit
 ";
 			unless ($exeonfiles eq "n")
 			{
@@ -6142,6 +6388,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 			unless ($exeonfiles eq "n")
 			{
@@ -6201,6 +6449,8 @@ $file_eplus
 -
 -
 YYY
+
+exit
 ";
 	unless ($exeonfiles eq "n")
 	{
@@ -6352,6 +6602,8 @@ $testshdaname
 y
 -
 YYY
+
+exit
 ";
 				#print  "SETTING UP THINGS AFTER RUNNING modish.pl.\n $printthis";
 				unless ($exeonfiles eq "n")
@@ -7001,6 +7253,8 @@ $newvalue
 -
 -
 YYY
+
+exit
 ";
 
 	unless ($exeonfiles eq "n")
@@ -7611,6 +7865,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 			unless ($exeonfiles eq "n")
 			{
@@ -7663,6 +7919,8 @@ y
 -
 -
 YYY
+
+exit
 ";
 			unless ($exeonfiles eq "n") # unless ($exeonfiles eq "n")
 			{

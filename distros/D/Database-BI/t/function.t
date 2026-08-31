@@ -983,4 +983,67 @@ subtest 'GET /export -- no left table returns redirect to /' => sub {
 	  ->status_isnt(500, 'export with missing table does not 500');
 };
 
+# ---------------------------------------------------------------------------
+# Subtest: graph_view Y-strip -- accounting-notation negative amounts
+#
+# Regression for the accounting-format bug: ($1,234.56) was stripped to
+# "1234.56" (positive) because all non-digit/dot/dash chars were removed
+# before detecting the sign.  The fix checks for a leading '(' before
+# stripping and prepends '-' to the result.
+#
+# Strategy: create a temp CSV with a mix of plain-positive, accounting-
+# negative, and dash-negative amounts; hit /graph and verify the embedded
+# chart JSON contains the correct signed values.
+# ---------------------------------------------------------------------------
+
+subtest 'graph_view Y-strip -- accounting negatives plotted as negative values' => sub {
+	use Mojo::Util qw(url_escape);
+	SKIP: {
+		eval { require HTML::D3 } or skip 'HTML::D3 not available', 4;
+		my $dir  = tempdir(CLEANUP => 1);
+		my $file = Mojo::File->new($dir, 'ledger.csv');
+		$file->spew(
+			"month,amount\n" .
+			"Jan,\$1200.00\n" .    # plain positive
+			"Feb,(\$450.00)\n" .   # accounting negative — was plotted as +450
+			"Mar,(\$75.50)\n" .    # accounting negative, decimal
+			"Apr,-30.00\n"         # dash negative
+		);
+		my $enc = url_escape($file->to_string);
+		$t->get_ok("/graph?l=path:$enc&x=month&y=amount")
+		  ->status_is(200, 'graph renders with accounting amounts')
+		  ->content_like(qr/-450\b/, 'accounting ($450.00) plotted as -450')
+		  ->content_like(qr/-75\.5\b/, 'accounting ($75.50) plotted as -75.5');
+	}
+};
+
+subtest 'graph_view Y-strip -- accounting zero ($0.00) is valid and not skipped' => sub {
+	use Mojo::Util qw(url_escape);
+	SKIP: {
+		eval { require HTML::D3 } or skip 'HTML::D3 not available', 2;
+		my $dir  = tempdir(CLEANUP => 1);
+		my $file = Mojo::File->new($dir, 'zero.csv');
+		$file->spew("month,amount\nJan,(\$0.00)\nFeb,\$100.00\n");
+		my $enc = url_escape($file->to_string);
+		$t->get_ok("/graph?l=path:$enc&x=month&y=amount")
+		  ->status_is(200, 'graph renders even when one Y value is zero in accounting format')
+		  ->content_unlike(qr/No plottable data/, '($0.00) is not skipped as non-numeric');
+	}
+};
+
+subtest 'graph_view Y-strip -- column with no-dollar accounting parens is numeric' => sub {
+	# (148.00) has no $ prefix but is still accounting-negative.
+	use Mojo::Util qw(url_escape);
+	SKIP: {
+		eval { require HTML::D3 } or skip 'HTML::D3 not available', 2;
+		my $dir  = tempdir(CLEANUP => 1);
+		my $file = Mojo::File->new($dir, 'nodollar.csv');
+		$file->spew("month,amount\nJan,(148.00)\nFeb,200.00\n");
+		my $enc = url_escape($file->to_string);
+		$t->get_ok("/graph?l=path:$enc&x=month&y=amount")
+		  ->status_is(200, 'no-dollar accounting notation recognised as numeric')
+		  ->content_like(qr/-148\b/, '(148.00) plotted as -148');
+	}
+};
+
 done_testing();

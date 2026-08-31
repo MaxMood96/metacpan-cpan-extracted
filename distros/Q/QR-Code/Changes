@@ -1,5 +1,8 @@
 Revision history for QR::Code
 
+0.05    2026-08-31
+        - Define NO_XSLOCKS so the C core builds on Strawberry perl.
+
 0.04    2026-08-24
         - Return _abi_ptr as a UV, not an IV.
 

@@ -1,22 +1,25 @@
 # ABSTRACT: Atomically find and claim the next available task
 
 package App::karr::Cmd::Pick;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use MooX::Cmd;
 use MooX::Options (
-  usage_string => 'USAGE: karr pick --claim NAME [--move STATUS] [--status LIST] [--tags LIST]',
+  usage_string => 'USAGE: karr pick --claim NAME [--move STATUS] [--status LIST] [--tags LIST] [--compact]',
 );
 use App::karr::Role::BoardAccess;
 use App::karr::Role::Output;
+use App::karr::Role::CompactOutput;
 use App::karr::Role::DependencyCheck;
+use App::karr::Role::PickRules;
 use App::karr::Task;
 use App::karr::Config;
 use App::karr::Lock;
 use Time::Piece;
 
 with 'App::karr::Role::BoardAccess', 'App::karr::Role::Output',
-     'App::karr::Role::ClaimTimeout', 'App::karr::Role::DependencyCheck';
+     'App::karr::Role::CompactOutput', 'App::karr::Role::ClaimTimeout',
+     'App::karr::Role::DependencyCheck', 'App::karr::Role::PickRules';
 
 
 option claim => (
@@ -63,34 +66,16 @@ sub execute {
 
   # A ranking, not a decision. Every one of these is re-read and re-tested under
   # its own lock before anything is written (see EXCLUSIVITY above).
-  my @tasks = grep { $self->_is_pickable($_, $timeout) } $self->load_tasks;
-
-  # Sort by class priority, then by priority. Both axes are driven by the
-  # board's configured lists -- not by a hardcoded table that only knew the
-  # four default priorities and classes. A board imported from kanban-md
-  # can name anything (ticket #149: a `blocker` priority beat a `critical`
-  # one on a non-default board); picking against the hardcoded table gave
-  # the wrong card out while `karr list --sort priority` showed the right
-  # one right next to it.
   #
-  # Convention, matching kanban-md's pick.go: lower class index = more
-  # urgent class; higher priority index = more urgent priority. So the
-  # sort key for priority is `(max - priority_index)` -- most-urgent-last
-  # in the config list comes out first.
-  my $cfg = App::karr::Config->from_merged($ec);
-  my @priorities = $cfg->priorities;
-  my @classes    = $cfg->classes;
-  my %pri_idx; $pri_idx{$priorities[$_]} = $_ for 0 .. $#priorities;
-  my %cls_idx; $cls_idx{$classes[$_]}    = $_ for 0 .. $#classes;
-  my $max_pri = $#priorities;
-  my $std_cls_idx = $cls_idx{standard} // 0;
-
-  @tasks = sort {
-    ( ($cls_idx{$a->class}    // $std_cls_idx) <=> ($cls_idx{$b->class}    // $std_cls_idx) )
-    || ( ($max_pri - ($pri_idx{$a->priority} // -1))
-         <=> ($max_pri - ($pri_idx{$b->priority} // -1)) )
-    || $a->id <=> $b->id
-  } @tasks;
+  # Which cards qualify and what order they come in are both
+  # App::karr::Role::PickRules', not this command's: App::karr::Foundation's
+  # ticket mode has to name the card `karr pick` would hand out, and while the
+  # eligibility test and the class/priority/id sort were written out here and
+  # again in App::karr::Foundation::Picker, they agreed only by having been
+  # copied (ticket #198). What stays here is everything the role deliberately
+  # does not do -- the lock, the re-read and the compare-and-swap below.
+  my %filter = $self->_pick_filter($timeout);
+  my @tasks  = $self->pick_candidates( [ $self->load_tasks ], %filter );
 
   unless (@tasks) {
     return $self->_nothing_picked("No available tasks to pick.");
@@ -113,7 +98,7 @@ sub execute {
 
     # Hold the lock for the claim and nothing else, and give it back on the way
     # out either way. Before #45 a die in here left the ref behind for good.
-    $picked = eval { $self->_claim_under_lock($candidate->id, $timeout) };
+    $picked = eval { $self->_claim_under_lock($candidate->id, \%filter) };
     my $err = $@;
     $lock->release($candidate->id, $email);
     die $err if $err;
@@ -147,6 +132,30 @@ sub execute {
   }
 
   printf "Picked task %d: %s (claimed by %s)\n", $picked->id, $picked->title, $self->claim;
+
+  # Everything below is the detail block, and --compact is the instruction not
+  # to print it. Until #251 this command composed App::karr::Role::Output, took
+  # --compact from it and never looked at it, so `pick --claim x --compact` came
+  # out character-identical to `pick --claim x` -- an output that looks like an
+  # answer while disobeying the option, which is the failure #225 refused to
+  # leave standing.
+  #
+  # Meeting the option beat withdrawing it, and that was decided on the role
+  # rather than on this command: Role::Output declared --compact beside --json
+  # then, so removing it from one consumer meant splitting the role and moving
+  # the option surface of the seventeen further commands that ignored it just as
+  # silently. #254 did exactly that -- --compact now lives in
+  # App::karr::Role::CompactOutput, which this command composes and the thirteen
+  # that render nothing do not. Pick meanwhile already prints in two
+  # parts -- who got which card, then what the card is -- so there is an obvious
+  # place to cut, and the reference cuts there too: kanban-md's `pick --no-body`
+  # ("suppress full task details after pick", cmd/pick.go:104) prints its
+  # confirmation line and returns before the detail block.
+  #
+  # Only the plaintext half. The --json branch returned above, exactly as
+  # noBody sits after the JSON check over there.
+  return if $self->compact;
+
   printf "Status: %s | Priority: %s | Class: %s\n", $picked->status, $picked->priority, $picked->class;
   if ($picked->body) {
     print "\n" . $picked->body . "\n";
@@ -176,44 +185,28 @@ sub _nothing_picked {
   return;
 }
 
-# The one and only definition of "this card is available to me right now". It is
-# a method rather than a chain of greps in execute so that the pre-lock ranking
-# and the re-read under the lock cannot drift apart: the second test has to be
-# the same test, or moving it inside the lock buys nothing (#86).
-sub _is_pickable {
-  my ($self, $task, $timeout) = @_;
-  return 0 unless $task;
-
-  if ($self->status) {
-    my %allowed = map { $_ => 1 } split /,/, $self->status;
-    return 0 unless $allowed{$task->status};
-  } else {
-    # The board's own terminal status, not a hardcoded 'done': a board imported
-    # from kanban-md can end in `shipped`, and pick used to hand those finished
-    # cards straight back out (ticket #67).
-    return 0 if $self->store->is_terminal_status($task->status);
-  }
-
-  # `claimed_by: ""` means unclaimed. kanban-md's omitempty writes the key only
-  # when it is non-empty, but a card it read and rewrote -- or any hand-written
-  # one -- can carry the empty string, and Moo's predicate calls that "set". So
-  # every imported kanban-md card looked as though somebody held it, and pick
-  # reported an empty board while `karr list` showed the work sitting there
-  # (ticket #59).
-  # This is the same emptiness test App::karr::Role::ClaimTimeout/check_claim
-  # already applies; the two have to agree or a task pick refuses is a task
-  # move happily accepts.
-  return 0 if $task->has_claimed_by
-    && length $task->claimed_by
-    && !$self->_claim_expired($task, $timeout);
-  return 0 if $task->has_blocked;
-
-  if ($self->tags) {
-    my %wanted = map { $_ => 1 } split /,/, $self->tags;
-    return 0 unless grep { $wanted{$_} } @{$task->tags};
-  }
-
-  return 1;
+# This command's half of "this card is available to me right now": the two
+# option filters, split from their comma-separated option strings into the shape
+# App::karr::Role::PickRules/pickable takes. The rule itself is the role's, and
+# is the same rule App::karr::Foundation::Picker applies with neither filter set
+# (#198) -- an option is a narrowing of the shared test, never a second one.
+#
+# Built once per run and passed on to _claim_under_lock rather than rebuilt
+# there, for the reason the old private predicate was a method: the pre-lock
+# ranking and the re-read under the lock have to ask the identical question, or
+# moving the test inside the lock buys nothing (#86).
+#
+# Truthiness decides whether a filter applies, which is what `if ($self->status)`
+# meant here before: an unset option leaves the key out, and leaving it out is
+# not the same as passing an empty list -- no `statuses` means "anything but a
+# terminal status", `statuses => []` would mean nothing qualifies at all.
+sub _pick_filter {
+  my ($self, $timeout) = @_;
+  return (
+    timeout => $timeout,
+    ( $self->status ? ( statuses => [ split /,/, $self->status ] ) : () ),
+    ( $self->tags   ? ( tags     => [ split /,/, $self->tags   ] ) : () ),
+  );
 }
 
 # Claim one candidate, or return false if it is no longer ours to claim.
@@ -225,11 +218,11 @@ sub _is_pickable {
 # separates the two ways a compare-and-swap can fail: the card changed under us
 # (re-read, decide again) versus the card is taken (final, move on).
 sub _claim_under_lock {
-  my ($self, $id, $timeout) = @_;
+  my ($self, $id, $filter) = @_;
 
   return $self->git->retry_contended("the claim on task $id", sub {
     my ($oid, $task) = $self->store->find_task_with_oid($id);
-    return (0) unless $self->_is_pickable($task, $timeout);
+    return (0) unless $self->pickable($task, %$filter);
 
     $task->claimed_by($self->claim);
     $task->claimed_at(gmtime->datetime . 'Z');
@@ -244,10 +237,10 @@ sub _claim_under_lock {
     #
     # Without --move the card stays where it is, so the status it stays in is
     # the one to judge. That is not a formality: --status is the one way a card
-    # already in a terminal status reaches this point at all (_is_pickable
-    # excludes terminal statuses only when --status is absent), and picking up
-    # a finished card must not lecture about dependencies that stopped
-    # mattering when it was finished.
+    # already in a terminal status reaches this point at all (the shared
+    # App::karr::Role::PickRules/pickable excludes terminal statuses only when
+    # --status is absent), and picking up a finished card must not lecture about
+    # dependencies that stopped mattering when it was finished.
     #
     # Pick does not go through apply_status_change (see EXCLUSIVITY above), so
     # this is its own call to the check every other status change gets there.
@@ -291,13 +284,14 @@ App::karr::Cmd::Pick - Atomically find and claim the next available task
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
     karr pick --claim agent-fox
     karr pick --claim agent-fox --status todo --move in-progress
     karr pick --claim agent-fox --tags backend,urgent --json
+    karr pick --claim agent-fox --compact
 
 =head1 DESCRIPTION
 
@@ -305,6 +299,14 @@ Selects the next available task for an agent, taking class of service,
 priority, blocked state, and claim expiry into account. When the board lives in
 a Git repository, the command also uses lock refs so concurrent agents do not
 pile onto the same candidate.
+
+Which cards qualify and what order they come in are not defined here: they are
+L<App::karr::Role::PickRules>, which L<App::karr::Foundation::Picker> composes
+as well, so karr-foundation's ticket mode names the card this command would
+hand out instead of a second opinion about it (ticket #198). What belongs to
+this command is everything on top of that ranking -- the claim, the lock and
+the compare-and-swap below -- and the C<--status> and C<--tags> options, which
+narrow the shared test rather than replace it.
 
 =head1 SELECTION RULES
 
@@ -331,6 +333,17 @@ so a board imported from kanban-md with a longer priorities list ranks
 according to its own list. Lower class index is more urgent; higher priority
 index is more urgent (matches kanban-md's pick.go).
 
+=item * C<fixed-date>
+
+Where both candidates carry the C<fixed-date> class, the due date is asked
+before priority: the card due sooner goes first, and a C<fixed-date> card with
+no due date sorts behind every dated one. Undated on both sides, or the same
+date on both, leaves priority to decide. Only that class, and only against
+itself -- a C<fixed-date> card meeting any other class is ranked by class index
+alone, whatever the dates say. This too is kanban-md's rule (its
+C<sortPickCandidates>), and it is where a class of service that exists for a
+deadline stops being ranked by urgency instead.
+
 =item * C<--move>
 
 Optionally updates the picked task to a new status such as C<in-progress>.
@@ -343,6 +356,15 @@ With C<--json> a successful pick prints the picked task as a JSON object, and
 picking nothing prints C<< {"picked":null} >>. Either way the exit status is
 C<0>, so a polling agent decodes the payload and tests for a task rather than
 reading the exit code or the message text.
+
+=head1 COMPACT OUTPUT
+
+C<--compact> ends the plaintext output after the assignment line: no
+C<Status | Priority | Class> line and no body. It is what kanban-md spends a
+flag of its own on (C<pick --no-body>), and it is the whole of the option here
+-- C<--json> renders the full task either way, and the dependency warnings are
+unaffected, because they go to STDERR and answer to C<--quiet> rather than to a
+flag about how much of STDOUT to print.
 
 =head1 EXCLUSIVITY
 
@@ -377,9 +399,10 @@ L<App::karr::Cmd::Unlock> is the manual escape hatch.
 
 =head1 SEE ALSO
 
-L<karr>, L<App::karr>, L<App::karr::Cmd::List>, L<App::karr::Cmd::Move>,
-L<App::karr::Cmd::Handoff>, L<App::karr::Cmd::AgentName>,
-L<App::karr::Cmd::Unlock>
+L<karr>, L<App::karr>, L<App::karr::Role::PickRules>,
+L<App::karr::Foundation::Picker>, L<App::karr::Cmd::List>,
+L<App::karr::Cmd::Move>, L<App::karr::Cmd::Handoff>,
+L<App::karr::Cmd::AgentName>, L<App::karr::Cmd::Unlock>
 
 =head1 SUPPORT
 
@@ -402,9 +425,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

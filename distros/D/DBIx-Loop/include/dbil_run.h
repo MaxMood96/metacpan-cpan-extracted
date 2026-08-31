@@ -112,7 +112,10 @@ static SV *dbil_run_dbi(pTHX_ SV *dbh, int is_query, SV *sql, AV *bind, SV **err
             if (n > 0) { SV *s = POPs; if (SvROK(s)) sth = SvREFCNT_inc(s); }
             PUTBACK; FREETMPS; LEAVE;
         }
-        if (!sth) { *err = sv_2mortal(newSVpvs("prepare returned no statement handle")); return NULL; }
+        /* a prepare that fails on a handle without RaiseError returns undef
+         * rather than croaking, and the driver's reason is on the DBH - the
+         * same false-return the execute path reads off the STH below */
+        if (!sth) { *err = dbil_errstr(aTHX_ dbh, "prepare returned no statement handle"); return NULL; }
         sv_2mortal(sth);
         /* execute */
         {

@@ -18,6 +18,27 @@ use constant {
     M_MS => 'punk.health.ms',
 };
 
+# The store's budgets default to 500,000 when left unset. A STRING, not
+# `1 << 62`, because a perl with 32-bit integers does not have that number and
+# would quietly pass something else; the store parses nanosecond-width decimals
+# everywhere already.
+use constant NO_CEILING => '4611686018427387904';
+
+# Every query here is one this file wrote, and every one of them is an
+# aggregate over the window - so none can be answered by stopping part way. An
+# uptime band that stops mid-window reports a service as up because the scan
+# ran out, which is the one reading this page must never give. It is also what
+# keeps the page cheap: a chunk that truncates is never cached, so a query left
+# on the default ceiling has its busiest chunk rescanned on every poll.
+sub _read {
+    my ($store, @args) = @_;
+    push @args, limit => NO_CEILING, hard_max => NO_CEILING,
+                max_rows => NO_CEILING;
+    return $store->can('cached_query')
+         ? $store->cached_query(@args)
+         : $store->query(@args);
+}
+
 sub _rec {
     my ($t, $name, $value, $attrs) = @_;
     return { t => $t, kind => 1, body => $name, value => $value + 0,
@@ -180,7 +201,7 @@ sub page_vars {
         my $secs = int(($t->{every_ns} || 60_000_000_000) / 1_000_000_000) || 60;
         my $q = sprintf('metric %s | where target == "%s" | bucket(%ds) min by check',
                         M_OK, $t->{name}, $secs);
-        my $res = eval { $store->query($q, from => $from, to => $now) };
+        my $res = eval { _read($store, $q, from => $from, to => $now) };
         next unless $res && $res->{ok} && ref $res->{series} eq 'ARRAY';
 
         for my $s (@{ $res->{series} }) {
@@ -224,7 +245,7 @@ sub page_vars {
 
         my $qm = sprintf('metric %s | where target == "%s" | bucket(%ds) max by check',
                          M_MS, $t->{name}, $secs);
-        my $ms = eval { $store->query($qm, from => $from, to => $now) };
+        my $ms = eval { _read($store, $qm, from => $from, to => $now) };
         if ($ms && $ms->{ok} && ref $ms->{series} eq 'ARRAY') {
             my %by_check;
             for my $s (@{ $ms->{series} }) {
@@ -245,20 +266,6 @@ sub page_vars {
     return \@out;
 }
 
-# --- was it up, and when was it not -----------------------------------------
-
-# WHAT A LATENCY CHART CANNOT SAY. The poll-latency bars answered "how slow is
-# it right now", which is a number the table already carries, and said nothing
-# at all about the question somebody opens this page to ask: was it up for the
-# last hour, and if not, when was it down. A target that has been down for
-# forty minutes drew a bar like any other.
-#
-# The history is already there - `punk.health.ok` is a metric point per poll -
-# so this needs no new storage, only the read.
-#
-# MIN OVER THE BUCKET, not average or last: a bucket where ANY poll failed is
-# a bucket the service was down in. An average would paint a minute with one
-# failure in five as mostly-up, which is the reading that loses the incident.
 my $UP_BUCKETS = 120;          # across the window, whatever it is
 my $UP_MIN_NS  = 30 * 1_000_000_000;
 
@@ -267,21 +274,10 @@ sub _up_bucket_ns {
     my $span = Punk::Observe::Store::nsub($to, $from);
     my $each = int(($span + 0) / $UP_BUCKETS);
     $each = $UP_MIN_NS if $each < $UP_MIN_NS;
-    # Whole seconds, because that is what the query language writes and a
-    # fractional duration would round somewhere the reader cannot see.
     my $secs = int($each / 1_000_000_000) || 1;
     return $secs;
 }
 
-# uptime_events(store => $s, from => $ns, to => $ns)
-#
-# The band list `Punk::Observe::Plot::alert_timeline` draws, derived from the
-# polls rather than from a transitions table - health has no such table, and
-# inventing one would be a second place for the same truth to live.
-#
-# A band starts where the state CHANGED and runs to the next change; the
-# renderer runs the last one to `to`, because a state nobody has left is still
-# in force.
 sub uptime_events {
     my (%opt) = @_;
     my $store = $opt{store} or return [];
@@ -290,15 +286,13 @@ sub uptime_events {
 
     my $secs = _up_bucket_ns($from, $to);
     my $res  = eval {
-        $store->query('metric ' . M_OK . " | bucket(${secs}s) min by target, check",
-                      from => $from, to => $to)
+        _read($store, 'metric ' . M_OK . " | bucket(${secs}s) min by target, check",
+              from => $from, to => $to)
     };
     return [] unless $res && $res->{ok} && ($res->{shape} || '') eq 'buckets';
 
     my @ev;
     for my $ser (@{ $res->{series} || [] }) {
-        # `by target, check` joins its fields with \x1f - the unit separator
-        # the group key uses - and a target-level point has an empty check.
         my ($target, $check) = split /\x1f/, ($ser->{key} // ''), 2;
         next unless defined $target && length $target;
         my $label = (defined $check && length $check)
@@ -308,10 +302,6 @@ sub uptime_events {
                       || $a->[0] cmp $b->[0] } @{ $ser->{points} || [] };
         my $last = '';
         for my $p (@pts) {
-            # A bucket holding no poll at all is not a bucket the service was
-            # down in - it is one nobody looked. The query does not emit
-            # empty buckets, so an absent bucket simply extends the band
-            # either side of it, which is what "we did not check" should draw.
             my $state = (($p->[1] // 0) >= 1) ? 'up' : 'down';
             next if $state eq $last;
             push @ev, { series => $label, at => "$p->[0]", to => $state };

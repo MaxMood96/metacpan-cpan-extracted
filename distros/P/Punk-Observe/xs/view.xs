@@ -2291,7 +2291,7 @@ povw__page_explore(SV *class, SV *store, SV *req)
             XPUSHs(sv_2mortal(newSVpvs("from"))); XPUSHs(sv_2mortal(newSVsv(from)));
             XPUSHs(sv_2mortal(newSVpvs("to")));   XPUSHs(sv_2mortal(newSVsv(to)));
             PUTBACK;
-            n = call_method("query", G_SCALAR);
+            n = call_method(povw_read_method(aTHX_ store), G_SCALAR);
             SPAGAIN;
             res = n ? SvREFCNT_inc(POPs) : NULL;
             PUTBACK;
@@ -3831,7 +3831,7 @@ povw__page_metrics(SV *class, SV *store, SV *req)
             XPUSHs(sv_2mortal(newSVpvs("from"))); XPUSHs(sv_2mortal(newSVsv(from)));
             XPUSHs(sv_2mortal(newSVpvs("to")));   XPUSHs(sv_2mortal(newSVsv(to)));
             PUTBACK;
-            n = call_method("query", G_SCALAR);
+            n = call_method(povw_read_method(aTHX_ store), G_SCALAR);
             SPAGAIN;
             res = n ? SvREFCNT_inc(POPs) : NULL;
             PUTBACK;

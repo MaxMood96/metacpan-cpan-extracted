@@ -1,4 +1,12 @@
 #define PERL_NO_GET_CONTEXT
+/* Under PERL_IMPLICIT_SYS - every Strawberry perl - XSUB.h rewrites the
+ * plain names malloc/realloc/free/close/open into macros that dereference
+ * my_perl. The encoder and the serialisers are plain C in headers with no
+ * interpreter to hand, and the ABI hands out a bare `free` for consumers
+ * to call on what those headers allocated, so the rewrite has to be off.
+ * Nothing here crosses allocators: what qr_svg.h mallocs, this file and
+ * the ABI free with the same libc free. */
+#define NO_XSLOCKS
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"

@@ -1,5 +1,11 @@
 Revision history for Hyperman
 
+0.39    2026-08-30
+        - A queue-group claim waits on a slot for a second of real time, not
+          for ten thousand yields.
+        - The tests that prove a refusal ignore SIGPIPE, so the client is not
+          killed by the close it asked for.
+
 0.38    2026-08-30
         - Windows Fixes
         - XSUB.h rewrites the plain CRT and socket names under PERL_IMPLICIT_SYS

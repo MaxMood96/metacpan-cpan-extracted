@@ -1,0 +1,1 @@
+{"id":"cpan","ecosystem":"CPAN","name":"CleanPaste-Normalizer","version":"0.2.0","license":"MIT","homepage":"https://cleanpasteai.com/","repository":"https://cleanpasteai.com/","source":"https://cleanpasteai.com/","source_files":["lib/CleanPaste/Normalizer.pm"],"test_command":"prove -l t/normalizer.t"}

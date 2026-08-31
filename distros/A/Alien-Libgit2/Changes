@@ -1,5 +1,36 @@
 Revision history for Alien-Libgit2
 
+0.002     2026-08-30 13:47:34Z
+
+  - Raise the system-libgit2 floor from 1.5 to 1.9.3. Not an API requirement:
+    libgit2 PR #7165 (in 1.9.3) fixed an ssh transport that looped forever on
+    LIBSSH2_ERROR_TIMEOUT, so against a peer that accepts the connection and
+    then stays silent every caller below 1.9.3 hangs unboundedly -- no libgit2
+    timeout option reaches the libssh2 read loop. A system lib below the fix
+    now falls through to the bundled 1.9.3 share build.
+
+  - Correct README and POD: both still documented the old 1.5 floor.
+
+  - POD now carries what README.md only showed on GitHub: the install
+    decision, the share-build dependencies, ALIEN_INSTALL_TYPE and the
+    consumers. README.md is not shipped to CPAN.
+
+  - CI: the linux system-libgit2 job installs the bundled 1.9.3 into
+    /usr/local instead of apt's libgit2-dev. No Debian release reaches the
+    floor (bookworm 1.5.1, trixie 1.9.0), so since the raise that job had
+    been falling through to a share build with none of the share build's
+    prerequisites installed. All four CI jobs now pin ALIEN_INSTALL_TYPE
+    explicitly, so a probe landing on the wrong path fails the job instead
+    of silently testing the other one.
+
+  - t/01-alien.t asserts the 1.9.3 floor against the libgit2 that is actually
+    loaded, instead of "major >= 1", which stayed green against every libgit2
+    back to 1.0 -- including the versions 0.002 exists for. It also notes the
+    install type and, when ALIEN_INSTALL_TYPE forces one, asserts that the
+    build honoured it.
+
+  - Link the shared perl-alien skill into .claude/skills/ (manage-skills).
+
 0.001     2026-05-27 03:14:28Z
 
   - Update CI workflows to use the shared dzil-test composite action from

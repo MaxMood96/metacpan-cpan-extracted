@@ -27,7 +27,7 @@
 	doap:maintainer      <http://purl.org/NET/cpan-uri/person/jonass>;
 	doap:name            "String-Copyright";
 	doap:programming-language "Perl";
-	doap:release         <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001001>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001002>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001003>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001004>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001005>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-002000>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-002001>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003000>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003001>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003002>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003003>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003004>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003005>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003006>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003007>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003008>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003009>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003010>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003011>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003012>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003013>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003014>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_v0-4-0>;
+	doap:release         <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001001>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001002>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001003>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001004>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-001005>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-002000>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-002001>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003000>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003001>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003002>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003003>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003004>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003005>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003006>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003007>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003008>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003009>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003010>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003011>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003012>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003013>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_0-003014>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_v0-4-0>, <http://purl.org/NET/cpan-uri/dist/String-Copyright/v_v0-4-1>;
 	doap:repository      [
 		a doap:GitRepository;
 		doap:browse <https://anonscm.debian.org/cgit/build-common/string-copyright.git>;
@@ -702,6 +702,23 @@
 	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/jonass>;
 	doap:file-release    <http://backpan.cpan.org/authors/id/J/JO/JONASS/String-Copyright-v0.4.0.tar.gz>;
 	doap:revision        "v0.4.0"^^xsd:string.
+
+<http://purl.org/NET/cpan-uri/dist/String-Copyright/v_v0-4-1>
+	a                    doap:Version;
+	dc:identifier        "String-Copyright-v0.4.1"^^xsd:string;
+	dc:issued            "2026-08-31"^^xsd:date;
+	doap-changeset:changeset [
+		doap-changeset:item [
+			a doap-changeset:Change;
+			rdfs:label "improve logging";
+		], [
+			a doap-changeset:Change;
+			rdfs:label "extend dash normalization to cover mojibake";
+		];
+	];
+	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/jonass>;
+	doap:file-release    <http://backpan.cpan.org/authors/id/J/JO/JONASS/String-Copyright-v0.4.1.tar.gz>;
+	doap:revision        "v0.4.1"^^xsd:string.
 
 <http://purl.org/NET/cpan-uri/person/jonass>
 	a                    foaf:Person;

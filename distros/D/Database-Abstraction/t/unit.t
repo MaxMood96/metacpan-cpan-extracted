@@ -45,6 +45,7 @@ my %LEDGER = (
 	'unsafe id in new'       => 'new(): id injection guard — semicolon in id',
 	'unsafe id in clone'     => 'new(): clone path id injection guard',
 	'unsafe host in new'     => 'new(): host injection guard — space/metachar in host',
+	'unsafe table in new'    => 'new(): table injection guard — semicolon in table name',
 	'BerkeleyDB no JOINs'    => 'selectall_arrayref: _scan_berkeley join croak',
 	'BerkeleyDB no or-and'   => 'selectall_arrayref: _scan_berkeley -or/-and croak',
 	'fetchrow_hashref NoSQL' => 'fetchrow_hashref: BerkeleyDB non-entry column croak',
@@ -1192,6 +1193,109 @@ note '=== 20. new() safety guards ===';
 	} qr/unsafe host/i,
 	'20.3 new(): shell metacharacters in host cause croak at construction time';
 	delete $LEDGER{'unsafe host in new'};
+
+	# 20.4  Unsafe table name (semicolons / SQL keywords must be rejected
+	#        before any object is created or file I/O is attempted).
+	throws_ok {
+		Database::test1->new(directory => $DATA_DIR, table => 'bad; DROP TABLE x--')
+	} qr/unsafe table name/i,
+	'20.4 new(): semicolon in table name causes croak before any object is returned';
+	delete $LEDGER{'unsafe table in new'};
+}
+
+# ---------------------------------------------------------------------------
+# SECTION 21 — XLSX backend
+#
+# The POD documents that an Excel workbook (.xlsx) is detected automatically
+# when found in the directory.  Each worksheet is a separate SQL table; the
+# active worksheet is determined by the class-derived table name (or the
+# 'table' constructor parameter).  Results are returned via the standard API.
+# ---------------------------------------------------------------------------
+
+note '';
+note '=== 21. XLSX backend ===';
+{
+	my $have_excel = eval {
+		require DBD::Excel;
+		require Spreadsheet::WriteExcel;
+		1;
+	};
+
+	SKIP: {
+		skip 'DBD::Excel or Spreadsheet::WriteExcel not available', 11
+			unless $have_excel;
+
+		# Build a temporary XLSX fixture with two worksheets.
+		# test1  — entry / number  (primary, matches class-derived table name)
+		# sheet2 — entry / score   (used to verify the 'table' constructor param)
+		my $tmpdir = tempdir(CLEANUP => 1);
+		my $xlsx   = File::Spec->catfile($tmpdir, 'test1.xlsx');
+
+		{
+			my $wb  = Spreadsheet::WriteExcel->new($xlsx);
+			my $ws1 = $wb->add_worksheet('test1');
+			$ws1->write(0, 0, 'entry');  $ws1->write(0, 1, 'number');
+			$ws1->write(1, 0, 'one');    $ws1->write(1, 1, 1);
+			$ws1->write(2, 0, 'two');    $ws1->write(2, 1, 2);
+			$ws1->write(3, 0, 'three');  $ws1->write(3, 1, 3);
+			my $ws2 = $wb->add_worksheet('sheet2');
+			$ws2->write(0, 0, 'entry');  $ws2->write(0, 1, 'score');
+			$ws2->write(1, 0, 'alpha');  $ws2->write(1, 1, 90);
+			$ws2->write(2, 0, 'beta');   $ws2->write(2, 1, 75);
+			$wb->close();
+		}
+
+		# 21.1  Object constructs without error and reports the correct class
+		my $db = new_ok('Database::test1' => [$tmpdir],
+			'21.1 new(): XLSX directory accepted');
+
+		# 21.2  type is set lazily; count() triggers _open()
+		is($db->count(), 3, '21.2 count(): primary worksheet has 3 data rows');
+
+		# 21.3  type is now visible as 'Excel' (set during _open())
+		is($db->{'type'}, 'Excel',
+			'21.3 XLSX backend: type is "Excel" after first query');
+
+		# 21.4  AUTOLOAD column lookup works against the live worksheet
+		is($db->number('two'), 2,
+			'21.4 AUTOLOAD: number(two) returns 2 from XLSX');
+
+		# 21.5  fetchrow_hashref returns the expected row hashref
+		my $row = $db->fetchrow_hashref(entry => 'one');
+		is($row->{'number'}, 1,
+			'21.5 fetchrow_hashref: number for "one" is 1');
+
+		# 21.6  selectall_arrayref returns all rows
+		my $all = $db->selectall_arrayref();
+		is(scalar(@{$all}), 3,
+			'21.6 selectall_arrayref: returns arrayref of 3 rows');
+
+		# 21.7  The 'table' constructor parameter selects an alternate worksheet;
+		#        the file stem still resolves from the class name, not from 'table'
+		my $db2 = Database::test1->new(directory => $tmpdir, table => 'sheet2');
+		isa_ok($db2, 'Database::test1',
+			'21.7 new(table => "sheet2"): object created');
+
+		# 21.8  Querying the alternate worksheet returns the correct row count
+		is($db2->count(), 2,
+			'21.8 table override: sheet2 has 2 rows');
+
+		# 21.9  AUTOLOAD against the alternate worksheet
+		is($db2->score('alpha'), 90,
+			'21.9 table override: score(alpha) == 90');
+
+		# 21.10  no_entry mode works against XLSX (SQL path, no slurp)
+		my $db_ne = Database::test1->new(
+			directory => $tmpdir, no_entry => 1, max_slurp_size => 0
+		);
+		cmp_ok($db_ne->count(), '>', 0,
+			'21.10 no_entry: count() > 0 on XLSX backend');
+
+		# 21.11  XLSX backend participates in the standard count / selectall
+		#         equivalence expected by the POD
+		is($db->count(), scalar(@{$db->selectall_arrayref()}),
+			'21.11 count() == scalar(selectall_arrayref()) for XLSX');
+	}
 }
 
 # ---------------------------------------------------------------------------

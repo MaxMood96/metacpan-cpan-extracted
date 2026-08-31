@@ -54,23 +54,28 @@ use constant	DEFAULT_MAX_SLURP_SIZE => 16 * 1024;	# CSV files <= than this size 
 my $SAFE_IDENTIFIER = qr/\A[a-zA-Z_][a-zA-Z0-9_]*\z/;
 my $SAFE_QUALIFIED  = qr/\A[a-zA-Z_][a-zA-Z0-9_.]*\z/;
 
+# Module-level constant: valid JOIN types after uc() normalisation.
+# Built once at compile time; reused by every _build_joins call.
+my %VALID_JOIN_TYPES = map { $_ => 1 } qw(INNER LEFT RIGHT FULL CROSS);
+
 =head1 NAME
 
 Database::Abstraction - Read-only Database Abstraction Layer (ORM)
 
 =head1 VERSION
 
-Version 0.40
+Version 0.41
 
 =cut
 
-our $VERSION = '0.40';
+our $VERSION = '0.41';
 
 =head1 DESCRIPTION
 
 C<Database::Abstraction> is a read-only ORM for Perl that gives a uniform
-interface over CSV, PSV, XML, SQLite, DBM::Deep, and BerkeleyDB files - without writing
-any SQL.
+interface over CSV, PSV, XML, SQLite, DBM::Deep, BerkeleyDB, and Excel (XLSX)
+files - local, remote (via SSH), or fetched from a URL - without writing any
+SQL.
 
 Key features:
 
@@ -126,7 +131,7 @@ A CHI-compatible cache layer is also supported.
     use parent 'Database::Abstraction';
 
     # 2. Open the database - file is auto-detected from the class name
-    #    (looks for foo.sql / foo.psv / foo.csv / foo.xml / foo.db)
+    #    (looks for foo.sql / foo.psv / foo.csv / foo.xlsx / foo.xml / foo.db)
     my $db = Database::Foo->new(directory => '/path/to/data');
 
     # 3. Simple lookups -----------------------------------------------
@@ -249,15 +254,24 @@ Comma (or custom) separated file, ending C<.csv> or C<.db>; can be
 gzipped.  B<Note:> the default separator is C<!> not C<,> for historical
 reasons - pass C<< sep_char => ',' >> for standard CSVs.
 
-=item 5. C<XML>
+=item 5. C<Excel>
+
+Excel workbook ending C<.xlsx>.  Each worksheet is a separate SQL table;
+the active worksheet is determined by the class-derived table name (or the
+C<table> constructor parameter - see L</SUBROUTINES/METHODS>).  Requires
+L<DBD::Excel> (loaded lazily); L<Spreadsheet::ParseXLSX> is used
+automatically for modern C<.xlsx> files when installed.  No slurp path:
+C<max_slurp_size> has no effect on the Excel backend.
+
+=item 6. C<XML>
 
 File ending C<.xml>
 
-=item 6. C<BerkeleyDB>
+=item 7. C<BerkeleyDB>
 
 Binary key-value file ending C<.db>
 
-=item 7. C<HTML>
+=item 8. C<HTML>
 
 Remote HTML page fetched via a URL.  Pass C<url> instead of C<directory>; the
 module fetches the page with L<LWP::UserAgent>, parses all C<< <table> >>
@@ -439,6 +453,18 @@ Database password.  Used only with C<dsn>; ignored for file-based backends.
 Override the filename stem searched in C<directory> (default: the table
 name derived from the class name).
 
+=item * C<table>
+
+Override the table (or worksheet) name used in SQL queries for this object.
+Default is the class-name-derived table name (e.g. C<Database::Foo> =>
+C<foo>).  Particularly useful for Excel workbooks where a single F<.xlsx>
+file contains multiple worksheets: pass C<< table => 'Summary' >> to query
+the C<Summary> worksheet without creating a dedicated subclass.  Also works
+with SQLite/DSN connections to select a table other than the class-derived
+default.  The filename stem (C<dbname>) continues to fall back to the class
+name, so the correct file is opened regardless of this override.  The value
+is validated against C<$SAFE_QUALIFIED> at construction time.
+
 =item * C<filename>
 
 Override the full filename (relative to C<directory>).  Takes precedence
@@ -580,13 +606,16 @@ sub new {
 		croak("$class: abstract class");
 	} elsif(Scalar::Util::blessed($class)) {
 		# If $class is an object, clone it with new arguments.
-		# Validate 'id' before merging — the id validation block below is
-		# skipped by this early return, so a hostile clone arg like
-		# id => "entry); DROP TABLE t--" would otherwise bypass all guards
-		# and be interpolated directly into ORDER BY / COUNT() SQL.
+		# Validate 'id' and 'table' before merging — the validation block below is
+		# skipped by this early return, so hostile clone args would otherwise bypass
+		# all guards and be interpolated directly into SQL.
 		if(defined $args{'id'}) {
 			croak(ref($class), ": unsafe id column name '$args{id}'")
 				unless $args{'id'} =~ $SAFE_IDENTIFIER;
+		}
+		if(defined $args{'table'}) {
+			croak(ref($class), ": unsafe table name '$args{table}'")
+				unless $args{'table'} =~ $SAFE_QUALIFIED;
 		}
 		return bless { %{$class}, %args }, ref($class);
 	}
@@ -619,12 +648,23 @@ sub new {
 		}
 		if(defined $src->{'host'}) {
 			croak("$class: unsafe host '$src->{host}'")
-				# \z (not $) so a trailing newline cannot sneak past the anchor.
-				unless $src->{'host'} =~ /\A(?:[a-zA-Z0-9][a-zA-Z0-9._-]*\@)?[a-zA-Z0-9:][a-zA-Z0-9._:-]*\z/;
+				unless $src->{'host'} =~ /\A
+					(?:                   # optional "user\@" prefix
+						[a-zA-Z0-9]       # username: first char must be alnum
+						[a-zA-Z0-9._-]*   # username: rest may include dots and hyphens
+						\@                # literal at-sign; \@ prevents array interpolation
+					)?
+					[a-zA-Z0-9:]          # first char of host or IP; colon allows IPv6
+					[a-zA-Z0-9._:-]*      # rest: hostname, dotted IPv4, or IPv6 hex groups
+				\z/x;
 		}
 		if(defined $src->{'url'}) {
 			croak("$class: unsafe url '$src->{url}'")
 				unless $src->{'url'} =~ /\Ahttps?:\/\//i;
+		}
+		if(defined $src->{'table'}) {
+			croak("$class: unsafe table name '$src->{table}'")
+				unless $src->{'table'} =~ $SAFE_QUALIFIED;
 		}
 	}
 
@@ -774,9 +814,16 @@ sub _open :Protected
 		return $self;
 	}
 
-	my $dbname = $self->{'dbname'} || $defaults{'dbname'} || $table;
+	# Derive the filename stem from the class name, NOT from any $table override.
+	# This allows table => 'Sheet2' to query a different worksheet within the same
+	# file (e.g. test1.xlsx with a 'sheet2' worksheet) without needing an explicit
+	# dbname. When dbname is set explicitly it always wins.
+	my $class_stem = ref($self);
+	$class_stem =~ s/\A.*:://;
+	my $dbname = $self->{'dbname'} || $defaults{'dbname'} || $class_stem;
+	# \A/\z (not ^/$) so a trailing newline cannot sneak past the $ anchor.
 	Carp::croak(ref($self), ": unsafe dbname '$dbname'")
-		unless $dbname =~ /^[a-zA-Z0-9_.-]+$/ && $dbname !~ /\.\./;
+		unless $dbname =~ /\A[a-zA-Z0-9_.-]+\z/ && $dbname !~ /\.\./;
 
 	# When a remote host is given, fetch all candidate files into a local temp
 	# directory via File::Slurp::Remote (SSH/SCP).  localhost / 127.0.0.1 / the
@@ -792,7 +839,7 @@ sub _open :Protected
 			my $tmpdir_obj = File::Temp->newdir(CLEANUP => 1);
 			$self->{'_remote_tmpdir'} = $tmpdir_obj;	# auto-cleans on DESTROY
 			my $tmpdir = $tmpdir_obj->dirname();
-			for my $ext (qw(sql dbm deep db csv.gz db.gz psv csv xml)) {
+			for my $ext (qw(sql dbm deep db csv.gz db.gz psv xlsx csv xml)) {
 				my $remote_file = "$remote_dir/$dbname.$ext";
 				my $content = eval { scalar File::Slurp::Remote::read_remote_file($host, $remote_file) };
 				next unless defined($content) && length($content);
@@ -896,7 +943,7 @@ sub _open :Protected
 			require Gzip::Faster;
 
 			close($fin);
-			$fin = File::Temp->new(SUFFIX => '.csv', UNLINK => 1);
+			$fin = File::Temp->new(SUFFIX => '.csv', UNLINK => 1, CLEANUP => 1);
 			print $fin Gzip::Faster::gunzip_file($gz_file);
 			$fin->flush();
 			$slurp_file = $fin->filename();
@@ -921,7 +968,7 @@ sub _open :Protected
 		}
 		if(my $filename = $self->{'filename'} || $defaults{'filename'}) {
 			Carp::croak(ref($self), ": unsafe filename '$filename'")
-				unless $filename =~ /^[a-zA-Z0-9_.-]+$/ && $filename !~ /\.\./;
+				unless $filename =~ /\A[a-zA-Z0-9_.-]+\z/ && $filename !~ /\.\./;
 			$self->_debug("Looking for $filename in $dir");
 			$slurp_file = File::Spec->catfile($dir, $filename);
 		}
@@ -1025,55 +1072,68 @@ sub _open :Protected
 			}
 			$self->{'type'} = 'CSV';
 		} else {
-			$slurp_file = File::Spec->catfile($dir, "$dbname.xml");
-			if(-r $slurp_file) {
-				if((-s $slurp_file) <= $max_slurp_size) {
-					require XML::Simple;
+			my $xlsx_file = File::Spec->catfile($dir, "$dbname.xlsx");
+			if(-r $xlsx_file) {
+				# Excel workbook via DBD::Excel — each worksheet is a SQL table.
+				# Loaded lazily; not required for any other backend.
+				require DBD::Excel;
+				$dbh = DBI->connect("dbi:Excel:file=$xlsx_file", undef, undef, {
+					RaiseError => 1,
+					PrintError => 0,
+				}) or Carp::croak(ref($self), ": can't open $xlsx_file: $DBI::errstr");
+				$self->{'type'} = 'Excel';
+				$slurp_file = $xlsx_file;
+			} else {
+				$slurp_file = File::Spec->catfile($dir, "$dbname.xml");
+				if(-r $slurp_file) {
+					if((-s $slurp_file) <= $max_slurp_size) {
+						require XML::Simple;
 
-					my $xml = XML::Simple::XMLin($slurp_file);
-					my @keys = keys %{$xml};
-					my $key = $keys[0];
-					my @data;
-					if(ref($xml->{$key}) eq 'ARRAY') {
-						@data = @{$xml->{$key}};
-					} elsif(ref($xml) eq 'ARRAY') {
-						@data = @{$xml};
-					} elsif((ref($xml) eq 'HASH') && !$self->{'no_entry'}) {
-						if(scalar(keys %{$xml}) == 1) {
-							if($xml->{$table}) {
-								@data = $xml->{$table};
+						my $xml = XML::Simple::XMLin($slurp_file);
+						my @keys = keys %{$xml};
+						my $key = $keys[0];
+						my @data;
+						if(ref($xml->{$key}) eq 'ARRAY') {
+							@data = @{$xml->{$key}};
+						} elsif(ref($xml) eq 'ARRAY') {
+							@data = @{$xml};
+						} elsif((ref($xml) eq 'HASH') && !$self->{'no_entry'}) {
+							if(scalar(keys %{$xml}) == 1) {
+								if($xml->{$table}) {
+									@data = $xml->{$table};
+								} else {
+									Carp::croak('XML slurp: complex documents with an "entry" field are not yet supported');
+								}
 							} else {
-								Carp::croak('XML slurp: complex documents with an "entry" field are not yet supported');
+								Carp::croak('XML slurp: multi-key documents are not yet supported');
 							}
 						} else {
-							Carp::croak('XML slurp: multi-key documents are not yet supported');
+							Carp::croak('XML slurp: cannot handle ', ref($xml), ' structure');
+						}
+						if($self->{'no_entry'}) {
+							# Not keyed, will need to scan each entry
+							my $i = 0;
+							foreach my $d(@data) {
+								$self->{'data'}->{$i++} = $d;
+							}
+						} else {
+							# keyed on the $self->{'id'} (default: "entry") column
+							foreach my $d(@data) {
+								$self->{'data'}->{$d->{$self->{'id'}}} = $d;
+							}
 						}
 					} else {
-						Carp::croak('XML slurp: cannot handle ', ref($xml), ' structure');
-					}
-					if($self->{'no_entry'}) {
-						# Not keyed, will need to scan each entry
-						my $i = 0;
-						foreach my $d(@data) {
-							$self->{'data'}->{$i++} = $d;
-						}
-					} else {
-						# keyed on the $self->{'id'} (default: "entry") column
-						foreach my $d(@data) {
-							$self->{'data'}->{$d->{$self->{'id'}}} = $d;
-						}
+						$dbh = DBI->connect('dbi:XMLSimple(RaiseError=>1):');
+						$dbh->{'RaiseError'} = 1;
+						$self->_debug("read in $table from XML $slurp_file");
+						$dbh->func($table, 'XML', $slurp_file, 'xmlsimple_import');
 					}
 				} else {
-					$dbh = DBI->connect('dbi:XMLSimple(RaiseError=>1):');
-					$dbh->{'RaiseError'} = 1;
-					$self->_debug("read in $table from XML $slurp_file");
-					$dbh->func($table, 'XML', $slurp_file, 'xmlsimple_import');
+					# throw Error(-file => "$dir/$table");
+					$self->_fatal("Can't find a file called '$dbname' for the table $table in $dir");
 				}
-			} else {
-				# throw Error(-file => "$dir/$table");
-				$self->_fatal("Can't find a file called '$dbname' for the table $table in $dir");
+				$self->{'type'} = 'XML';
 			}
-			$self->{'type'} = 'XML';
 		}
 	}
 
@@ -1318,9 +1378,12 @@ sub selectall_array
 		} elsif(ref($self->{'data'}) eq 'HASH') {
 			# Same as selectall_arrayref scan but returns a list
 			$self->_debug("$table: selectall_array in-memory scan with criteria");
+			# Pre-compute param keys once — same optimisation as selectall_arrayref:
+			# avoids N * K hash-key extractions inside the inner closure.
+			my @param_keys = keys %{$params};
 			my @rc = grep {
 				my $row = $_;
-				all { $self->_match_criterion(exists($row->{$_}) ? $row->{$_} : undef, $params->{$_}) } keys %{$params}
+				all { $self->_match_criterion(exists($row->{$_}) ? $row->{$_} : undef, $params->{$_}) } @param_keys
 			} values %{$self->{'data'}};
 			return @rc;
 		}
@@ -1462,11 +1525,12 @@ sub count
 			# fires in _build_where_conditions.
 			$self->_debug("$table: count in-memory scan");
 			my @param_keys = keys %{$params};
-			my @rows = ref($self->{'data'}) eq 'HASH' ? values %{$self->{'data'}} : @{$self->{'data'}};
+			# Pass the row list directly to grep — avoids materialising an
+			# intermediate @rows array of N references on the stack.
 			return scalar grep {
 				my $row = $_;
 				all { $self->_match_criterion(exists($row->{$_}) ? $row->{$_} : undef, $params->{$_}) } @param_keys
-			} @rows;
+			} (ref($self->{'data'}) eq 'HASH' ? values %{$self->{'data'}} : @{$self->{'data'}});
 		}
 	}
 
@@ -1617,6 +1681,10 @@ sub fetchrow_hashref {
 	} else {
 		$self->_debug("fetchrow_hashref $query");
 	}
+	# TODO: Data Flow Anomaly - D~: $key is computed unconditionally (string concat +
+	# join) even when no cache is configured.  When $self->{cache} is undef the
+	# assembled string is a dead store.  Cost is trivial but the logic would be
+	# cleaner inside the if($c) block below.
 	my $key = ref($self) . '::';
 	if(defined($query_args[0])) {
 		if(wantarray) {
@@ -1986,10 +2054,10 @@ has been disabled with C<< auto_load => 0 >>.
 
 sub AUTOLOAD {
 	our $AUTOLOAD;
-	my ($column) = $AUTOLOAD =~ /::(\w+)$/;
+	my ($column) = $AUTOLOAD =~ /::(\w+)\z/;
 
 	return if($column eq 'DESTROY');
-	return if($column =~ /^_/);	# never treat private method names as column lookups
+	return if($column =~ /\A_/);	# never treat private method names as column lookups
 
 	my $self = shift or return;
 
@@ -2174,7 +2242,9 @@ sub AUTOLOAD {
 	$sth->execute(@args) || croak($query);
 
 	if(wantarray) {
-		my @rc = map { $_->[0] } @{$sth->fetchall_arrayref()};
+		# fetchall_arrayref([0]) asks DBI to project column 0 server-side, so each
+		# returned row is [$col0] instead of the full row — less memory, same result.
+		my @rc = map { $_->[0] } @{$sth->fetchall_arrayref([0])};
 		if($cache) {
 			$cache->set($key, \@rc, $self->{'cache_duration'});	# Store a ref to the array
 		}
@@ -2195,10 +2265,18 @@ sub DESTROY
 	if(defined($^V) && ($^V ge 'v5.14.0')) {
 		return if ${^GLOBAL_PHASE} eq 'DESTRUCT';	# >= 5.14.0 only
 	}
+
 	my $self = shift;
 
 	# Clean up temporary files — deleting File::Temp objects triggers auto-unlink/rmdir
-	delete $self->{'_temp_fh'};
+	# If that doesn't happen for some reason, explicitly unlink
+	if(defined $self->{'_temp_fh'}) {
+		my $temp_fh = $self->{'_temp_fh'};
+		my $temp_path = eval { $temp_fh->filename() };
+		delete $self->{'_temp_fh'};
+		# Fallback explicit unlink if File::Temp didn't clean up
+		unlink($temp_path) if defined($temp_path) && -f $temp_path;
+	}
 	delete $self->{'_remote_tmpdir'};
 
 	# Clean up database handles
@@ -2231,7 +2309,6 @@ sub _build_joins
 	my ($self, $join_spec) = @_;
 
 	my @specs = ref($join_spec) eq 'ARRAY' ? @{$join_spec} : ($join_spec);
-	my %valid_types = map { $_ => 1 } qw(INNER LEFT RIGHT FULL CROSS);
 	my @clauses;
 
 	for my $j (@specs) {
@@ -2240,7 +2317,7 @@ sub _build_joins
 		Carp::croak("join: unsafe table name '$jtable'")
 			unless $jtable =~ $SAFE_QUALIFIED;
 		my $on     = $j->{'on'}    or Carp::croak('join: missing "on" condition');
-		Carp::croak("Invalid JOIN type: $type") unless $valid_types{$type};
+		Carp::croak("Invalid JOIN type: $type") unless $VALID_JOIN_TYPES{$type};
 		push @clauses, "$type JOIN $jtable ON ($on)";
 	}
 
@@ -2298,11 +2375,25 @@ sub _build_where
 	my ($self, $params) = @_;
 
 	$params //= {};
-	my %p = %{$params};	# work on a copy so we can delete -or/-and
 	my @clauses;
 	my @args;
 
-	if(my $or_list = delete $p{'-or'}) {
+	# Avoid an O(K) hash copy in the common case where neither -or nor -and is
+	# present.  Only copy when we actually need to delete grouping keys, so the
+	# plain-criteria path (the vast majority of queries) passes $params through
+	# directly to _build_where_conditions without any allocation.
+	my $or_list  = $params->{'-or'};
+	my $and_list = $params->{'-and'};
+	my $plain;
+	if(defined($or_list) || defined($and_list)) {
+		my %p = %{$params};
+		delete @p{qw(-or -and)};
+		$plain = \%p;
+	} else {
+		$plain = $params;
+	}
+
+	if($or_list) {
 		my (@sub_clauses, @sub_args);
 		for my $cond (@{$or_list}) {
 			my ($s, $a) = $self->_build_where_conditions($cond);
@@ -2316,7 +2407,7 @@ sub _build_where
 			push @args, @sub_args;
 		}
 	}
-	if(my $and_list = delete $p{'-and'}) {
+	if($and_list) {
 		my (@sub_clauses, @sub_args);
 		for my $cond (@{$and_list}) {
 			my ($s, $a) = $self->_build_where_conditions($cond);
@@ -2331,7 +2422,7 @@ sub _build_where
 		}
 	}
 
-	my ($more, $margs) = $self->_build_where_conditions(\%p);
+	my ($more, $margs) = $self->_build_where_conditions($plain);
 	if($more) {
 		push @clauses, $more;
 		push @args, @{$margs};
@@ -2358,7 +2449,7 @@ sub _build_where_conditions
 			unless $col =~ $SAFE_QUALIFIED;
 
 		if(ref($val) eq 'HASH') {
-			for my $op (sort keys %{$val}) {
+			for my $op (keys %{$val}) {    # no sort — operator hashes typically have 1-2 keys; sort adds O(K log K) overhead
 				my $operand = $val->{$op};
 				if($op eq '-in' || $op eq '-not_in') {
 					my $sql_op = $op eq '-in' ? 'IN' : 'NOT IN';
@@ -2417,6 +2508,11 @@ sub _scan_berkeley
 	my ($self, $params) = @_;
 	$params //= {};
 
+	# TODO: Data Flow Anomaly - Mutation side effect: delete mutates the caller's
+	# $params hashref in-place.  All current callers (selectall_arrayref,
+	# selectall_array, count) do not reuse $params after this call, so it is safe;
+	# but a future caller that reuses $params would silently lose the 'join' key.
+	# Fix: use exists($params->{'join'}) to check; copy params before deleting.
 	if(delete $params->{'join'}) {
 		Carp::croak(ref($self), ': BerkeleyDB does not support JOINs');
 	}
@@ -2425,11 +2521,14 @@ sub _scan_berkeley
 	}
 
 	my $bdb = $self->{'berkeley'};
-	my @rows = map { { entry => $_, value => $bdb->{$_} } } keys %{$bdb};
+	my @cols = keys %{$params};
+	my @rows;
 
-	if(my @cols = keys %{$params}) {
-		@rows = grep {
-			my $row = $_;
+	if(@cols) {
+		# Single-pass build+filter: avoids materialising the full N-row list
+		# before filtering.  Peak memory is O(matching rows) instead of O(N).
+		for my $k (keys %{$bdb}) {
+			my $row = { entry => $k, value => $bdb->{$k} };
 			my $match = 1;
 			for my $col (@cols) {
 				unless($self->_match_criterion($row->{$col}, $params->{$col})) {
@@ -2437,8 +2536,10 @@ sub _scan_berkeley
 					last;
 				}
 			}
-			$match;
-		} @rows;
+			push @rows, $row if $match;
+		}
+	} else {
+		@rows = map { { entry => $_, value => $bdb->{$_} } } keys %{$bdb};
 	}
 
 	return \@rows;
@@ -2506,31 +2607,32 @@ sub _like_match
 	}
 
 	# Full DP — O(m*n) time, O(m) memory.
-	# Two 1-D arrays (@prev, @curr) replace the O(m*n) 2-D table.
+	# Two 1-D arrayrefs (@$prev, @$curr) replace the O(m*n) 2-D table.
 	# substr() replaces split(//) — no per-char scalar allocation.
+	# Ref-swap ($prev,$curr) = ($curr,$prev) at the end of each outer iteration
+	# avoids the O(m) array copy that "@prev = @curr" would perform.
 	my $m = $str_len;
 	my $n = $pat_len;
 
-	# @prev[j] = true iff pattern[0..i-1] matches string[0..j-1]
-	my @prev = (1, (0) x $m);
+	my ($prev, $curr) = ([1, (0) x $m], [(0) x ($m + 1)]);
 
 	for my $i (1 .. $n) {
-		my @curr = (0) x ($m + 1);
+		@{$curr} = (0) x ($m + 1);    # zero in-place — reuses existing allocation
 		my $pc = substr($lc_pat, $i - 1, 1);
 		if($pc eq '%') {
-			$curr[0] = $prev[0];
+			$curr->[0] = $prev->[0];
 			for my $j (1 .. $m) {
-				$curr[$j] = ($prev[$j] || $curr[$j - 1]) ? 1 : 0;
+				$curr->[$j] = ($prev->[$j] || $curr->[$j - 1]) ? 1 : 0;
 			}
 		} else {
 			for my $j (1 .. $m) {
-				$curr[$j] = ($prev[$j - 1]
+				$curr->[$j] = ($prev->[$j - 1]
 					&& ($pc eq '_' || $pc eq substr($lc_str, $j - 1, 1))) ? 1 : 0;
 			}
 		}
-		@prev = @curr;
+		($prev, $curr) = ($curr, $prev);    # O(1) ref swap — no array copy
 	}
-	return $prev[$m];
+	return $prev->[$m];
 }
 
 sub _match_criterion
@@ -2671,8 +2773,8 @@ sub _has_bdb_magic {
 sub _is_local_host {
 	my ($self, $host) = @_;
 
-	# Strip optional user@ prefix
-	(my $bare = $host) =~ s/^[^@]*\@//;
+	# Strip optional user@ prefix.  \A (not ^) so a newline cannot split the match.
+	(my $bare = $host) =~ s/\A[^@]*@//;
 
 	# \z anchors at true end-of-string; $ would match before a trailing newline.
 	return 1 if $bare =~ /\A(?:localhost|127\.0\.0\.1|::1)\z/i;
@@ -2788,7 +2890,7 @@ DBI failed to connect to the given C<dsn>.  Check credentials and host.
 
 =item C<< Can't find a file called 'I<name>' for the table I<T> in I<dir> >>
 
-None of the probe extensions (C<.sql>, C<.psv>, C<.csv>, C<.db>, C<.xml>)
+None of the probe extensions (C<.sql>, C<.psv>, C<.csv>, C<.xlsx>, C<.db>, C<.xml>)
 matched in C<directory>.
 
 =item C<< I<Class>: prepare failed: I<$errstr> >>

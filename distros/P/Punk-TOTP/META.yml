@@ -27,5 +27,5 @@ requires:
   QR::Code: '0.03'
   XSLoader: '0'
   perl: '5.010000'
-version: '0.05'
+version: '0.06'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

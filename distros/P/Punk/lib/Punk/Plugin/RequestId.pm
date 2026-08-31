@@ -7,7 +7,7 @@ use parent 'Punk::Plugin';
 use Carp ();
 use Punk ();
 
-our $VERSION = '0.34';
+our $VERSION = '0.38';
 
 # The id path itself is C - include/punk/punk_reqid.h and xs/reqid.xs.
 

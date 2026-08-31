@@ -1,17 +1,20 @@
 # ABSTRACT: View or modify board configuration
 
 package App::karr::Cmd::Config;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use MooX::Cmd;
 use MooX::Options (
-  usage_string => 'USAGE: karr config [show|get KEY|set KEY VALUE] [--defaults] [--json]',
+  usage_string => 'USAGE: karr config [show|get KEY|set KEY VALUE] '
+    . '[--defaults] [--json] [--compact]',
 );
 use App::karr::Role::BoardAccess;
 use App::karr::Role::Output;
+use App::karr::Role::CompactOutput;
 use App::karr::Config;
 
-with 'App::karr::Role::BoardAccess', 'App::karr::Role::Output';
+with 'App::karr::Role::BoardAccess', 'App::karr::Role::Output',
+     'App::karr::Role::CompactOutput';
 
 
 option defaults => (
@@ -78,10 +81,19 @@ sub execute {
   if ($action eq 'show') {
     $self->_show_all($config);
   } elsif ($action eq 'get') {
-    my $key = $pos[1] or die "Usage: karr config get KEY\n";
+    # length, not truth, on both keys below: `or` reads the key "0" as no key
+    # at all and answers a usage error (2) where an unknown key answers
+    # "Unknown key" (1) -- the fourth and last site of the shape #153, #230 and
+    # #239 closed elsewhere (#244). No config key is numeric, so nothing real
+    # was unreachable; what was wrong is which side of the exit-code contract
+    # (ADR 0002) a bad key falls on. The value below already used //, which
+    # keeps `config set foundation.enabled 0` writable.
+    my $key = $pos[1];
+    die "Usage: karr config get KEY\n" unless defined $key && length $key;
     $self->_get_key($config, $key);
   } elsif ($action eq 'set') {
-    my $key = $pos[1] or die "Usage: karr config set KEY VALUE\n";
+    my $key = $pos[1];
+    die "Usage: karr config set KEY VALUE\n" unless defined $key && length $key;
     my $val = $pos[2] // die "Usage: karr config set KEY VALUE\n";
     $self->_set_key($config, $key, $val);
     $self->sync_after;
@@ -98,6 +110,18 @@ sub _show_all {
   }
 
   my @keys = $self->_display_keys($d);
+
+  # Same rows, no column: `key=value` is what a script cuts on, and the padded
+  # table is what a person reads. Until #254 this command took --compact from
+  # App::karr::Role::Output and printed the padded table for it anyway.
+  if ($self->compact) {
+    for my $entry (@keys) {
+      my ($key, $val) = @$entry;
+      printf "%s=%s\n", $key, $self->_format_value($val);
+    }
+    return;
+  }
+
   for my $entry (@keys) {
     my ($key, $val) = @$entry;
     printf "%-25s %s\n", $key, $self->_format_value($val);
@@ -117,22 +141,43 @@ sub _display_keys {
   # the board's statuses are (ticket #130).
   my $statuses = ref $d->{statuses} eq 'ARRAY' ? $d->{statuses} : [];
   my $classes  = ref $d->{classes}  eq 'ARRAY' ? $d->{classes}  : [];
+  # `defined`, not truth, on the six optional rows below. The question the
+  # filter asks is "did this config set the key at all", and a user-set `0` is
+  # a value, not an absence: `config set board.name 0` was accepted, `config get
+  # board.name` answered 0 and `config show --json` carried it, while this table
+  # dropped the row -- and with it the POD promise above that `diff <(karr
+  # config show) <(karr config show --defaults)` is the set of keys this board
+  # overrides, because `board.description` and `foundation.reason` have no
+  # default row for the override to differ from (#255). `foundation.enabled`
+  # already prints a bare `0` two lines down, unfiltered, so a zero row is
+  # nothing new in this output.
+  #
+  # `defined` alone rather than `defined && length`: the empty string is the
+  # same disagreement with a different value. `config set` cannot write one
+  # (#243 refuses an empty argument), but `karr import` and a hand-edited
+  # config.yml can, and there `config get board.description` prints an empty
+  # line at exit 0 while `--json` carries "" -- both call the key present, so
+  # the table does too. Rendering stays `_format_value`'s: it answers '' and
+  # leaves the row's right-hand side blank, which is the same nothing `config
+  # get` prints for it. A placeholder like `(empty)` would read better but is a
+  # notation no other surface of this command has, and would put `show` and
+  # `get` back in disagreement from the other side.
   my @out;
   push @out, ['version',            $d->{version}];
-  push @out, ['board.name',         $board->{name}]        if $board->{name};
-  push @out, ['board.description',  $board->{description}] if $board->{description};
+  push @out, ['board.name',         $board->{name}]        if defined $board->{name};
+  push @out, ['board.description',  $board->{description}] if defined $board->{description};
   push @out, ['tasks_dir',          $d->{tasks_dir}];
   push @out, ['statuses',           $statuses];
   push @out, ['priorities',         [$c->priorities]];
-  push @out, ['defaults.status',    $defaults->{status}]   if $defaults->{status};
-  push @out, ['defaults.priority',  $defaults->{priority}] if $defaults->{priority};
-  push @out, ['defaults.class',     $defaults->{class}]    if $defaults->{class};
+  push @out, ['defaults.status',    $defaults->{status}]   if defined $defaults->{status};
+  push @out, ['defaults.priority',  $defaults->{priority}] if defined $defaults->{priority};
+  push @out, ['defaults.class',     $defaults->{class}]    if defined $defaults->{class};
   push @out, ['claim_timeout',      $d->{claim_timeout}];
   push @out, ['lock_timeout',       $d->{lock_timeout}];
   push @out, ['classes',            $classes];
   push @out, ['foundation.enabled', $c->foundation_enabled];
   push @out, ['foundation.reason',  $d->{foundation}{reason}]
-    if ref $d->{foundation} eq 'HASH' && $d->{foundation}{reason};
+    if ref $d->{foundation} eq 'HASH' && defined $d->{foundation}{reason};
   return @out;
 }
 
@@ -174,7 +219,8 @@ sub _set_key {
     # minutes here and in kanban-md (ticket #78). usage_error rather than a bare
     # die: an option value that parses but is not a duration is misuse, and the
     # exit-code contract says 2.
-    $self->usage_error(qq{invalid claim_timeout "$val" (use e.g. 1h, 30m, 1h30m)})
+    $self->usage_error(
+      qq{invalid claim_timeout "$val" (use e.g. 1h, 30m, 1h30m, 0s to disable)})
       unless defined App::karr::Config->parse_duration($val);
   } elsif ($key eq 'lock_timeout') {
     $self->usage_error(qq{invalid lock_timeout "$val" (use e.g. 5m, 30s, 0s to disable)})
@@ -226,9 +272,12 @@ sub _format_value {
 # the one output a reader consults to learn which columns a board has, which is
 # how an "extended status set" nobody configures got invented (ticket #130). The
 # name leads and its per-entry settings follow in parentheses, so the value
-# stays a single greppable line and still says which status wants a claim and
-# which class carries a WIP limit. --json is untouched by this: it carries the
-# entries as configured, never a rendering of them.
+# stays a single greppable line and still says which status wants a claim. On a
+# default board that claim flag is the only setting left to show: since #227 the
+# four default classes are name-only mappings and karr models no WIP limits at
+# all, so a class with settings in this rendering is one the board itself set or
+# imported. --json is untouched by this: it carries the entries as configured,
+# never a rendering of them.
 sub _format_entry {
   my ($self, $entry) = @_;
   return $self->_format_value($entry) unless ref $entry eq 'HASH';
@@ -258,7 +307,7 @@ App::karr::Cmd::Config - View or modify board configuration
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -267,6 +316,7 @@ version 0.500
     karr config set board.name "New Board Name"
     karr config show --defaults
     karr config --json
+    karr config show --compact
 
 =head1 DESCRIPTION
 
@@ -303,7 +353,12 @@ fallback was not. Rejected on C<set>, which has nothing to write to.
 
 Because it renders identically to a board read, C<< diff <(karr config show)
 <(karr config show --defaults) >> is exactly the set of keys this board
-overrides.
+overrides. That holds for every value a key can carry: the plain-text table
+lists a key whenever the config defines it, C<0> and the empty string
+included -- an empty value gets a row with a blank right-hand side, which is
+what C<config get> prints for it too. Through 0.500 the optional rows were
+filtered by truth, so a board that set C<board.name> to C<0> reported that key
+through C<get> and C<--json> but dropped it from both sides of the diff (#255).
 
 =item * C<--json>
 
@@ -322,6 +377,25 @@ the wrapped form of a scalar key called C<name>, and no key in the payload to
 tell them apart (#131). Consumers that read the bare list or mapping must now
 index the requested key first; a scalar read is unchanged.
 
+=item * C<--compact>
+
+C<show> prints C<key=value>, one key per line, instead of padding the key into
+a 25-column field:
+
+    karr config show --compact | grep '^claim_timeout='
+
+Same keys, same order, and the same rendered values as the padded table --
+only the frame changes, so the C<diff> of a board against C<--defaults>
+described above holds for this rendering too. A value is still rendered for
+people (a list joins with C<, >), because C<show> and C<--compact> disagreeing
+about what a board's statuses are would be the trap of #130 again; the payload
+notation is C<--json>, and C<--json> wins where both are given.
+
+C<get> and C<set> are unchanged by it: C<get> already prints the bare value
+and nothing else -- which is what C<$(karr config get claim_timeout)> relies
+on and is as terse as an answer gets -- and C<set> already confirms in a single
+short line. The option is accepted there and has nothing left to shorten.
+
 =back
 
 =head1 WRITABLE KEYS
@@ -338,7 +412,9 @@ Default values applied by L<App::karr::Cmd::Create>.
 
 =item * C<claim_timeout>
 
-Claim expiry duration in C<Nh> or C<Nm> format.
+Claim expiry duration in C<Nh> or C<Nm> format. Defaults to C<1h>; C<0s>
+disables expiry, so a claim binds until it is released and no other agent can
+pick or mutate the card in the meantime.
 
 =item * C<lock_timeout>
 
@@ -382,9 +458,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

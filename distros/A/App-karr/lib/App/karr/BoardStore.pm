@@ -1,7 +1,7 @@
 # ABSTRACT: Ref-backed board storage for karr
 
 package App::karr::BoardStore;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use Path::Tiny qw( path );
 use YAML::XS qw( DumpFile LoadFile );
@@ -13,6 +13,7 @@ has git => (
     is       => 'ro',
     required => 1,
 );
+
 
 
 sub board_exists {
@@ -571,7 +572,7 @@ App::karr::BoardStore - Ref-backed board storage for karr
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -586,6 +587,11 @@ L<App::karr::BoardStore> treats C<refs/karr/*> as the canonical board state.
 It can merge sparse config overrides with code defaults, allocate numeric task
 ids through a dedicated metadata ref, and materialize or serialize temporary
 board views for command handlers that still work with files internally.
+
+=head2 git
+
+The L<App::karr::Git> instance this store reads and writes board refs
+through. Required.
 
 =head1 SEE ALSO
 
@@ -1021,9 +1027,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

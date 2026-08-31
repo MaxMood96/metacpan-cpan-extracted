@@ -1,0 +1,87 @@
+/* Font Awesome Free 6.4.0, the solid weight only - see LICENSE.txt
+ * beside this file (Icons CC BY 4.0, Fonts SIL OFL 1.1, Code MIT).
+ *
+ * NOT upstream's all.min.css. That file is 102KB and carries the content
+ * codes for every icon in the set; this UI renders thirty-six of them, so
+ * the codes below are copied out of it one by one and the rest is left
+ * behind. Each is upstream's own value, transcribed - never guessed - and
+ * the way to re-derive any of them is to grep all.min.css for
+ * `.fa-NAME:before`.
+ *
+ * The URL is RELATIVE on purpose. This chunk is concatenated into
+ * `<prefix>/assets/funky.css`, and a relative url() in a stylesheet
+ * resolves against that stylesheet's own address - so the font is found
+ * under whatever prefix the admin UI is mounted at, with nothing
+ * interpolated server-side.
+ *
+ * font-display: block, not swap. These are icon glyphs, not text: a
+ * fallback face would render arbitrary letters in their place for the
+ * duration of the swap, which is worse than a moment of nothing.
+ */
+
+@font-face {
+    font-family: "Font Awesome 6 Free";
+    font-style: normal;
+    font-weight: 900;
+    font-display: block;
+    src: url("fa-solid-900.woff2") format("woff2");
+}
+
+/* `far` is mapped onto the solid face deliberately: the regular weight is
+ * a second 25KB file and this UI renders nothing that needs it. */
+.fa, .fas, .far {
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+    font-style: normal;
+    font-variant: normal;
+    display: inline-block;
+    min-width: 1em;
+    text-align: center;
+    text-rendering: auto;
+    line-height: 1;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* the thirty-six this UI actually renders, in name order */
+.fa-bookmark::before            { content: "\f02e"; }
+.fa-chart-bar::before           { content: "\f080"; }
+.fa-check::before               { content: "\f00c"; }
+.fa-check-circle::before        { content: "\f058"; }
+.fa-circle::before              { content: "\f111"; }
+.fa-clock::before               { content: "\f017"; }
+.fa-cog::before                 { content: "\f013"; }
+.fa-columns::before             { content: "\f0db"; }
+.fa-exclamation-circle::before  { content: "\f06a"; }
+.fa-exclamation-triangle::before{ content: "\f071"; }
+.fa-file-csv::before            { content: "\f6dd"; }
+.fa-file-excel::before          { content: "\f1c3"; }
+.fa-file-upload::before         { content: "\f574"; }
+.fa-filter::before              { content: "\f0b0"; }
+.fa-inbox::before               { content: "\f01c"; }
+.fa-info-circle::before         { content: "\f05a"; }
+.fa-keyboard::before            { content: "\f11c"; }
+.fa-list::before                { content: "\f03a"; }
+.fa-lock::before                { content: "\f023"; }
+.fa-minus::before               { content: "\f068"; }
+.fa-mouse-pointer::before       { content: "\f245"; }
+.fa-play-circle::before         { content: "\f144"; }
+.fa-plus::before                { content: "\2b";   }
+.fa-question-circle::before     { content: "\f059"; }
+.fa-redo::before                { content: "\f01e"; }
+.fa-rocket::before              { content: "\f135"; }
+.fa-save::before                { content: "\f0c7"; }
+.fa-search::before              { content: "\f002"; }
+.fa-spinner::before             { content: "\f110"; }
+.fa-sync-alt::before            { content: "\f2f1"; }
+.fa-table::before               { content: "\f0ce"; }
+.fa-times::before               { content: "\f00d"; }
+.fa-times-circle::before        { content: "\f057"; }
+.fa-trash::before               { content: "\f1f8"; }
+.fa-user::before                { content: "\f007"; }
+.fa-users::before               { content: "\f0c0"; }
+
+/* fa-wifi-slash is a Font Awesome PRO icon and is not in the Free set at
+ * any weight. Funky's websocket module emits it for the disconnected
+ * state, so it gets fa-link-slash, which is free and says the same
+ * thing. Without this the badge would render an empty box. */
+.fa-wifi-slash::before          { content: "\f127"; }

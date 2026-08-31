@@ -63,6 +63,9 @@ tool *and* the workflow, so use it; don't invoke a skill first, just run it:
 - `karr create "Title" --priority high --tags a,b --body '…'` — new ticket
 - `karr edit ID -a "note"` · `--claim NAME` · `--block "why"` — update
 - `karr move ID in-progress --claim NAME` — start · `karr handoff ID --claim NAME --note "…"` — to review
+- `NAME=$(karr agentname)` — mint a claim name **once** and reuse that same `$NAME` for move,
+  handoff and `--claimed-by`; every call returns a different name, so a fresh one at handoff time
+  no longer matches the claim (`karr show ID` reads the held name back off the card)
 
 Bugs found while dogfooding become tickets on this board. Full command surface (pick / context /
 set-refs / multi-agent): skill `kanban-issues-karr-cli`.
@@ -72,9 +75,11 @@ set-refs / multi-agent): skill `kanban-issues-karr-cli`.
 `dzil build` / `dzil test` / `prove -l t/` are fine anytime. `dzil release` and any CPAN upload
 are STRICTLY forbidden without the maintainer's explicit go-ahead — even if a plan or roadmap
 lists "release" as the next step. For anything heading toward release: stop and ask. After a
-release the `$VERSION` bump in `lib/App/karr.pm` is a separate, deliberate commit.
+release the `$VERSION` bump is a separate, deliberate commit, and it touches every file
+under `lib/` and `bin/` — each one carries its own `our $VERSION`, not just
+`lib/App/karr.pm`.
 
 ## Perl specifics — reference, don't restate
 
 Module loading, Moo/Moose patterns, cpanfile pinning for Getty-authored deps, and house style
-live in skill `perl-core` (force-loaded for `karr-*` agents). Do not duplicate that content here.
+live in skill `getty-perl-core` (force-loaded for `karr-*` agents). Do not duplicate that content here.

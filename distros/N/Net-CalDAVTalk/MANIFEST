@@ -2,6 +2,7 @@ Changes
 ignore.txt
 lib/Net/CalDAVTalk.pm
 lib/Net/CalDAVTalk/TimeZones.pm
+LICENSE
 Makefile.PL
 MANIFEST			This list of files
 README

@@ -1,10 +1,6 @@
 package Test2::ScanCode;
 
-use v5.20;
-use strict;
-use warnings;
-use feature qw(signatures);
-no warnings qw(experimental::signatures);
+use v5.40;
 
 my $CLASS = __PACKAGE__;
 
@@ -24,7 +20,7 @@ use Uncruft;
 use String::License;
 use String::License::Naming::Custom;
 
-use base qw(Exporter);
+use parent qw(Exporter);
 our @EXPORT = qw(are_licensed_like_scancode);
 
 my $corpus = File::BaseDir::data_dirs('tests/ScanCode');

@@ -1,5 +1,14 @@
 Revision history for Perl extension Data::JSEmail
 
+0.04  2026-08-31
+	- clarify licensing: same terms as Perl itself (Artistic License 1.0
+	  or GPL version 1 or later)
+	- include a LICENSE file in the distribution
+	- add POD with NAME/AUTHOR/LICENSE (the module had none)
+	- add a README
+	- move differ.pl to contrib/ and drop it from MANIFEST; it is a
+	  development helper and was being installed into blib/lib/Data/
+
 0.03  2026-04-07
 	- Restructure make() header precedence to match RFC 8621 / Cyrus:
 	  1. header:* properties, 2. convenience properties, 3. defaults

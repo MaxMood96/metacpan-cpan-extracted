@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% title | default('Passkey demo') %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1><a href="/">Punk::Plugin::Passkey</a></h1>
+  <p class="lede">One keyword. No password anywhere in this
+  application.</p>
+</header>
+
+<main>
+{% content %}
+</main>
+
+<footer><small>Everything is in memory: restarting the server forgets
+every account and every credential, and the passkey left on your device
+will no longer match anything here. Delete it from your password manager
+when you are done.</small></footer>
+</body>
+</html>

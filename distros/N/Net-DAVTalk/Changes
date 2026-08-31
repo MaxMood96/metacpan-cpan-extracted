@@ -1,5 +1,11 @@
 Revision history for Net-DAVTalk
 
+0.25    Mon Aug 31 2026
+  - relicensed from Artistic License 2.0 to the same terms as Perl
+    itself (Artistic License 1.0 or GPL version 1 or later)
+  - include a LICENSE file in the distribution
+  - rewrite the custom-headers merge in SafeRequest (no behaviour change)
+
 0.24    Thu Feb 12 09:29:06 EST 2026
   - add "SafeRequest" API to capture errors (thanks rjbs) PR#6 PR#7
 

@@ -17,15 +17,16 @@ my %WriteMakefileArgs = (
   "MIN_PERL_VERSION" => "5.020",
   "NAME" => "Git::Libgit2",
   "PREREQ_PM" => {
-    "Alien::Libgit2" => "0.001",
+    "Alien::Libgit2" => "0.002",
     "Carp" => 0,
     "Exporter" => 0,
     "FFI::Platypus" => "2.00"
   },
   "TEST_REQUIRES" => {
+    "Path::Tiny" => 0,
     "Test2::V0" => 0
   },
-  "VERSION" => "0.006",
+  "VERSION" => "0.007",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -33,10 +34,11 @@ my %WriteMakefileArgs = (
 
 
 my %FallbackPrereqs = (
-  "Alien::Libgit2" => "0.001",
+  "Alien::Libgit2" => "0.002",
   "Carp" => 0,
   "Exporter" => 0,
   "FFI::Platypus" => "2.00",
+  "Path::Tiny" => 0,
   "Test2::V0" => 0
 );
 

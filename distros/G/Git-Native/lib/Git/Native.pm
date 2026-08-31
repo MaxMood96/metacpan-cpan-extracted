@@ -1,8 +1,9 @@
 # ABSTRACT: Native Git for Perl via libgit2 (FFI, no fork/exec)
 
 package Git::Native;
-our $VERSION = '0.005';
-use Moo;
+our $VERSION = '0.006';
+use strict;
+use warnings;
 use Carp ();
 use Git::Libgit2 qw(
   init_lib
@@ -150,7 +151,7 @@ Git::Native - Native Git for Perl via libgit2 (FFI, no fork/exec)
 
 =head1 VERSION
 
-version 0.005
+version 0.006
 
 =head1 SYNOPSIS
 
@@ -174,10 +175,16 @@ version 0.005
 
 =head1 DESCRIPTION
 
-L<Git::Native> is a Moo wrapper around L<Git::Libgit2> (which binds
-C<libgit2> via L<FFI::Platypus>). Use it instead of L<Git::Wrapper> or
-L<Git::Repository> when you want to do Git work without forking the
-C<git> binary on every operation.
+L<Git::Native> wraps L<Git::Libgit2> (which binds C<libgit2> via
+L<FFI::Platypus>) in a set of Moo classes. Use it instead of
+L<Git::Wrapper> or L<Git::Repository> when you want to do Git work
+without forking the C<git> binary on every operation.
+
+This package itself is not one of those classes. It holds no state and
+has no constructor - there is no C<Git::Native-E<gt>new>. Everything here
+is a class method: C<open>, C<open_ext>, C<init> and C<clone> hand back a
+L<Git::Native::Repository>, and the remaining two do not need a
+repository at all.
 
 Contrast:
 - L<Git::Wrapper>, L<Git::Repository>: shell out to C<git>
@@ -306,9 +313,6 @@ config it resolved when it was opened; only the next
 C<git_repository_open> sees the change.
 
 =back
-
-Needs L<Git::Libgit2> 0.006 or newer, which is where C<git_libgit2_opts>
-and the C<GIT_CONFIG_LEVEL_*> constants arrived.
 
 =head1 SEE ALSO
 

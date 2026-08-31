@@ -768,28 +768,99 @@ header(self, ...)
         RETVAL
 
 # cookie($name) reads (via the request); cookie($name => $value, %opts) sets a
-# Set-Cookie on the response (undef value deletes). Set form chains.
+# Set-Cookie on the response (undef value deletes). Set form chains. Options
+# may also arrive as one trailing hashref, in either direction - which is how
+# the read form takes any at all: cookie('theme', { signed => 1 }).
+#
+# `signed => 1` signs with the SESSION's machinery and the session's secret,
+# deliberately: pk_session_sign/verify already exist, the verify is already
+# constant-time, and if `secret` ever grows rotation (a list: newest signs,
+# all verify) signed cookies inherit it by riding the same key path. Do not
+# build a second HMAC or a second key schedule here.
 SV *
 cookie(self, ...)
         SV *self
     CODE:
     {
         AV *av = pcx_av(aTHX_ self);
-        if (items <= 2) {                          /* read via the request */
+        int read_opts = items == 3 && SvROK(ST(2))
+                        && SvTYPE(SvRV(ST(2))) == SVt_PVHV;
+        if (items <= 2 || read_opts) {             /* read via the request */
             SV *req = pcx_force(aTHX_ av, PCX_REQ, "Punk::Request",
                                 pcx_get(aTHX_ av, PCX_ENV));
             SV *argv[1], *r;
-            argv[0] = items == 2 ? ST(1) : &PL_sv_undef;
+            argv[0] = items >= 2 ? ST(1) : &PL_sv_undef;
             r = pcx_call_meth(aTHX_ req, "cookie", argv, 1, 1);
+            if (read_opts && r && SvOK(r)) {
+                SV **sg = hv_fetchs((HV *)SvRV(ST(2)), "signed", 0);
+                if (sg && *sg && SvTRUE(*sg)) {
+                    HV *scfg = ps_cfg(aTHX_ self);
+                    STRLEN kl = 0;
+                    const char *key = scfg
+                        ? ps_cfg_str(aTHX_ scfg, "secret", "", &kl) : "";
+                    STRLEN cl;
+                    const char *cv2;
+                    SV *payload;
+                    if (!kl)
+                        croak("Punk: signed cookies sign with the session's "
+                              "secret - add `session secret => ...`");
+                    cv2 = SvPV_const(r, cl);
+                    payload = pk_session_verify(aTHX_ cv2, cl, key, kl);
+                    SvREFCNT_dec(r);
+                    r = NULL;
+                    if (payload) {
+                        /* The NAME is under the MAC. A signed value the
+                         * client moved onto another cookie decodes to the
+                         * wrong `name=` prefix and fails closed, like any
+                         * other tamper - without this, any two signed
+                         * cookies could be swapped for each other and both
+                         * would verify. */
+                        STRLEN pl, nl2;
+                        const char *p = SvPV_const(payload, pl);
+                        const char *n2 = SvPV_const(ST(1), nl2);
+                        if (pl > nl2 && memEQ(p, n2, nl2) && p[nl2] == '=')
+                            r = newSVpvn(p + nl2 + 1, pl - nl2 - 1);
+                        SvREFCNT_dec(payload);
+                    }
+                }
+            }
             RETVAL = r ? r : &PL_sv_undef;
         }
         else {                                     /* set */
             SV *name = ST(1), *value = ST(2), *ck, *res, *hargv[2], *r;
             HV *opts = (HV *)sv_2mortal((SV *)newHV());
             int i;
-            for (i = 3; i + 1 < items; i += 2) {
-                STRLEN kl; const char *k = SvPV_const(ST(i), kl);
-                (void)hv_store(opts, k, (I32)kl, newSVsv(ST(i + 1)), 0);
+            if (items == 4 && SvROK(ST(3)) && SvTYPE(SvRV(ST(3))) == SVt_PVHV) {
+                HV *oh = (HV *)SvRV(ST(3));
+                HE *he;
+                hv_iterinit(oh);
+                while ((he = hv_iternext(oh)))
+                    (void)hv_store_ent(opts, HeSVKEY_force(he),
+                                       newSVsv(HeVAL(he)), 0);
+            }
+            else {
+                for (i = 3; i + 1 < items; i += 2) {
+                    STRLEN kl; const char *k = SvPV_const(ST(i), kl);
+                    (void)hv_store(opts, k, (I32)kl, newSVsv(ST(i + 1)), 0);
+                }
+            }
+            {
+                SV **sg = hv_fetchs(opts, "signed", 0);
+                if (sg && *sg && SvTRUE(*sg) && value && SvOK(value)) {
+                    HV *scfg = ps_cfg(aTHX_ self);
+                    STRLEN kl = 0;
+                    const char *key = scfg
+                        ? ps_cfg_str(aTHX_ scfg, "secret", "", &kl) : "";
+                    SV *payload;
+                    if (!kl)
+                        croak("Punk: signed cookies sign with the session's "
+                              "secret - add `session secret => ...`");
+                    payload = sv_2mortal(newSVsv(name));
+                    sv_catpvs(payload, "=");
+                    sv_catsv(payload, value);
+                    value = sv_2mortal(pk_session_sign(aTHX_ payload,
+                                                       key, kl));
+                }
             }
             ck = sv_2mortal(pk_build_cookie(aTHX_ name, value, opts));
             res = pcx_force(aTHX_ av, PCX_RES, "Punk::Response", NULL);

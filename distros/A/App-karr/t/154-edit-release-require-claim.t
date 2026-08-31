@@ -4,10 +4,8 @@ use Test::More;
 use lib 't/lib';
 use TestGit qw( require_git_c );
 require_git_c();
+use TestKarr qw( run_karr run_karr_stdin );
 use File::Temp qw( tempdir );
-use Cwd qw( abs_path getcwd );
-use IPC::Open3 qw( open3 );
-use Symbol qw( gensym );
 use Time::Piece;
 
 use App::karr::Git;
@@ -24,33 +22,15 @@ use App::karr::Git;
 #   (internal/board/mutate.go:442). karr now does both: --claim + --release is
 #   a usage error, and --release clears the claim before the guard runs.
 
-my $ROOT = abs_path('.');
-my $BIN  = "$ROOT/bin/karr";
-
+# In-process runner (t/lib/TestKarr.pm): same ($cwd, $stdin, @argv) signature
+# and { exit, stdout, stderr } return as the open3 helper this file used to
+# carry, dispatched through the shared App::karr::Dispatch path.
+# KARR_TEST_SUBPROC=1 restores the old open3 path.
 sub _run_karr {
     my ( $cwd, $stdin, @argv ) = @_;
-    my $old = getcwd();
-    chdir $cwd or die "chdir $cwd: $!";
-
-    my $stderr = gensym;
-    my $pid = open3( my $stdin_fh, my $stdout_fh, $stderr,
-        $^X, "-I$ROOT/lib", $BIN, @argv );
-
-    print {$stdin_fh} $stdin if defined $stdin;
-    close $stdin_fh;
-
-    my $stdout      = do { local $/; <$stdout_fh> };
-    my $stderr_text = do { local $/; <$stderr> };
-    waitpid( $pid, 0 );
-    my $exit = $? >> 8;
-
-    chdir $old or die "chdir $old: $!";
-
-    return {
-        exit   => $exit,
-        stdout => defined $stdout      ? $stdout      : '',
-        stderr => defined $stderr_text ? $stderr_text : '',
-    };
+    return defined $stdin
+        ? run_karr_stdin( $cwd, $stdin, @argv )
+        : run_karr( $cwd, @argv );
 }
 
 sub _setup_repo {
@@ -112,7 +92,7 @@ subtest 'the ticket reproduction: --status X --release no longer slips through r
         'edit', 1, '--status', 'in-progress', '--release' );
     is( $bug->{exit}, 1, 'edit --status in-progress --release is now refused' )
         or diag $bug->{stdout} . $bug->{stderr};
-    like( $bug->{stderr}, qr/Status 'in-progress' requires --claim/,
+    like( $bug->{stderr}, qr/Status 'in-progress' requires a claim/,
         '...with the require_claim message' );
 
     my $task = _task($repo);
@@ -120,7 +100,7 @@ subtest 'the ticket reproduction: --status X --release no longer slips through r
     is( $task->claimed_by, 'agent-a', 'and the pre-existing claim is still there' );
 };
 
-subtest 'unclaimed-then-release: --release clears a claim, plain --status still requires --claim (#150)' => sub {
+subtest 'unclaimed-then-release: --release clears a claim, plain --status still requires a claim (#150)' => sub {
     my $repo = _setup_repo();
 
     # --release alone, with nothing else to do, is fine: it clears the claim
@@ -139,7 +119,7 @@ subtest 'unclaimed-then-release: --release clears a claim, plain --status still 
     is( $no_claim_move->{exit}, 1,
         'edit --status in-progress without --claim is still refused' )
         or diag $no_claim_move->{stdout} . $no_claim_move->{stderr};
-    like( $no_claim_move->{stderr}, qr/requires --claim/,
+    like( $no_claim_move->{stderr}, qr/requires a claim/,
         '...with the same require_claim message as move' );
 
     # And the same shape with --claim lands the task and records the claim,

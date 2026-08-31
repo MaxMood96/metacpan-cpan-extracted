@@ -5,7 +5,7 @@ use warnings;
 
 package Data::JSEmail;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 use JSON;
 use JSON::XS;
@@ -967,3 +967,27 @@ sub htmltotext {
 }
 
 1;
+
+__END__
+
+=head1 NAME
+
+Data::JSEmail - Convert between Email::MIME and the JSON format from RFC 8621 (JMAP Mail)
+
+=head1 AUTHOR
+
+Bron Gondwana, C<< <brong at cpan.org> >>
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright 2026 Fastmail Pty Ltd.
+
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself; that is, either the GNU General
+Public License as published by the Free Software Foundation (version 1,
+or at your option any later version), or the Artistic License.
+
+See L<http://dev.perl.org/licenses/> and the LICENSE file included with
+this distribution for more information.
+
+=cut

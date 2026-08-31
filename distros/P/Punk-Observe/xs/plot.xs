@@ -1445,8 +1445,9 @@ popl_volume_figure(SV *store, SV *q, SV *from, SV *to)
             XPUSHs(sv_2mortal(f ? newSVsv(f) : newSV(0)));
             XPUSHs(sv_2mortal(newSVpvs("to")));
             XPUSHs(sv_2mortal(t ? newSVsv(t) : newSV(0)));
+            POVW_NO_CEILING();
             PUTBACK;
-            got = call_method("query", G_SCALAR | G_EVAL);
+            got = call_method(povw_read_method(aTHX_ store), G_SCALAR | G_EVAL);
             SPAGAIN;
             probe = got ? SvREFCNT_inc(POPs) : NULL;
             PUTBACK;
@@ -1534,8 +1535,9 @@ popl_volume_figure(SV *store, SV *q, SV *from, SV *to)
             XPUSHs(sv_2mortal(qq));
             XPUSHs(sv_2mortal(newSVpvs("from"))); XPUSHs(sv_2mortal(newSVsv(f)));
             XPUSHs(sv_2mortal(newSVpvs("to")));   XPUSHs(sv_2mortal(newSVsv(t)));
+            POVW_NO_CEILING();
             PUTBACK;
-            got = call_method("query", G_SCALAR | G_EVAL);
+            got = call_method(povw_read_method(aTHX_ store), G_SCALAR | G_EVAL);
             SPAGAIN;
             res = got ? SvREFCNT_inc(POPs) : NULL;
             PUTBACK;
@@ -1709,8 +1711,10 @@ popl_ingest_figure(SV *store, SV *from, SV *to)
                 XPUSHs(sv_2mortal(q));
                 XPUSHs(sv_2mortal(newSVpvs("from"))); XPUSHs(sv_2mortal(newSVsv(from)));
                 XPUSHs(sv_2mortal(newSVpvs("to")));   XPUSHs(sv_2mortal(newSVsv(to)));
+                POVW_NO_CEILING();
                 PUTBACK;
-                got = call_method("query", G_SCALAR | G_EVAL);
+                got = call_method(povw_read_method(aTHX_ store),
+                                  G_SCALAR | G_EVAL);
                 SPAGAIN;
                 res = got ? SvREFCNT_inc(POPs) : NULL;
                 PUTBACK;

@@ -6,10 +6,13 @@ use FindBin ();
 use lib "$FindBin::Bin/lib";
 use Test::More;
 use File::Temp ();
-use File::Raw::JSON qw(file_json_decode);
+use Punk::Test;
 
 # multipart/form-data: field parts become params, file parts become
-# Punk::Upload objects.
+# Punk::Upload objects. Posted through Punk::Test's own multipart
+# encoder, so the two halves of the conversation test each other; only
+# the malformed body at the end is hand-rolled, because the client will
+# not build one.
 
 {
     package UApp;
@@ -31,39 +34,24 @@ use File::Raw::JSON qw(file_json_decode);
     package main;
 }
 
+# frozen once: the malformed post at the end drives the same coderef raw
 my $app = UApp->to_app;
-sub post_multipart {
-    my ($body, $boundary) = @_;
-    open my $in, '<', \$body or die;
-    return $app->({
-        REQUEST_METHOD => 'POST', PATH_INFO => '/up',
-        CONTENT_TYPE   => "multipart/form-data; boundary=$boundary",
-        CONTENT_LENGTH => length $body,
-        'psgi.input'   => $in,
-    });
-}
+my $t   = Punk::Test->new($app);
 
-my $b = 'PunkBoundary123';
-my $body = join('',
-    "--$b\r\n", "Content-Disposition: form-data; name=\"desc\"\r\n\r\n",
-    "a caption\r\n",
-    "--$b\r\n",
-    "Content-Disposition: form-data; name=\"file\"; filename=\"hi.txt\"\r\n",
-    "Content-Type: text/plain\r\n\r\n", "the bytes\r\n",
-    "--$b\r\n", "Content-Disposition: form-data; name=\"multi\"; filename=\"a\"\r\n\r\n",
-    "A\r\n",
-    "--$b\r\n", "Content-Disposition: form-data; name=\"multi\"; filename=\"b\"\r\n\r\n",
-    "B\r\n",
-    "--$b--\r\n");
-
-my $d = file_json_decode(post_multipart($body, $b)->[2][0]);
-is($d->{desc},     'a caption', 'a text field becomes a param');
-is($d->{filename}, 'hi.txt',    'the upload filename');
-is($d->{name},     'file',      'the form field name');
-is($d->{type},     'text/plain','the content type');
-is($d->{size},     9,           'the byte size');
-is($d->{content},  'the bytes', 'the content');
-is($d->{two},      2,           'a field uploaded twice yields an arrayref');
+$t->post_ok('/up',
+        form   => { desc => 'a caption' },
+        upload => {
+            file  => [ \'the bytes', 'hi.txt', 'text/plain' ],
+            multi => [ [ \'A', 'a' ], [ \'B', 'b' ] ],
+        })
+  ->status_is(200)
+  ->json_is('/desc',     'a caption',  'a text field becomes a param')
+  ->json_is('/filename', 'hi.txt',     'the upload filename')
+  ->json_is('/name',     'file',       'the form field name')
+  ->json_is('/type',     'text/plain', 'the content type')
+  ->json_is('/size',     9,            'the byte size')
+  ->json_is('/content',  'the bytes',  'the content')
+  ->json_is('/two',      2,            'a field uploaded twice yields an arrayref');
 
 # save() writes the bytes
 {
@@ -76,23 +64,27 @@ is($d->{two},      2,           'a field uploaded twice yields an arrayref');
         $c->text('saved');
     };
     package main;
-    my $sapp = SaveApp->to_app;
+    my $s = Punk::Test->new('SaveApp');
     my $tmp = File::Temp->new(SUFFIX => '.dat'); my $path = "$tmp";
-    my $body2 = join('',
-        "--$b\r\n", "Content-Disposition: form-data; name=\"to\"\r\n\r\n", "$path\r\n",
-        "--$b\r\n", "Content-Disposition: form-data; name=\"file\"; filename=\"f\"\r\n\r\n",
-        "SAVED-BYTES\r\n", "--$b--\r\n");
-    open my $in, '<', \$body2;
-    $sapp->({ REQUEST_METHOD => 'POST', PATH_INFO => '/save',
-              CONTENT_TYPE => "multipart/form-data; boundary=$b",
-              CONTENT_LENGTH => length $body2, 'psgi.input' => $in });
+    $s->post_ok('/save',
+            form   => { to => $path },
+            upload => { file => [ \'SAVED-BYTES', 'f' ] })
+      ->status_is(200);
     open my $rd, '<', $path; local $/; my $got = <$rd>;
     is($got, 'SAVED-BYTES', 'save($path) writes the uploaded bytes');
 }
 
-# a malformed body is empty, not a crash
+# a malformed body is empty, not a crash - hand-rolled, the client will
+# not produce one
 {
-    my $r = eval { post_multipart("garbage without a boundary", $b) };
+    my $body = "garbage without a boundary";
+    open my $in, '<', \$body or die;
+    my $r = eval { $app->({
+        REQUEST_METHOD => 'POST', PATH_INFO => '/up',
+        CONTENT_TYPE   => 'multipart/form-data; boundary=PunkBoundary123',
+        CONTENT_LENGTH => length $body,
+        'psgi.input'   => $in,
+    }) };
     ok(!$@, 'a malformed multipart body does not crash');
     is($r->[0], 400, 'and there simply is no upload');
 }

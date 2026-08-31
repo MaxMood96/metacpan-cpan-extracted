@@ -1,0 +1,89 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Punk::Passkey - capture a fixture</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 46em;
+         margin: 3em auto; padding: 0 1em; }
+  pre { background: #f4f4f4; padding: 1em; overflow-x: auto;
+        white-space: pre-wrap; word-break: break-all; }
+  button { font: inherit; padding: .5em 1em; }
+  .note { color: #555; }
+</style>
+
+<h1>Capture a passkey fixture</h1>
+
+<p class="note">
+  This registers a credential against whatever origin serves this page
+  and prints a fixture file for <code>t/fixtures/</code>. It is a
+  development tool, not part of the distribution's runtime: WebAuthn
+  requires a secure context, so serve it over https or from
+  <code>localhost</code>.
+</p>
+
+<p class="note">
+  Every fixture wants a row in <code>t/fixtures/README</code> naming
+  the authenticator it came from - "iPhone, platform", "YubiKey 5,
+  roaming" - because a capture whose provenance nobody recorded is a
+  vector nobody can re-derive.
+</p>
+
+<p>
+  <label>rpId <input id="rp" size="24"></label>
+  <button id="go">Register a credential</button>
+</p>
+
+<pre id="out">(nothing captured yet)</pre>
+
+<script>
+(function () {
+  var out = document.getElementById('out');
+  var rp  = document.getElementById('rp');
+  rp.value = location.hostname;
+
+  function b64u(buf) {
+    var b = '', a = new Uint8Array(buf), i;
+    for (i = 0; i < a.length; i++) b += String.fromCharCode(a[i]);
+    return btoa(b).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  document.getElementById('go').onclick = function () {
+    out.textContent = 'waiting for the authenticator...';
+
+    // The challenge is a fixed value on purpose: this page captures
+    // the shape of a registration, and a fixture whose challenge
+    // changes every run cannot be checked in with the clientDataJSON
+    // that matches it. Nothing here is a ceremony - the server side
+    // decides challenges, and it decides them randomly.
+    var challenge = new Uint8Array(32);
+    for (var i = 0; i < 32; i++) challenge[i] = i;
+
+    var userId = new Uint8Array(16);
+    for (var j = 0; j < 16; j++) userId[j] = 0xa0 + j;
+
+    navigator.credentials.create({
+      publicKey: {
+        challenge: challenge,
+        rp: { id: rp.value, name: 'Punk::Passkey fixture capture' },
+        user: { id: userId, name: 'fixture', displayName: 'fixture' },
+        pubKeyCredParams: [
+          { type: 'public-key', alg: -7 },      // ES256
+          { type: 'public-key', alg: -257 }     // RS256, Windows Hello
+        ],
+        authenticatorSelection: { userVerification: 'preferred' },
+        attestation: 'none',
+        timeout: 120000
+      }
+    }).then(function (cred) {
+      var r = cred.response;
+      out.textContent =
+        '# captured ' + new Date().toISOString().slice(0, 10) +
+        ' from <name the authenticator here>\n' +
+        '# rpId=' + rp.value + '\n' +
+        'attestationObject=' + b64u(r.attestationObject) + '\n' +
+        'clientDataJSON=' + b64u(r.clientDataJSON) + '\n';
+    }).catch(function (e) {
+      out.textContent = 'the authenticator refused or the browser did: ' + e;
+    });
+  };
+})();
+</script>

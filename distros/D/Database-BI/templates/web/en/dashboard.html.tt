@@ -309,6 +309,19 @@
 
   // --- Sort ---
 
+  // Parses an accounting-style value to a float.
+  // Handles: ($1,234.56) -> -1234.56, $1,234.56 -> 1234.56, -15.00 -> -15.
+  // Parentheses around a value indicate a negative number (accounting convention).
+  // Returns NaN if the value cannot be parsed as a number.
+  function parseAccounting(v) {
+    if (v === '') return NaN;
+    var s   = v.trim();
+    var neg = /^\(.*\)$/.test(s);      // (value) means negative
+    s = s.replace(/[^\d.\-]/g, '');    // strip $, commas, parens, spaces, etc.
+    var n = parseFloat(s);
+    return isNaN(n) ? NaN : (neg ? -Math.abs(n) : n);
+  }
+
   // Returns a YYYYMMDD integer sort key for recognised date strings, else null.
   // Handles YYYY-MM-DD (ISO) and M/D/YYYY or D/M/YYYY slash formats.
   // monthFirst: true = M/D/YYYY, false = D/M/YYYY.
@@ -348,7 +361,7 @@
     }
 
     var numeric = !isDate && nonEmpty.length > 0 && nonEmpty.every(function (v) {
-      return !isNaN(Number(v));
+      return !isNaN(parseAccounting(v));
     });
 
     rows.sort(function (a, b) {
@@ -359,7 +372,8 @@
         var ak = biDateKey(av, monthFirst), bk = biDateKey(bv, monthFirst);
         cmp = (ak === null ? -Infinity : ak) - (bk === null ? -Infinity : bk);
       } else if (numeric) {
-        cmp = (av === '' ? -Infinity : Number(av)) - (bv === '' ? -Infinity : Number(bv));
+        var an = parseAccounting(av), bn = parseAccounting(bv);
+        cmp = (isNaN(an) ? -Infinity : an) - (isNaN(bn) ? -Infinity : bn);
       } else {
         cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
       }
@@ -870,10 +884,10 @@
   }
 
   // Returns true if v is plottable as a number (mirrors the server's strip logic).
+  // Recognises accounting negatives: (1,234.56) counts as a valid number.
   function isNumericVal(v) {
     if (v === '') return true;
-    var s = v.replace(/[^\d.\-]/g, '');
-    return s !== '' && /^-?\d+(?:\.\d+)?$/.test(s);
+    return !isNaN(parseAccounting(v));
   }
 
   var yTextInput = document.getElementById('graph-y-text');

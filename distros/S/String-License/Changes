@@ -7,9 +7,36 @@ Home page:    <https://metacpan.org/release/String-License>
 Bug tracker:  <https://rt.cpan.org/Dist/Display.html?Queue=String-License>
 Maintainer:   Jonas Smedegaard (JONASS) <jonass@cpan.org>
 
-v0.0.11	2024-08-22
+v0.1.1	2026-08-31
+
+ [ Bug Fixes ]
+ - drop helper classes
+
+ [ Other ]
+ - improve logging
+ - tiny optimization: reduce grepping
+
+v0.1.0	2026-08-30
+
+ [ Documentation ]
+ - categorize bugfixes as such (not tests) in changelog
 
  [ Test Suite ]
+ - add test checking that RE2 module is enabled by default
+ - tighten a pending OSI test spuriously succeeding just by using modern
+   perl
+
+ [ Other ]
+ - Added: clean cruft; tighten test-recommendation on
+   Regexp::Pattern::License
+ - Added: normalize dash, including mojibake and lookalikes
+ - refine logic of lgpl_5 (LGPL, dual version) backwards compatibility
+ - tiny optimization: use List::Util::max
+ - use perl v5.40
+
+v0.0.11	2024-08-22
+
+ [ Bug Fixes ]
  - disambiguate empty code blocks to not confuse perl < 5.26
    Slaven Rezić++
  - tighten to require Feature::Compat::Class v0.07

@@ -79,7 +79,7 @@ eval { use Sim::OPTcue::Exogen::GBDT; 1 };
 eval { use Sim::OPTcue::Endogen::DWGN2; 1 };
 eval { use Sim::OPTcue::Endogen::NeuralBoltzmann; 1 };
 
-$VERSION = '0.925';
+$VERSION = '0.957';
 $ABSTRACT = 'Sim::OPT is an optimization and parametric exploration program oriented toward problem decomposition. It can be used with simulation programs receiving text files as input and emitting text files as output. It allows a free mix of sequential and parallel block coordinate searches, as well of searches more complely structured in graphs.';
 
 #################################################################################
@@ -175,9 +175,9 @@ sub washblockelts
   my @bag;
   foreach my $elt ( @blockelts )
   {  my ( @bin, $newelt );
-     if ( $elt =~ /(>|<|£|§|ì|#|ò|è|ß|ð|æ|đ|ŋ|ħ|ſ|ł|€|°|ø|ŧ|ù|þ)/ )
+     if ( $elt =~ /(>|<|£|§|ì|#|ò|è|ß|ð|æ|đ|ŋ|ħ|ſ|ł|€|°|ø|ŧ|ù|þ|·)/ )
      {
-       @bin = split( ">|<|£|§|ì|à|ò|è|ß|ð|æ|đ|ŋ|ħ|̉ſ|ł|à|°|ø|ŧ|ù|þ", $elt );
+       @bin = split( ">|<|£|§|ì|à|ò|è|ß|ð|æ|đ|ŋ|ħ|̉ſ|ł|à|°|ø|ŧ|ù|þ|·", $elt );
        $newelt = $bin[1];
        $newelt =~ s/(ù|ç|ł)// ;
        push( @bag, $newelt );
@@ -195,7 +195,7 @@ sub wash_sourcesweeps
 {
   my ($sweeps_r) = @_;
 
-  my $sep = qr/[><£§ìàòèßðæđŋħſł€ø°ŧùéçþ]/u;
+  my $sep = qr/[><£§ìàòèßðæđŋħſł€ø°ŧùéçþ·]/u;
   my $wash; $wash = sub
   {
     my ($x) = @_;
@@ -2068,6 +2068,7 @@ sub cleansweeps
         $elt =~ s/^(\d*)€// ;
         $elt =~ s/^(\d*)ø// ;
         $elt =~ s/^(\d*)þ// ;
+        $elt =~ s/^(\d*)·// ;
 
 
 				$elt =~ s/[A-za-z]*//g ;
@@ -2300,10 +2301,20 @@ sub solvestar
 		@starpositions, @dummysweeps );
 
 
-	if ( $dirfiles{stardivisions} ne "" )
+	# Explicit star positions are a durable sampling design.  When supplied in
+	# %dowhat (for example by StructureDesign memory reconstruction or a frozen
+	# production design), honour them instead of regenerating positions from
+	# stardivisions.  The n> sweep still supplies starsign and the block
+	# variables; stardivisions is used only when no explicit centres exist.
+	if ( ref( $dowhat{starpositions} ) eq "ARRAY"
+		and scalar( @{ $dowhat{starpositions} } ) > 0 )
+	{
+		$dirfiles{starpositions} = dclone( $dowhat{starpositions} );
+		( $dirfiles{dummysweeps}, $dirfiles{dummyelt} ) = @{ star_act( \@sweeps, \@blockelts, $countcase, $countblock ) };
+	}
+	elsif ( $dirfiles{stardivisions} ne "" )
 	{
 		$dirfiles{starpositions} = genstar( \%dirfiles, \@varnumbers, \%carrier, \@blockelts );
-
 		( $dirfiles{dummysweeps}, $dirfiles{dummyelt} ) = @{ star_act( \@sweeps, \@blockelts, $countcase, $countblock ) };
 	}
 
@@ -2385,21 +2396,24 @@ sub callblock # IT CALLS THE SEARCH ON BLOCKS.
   say  "IN CALLBLOCK EXE flags: randompick=$dirfiles{randompick} randompicknum=$dirfiles{randompicknum} newrandompick=$dirfiles{newrandompick} newrandompicknum=$dirfiles{newrandompicknum} fundamentality=$dirfiles{fundamentality} fundamentalitynum=$dirfiles{fundamentalitynum}";
 
 
-	if ( $countcase > $#sweeps )   # NUMBER OF CASES OF THE CURRENT PROBLEM
-  {
-		if ( ( $dirfiles{checksensitivity} eq "y" ) and ( checkOPTcue ) )
-		{
-			Sim::OPTcue::OPTcue::sense( $dirfiles{ordtot}, $mypath, $dirfiles{objectivecolumn} );
-		}
-    elsif ( ( $dirfiles{checksensitivity} eq "y" ) and ( !checkOPTcue ) )
-    {
-      say  "OPTcue must be installed to check sensitivity analysis ex-post. Skipping"
-    }
-
-    exit(
-		say    "#END RUN."
+	if ( $countcase > $#sweeps )
+	{
+	    if ( ( $dirfiles{checksensitivity} eq "y" ) and ( checkOPTcue ) )
+	    {
+		Sim::OPTcue::OPTcue::sense(
+		    $dirfiles{ordtot},
+		    $mypath,
+		    $dirfiles{objectivecolumn}
 		);
-  }
+	    }
+	    elsif ( ( $dirfiles{checksensitivity} eq "y" ) and ( !checkOPTcue ) )
+	    {
+		say "OPTcue must be installed to check sensitivity analysis ex-post. Skipping"
+	    }
+
+	    say "#END RUN.";
+	    exit 0;
+	}
 
 	say  "#Beginning a search on case " . ($countcase +1) . ", block " . ($countblock + 1) . ".";
 
@@ -2495,6 +2509,15 @@ sub callblock # IT CALLS THE SEARCH ON BLOCKS.
 
   }
   
+  # Keep the metamodel request in %dowhat synchronized with the parsed
+  # star-search state used later by Descend. An explicit ø still works as before;
+  # this also honours the documented metamodel => "y" + n> sweep form.
+  if ( ( ( $dowhat{metamodel} || "" ) eq "y" )
+    and ( ( $dirfiles{starsign} || "" ) eq "y" ) )
+  {
+    $dirfiles{metamodel} = "y";
+  }
+
   say "THSTHS \$dirfiles{fundamentality}: $dirfiles{fundamentality}, \$dirfiles{fundamentalitynum}: $dirfiles{fundamentalitynum}";
   ###...
 
@@ -2636,6 +2659,7 @@ sub deffiles # IT DEFINED THE FILES TO BE PROCESSED
       ( $dirfiles{randompick} eq "y" ) 
       or ( $dirfiles{newrandompick} eq "y" ) #DDD# ADDED THIS
       or ( $dirfiles{newenumerate} eq "y" ) #DDD# ADDED THIS
+      or ( $dirfiles{makenamedinstances} eq "y" ) #DDD# ADDED THIS
     or ( $dirfiles{patternsearch} eq "y" ) or ( $dirfiles{neldermead} eq "y" ) or ( $dirfiles{fundamentality} eq "y" ) 
     or ( $dirfiles{armijo} eq "y" ) or ( $dirfiles{NSGAII} eq "y" ) 
     or ( $dirfiles{pso} eq "y" ) or ( $dirfiles{simulatedannealing} eq "y" ) 
@@ -3026,6 +3050,7 @@ sub setlaunch # IT SETS THE DATA FOR THE SEARCH ON THE ACTIVE BLOCK.
 			{
 				unless ( ( $dirfiles{randompick} eq "y" ) or ( $dirfiles{newrandompick} eq "y" ) or ( $dirfiles{fundamentality} eq "y" ) 
         or ( $dirfiles{newenumerate} eq "y" )
+        or ( $dirfiles{makenamedinstances} eq "y" ) #DDD# ADDED THIS
         or ( $dirfiles{patternsearch} eq "y" ) or ( $dirfiles{neldermead} eq "y" ) 
         or ( $dirfiles{armijo} eq "y" ) or ( $dirfiles{NSGAII} eq "y" ) 
         or ( $dirfiles{pso} eq "y" ) or ( $dirfiles{simulatedannealing} eq "y" ) 
@@ -3127,6 +3152,7 @@ sub exe
 	###################################################################################################
 	elsif ( ( $dirfiles{randompick} eq "y" ) or ( $dirfiles{newrandompick} eq "y" ) 
   or ( $dirfiles{newenumerate} eq "y" )   or ( $dirfiles{fundamentality} eq "y" ) 
+  or ( $dirfiles{makenamedinstances} eq "y" ) #DDD# ADDED THIS
   or ( $dirfiles{patternsearch} eq "y" ) or ( $dirfiles{neldermead} eq "y" ) 
   or ( $dirfiles{armijo} eq "y" ) or ( $dirfiles{NSGAII} eq "y" ) or ( $dirfiles{ga} eq "y" ) 
   or ( $dirfiles{pso} eq "y" ) or ( $dirfiles{simulatedannealing} eq "y" ) 

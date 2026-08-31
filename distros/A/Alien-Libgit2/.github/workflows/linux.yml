@@ -8,6 +8,13 @@ on:
   pull_request:
 jobs:
   # System libgit2 via pkg-config (probe path).
+  #
+  # No Debian release reaches the 1.9.3 floor -- bookworm ships 1.5.1, trixie
+  # 1.9.0 -- so apt's libgit2-dev cannot exercise this path at all: the probe
+  # would fail and the build would quietly fall through to a second share
+  # build. Install the bundled 1.9.3 into /usr/local instead, using the same
+  # CMake flags the alienfile uses, and force ALIEN_INSTALL_TYPE=system so a
+  # failed probe fails the job rather than testing the wrong path in silence.
   system-libgit2:
     runs-on: ubuntu-latest
     strategy:
@@ -31,9 +38,33 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            libgit2-dev pkg-config git
-      - name: dzil test
+            cmake build-essential libssl-dev libssh2-1-dev zlib1g-dev pkg-config git
+      - name: Install libgit2 1.9.3 into /usr/local
+        run: |
+          set -eux
+          tar xzf share/libgit2-1.9.3.tar.gz -C /tmp
+          cmake -S /tmp/libgit2-1.9.3 -B /tmp/libgit2-build \
+            -DCMAKE_INSTALL_PREFIX=/usr/local \
+            -DCMAKE_INSTALL_LIBDIR=lib \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DBUILD_TESTS=OFF \
+            -DBUILD_CLAR=OFF \
+            -DBUILD_EXAMPLES=OFF \
+            -DUSE_SSH=ON \
+            -DUSE_HTTPS=OpenSSL \
+            -DREGEX_BACKEND=builtin
+          cmake --build /tmp/libgit2-build -j"$(nproc)"
+          cmake --install /tmp/libgit2-build
+          ldconfig
+      - name: Verify pkg-config sees 1.9.3
+        run: |
+          set -eux
+          test "$(pkg-config --modversion libgit2)" = 1.9.3
+      - name: dzil test (system libgit2)
         uses: Getty/p5-dist-zilla-pluginbundle-author-getty/.github/actions/dzil-test@main
+        with:
+          install-type: system
 
   # Share build (vendored libgit2 + cmake).
   share-build:

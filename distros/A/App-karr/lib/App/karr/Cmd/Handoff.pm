@@ -1,7 +1,7 @@
 # ABSTRACT: Hand off a task for review
 
 package App::karr::Cmd::Handoff;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use MooX::Cmd;
 use MooX::Options (
@@ -60,7 +60,17 @@ sub execute {
   $self->require_board;
 
   my @pos = $self->positional_args($args_ref);
-  my $id = $pos[0] or die "Usage: karr handoff ID --claim NAME [--note TEXT] [--block REASON] [--release]\n";
+  # See the note in Cmd::Move: length, not truth, or the id "0" is read as no
+  # id at all and answered with a usage error instead of "not found" (#239).
+  my $id = $pos[0];
+  # No suggestion line here, deliberately (ticket k263). This guard fires only
+  # when the id is missing, and --claim is required on this command, so by the
+  # time it is reached the caller has typed nothing that could be quoted back:
+  # a suggestion would be `karr handoff ID --claim NAME`, which is the "Usage:"
+  # line again in placeholders -- the generic example k263 refuses, and the one
+  # line a `tail -1` would keep. The "Usage:" line is the actionable line here.
+  die "Usage: karr handoff ID --claim NAME [--note TEXT] [--block REASON] [--release]\n"
+    unless defined $id && length $id;
 
   # The status a handoff lands in: the board's review column when it has one,
   # the derived last non-terminal column when it does not -- a literal
@@ -99,15 +109,12 @@ sub execute {
     }
 
     # Append note. length, not truth: --note 0 is a note (ticket #153, the
-    # same fix as --append_body in edit).
-    if (defined $self->note && length $self->note) {
-      my $note_text = $self->note;
-      if ($self->timestamp) {
-        $note_text = gmtime->strftime('%Y-%m-%d %H:%M') . ' ' . $note_text;
-      }
-      my $have = defined $task->body && length $task->body;
-      $task->body(($have ? $task->body . "\n" : '') . $note_text);
-    }
+    # same fix as --append_body in edit). The stamp and the blank-line
+    # separator come from App::karr::Task::append_body, which is also what
+    # edit's --append-body calls: this was a copy of that code, and the two
+    # had already drifted apart over the stamp (ticket #238).
+    $task->append_body( $self->note, $self->timestamp )
+      if defined $self->note && length $self->note;
 
     # Release claim if requested
     if ($self->release) {
@@ -118,17 +125,28 @@ sub execute {
 
   $self->sync_after;
 
+  # A handoff re-stamps claimed_by, so it is the command that most thoroughly
+  # erases whoever held the card before -- and the one #176's agent, having lost
+  # its own claim name, reaches for. If check_claim above only let it through
+  # because the claim had expired, this is where that is said (#177).
+  my %expired = $self->expired_claim_report( $task->id );
+
   # The handoff target is a working column, so apply_status_change above will
   # have recorded any unsatisfied dependencies; this emits them (ticket #123).
   my %dependency = $self->dependency_report( $task->id );
 
   if ($self->json) {
-    $self->print_json({ %{ $task->to_json_hash }, %dependency });
+    $self->print_json({ %{ $task->to_json_hash }, %expired, %dependency });
     return;
   }
 
   my $msg = sprintf "Handed off task %d -> %s", $task->id, $target;
-  $msg .= sprintf " (blocked: %s)", $self->block if $self->block;
+  # length, not truth on this side too: the guard above blocks the card for
+  # --block 0, so the line reporting the handoff has to say so -- it read
+  # `if $self->block` and denied a block that had just happened (ticket #230,
+  # the reporting half of ticket #153's --block fix).
+  $msg .= sprintf " (blocked: %s)", $self->block
+    if defined $self->block && length $self->block;
   $msg .= " (claim released)" if $self->release;
   print "$msg\n";
 }
@@ -147,7 +165,7 @@ App::karr::Cmd::Handoff - Hand off a task for review
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -174,8 +192,10 @@ the current claim unless that claim has expired.
 
 =item * C<--note>, C<--timestamp>
 
-Append handoff text to the task body, optionally prefixed with the current UTC
-timestamp.
+Append handoff text to the task body as a paragraph of its own, separated from
+the existing body by a blank line -- an empty body gains no separator --
+optionally prefixed with the current UTC timestamp. C<karr edit --append-body>
+appends by the same rule, in the same form.
 
 =item * C<--block>, C<--release>
 
@@ -209,9 +229,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

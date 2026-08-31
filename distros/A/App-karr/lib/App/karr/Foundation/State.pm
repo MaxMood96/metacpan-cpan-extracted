@@ -1,12 +1,13 @@
-# ABSTRACT: karr-foundation per-repo state — lock file, JSON state, cooldown backoff
+# ABSTRACT: karr-foundation per-repo state -- lock file, JSON state, cooldown backoff
 
 package App::karr::Foundation::State;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use Path::Tiny;
 use Fcntl qw( LOCK_EX LOCK_NB LOCK_UN );
 use App::karr::Encoding qw( json_encode json_decode );
 use Try::Tiny;
+
 
 
 has foundation => (
@@ -257,7 +258,7 @@ sub _set_cooldown {
     cooldown_level => $level + 1,
     cooldown_until => time + $minutes * 60,
   );
-  $self->foundation->_say_verbose( "cooldown $repo \x{2014} ${minutes}m (level " . ( $level + 1 ) . ")" );
+  $self->foundation->_say_verbose( "cooldown $repo -- ${minutes}m (level " . ( $level + 1 ) . ")" );
   return $minutes;
 }
 
@@ -299,11 +300,11 @@ __END__
 
 =head1 NAME
 
-App::karr::Foundation::State - karr-foundation per-repo state — lock file, JSON state, cooldown backoff
+App::karr::Foundation::State - karr-foundation per-repo state -- lock file, JSON state, cooldown backoff
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 DESCRIPTION
 
@@ -313,6 +314,13 @@ the JSON C<.karr.state> (board hash, per-task attempt counters, cooldown), and
 the exponential cooldown backoff applied after a common-error run. It holds a
 weak back-reference to the owning foundation for shared options (C<dry_run>) and
 helpers (C<_say_verbose>).
+
+=head2 foundation
+
+The owning L<App::karr::Foundation> instance, held C<weak_ref> to avoid a
+reference cycle. Supplies C<dry_run> (every writing method here is a no-op
+under it) and C<_say_verbose>, and holds the open lock filehandles this
+class's lock methods stash and recover between acquire and release.
 
 =head1 SUPPORT
 
@@ -335,9 +343,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

@@ -150,11 +150,15 @@ pdfmake_err_t pdfmake_check_header(pdfmake_parser_t *p, int *major, int *minor) 
         return PDFMAKE_EHEADER;
     }
     
-    /* Parse version */
+    /* Parse version. Bounded by the buffer: a file whose digits run to EOF
+     * would otherwise walk off the end of it. */
     ptr = found + 5;
-    while (isdigit(*ptr)) maj = maj * 10 + (*ptr++ - '0');
-    if (*ptr == '.') ptr++;
-    while (isdigit(*ptr)) min = min * 10 + (*ptr++ - '0');
+    {
+        const uint8_t *bufend = p->buf + p->buf_len;
+        while (ptr < bufend && isdigit(*ptr)) maj = maj * 10 + (*ptr++ - '0');
+        if (ptr < bufend && *ptr == '.') ptr++;
+        while (ptr < bufend && isdigit(*ptr)) min = min * 10 + (*ptr++ - '0');
+    }
     
     if (major) *major = maj;
     if (minor) *minor = min;
@@ -724,8 +728,17 @@ pdfmake_err_t pdfmake_locate_startxref(pdfmake_parser_t *p, uint64_t *offset) {
     uint64_t off;
     size_t i;
     
-    /* Find last occurrence of startxref */
-    for (i = p->buf_len; i > search_start + keyword_len; ) {
+    if (p->buf_len < keyword_len) {
+        set_error(p, PDFMAKE_EXREF, 0, "startxref not found");
+        return PDFMAKE_EXREF;
+    }
+
+    /* Find last occurrence of startxref. The scan starts at the last
+     * position the whole keyword can occupy: comparing from buf_len - 1
+     * reads eight bytes past the buffer, which is allocator slack on most
+     * platforms and a guard page on OpenBSD. The low end is search_start
+     * itself - a keyword there is inside the last 1024 bytes. */
+    for (i = p->buf_len - keyword_len + 1; i > search_start; ) {
         i--;
         if (memcmp(p->buf + i, keyword, keyword_len) == 0) {
             found = p->buf + i;

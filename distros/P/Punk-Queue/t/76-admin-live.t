@@ -27,9 +27,9 @@ plan skip_all => 'DBI and DBD::SQLite required' unless has_dbd();
 my $file = queue_file();
 my $DSN = "dbi:SQLite:dbname=$file";
 
-# The entity envelope: the shape app.js's bridge feeds into
-# Funky.Pages.handleDataChange. Asserted at the source, because it is a
-# wire contract between our server push and our own bridge.
+# The entity envelope: the shape app.js's bridge reads to decide whether
+# the page it is on shows that entity. Asserted at the source, because it
+# is a wire contract between our server push and our own bridge.
 {
     require Punk::Plugin::Queue;
     my $env = Punk::Plugin::Queue::_entity_envelope(job => update => 42);

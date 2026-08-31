@@ -448,6 +448,9 @@ XS_INTERNAL(pi_record_cb) {
     SV *err = NULL;
     AV *cap = punk_clos_cap(aTHX_ cv);
     NV ttl = 86400;
+    IV maxrec = 1048576;
+    const char *why = "idempotency: response not recorded, so a retry of "
+                      "this key will execute again";
 
     if (items < 2) XSRETURN_EMPTY;
     c = ST(0); resp = ST(1);
@@ -469,7 +472,9 @@ XS_INTERNAL(pi_record_cb) {
 
     if (cap) {
         SV **t = av_fetch(cap, 0, 0);
+        SV **m = av_fetch(cap, 1, 0);
         if (t && *t && SvOK(*t)) ttl = SvNV(*t);
+        if (m && *m && SvOK(*m)) maxrec = SvIV(*m);
     }
 
     f = pi_store(aTHX_ c, &err);
@@ -498,6 +503,34 @@ XS_INTERNAL(pi_record_cb) {
     if (!(bp && *bp && SvROK(*bp) && SvTYPE(SvRV(*bp)) == SVt_PVAV))
         goto unrecorded;
 
+    {   /* The ceiling. The plugin stores whole responses, so a 50MB export
+         * behind a key is 50MB in the cache per key, for the TTL. Over the
+         * ceiling the response is served but not recorded, and the response
+         * says so, because "my retry re-executed" must be debuggable from
+         * the client side. The single-flight lock was held to here all the
+         * same - the concurrent-retry protection covered the request's
+         * duration, and only the replayability is given up. */
+        AV *b = (AV *)SvRV(*bp);
+        SSize_t i, n = av_len(b) + 1;
+        UV blen = 0;
+        for (i = 0; i < n; i++) {
+            SV **e = av_fetch(b, i, 0);
+            STRLEN l;
+            if (e && *e && SvOK(*e)) { (void)SvPV_const(*e, l); blen += l; }
+        }
+        if (blen > (UV)maxrec) {
+            SV **hdrp = av_fetch(ra, 1, 0);
+            if (hdrp && *hdrp && SvROK(*hdrp)
+                && SvTYPE(SvRV(*hdrp)) == SVt_PVAV) {
+                av_push((AV *)SvRV(*hdrp), newSVpvs("Idempotency-Recorded"));
+                av_push((AV *)SvRV(*hdrp), newSVpvs("false"));
+            }
+            why = "idempotency: response is larger than max_record and was "
+                  "not recorded, so a retry of this key will execute again";
+            goto unrecorded;
+        }
+    }
+
     {
         SV *fp = *av_fetch(pending, 1, 0);
         SV *key = *av_fetch(pending, 0, 0);
@@ -516,9 +549,7 @@ XS_INTERNAL(pi_record_cb) {
     {
         SV *key = *av_fetch(pending, 0, 0);
         if (f->caps & PKC_CAN_UNLOCK) pkc_be_unlock(aTHX_ f, key);
-        pi_warn(aTHX_ c,
-               "idempotency: response not recorded, so a retry of this key "
-               "will execute again");
+        pi_warn(aTHX_ c, why);
     }
     XSRETURN_EMPTY;
 }

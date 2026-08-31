@@ -1,7 +1,7 @@
 # ABSTRACT: The one way karr finds and writes a bundled skill file
 
 package App::karr::Role::SkillFile;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo::Role;
 # All loaded without importing, for the reason spelled out in
 # App::karr::Role::Output: a Moo::Role composes every sub in its package into
@@ -136,13 +136,13 @@ App::karr::Role::SkillFile - The one way karr finds and writes a bundled skill f
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 DESCRIPTION
 
 Three commands need the bundled skill file: C<karr skill install> and
 C<karr skill update> write it, C<karr skill show> prints it, and
-C<karr init --claude-skill> writes the same F<.claude/skills/karr/SKILL.md> that
+C<karr init --claude-skill> writes the same F<.claude/skills/kanban-issues-karr-cli/SKILL.md> that
 C<karr skill install --agent claude-code> does. This role is the single place
 that knows both I<where that file comes from> and I<how> it has to be written,
 so neither rule can be fixed in one command and left wrong in the other, which
@@ -180,9 +180,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

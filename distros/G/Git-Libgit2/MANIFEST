@@ -2,9 +2,10 @@
 .claude/agents/libgit2-release-checker.md
 .claude/agents/libgit2-worker.md
 .claude/settings.json
+.claude/skills/getty-perl-core/SKILL.md
+.claude/skills/getty-perl-release-author-getty/SKILL.md
+.claude/skills/kanban-issues-karr-cli/SKILL.md
 .claude/skills/libgit2-core/SKILL.md
-.claude/skills/perl-core/SKILL.md
-.claude/skills/perl-release-author-getty/SKILL.md
 .claude/skills/perl-release-dist-ini/SKILL.md
 .github/workflows/linux.yml
 .github/workflows/macos.yml
@@ -43,6 +44,9 @@ t/23-reset.t
 t/24-lookup-prefix.t
 t/25-opts.t
 t/26-constants.t
+t/27-struct-layout.t
+t/28-server-timeout.t
+t/29-cert-hostkey-layout.t
 t/30-merge.t
 t/31-stash.t
 t/32-reflog.t

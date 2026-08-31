@@ -73,7 +73,11 @@ my $vendored = do {
     local $/; <$fh>;
 };
 my @listed = $vendored =~ /^\s{4}(\d\d-[\w.-]+\.js)\b/mg;
-ok(@listed >= 37, 'VENDORED.md lists the js files (' . @listed . ')');
+# Only that the regex found a list at all - a literal floor here was a
+# maintenance trap, since the vendored set legitimately shrinks (the SPA
+# layer left in 0.08). The count that matters is asserted next, against
+# what is actually on disk.
+ok(@listed, 'VENDORED.md lists the js files (' . @listed . ')');
 
 my $asset_dir = "$FindBin::Bin/../lib/Punk/Plugin/Queue/assets/funky/js";
 opendir my $dh, $asset_dir or die $!;
@@ -110,8 +114,43 @@ my $themes_at = index($css, '[data-theme');
 my $pq_at     = index($css, 'punk-queue.css - the override layer');
 ok($themes_at > 0, 'themes.css is in the bundle');
 ok($pq_at > $themes_at, 'punk-queue.css comes after it - the override');
-like($css, qr/\.fa-check-circle::before/,
-     'the FontAwesome neutralisation is present (no icon font vendored)');
+# The icons. Every fa-* class this UI renders must have a content code in
+# the bundle, or it draws an empty box - which is how the unicode shim
+# this replaced ended up showing a bullet for a table's cog. Asserted
+# against the classes actually emitted, not against a list kept by hand.
+{
+    my $fa_at = index($css, '@font-face');
+    ok($fa_at > $themes_at && $fa_at < $pq_at,
+       'the FontAwesome face is bundled between themes.css and the '
+     . 'override layer');
+    like($css, qr/url\("fa-solid-900\.woff2"\)/,
+         '...with a RELATIVE url, so it resolves under any mount prefix');
+
+    my $adir = "$FindBin::Bin/../lib/Punk/Plugin/Queue/assets";
+    my %emitted;
+    for my $f (glob("$adir/funky/js/*.js"), "$adir/app.js",
+               glob("$adir/templates/*.tmpl")) {
+        open my $fh, '<:raw', $f or die "$f: $!";
+        local $/;
+        my $src = <$fh>;
+        close $fh;
+        $emitted{$1} = 1 while $src =~ /\b(fa-[a-z][a-z0-9-]+)\b/g;
+    }
+    # sizing/behaviour modifiers, not icons; and `fa-file`, which is the
+    # left half of a class table.js BUILDS at runtime from an export
+    # format (`'fa-file-' + format`, table.js:6814). A static scan cannot
+    # know that set, and this UI never configures buttons.export so the
+    # branch is unreachable here - the three concrete spellings it can
+    # produce (csv, excel, upload) are coded like any other icon.
+    delete @emitted{qw(fa-2x fa-3x fa-lg fa-sm fa-xs fa-fw fa-spin
+                       fa-file fa-file-)};
+    my @uncoded = sort grep { $css !~ /\.\Q$_\E::before\s*\{\s*content:/ }
+                  keys %emitted;
+    is_deeply(\@uncoded, [],
+              'every icon class the UI emits has a content code');
+}
+like($css, qr/animation: pq-spin/,
+     'and .fa-spin is still ours - the face carries glyphs, not motion');
 
 $res = hit_asset(path => '/q/assets/app.js');
 is($res->[0], 200, 'app.js serves');

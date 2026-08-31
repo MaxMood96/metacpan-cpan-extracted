@@ -29,7 +29,7 @@ our @EXPORT = qw(
 	hash2vcard
 );
 
-our $VERSION = '0.11';
+our $VERSION = '0.12';
 
 require XSLoader;
 XSLoader::load('Text::VCardFast', $VERSION);
@@ -370,8 +370,8 @@ Text::VCardFast - Perl extension for very fast parsing of VCards
 
   use Text::VCardFast;
 
-  my $hash = Text::VCard::vcard2hash($card, multival => ['adr', 'org', 'n']);
-  my $card = Text::VCard::hash2vcard($hash, "\r\n");
+  my $hash = Text::VCardFast::vcard2hash($card, multival => ['adr', 'org', 'n']);
+  my $card = Text::VCardFast::hash2vcard($hash, "\r\n");
 
 =head1 DESCRIPTION
 
@@ -622,13 +622,16 @@ https://github.com/brong/Text-VCardFast/
 
 Bron Gondwana, E<lt>brong@fastmail.fm<gt>
 
-=head1 COPYRIGHT AND LICENSE
+=head1 LICENSE AND COPYRIGHT
 
-Copyright (C) 2014 by Bron Gondwana
+Copyright 2014-2026 Fastmail Pty Ltd.
 
-This library is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself, either Perl version 5.14.2 or,
-at your option, any later version of Perl 5 you may have available.
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself; that is, either the GNU General
+Public License as published by the Free Software Foundation (version 1,
+or at your option any later version), or the Artistic License.
 
+See L<http://dev.perl.org/licenses/> and the LICENSE file included with
+this distribution for more information.
 
 =cut

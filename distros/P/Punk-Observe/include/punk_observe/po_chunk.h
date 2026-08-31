@@ -16,10 +16,18 @@
  * concatenating them is not an approximation. t/0930 asserts it against a
  * real store rather than trusting this paragraph.
  *
- * IT ALSO MAKES THE ANSWER MORE COMPLETE, which was not the point. A query
- * has a row ceiling, and the twenty-four-hour scan above hit it: `truncated`
- * set, nine buckets returned of the twenty-four the data covers. Each chunk
- * stays well under the ceiling, so the chunked answer is the whole one.
+ * THE CALLER'S ROW BUDGET TRAVELS WITH EACH CHUNK, and getting that wrong is
+ * how splitting a window turns a complete answer into a partial one. A panel
+ * asks for no ceiling because a graph that stops mid-window draws some other
+ * window and labels it with this one; when the split dropped those options
+ * and ran every chunk at the store's default, each busy hour truncated at
+ * 500,000 and the panel reported the sum of two dozen capped scans. So
+ * everything the caller passed beyond the window itself is forwarded verbatim
+ * to every chunk, and only the window is this file's to decide.
+ *
+ * A CHUNK THAT TRUNCATED IS NOT STORED. It is still the answer for this call
+ * - it is exactly what an uncached query would have said - but caching it
+ * freezes a number that is known to be short for the entry's whole life.
  */
 #ifndef PO_CHUNK_H
 #define PO_CHUNK_H
@@ -101,8 +109,10 @@ typedef struct {
     size_t   n, cap;
     po_u64   bucket_ns;
     po_u64   scanned;
+    po_u64   scanned_bytes;
     int      truncated;
     int      exact;
+    int      degraded;
 } po_cres;
 
 static void po_cres_init(po_cres *r) {
@@ -185,13 +195,21 @@ static void po_cres_sort(po_cres *r) {
  * little-endian fields have no such question, and the decoder can reject a
  * blob it does not understand instead of half-reading it.
  *
- *   "POC1" | bucket_ns u64 | scanned u64 | flags u8 | nseries u32
+ *   "POC2" | bucket_ns u64 | scanned u64 | scanned_bytes u64 | flags u8
+ *          | nseries u32
  *   per series: klen u32, key bytes, npoints u32
  *               per point: at u64, value f64, count u64
+ *
+ * THE MAGIC IS PART OF THE UPGRADE. `POC1` entries were written by a version
+ * whose chunks ran at the store's default row ceiling rather than the
+ * caller's, so a busy chunk truncated and froze a partial count for its whole
+ * TTL. Those bytes are not worth reading, and the key namespace moved with
+ * this magic so they are never reached at all.
  */
-#define PO_CHUNK_MAGIC "POC1"
+#define PO_CHUNK_MAGIC "POC2"
 #define PO_CHUNK_F_TRUNCATED 0x01
 #define PO_CHUNK_F_INEXACT   0x02
+#define PO_CHUNK_F_DEGRADED  0x04
 
 static void po_c_put64(unsigned char *p, po_u64 v) {
     int i;
@@ -213,7 +231,7 @@ static uint32_t po_c_get32(const unsigned char *p) {
 }
 
 static size_t po_chunk_size(const po_cres *r) {
-    size_t n = 4 + 8 + 8 + 1 + 4, i;
+    size_t n = 4 + 8 + 8 + 8 + 1 + 4, i;
     for (i = 0; i < r->n; i++)
         n += 4 + r->s[i].klen + 4 + r->s[i].n * 24;
     return n;
@@ -224,8 +242,10 @@ static size_t po_chunk_encode(const po_cres *r, unsigned char *out) {
     memcpy(out, PO_CHUNK_MAGIC, 4); o += 4;
     po_c_put64(out + o, r->bucket_ns); o += 8;
     po_c_put64(out + o, r->scanned);   o += 8;
+    po_c_put64(out + o, r->scanned_bytes); o += 8;
     out[o++] = (unsigned char)((r->truncated ? PO_CHUNK_F_TRUNCATED : 0)
-                             | (r->exact ? 0 : PO_CHUNK_F_INEXACT));
+                             | (r->exact ? 0 : PO_CHUNK_F_INEXACT)
+                             | (r->degraded ? PO_CHUNK_F_DEGRADED : 0));
     po_c_put32(out + o, (uint32_t)r->n); o += 4;
     for (i = 0; i < r->n; i++) {
         po_c_put32(out + o, (uint32_t)r->s[i].klen); o += 4;
@@ -244,6 +264,16 @@ static size_t po_chunk_encode(const po_cres *r, unsigned char *out) {
     return o;
 }
 
+/* WOULD THIS BE READ AT ALL. The question a warmer asks, which is not the
+ * question a reader asks: it wants to know whether an entry is worth leaving
+ * alone, not what is in it, and building a result per chunk to find out would
+ * be most of the cost of not having needed to. A blob that passes here and
+ * fails the full decode later is deleted by the read path. */
+static int po_chunk_valid(const unsigned char *b, size_t len) {
+    if (!b || len < 4 + 8 + 8 + 8 + 1 + 4) return 0;
+    return memcmp(b, PO_CHUNK_MAGIC, 4) == 0;
+}
+
 /* Merges a stored blob INTO an accumulating result. Every length is checked
  * against what is left rather than trusted: the bytes come back from a cache
  * on disk, which is somewhere a truncated write or a stale format can leave
@@ -254,15 +284,17 @@ static int po_chunk_decode(po_cres *r, const unsigned char *b, size_t len) {
     uint32_t ns;
     unsigned char flags;
 
-    if (len < 4 + 8 + 8 + 1 + 4) return 0;
+    if (len < 4 + 8 + 8 + 8 + 1 + 4) return 0;
     if (memcmp(b, PO_CHUNK_MAGIC, 4) != 0) return 0;
     o = 4;
     if (!r->bucket_ns) r->bucket_ns = po_c_get64(b + o);
     o += 8;
     r->scanned += po_c_get64(b + o); o += 8;
+    r->scanned_bytes += po_c_get64(b + o); o += 8;
     flags = b[o++];
     if (flags & PO_CHUNK_F_TRUNCATED) r->truncated = 1;
     if (flags & PO_CHUNK_F_INEXACT)   r->exact = 0;
+    if (flags & PO_CHUNK_F_DEGRADED)  r->degraded = 1;
     ns = po_c_get32(b + o); o += 4;
 
     for (i = 0; i < ns; i++) {

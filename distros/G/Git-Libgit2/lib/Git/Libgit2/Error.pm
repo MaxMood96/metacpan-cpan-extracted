@@ -1,7 +1,7 @@
 # ABSTRACT: Wraps git_error_last() into a Perl structure
 
 package Git::Libgit2::Error;
-our $VERSION = '0.006';
+our $VERSION = '0.007';
 use strict;
 use warnings;
 use FFI::Platypus 2.00;
@@ -81,11 +81,11 @@ Git::Libgit2::Error - Wraps git_error_last() into a Perl structure
 
 =head1 VERSION
 
-version 0.006
+version 0.007
 
 =head1 SYNOPSIS
 
-  my $rc = git_repository_open(\my $repo, $path);
+  my $rc = Git::Libgit2::FFI::git_repository_open(\my $repo, $path);
   if ($rc < 0) {
     die Git::Libgit2::Error->last($rc);   # stringifies
   }

@@ -1,5 +1,13 @@
 Revision history for PDF::Make
 
+0.13  2026-08-31
+     - Fix: the backward scan for startxref compared the keyword from
+       positions where fewer than nine bytes remained, reading past the end
+       of the file buffer. Harmless slack on most allocators, a SIGSEGV on
+       OpenBSD when the buffer ended on a page boundary.
+     - Fix: the %PDF- version digits are parsed within the buffer, so a file
+       whose digits run to EOF cannot walk off it.
+
 0.12  2026-08-23
      - Fix: Font::Metrics was used by PDF::Make::Builder::Font but never
        declared as a prerequisite, so an install that already had an older

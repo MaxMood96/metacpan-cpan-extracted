@@ -8,7 +8,7 @@ use warnings;
 use warnings::register;
 use namespace::autoclean 0.19;
 
-our $VERSION = '1.66';
+our $VERSION = '1.67';
 
 use Carp;
 use DateTime::Duration;
@@ -2375,7 +2375,7 @@ DateTime - A date and time object for Perl
 
 =head1 VERSION
 
-version 1.66
+version 1.67
 
 =head1 SYNOPSIS
 
@@ -3036,6 +3036,9 @@ is formatted with a leading sign (+/-) and a colon separated numeric offset
 with hours and minutes. If the offset has a non-zero seconds component, that is
 also included.
 
+The output of this method does not include the optional nanosecond portion of
+the RFC3339 format.
+
 =head3 $dt->stringify
 
 This method returns a stringified version of the object. It is also how
@@ -3161,8 +3164,15 @@ patterns.
 
 If you give a pattern that doesn't exist, then it is simply treated as text.
 
-Note that any deviation from the POSIX standard is probably a bug. DateTime
-should match the output of C<POSIX::strftime> for any given pattern.
+While DateTime uses the same I<patterns> as the POSIX standard, the data used
+to fill in those patterns comes from the Unicode CLDR project. That means that
+the output from this method may not match the return value of
+C<POSIX::strftime> for all patterns. In particular, this means that the return
+value may include UTF-8 for any locale.
+
+Also note that DateTime does not look at env vars like C<LANG> or C<LC_*> in
+order to determine what locale or character set to use. The locale is set when
+constructing the DateTime object and the character set is always UTF-8.
 
 =head3 $dt->format_cldr( $format, ... )
 
@@ -3173,6 +3183,9 @@ format string.
 See the L<CLDR Patterns> section for a list of all possible CLDR patterns.
 
 If you give a pattern that doesn't exist, then it is simply treated as text.
+
+As with the C<strftime> method, the return value of this method is always
+UTF-8.
 
 =head3 $dt->epoch
 
@@ -3301,6 +3314,15 @@ If C<"week"> is given, then the datetime is set to the Monday of the week in
 which it occurs, and the time components are all set to 0. If you truncate to
 C<"local_week">, then the first day of the week is locale-dependent. For
 example, in the C<"en-US"> locale, the first day of the week is Sunday.
+
+B<Note:> Truncation can throw a fatal error if the resulting datetime is
+invalid in the object's time zone. This can happen when a DST transition occurs
+at midnight, causing that local time to not exist. For example, in some time
+zones the clocks spring forward from 00:00 to 01:00, meaning there is no
+midnight on that day.
+
+Unfortunately, this is difficult to work around, because truncating in UTC and
+then changing the time zone will probably not produce the result you want.
 
 =head3 $dt->set_locale($locale)
 
@@ -4797,7 +4819,7 @@ viviparous <viviparous@prc>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2003 - 2025 by Dave Rolsky.
+This software is Copyright (c) 2003 - 2026 by Dave Rolsky.
 
 This is free software, licensed under:
 

@@ -1,0 +1,5 @@
+%syntax-version=1.0.0
+%project=punk_passkey
+%uri=https://metacpan.org/pod/Punk::Plugin::Passkey
+
+passkeys [punk_auth:users] 2026-08-30T18:00:00Z LNATION <email@lnation.org> # one row per credential: the id, the COSE key, the sign count and what the user calls it

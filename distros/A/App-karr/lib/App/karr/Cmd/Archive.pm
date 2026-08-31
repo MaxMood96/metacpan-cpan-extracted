@@ -1,7 +1,7 @@
 # ABSTRACT: Archive a task (soft-delete)
 
 package App::karr::Cmd::Archive;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use MooX::Cmd;
 use MooX::Options (
@@ -25,8 +25,12 @@ sub execute {
   $self->require_board;
 
   my @pos = $self->positional_args($args_ref);
-  my $id_str = $pos[0] or die "Usage: karr archive ID[,ID,...]\n";
-  # See the note in Cmd::Move: a comma with no ids around it is truthy here and
+  my $id_str = $pos[0];
+  # See the note in Cmd::Move: length, not truth, or the id "0" is read as no
+  # id at all and answered with a usage error instead of "not found" (#239).
+  die "Usage: karr archive ID[,ID,...]\n"
+    unless defined $id_str && length $id_str;
+  # And a comma with no ids around it passes that guard and
   # splits to nothing, so the command used to exit 0 having done nothing
   # (ticket #152).
   my @ids = $self->parse_ids($id_str);
@@ -44,7 +48,11 @@ sub execute {
     # sit inside update_task_guarded's callback below, applied to the very
     # revision that gets written.
     my $found = $self->find_task($id);
-    die "Task $id not found\n" unless $found;
+    # The unguarded pre-read fires before update_task_guarded below, so this is
+    # the not-found a caller normally meets; the guard raises the same line only
+    # on the race where the card vanishes in the window. One spelling for both,
+    # and for every other command on the mutation path (ticket k264).
+    die $self->task_not_found($id) unless $found;
 
     if ($found->status eq 'archived') {
       printf "Task %d is already archived: %s\n", $found->id, $found->title
@@ -77,11 +85,16 @@ sub execute {
     });
 
     printf "Archived task %d: %s\n", $task->id, $task->title unless $self->json;
+    # The claimant passed above is undef, so the only way a claimed card reaches
+    # here at all is an expired claim -- which makes archive one of the two
+    # commands (delete is the other) that can take a card away from a named
+    # holder with nothing on the card left to say so (#177).
     return {
       id         => $task->id,
       title      => $task->title,
       status     => 'archived',
       old_status => $old_status,
+      $self->expired_claim_report( $task->id ),
     };
   });
 
@@ -106,7 +119,7 @@ App::karr::Cmd::Archive - Archive a task (soft-delete)
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 SYNOPSIS
 
@@ -115,9 +128,9 @@ version 0.500
 
 =head1 DESCRIPTION
 
-Soft-deletes tasks by moving them to the C<archived> status. The task file
-remains on disk, which keeps history and metadata intact while hiding the task
-from the default C<karr list> output.
+Soft-deletes tasks by moving them to the C<archived> status. The task's ref
+remains, which keeps history and metadata intact while hiding the task from
+the default C<karr list> output.
 
 =head1 CLAIMS
 
@@ -153,9 +166,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

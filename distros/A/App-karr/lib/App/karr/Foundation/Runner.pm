@@ -1,14 +1,16 @@
-# ABSTRACT: karr-foundation command execution — fork/pipe/select tee + error classification
+# ABSTRACT: karr-foundation command execution -- fork/pipe/select tee + run classification
 
 package App::karr::Foundation::Runner;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo;
 use App::karr::Error qw( clean_error user_error );
-use App::karr::Encoding qw( to_octets_for_env );
+use App::karr::Encoding qw( from_octets json_decode to_octets to_octets_for_env );
 use Encode ();
 use IO::Select;
 use IO::Handle ();
 use POSIX qw( SIGTERM SIGKILL SIGALRM WNOHANG setpgid );
+use Scalar::Util qw( looks_like_number );
+
 
 
 has foundation => (
@@ -22,10 +24,24 @@ has foundation => (
 # ---------------------------------------------------------------------------
 
 sub _run_command {
-  my ( $self, $repo, $karr, $cmd ) = @_;
+  my ( $self, $repo, $karr, $cmd, $ticket, $agent, %opt ) = @_;
   my $command      = $cmd // $karr->{command};
-  my $max_runtime  = $karr->{max_runtime} // 1800;
   my $stream_terms = $self->foundation->_stream_to_terminal;
+
+  # What this run is, and how long it may take. Both default to the agent, who
+  # was the only caller for as long as there was only one kind of run. The
+  # C<on_drained> hook (#193) is the second: it wants the whole apparatus below
+  # -- the process group, the timeout, the tee -- and none of the identity, so
+  # it passes its own role and its own budget and takes everything else as it
+  # stands. Anything the identity decides is keyed off $role and nothing else.
+  my $role         = $opt{role} // 'agent';
+  my $max_runtime  = $opt{max_runtime} // $karr->{max_runtime} // 1800;
+
+  # How this run's output is to be read for a human, decided by the agent
+  # definition that supplied the command and by nothing else (#188). Undef --
+  # every board that names no agent -- is the historical path: the octets the
+  # command printed, verbatim, to the log and the terminal.
+  my $render = ref $agent eq 'HASH' ? $agent->{render} : undef;
 
   # Environment for the child (and all karr calls it spawns). The child inherits
   # it across the fork/exec below, so a command template — including the
@@ -37,8 +53,38 @@ sub _run_command {
   # stderr and the bytes the child receives would depend on the IO layers in
   # scope at the call site.
   local $ENV{KARR_REPO} = to_octets_for_env("$repo");
-  local $ENV{KARR_ROLE} = to_octets_for_env('agent');
-  local $ENV{PROMPT}    = to_octets_for_env( $self->foundation->_prompt_for($karr) );
+  local $ENV{KARR_ROLE} = to_octets_for_env($role);
+
+  # The prompt is the board agent's instruction, so only the board agent gets
+  # the board's one. A hook handed a prompt telling it to pick the next
+  # actionable task would be told to do the one thing it is not there for, and
+  # every karr write it made would land in the agent's activity log -- which is
+  # the evidence the auto-block reads. KARR_ROLE keeps those apart, and this
+  # keeps the instruction with the identity it belongs to.
+  #
+  # A caller that brings its OWN instruction passes it, and the coordination
+  # agent (#210) is the one that does: it is an agent and needs a prompt, but
+  # not the board's -- it is not there to work a card, and it is not even run
+  # in a board's own repository in the sense the drain means. `prompt => ...`
+  # is therefore the exception the two identities above make necessary, not a
+  # third way for a board agent to be told what to do.
+  local $ENV{PROMPT}    = to_octets_for_env(
+      defined $opt{prompt} ? $opt{prompt}
+    : $role eq 'agent'     ? $self->foundation->_prompt_for( $karr, $ticket )
+    :                        '' );
+
+  # The id of the task this run is about, in ticket mode, and empty in every
+  # other mode -- localised either way so a run never inherits the previous
+  # one's card, and so a template reading it in drain mode gets nothing rather
+  # than a stale number. This is the whole machine-readable half of the ticket
+  # contract: the prompt above carries the assignment in prose for the agent,
+  # $KARR_TASK carries it for a command template that wants the bare id
+  # (`myagent --task "$KARR_TASK"`). Deliberately not an argument appended to
+  # the command -- how arguments are appended is what `kind: claude-code`
+  # settles per agent definition (#188), and an env var is the one thing that
+  # works with every command template that exists today, including the
+  # synthesized `claude -p "$PROMPT"`.
+  local $ENV{KARR_TASK} = defined $ticket ? to_octets_for_env("$ticket") : '';
 
   # The expansion is the shell's, not ours (#159). Splicing %ENV into the command
   # string here instead meant the shell went on to parse the *values*: a prompt
@@ -57,7 +103,10 @@ sub _run_command {
   # .karr vs synthesized claude), not a second copy of the prompt. It also no
   # longer copies whatever an env var held — a wrapper's API key included — into
   # a plaintext .karr.log.
-  $self->foundation->_append_log( $repo, "START command=$command" );
+  $self->foundation->_append_log( $repo, 'START '
+    . ( $role ne 'agent' ? "role=$role " : '' )
+    . ( ref $agent eq 'HASH' && defined $agent->{name} ? "agent=$agent->{name} " : '' )
+    . "command=$command" );
   $self->foundation->_say_verbose("exec in $repo: $command");
 
   if ( $self->foundation->dry_run ) {
@@ -169,6 +218,11 @@ sub _run_command {
   # error-scanning buffer keep the raw octets.
   my $pending = '';
 
+  # Line assembly for a rendered stream (see _render_stream_line). Only used
+  # when $render is on; the raw path below never touches them.
+  my $line_buf = '';
+  my $shown    = '';
+
   while (1) {
     last if $timed_out;
     if ( !$sel ) {
@@ -190,12 +244,45 @@ sub _run_command {
     my $n = sysread( $reader, $chunk, 65536 );
     last if !defined $n;   # read error (or SIGALRM closing the fd)
     last if $n == 0;       # EOF — the command closed its output
-    print {$log_fh} $chunk;
-    if ($stream_terms) {
+    if ($render) {
       $pending .= $chunk;
-      print Encode::decode( 'UTF-8', $pending, Encode::FB_QUIET );
+      $line_buf .= Encode::decode( 'UTF-8', $pending, Encode::FB_QUIET );
+      while ( $line_buf =~ s/\A([^\n]*)\n// ) {
+        my $text = $self->_render_stream_line( $render, $1 );
+        next unless length $text;
+        print {$log_fh} to_octets($text);
+        print $text if $stream_terms;
+        $shown = substr $text, -1;
+      }
     }
+    else {
+      print {$log_fh} $chunk;
+      if ($stream_terms) {
+        $pending .= $chunk;
+        print Encode::decode( 'UTF-8', $pending, Encode::FB_QUIET );
+      }
+    }
+    # The classification buffer keeps the raw octets whatever the terminal and
+    # the log were given: _run_result reads the result object out of the tail
+    # of the stream, and rendering has just dropped it on the floor.
     $output .= $chunk;
+  }
+
+  # A last line the command left without a newline (it was killed, or it simply
+  # does not end its output with one) still has something to say.
+  if ( $render && length $line_buf ) {
+    my $text = $self->_render_stream_line( $render, $line_buf );
+    if ( length $text ) {
+      print {$log_fh} to_octets($text);
+      print $text if $stream_terms;
+      $shown = substr $text, -1;
+    }
+  }
+  # Rendered text arrives as deltas and the last one rarely ends a line, so
+  # without this the shell prompt (and the next log line) lands mid-sentence.
+  if ( $render && length $shown && $shown ne "\n" ) {
+    print {$log_fh} "\n";
+    print "\n" if $stream_terms;
   }
 
   # Disarm the alarm before reap: a waitpid that takes longer than max_runtime
@@ -218,7 +305,7 @@ sub _run_command {
     my $log_err;
     eval {
       $self->foundation->_append_log( $repo,
-        "TIMEOUT after ${elapsed}s \x{2014} sending SIGTERM to $pid (group -$pid)" );
+        "TIMEOUT after ${elapsed}s -- sending SIGTERM to $pid (group -$pid)" );
       1;
     } or $log_err = clean_error($@);
     # Negative pid = process group (kill(2) group semantics, #148). The shell,
@@ -308,6 +395,187 @@ sub _classify_exit {
   my $sig = $status & 127;
   return 128 + $sig if $sig;
   return ( $status >> 8 ) & 255;
+}
+
+# ---------------------------------------------------------------------------
+# Live output for a structured stream
+# ---------------------------------------------------------------------------
+
+# One line of a rendered stream, as text for the terminal and the log, or the
+# empty string for a line that carries nothing a human wants to read.
+#
+# This exists because of a trap in the `kind: claude-code` contract. A run has
+# to be asked for structured output before it will report on itself, and plain
+# `--output-format json` buys that by printing NOTHING until the run ends --
+# which silently cancels the live output App::karr::Foundation promises for a
+# TTY, on exactly the runs that take half an hour. `stream-json` ends with the
+# same result object and streams on the way there, so the contract asks for
+# that instead and the rendering happens here.
+#
+# What is rendered is the assistant's own text, which is the same choice
+# App::karr::Foundation's documented jq pipeline makes
+# (`select(.type == "stream_event") | .event.delta.text`). Everything else in
+# the stream -- the init banner, the per-message envelopes, the tool plumbing,
+# the final result object -- is machinery, and the machinery is what an
+# operator watching a board does not want to read. The result object is not
+# lost by suppressing it: the drain classifies from it (it stays in the raw
+# buffer) and logs a RESULT line of its own.
+#
+# A line that is not JSON at all passes through verbatim. The pipe is shared
+# with the command's stderr, so a wrapper's banner, a `set -x` trace or a
+# warning can land between two stream events, and swallowing those would be
+# the same mistake one level down.
+sub _render_stream_line {
+  my ( $self, $render, $line ) = @_;
+  return '' unless $render eq 'stream-json';
+  return '' unless defined $line && $line =~ /\S/;
+  # Same cheap pre-filter as _run_result: prose never reaches the parser.
+  return "$line\n" unless $line =~ /\A\s*\{.*\}\s*\z/s;
+  my $ev = eval { json_decode($line) };
+  return "$line\n" unless ref $ev eq 'HASH';
+  return '' unless ( $ev->{type} // '' ) eq 'stream_event';
+  my $delta = ( $ev->{event} // {} )->{delta};
+  return '' unless ref $delta eq 'HASH';
+  my $text = $delta->{text};
+  return defined $text && !ref $text ? $text : '';
+}
+
+# ---------------------------------------------------------------------------
+# Structured result (a claude-code run's own report)
+# ---------------------------------------------------------------------------
+
+# How much of a transcript is looked at for the report at its end. The buffer
+# is everything the agent printed and can be megabytes; the object itself is a
+# couple of kilobytes. A report that does not fit in the window fails to parse
+# and the run counts as unstructured, which is the safe direction.
+my $RESULT_TAIL_BYTES = 1_048_576;
+
+# The run's own report, or undef when it made none.
+#
+# How foundation finds out that a run answers structurally: it does not ask,
+# and it is not told. It reads what the run left at the end of its output.
+#
+# The two alternatives are both worse. A configuration key ("this board's agent
+# emits json") is a second copy of a fact the command already carries, and a
+# copy that has gone stale is worse than no copy at all -- it makes foundation
+# look for a report that is not there, or ignore one that is, and it puts the
+# operator in charge of keeping two strings in step. Sniffing the command
+# string for --output-format json means parsing a shell template foundation
+# deliberately does not parse (#159: the expansion is the shell's, not ours),
+# and it guesses wrong on the very pipeline this module's own documentation
+# recommends -- `... --output-format stream-json ... | jq -r ...` carries the
+# flag and delivers no JSON at all.
+#
+# What is not a guess is the output. `claude -p --output-format json` ends with
+# exactly one line, a JSON object with "type":"result". That is the format's
+# contract, so reading the tail asks the run itself.
+#
+# Only the LAST non-empty line is examined, and that is the whole answer to
+# "an agent that mixes prose and JSON must not be misclassified":
+#
+#   * prose BEFORE the object is irrelevant -- a wrapper's banner, a `set -x`
+#     line, a warning that reached the shared stdout/stderr pipe earlier;
+#   * prose CONTAINING an object cannot reach the classifier. An agent working
+#     a karr board prints the board, and a board can hold a pasted result
+#     object the way #160's board held a "503" and a "403". Anything that
+#     scans a whole transcript eventually reads the agent's own quotation as
+#     the agent's own report; a tail read cannot;
+#   * anything printed AFTER the object makes the run unstructured again and
+#     the text scan takes over. Structure is lost, never invented.
+sub _run_result {
+  my ( $self, $output ) = @_;
+  return undef unless defined $output && length $output;
+  my $tail = length($output) > $RESULT_TAIL_BYTES
+    ? substr( $output, -$RESULT_TAIL_BYTES )
+    : $output;
+  my ( $last ) = grep { /\S/ } reverse split /\n/, $tail, -1;
+  return undef unless defined $last;
+  $last =~ s/\A\s+//;
+  $last =~ s/\s+\z//;
+  # Cheap pre-filter before the parser, the same bargain _match_error makes
+  # with its trigger substrings: nearly every run ends in prose, and prose is
+  # rejected here without JSON::MaybeXS ever seeing it.
+  return undef unless $last =~ /\A\{.*\}\z/s;
+  # The buffer holds octets (the tee keeps the log and the scan byte-exact),
+  # and json_decode is the character-level door -- App::karr::Encoding owns
+  # both crossings, so the decode is from_octets and nothing else.
+  my $data = eval { json_decode( from_octets( $last ) ) };
+  return undef unless ref $data eq 'HASH';
+  return undef unless ( $data->{type} // '' ) eq 'result';
+  return $data;
+}
+
+# What the report says about how the run ended, as ( $error, $ended ):
+#
+#   $ended  always describes the ending, for the log and for .karr.state
+#   $error  is set only where that ending is a common error -- the same
+#           currency _match_error returns, so the drain treats a reported
+#           error and a scanned one alike from there on
+#
+# A reported error is a hard signal, not a near-miss: it is the run's own
+# statement about itself, not an inference drawn from its prose. The progress
+# guard #160 put in front of the text scan therefore does not belong in front
+# of this one -- that guard exists because a word search over a transcript
+# cannot tell the agent's report from the board's contents, which is a problem
+# a field in the agent's own result object does not have.
+sub _result_error {
+  my ( $self, $result ) = @_;
+  return ( undef, 'success' ) unless $result->{is_error};
+
+  my $subtype = $result->{subtype} // 'error';
+
+  # A status from the provider is exactly the case the text scan was written
+  # for, arriving as a number in a field instead of a word in a sentence. The
+  # board backs off, as it always did for a rate limit.
+  my $api = $result->{api_error_status};
+  return ( "api $api", "api $api" ) if defined $api && length $api;
+
+  # The turn budget ran out. This is the one error flag that reports no
+  # failure of the agent and none of the provider: both worked, the task was
+  # larger than the budget it was given, and the honest response is to run
+  # again rather than to park the board for an exponentially growing hour.
+  # So it names the ending and returns no error, and the run is judged the way
+  # every other run is -- by what the board did.
+  return ( undef, 'max turns' )
+    if $subtype eq 'error_max_turns'
+    || ( $result->{terminal_reason} // '' ) eq 'max_turns';
+
+  return ( $subtype, $subtype );
+}
+
+# The numbers worth keeping out of a report: how far the run got and what it
+# cost. .karr.state carries the last one so an operator -- and the coordination
+# agent this is groundwork for -- can read the last run's report without
+# parsing .karr.log.
+sub _result_summary {
+  my ( $self, $result, $ended ) = @_;
+  return {
+    ended    => $ended,
+    turns    => $result->{num_turns},
+    duration => $result->{duration_ms},
+    cost_usd => $result->{total_cost_usd},
+    session  => $result->{session_id},
+  };
+}
+
+# The same report as one .karr.log line. Every field is optional: a report is
+# read for its is_error flag first of all, and one that carries no numbers is
+# still a report.
+sub _result_line {
+  my ( $self, $result, $ended ) = @_;
+  my @bits;
+  my ( $turns, $ms, $cost ) =
+    @{$result}{qw( num_turns duration_ms total_cost_usd )};
+  # looks_like_number, not a regex: these come out of somebody else's JSON and
+  # the only thing being asked is whether they can be printed as numbers. A
+  # field that cannot is left out of the line rather than warned about -- a
+  # report is read for its error flag first of all, and one carrying no usable
+  # numbers is still a report.
+  push @bits, ( $turns == 1 ? '1 turn' : "$turns turns" )
+    if looks_like_number( $turns );
+  push @bits, sprintf( '%.1fs', $ms / 1000 ) if looks_like_number( $ms );
+  push @bits, sprintf( '$%.4f', $cost )      if looks_like_number( $cost );
+  return "RESULT $ended" . ( @bits ? ' (' . join( ', ', @bits ) . ')' : '' );
 }
 
 # ---------------------------------------------------------------------------
@@ -469,11 +737,11 @@ __END__
 
 =head1 NAME
 
-App::karr::Foundation::Runner - karr-foundation command execution — fork/pipe/select tee + error classification
+App::karr::Foundation::Runner - karr-foundation command execution -- fork/pipe/select tee + run classification
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 DESCRIPTION
 
@@ -481,25 +749,72 @@ L<App::karr::Foundation::Runner> runs a single agent command for
 L<App::karr::Foundation>. It forks the command under C</bin/sh -c>, reads its
 combined stdout/stderr over a native pipe, and tees each chunk to the
 persistent C<.karr.log>, the terminal (when streaming), and an in-memory buffer
-used for error scanning, enforcing the per-run C<max_runtime> timeout. It also
-classifies observable common errors (rate limit, auth, network, 5xx, ...) in
-that buffer: a symptom word counts only next to a failure word on the same
-line, or inside a phrase an API really emits, and an HTTP status only where
-something adjacent marks it as one. The drain asks at all only for a run that
-made no progress -- see L<App::karr::Foundation>'s "Drain semantics". A
+the run is classified from, enforcing the per-run C<max_runtime> timeout. A
 weak back-reference to the owning foundation supplies shared options and helpers
 (C<dry_run>, C<_stream_to_terminal>, C<_prompt_for>, C<_append_log>,
 C<_say_verbose>).
 
+That buffer is read twice over, in this order. First for the run's B<own
+report>: an agent invoked with C<--output-format json> ends its output with a
+JSON object saying whether the run failed, how it ended, how many turns it
+took, how long it ran and what it cost. C<_run_result> finds it -- at the tail
+of the output, which is the only place a mixture of prose and JSON cannot be
+misread -- and C<_result_error> says whether the ending it describes is a
+common error and of what kind.
+
+Only where a run left no report does the older text scan run: observable common
+errors (rate limit, auth, network, 5xx, ...) matched against the transcript,
+where a symptom word counts only next to a failure word on the same line, or
+inside a phrase an API really emits, and an HTTP status only where something
+adjacent marks it as one. The drain asks that at all only for a run that made
+no progress -- see L<App::karr::Foundation>'s "Drain semantics".
+
 The command is a shell template, not a string karr rewrites: C<PROMPT>,
-C<KARR_REPO> and C<KARR_ROLE> are exported into the child's environment and
-C</bin/sh> expands them like any other parameter. A prompt's own backticks
-therefore stay text, and C<< awk '{print $2}' >> reaches awk intact.
+C<KARR_REPO>, C<KARR_ROLE> and C<KARR_TASK> are exported into the child's
+environment and C</bin/sh> expands them like any other parameter. A prompt's own
+backticks therefore stay text, and C<< awk '{print $2}' >> reaches awk intact.
+C<KARR_TASK> holds the id of the task a C<< mode: ticket >> run was given and is
+empty in every other mode; the same id is spelled out in the prompt.
+
+Where the agent came from a definition with an invocation contract that asks
+for structured live output (C<kind: claude-code>, #188), the tee renders it: the
+assistant's own text goes to the terminal and to F<.karr.log> as it arrives,
+while the raw stream stays in the classification buffer. That is what lets the
+contract ask for a machine-readable format without losing the live output an
+interactive run is watched for. A board that names no agent is on the older
+path -- the octets the command printed, verbatim, to both sinks.
 
 A C<.karr.log> it cannot open ends the run for that board B<before> the command
 is started, never after: the agent is refused rather than launched unwatched.
 Once the fork has happened the parent owes it a C<waitpid>, so nothing between
 the two may throw.
+
+The agent is not the only thing that goes through this door. The C<on_drained>
+hook (L<App::karr::Foundation>) is a command in a repository that must not
+outlive the run that started it either, so it is started here rather than
+beside here -- one process-group kill, one timeout, one tee, one place where
+the live child is registered for the shutdown handler. What it does B<not>
+share is the identity: C<< role => 'hook' >> puts C<KARR_ROLE=hook> in its
+environment and leaves C<PROMPT> empty, so its own C<karr> writes land in a
+different activity log from the agent's and it is never handed the instruction
+to go and pick a card. C<< max_runtime => N >> gives it its own budget, because
+how long a board's agent may run says nothing about how long whatever the
+operator hung on C<on_drained> may take. Nothing else in this method asks who
+the caller is: the run is classified by the drain, which simply does not
+classify a hook.
+
+The coordination agent (L<App::karr::Foundation::Coordinator>) is the third,
+and the one that needed a third option: it B<is> an agent and needs an
+instruction, but not a board's -- so it passes C<< prompt => ... >> beside
+C<< role => 'coordinator' >> and gets its own text in C<$PROMPT> instead of
+the board's or the hook's silence.
+
+=head2 foundation
+
+The owning L<App::karr::Foundation> instance, held C<weak_ref> to avoid a
+reference cycle. Supplies the shared options and helpers a run needs
+(C<dry_run>, C<_stream_to_terminal>, C<_prompt_for>, C<_append_log>,
+C<_say_verbose>) that do not belong to the Runner itself.
 
 =head1 SUPPORT
 
@@ -522,9 +837,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

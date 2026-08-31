@@ -4,7 +4,7 @@ use 5.010;
 use strict;
 use warnings;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 require XSLoader;
 XSLoader::load('Punk::Observe', $VERSION);
@@ -19,7 +19,7 @@ Punk::Observe - an OpenTelemetry observability and logging backend
 
 =head1 VERSION
 
-Version 0.04
+Version 0.05
 
 =head1 SYNOPSIS
 
@@ -1231,6 +1231,10 @@ Storage:
 
 =item * L<Punk::Observe::Store> - sealing, and the read path over what is
 sealed
+
+=item * L<Punk::Observe::Cache> - the settled part of a window, computed once
+
+=item * L<Punk::Observe::Warm> - and computed where nobody is waiting
 
 =back
 

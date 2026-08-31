@@ -1,10 +1,6 @@
 package Test2::Require::TestCorpus;
 
-use v5.20;
-use strict;
-use warnings;
-use feature qw(signatures);
-no warnings qw(experimental::signatures);
+use v5.40;
 
 use Test2::Require::Module qw(File::BaseDir);
 
@@ -12,7 +8,7 @@ use File::BaseDir qw(data_dirs);
 
 use Carp qw/confess/;
 
-use base 'Test2::Require';
+use parent 'Test2::Require';
 
 sub skip ( $class, $var )
 {

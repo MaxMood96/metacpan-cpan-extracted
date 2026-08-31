@@ -63,29 +63,50 @@ my $ua = Fetch->new;
 }
 
 # ---- a prompt request beats a generous timeout (timer cancels cleanly) ----
+# Also the calibration for the block below: whatever a round trip costs on
+# this box, the deadlines there are multiples of it.
+my $rtt;
 {
-    my $res = $ua->get("$base/fast", timeout => 5)->get;
+    my $t0  = Time::HiRes::time();
+    my $res = $ua->get("$base/fast", timeout => 30)->get;
+    $rtt = Time::HiRes::time() - $t0;
     is($res->content, 'quick', 'fast request succeeds with a timeout set');
 }
 
 # ---- a cancelled deadline must stay cancelled ----------------------------
 # The fast request's timer is cancelled when its response lands. A backend
-# that forgets to tell the kernel (io_uring before 0.19) left the timeout in
-# flight with a freed pointer as its user_data: when it came due during the
-# next wait it was dereferenced as a live timer - a crash, or the next
-# request ending early on a deadline that was never its own. So: cancel a
-# short deadline, then wait on a longer one and check nothing fires early.
-# (A lower bound on the elapsed time cannot be broken by a loaded box.)
+# that forgets to tell the kernel (io_uring before 0.19, kqueue reported on
+# FreeBSD 9.2) left the timeout in flight with the freed watcher naming it:
+# when it came due during the next wait it was either dereferenced as a live
+# timer - a crash - or, once the allocator handed that block to the next
+# request, charged to that request instead, which then failed on a deadline
+# that was never its own. So: cancel a short deadline, then wait on a longer
+# one and check nothing fires early.
+#
+# Both deadlines scale off the measured round trip, because the short one is
+# an upper bound on a request completing and a slow or emulated smoker will
+# break any fixed value; only the ratio between them matters to the bug.
 {
-    my $res = $ua->get("$base/fast", timeout => 0.5)->get;
-    is($res->content, 'quick', 'fast request cancels its 0.5s deadline');
+    my $short = $rtt * 20;  $short = 0.5 if $short < 0.5;
+    my $long  = $short * 3;
 
-    my $t0 = Time::HiRes::time();
-    my $f  = $ua->get("$base/slow2", timeout => 1.2);
-    eval { $f->get };
-    my $elapsed = Time::HiRes::time() - $t0;
-    ok($f->is_failed, 'the following stalled request still fails');
-    cmp_ok($elapsed, '>=', 1.1, 'on its own deadline, not the cancelled one');
+    my $res = $short > 2 ? undef
+            : eval { $ua->get("$base/fast", timeout => $short)->get };
+  SKIP: {
+        skip "round trip of ${rtt}s is too slow to time a cancelled deadline", 3
+            unless $res;
+        is($res->content, 'quick', "fast request cancels its ${short}s deadline");
+
+        my $t0 = Time::HiRes::time();
+        my $f  = $ua->get("$base/slow2", timeout => $long);
+        eval { $f->get };
+        my $elapsed = Time::HiRes::time() - $t0;
+        ok($f->is_failed, 'the following stalled request still fails');
+        cmp_ok($elapsed, '>=', $short * 1.5,
+               'on its own deadline, not the cancelled one')
+            or diag "failed after ${elapsed}s of a ${long}s deadline: "
+                  . (defined $f->failure ? $f->failure : 'no failure');
+    }
 }
 
 END { local $?; if ($pid) { kill 'KILL', $pid; waitpid $pid, 0 } }

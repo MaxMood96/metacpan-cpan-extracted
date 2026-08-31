@@ -200,7 +200,6 @@ sub prwarn { print STDERR $_[0], "\n";}
 
 # some kind of stack corruption is related to this function, maybe. no probably not.
 # So, only shift opts if they are there
-#use Data::Dumper;
 
 sub new {
   my($class) = shift;
@@ -209,7 +208,6 @@ sub new {
   if(ref $opts ne 'HASH') { # change opts to hash of opts
     $opts = defined $opts ? {$opts,@_} : {} ;
   }
-#  print Dumper($opts),"\n";
   my $self = { # following are defaults
       MKOBJ => $MKOBJ,
       MKSO => $MKSO,
@@ -954,7 +952,7 @@ sub jac_of_t1 {
     _callj1($p,$t,$jac, $self->{JPOINTER});
     return($jac);
 }
-#line 958 "Func.pm"
+#line 956 "Func.pm"
 
 *_callf = \&PDL::Fit::Levmar::Func::_callf;
 
@@ -986,7 +984,7 @@ distribution. If this file is separated from the PDL distribution,
 the copyright notice should be included in the file.
 
 =cut
-#line 990 "Func.pm"
+#line 988 "Func.pm"
 
 # Exit with OK status
 

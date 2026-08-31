@@ -1,7 +1,7 @@
 # ABSTRACT: Role providing common output format options
 
 package App::karr::Role::Output;
-our $VERSION = '0.500';
+our $VERSION = '0.600';
 use Moo::Role;
 use MooX::Options;
 # Loaded without importing: a Moo::Role composes every sub in this package into
@@ -13,11 +13,6 @@ use App::karr::Encoding ();
 option json => (
   is => 'ro',
   doc => 'JSON output',
-);
-
-option compact => (
-  is => 'ro',
-  doc => 'Compact output',
 );
 
 # Characters out, not octets: STDOUT carries the CLI's :encoding(UTF-8) layer
@@ -50,12 +45,19 @@ App::karr::Role::Output - Role providing common output format options
 
 =head1 VERSION
 
-version 0.500
+version 0.600
 
 =head1 DESCRIPTION
 
-Small role that adds shared output options for commands with alternate
-renderings and provides a JSON printer used throughout the CLI.
+Small role that adds the shared C<--json> option for commands with a
+machine-readable rendering, and provides the JSON printer used throughout the
+CLI.
+
+C<--compact> used to be declared here beside it and is not: only nine commands
+render a compact form, while every command with a C<--json> composes this role,
+so the shared declaration advertised C<--compact> on thirteen commands that
+ignored it (#254). It lives in L<App::karr::Role::CompactOutput> now, which
+those nine compose in addition to this role.
 
 =head2 print_json
 
@@ -97,9 +99,10 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is Copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut

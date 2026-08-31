@@ -1,22 +1,23 @@
 /* punk-queue admin - the page modules.
  *
- * Server-rendered pages navigated as an SPA (Funky.SPA swaps
- * #spaContent), one Funky.Pages module per page.
+ * Pages are rendered whole on the server and navigate as ordinary page
+ * loads. This file runs once per load and mounts the one module the
+ * server named in `data-page`; back, forward, reload and open-in-new-tab
+ * are the browser's job and stay that way.
  *
  * Refresh is a 5s poll: the stats, and the current page's own view
  * (its table, or the job it is showing). That poll is the load-bearing
  * one - a job changes state inside a WORKER process, which has no way
  * to reach these sockets. Live mode is the enhancement on top: a
  * websocket carrying what this web process itself did (an enqueue, a
- * retry, a remove), bridged into Funky.Pages.handleDataChange so the
- * page reacts immediately instead of on the next tick. The bridge is
- * ours - Pages documents handleDataChange but nothing in Funky calls it.
+ * retry, a remove), routed to the current page's update() so it reacts
+ * immediately instead of on the next tick.
  *
  * ES5, no build step, matching the framework it drives. */
 (function () {
 	'use strict';
 
-	if (!window.Funky || !Funky.Pages || !Funky.SPA) {
+	if (!window.Funky || !Funky.Api) {
 		if (window.console) console.error('[punk-queue] Funky did not load');
 		return;
 	}
@@ -76,11 +77,13 @@
 		};
 	}
 
-	/* Relative times are hydrated by Funky.RelativeTime, which scans on
-	 * funky.spa.pageload and on a `funky.datatable.draw` DOM event. Funky
-	 * .Table emits `funky:table:draw` on PubSub instead - a different name
-	 * on a different bus - so rows drawn by a reload keep an empty <time>.
-	 * The bridge is one line, like the entity_change one. */
+	/* Relative times are hydrated by Funky.RelativeTime, which scans the
+	 * document once it is ready - so a full page load is covered without
+	 * us asking. Rows drawn LATER by a table reload are not: RelativeTime
+	 * listens for a `funky.datatable.draw` DOM event, and Funky.Table
+	 * emits `funky:table:draw` on PubSub instead - a different name on a
+	 * different bus - so those rows keep an empty <time>. The bridge is
+	 * one line, like the entity_change one. */
 	if (Funky.PubSub && Funky.RelativeTime && Funky.RelativeTime.init) {
 		Funky.PubSub.on('funky:table:draw', function (e) {
 			var el = e && e.table && e.table.container;
@@ -180,9 +183,37 @@
 		});
 	}
 
+	/* ---- the page registry ----------------------------------------------
+	 *
+	 * Each admin page ships one module, keyed by the `data-page` id the
+	 * server writes onto the content element. There is no router and no
+	 * lifecycle: the browser navigates, this runs once, and the page is
+	 * torn down by leaving it.
+	 *
+	 * `changed` is the live seam. It reports whether the active page
+	 * claimed the entity, so the caller knows if anything acted on it. */
+	var Pages = (function () {
+		var reg = {}, active = null;
+		return {
+			register: function (id, mod) { reg[id] = mod; },
+			mount: function (id) {
+				if (!reg[id]) return;
+				active = reg[id];
+				if (active.init) active.init();
+			},
+			changed: function (entity) {
+				if (!active || !active.update) return false;
+				var ents = active.entities || [];
+				for (var i = 0; i < ents.length; i++)
+					if (ents[i] === entity) { active.update(); return true; }
+				return false;
+			}
+		};
+	})();
+
 	/* ---- overview ------------------------------------------------------- */
 
-	Funky.Pages.register('pq-overview', {
+	Pages.register('pq-overview', {
 		entities: ['stats', 'job'],
 		init: function () {
 			Funky.StatsBar.init('#pqStats', { id: 'pqStats', stats: [
@@ -198,7 +229,7 @@
 				var stat = e.target.closest ? e.target.closest('.stat-item') : null;
 				var id = stat && stat.getAttribute('data-stat-id');
 				if (id && id !== 'delayed')
-					Funky.SPA.navigate(PQ.prefix + '/jobs?state=' +
+					location.assign(PQ.prefix + '/jobs?state=' +
 						(id === 'inactive' ? 'inactive' : id));
 			});
 			/* breakdown names too - delegated on the containers, which
@@ -210,7 +241,7 @@
 						e.target.closest('a[data-name]') : null;
 					if (!a) return;
 					e.preventDefault();
-					Funky.SPA.navigate(PQ.prefix + '/jobs?' + param + '=' +
+					location.assign(PQ.prefix + '/jobs?' + param + '=' +
 						encodeURIComponent(a.getAttribute('data-name')));
 				});
 			};
@@ -240,14 +271,16 @@
 				Funky.Charts.autoInit(el);
 			})['catch'](function (e) { fail(document.getElementById('pqHistory'), e); });
 		},
-		destroy: function () { return {}; }
+		/* the stats poll IS this page's view, so a live change to either
+		 * entity is answered by re-reading it */
+		update: function () { pollStats(); }
 	});
 
 	/* ---- jobs ----------------------------------------------------------- */
 
 	var jobsTable = null;
 
-	Funky.Pages.register('pq-jobs', {
+	Pages.register('pq-jobs', {
 		entities: ['job'],
 		init: function () {
 			var initial = {};
@@ -295,19 +328,18 @@
 					  } }
 				],
 				onRowClick: function (row) {
-					Funky.SPA.navigate(PQ.prefix + '/jobs/' + row.id);
+					location.assign(PQ.prefix + '/jobs/' + row.id);
 				}
 			});
 			activeRefresh = tableRefresher(function () { return jobsTable; });
 
-			/* NO click listener for the view links: SPA.bindNavigation
-			 * already intercepts every same-origin a[href] at the
-			 * document. A second navigate() here races it - the two URL
-			 * spellings (attribute vs link.href) slip the concurrent-load
-			 * guard, and the doubled showLoading orphans a spinner timer
-			 * that nothing clears: the stuck "Loading..." bug. The link
-			 * only needs data-action, which keeps Funky.Table's selection
-			 * handler off it; SPA does the rest. */
+			/* NO click listener for the view links. They are real anchors
+			 * to real URLs and the browser knows what to do with them; a
+			 * handler that navigated instead would work on a left click
+			 * and silently break middle-click, open-in-new-tab and
+			 * copy-address - the things a server-rendered admin UI exists
+			 * to keep. The link only needs data-action, which keeps
+			 * Funky.Table's selection handler off it. */
 
 			/* the filter toolbar does not talk to Funky.Table (its
 			 * dataTable integration is jQuery-era) - wire it by hand */
@@ -368,13 +400,12 @@
 				}
 			});
 		},
-		update: function () { if (jobsTable) jobsTable.reload(); },
-		destroy: function () { jobsTable = null; activeRefresh = null; return {}; }
+		update: function () { if (jobsTable) jobsTable.reload(); }
 	});
 
 	/* ---- job detail ------------------------------------------------------ */
 
-	Funky.Pages.register('pq-job', {
+	Pages.register('pq-job', {
 		entities: ['job'],
 		init: function () {
 			var el = document.getElementById('pqJobDetail');
@@ -453,20 +484,19 @@
 					onConfirm: function () {
 						post(API + '/jobs/' + id + '/remove').then(function () {
 							Funky.Toast.success('job ' + id + ' removed');
-							Funky.SPA.navigate(PQ.prefix + '/jobs');
+							location.assign(PQ.prefix + '/jobs');
 						})['catch'](function (e) { Funky.Toast.error(e.message || 'remove failed'); });
 					}
 				});
 			});
 		},
-		update: function () { if (activeRefresh) activeRefresh(); },
-		destroy: function () { activeRefresh = null; return {}; }
+		update: function () { if (activeRefresh) activeRefresh(); }
 	});
 
 	/* ---- workers / locks / crons ---------------------------------------- */
 
 	var workersTable = null;
-	Funky.Pages.register('pq-workers', {
+	Pages.register('pq-workers', {
 		entities: ['worker'],
 		init: function () {
 			workersTable = Funky.Table.init('#pqWorkersTable', {
@@ -504,12 +534,11 @@
 				})['catch'](function (er) { Funky.Toast.error(er.message || 'stop failed'); });
 			});
 		},
-		update: function () { if (workersTable) workersTable.reload(); },
-		destroy: function () { workersTable = null; activeRefresh = null; return {}; }
+		update: function () { if (workersTable) workersTable.reload(); }
 	});
 
 	var locksTable = null;
-	Funky.Pages.register('pq-locks', {
+	Pages.register('pq-locks', {
 		entities: ['lock'],
 		init: function () {
 			locksTable = Funky.Table.init('#pqLocksTable', {
@@ -530,12 +559,11 @@
 			});
 			activeRefresh = tableRefresher(function () { return locksTable; });
 		},
-		update: function () { if (locksTable) locksTable.reload(); },
-		destroy: function () { locksTable = null; activeRefresh = null; return {}; }
+		update: function () { if (locksTable) locksTable.reload(); }
 	});
 
 	var cronsTable = null;
-	Funky.Pages.register('pq-crons', {
+	Pages.register('pq-crons', {
 		entities: ['cron'],
 		init: function () {
 			cronsTable = Funky.Table.init('#pqCronsTable', {
@@ -585,18 +613,19 @@
 					});
 			});
 		},
-		update: function () { if (cronsTable) cronsTable.reload(); },
-		destroy: function () { cronsTable = null; activeRefresh = null; return {}; }
+		update: function () { if (cronsTable) cronsTable.reload(); }
 	});
 
 	/* ---- boot ------------------------------------------------------------ */
 
-	Funky.SPA.init();
 	startPolling();
 
-	/* the entity bridge: Funky documents Pages.handleDataChange but
-	 * nothing calls it - the websocket envelope is ours. Server sends
-	 * { type: 'entity_change', entity, action, id }. */
+	/* the entity bridge. Server sends
+	 * { type: 'entity_change', entity, action, id }.
+	 *
+	 * It refreshes what the page is showing; it never navigates. A push
+	 * arrives because some other tab enqueued or retried something, and
+	 * moving the reader off the page they are on is not an update. */
 	if (PQ.live && Funky.WebSocket) {
 		/* the URL goes in through init, NOT connect: Funky.WebSocket.connect
 		 * takes no arguments and reads CONFIG.url, whose default is
@@ -609,8 +638,9 @@
 			debug: false
 		});
 		Funky.WebSocket.on('entity_change', function (m) {
-			Funky.Pages.handleDataChange(m.entity, m.id, m.action || 'refresh', m);
-			if (m.entity === 'stats') pollStats();
+			/* the stats bar sits on every page, so a stats envelope the
+			 * active module did not claim is still worth a poll */
+			if (!Pages.changed(m.entity) && m.entity === 'stats') pollStats();
 		});
 
 		/* the badge follows the connection rather than announcing it: live
@@ -630,18 +660,16 @@
 	/* boot-time completeness assertion - missing modules otherwise fail
 	 * silently at first call (the vendoring gotcha made executable) */
 	(function () {
-		var need = ['Dom', 'Pages', 'SPA', 'Api', 'Table', 'StatsBar', 'Charts',
+		var need = ['Dom', 'Api', 'Table', 'StatsBar', 'Charts',
 			'Toast', 'Modal', 'EmptyState', 'BulkActions', 'RelativeTime'];
 		for (var i = 0; i < need.length; i++)
 			if (!Funky[need[i]] && window.console)
 				console.error('[punk-queue] missing Funky module: ' + need[i]);
 	})();
 
-	/* the current page module (full page load; SPA handles later swaps) */
-	var content = document.getElementById('spaContent');
-	if (content) {
-		var pageId = content.getAttribute('data-page');
-		if (pageId && Funky.Pages.has(pageId)) Funky.Pages.mount(pageId);
-	}
+	/* this page's module, named by the server. Runs once; the next
+	 * navigation is a new document and a new run of this file. */
+	var content = document.getElementById('pqContent');
+	if (content) Pages.mount(content.getAttribute('data-page'));
 	if (Funky.RelativeTime && Funky.RelativeTime.init) Funky.RelativeTime.init();
 })();

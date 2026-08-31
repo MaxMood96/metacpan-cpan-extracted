@@ -3,7 +3,7 @@ package PDF::Make::Extract;
 use strict;
 use warnings;
 
-our $VERSION = '0.12';
+our $VERSION = '0.13';
 
 use PDF::Make ();
 use PDF::Make::Reader;

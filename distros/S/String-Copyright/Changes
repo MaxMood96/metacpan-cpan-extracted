@@ -7,6 +7,11 @@ Home page:    <https://metacpan.org/release/String-Copyright>
 Bug tracker:  <https://bugs.debian.org/cgi-bin/pkgreport.cgi?pkg=libstring-copyright-perl>
 Maintainer:   Jonas Smedegaard (JONASS) <jonass@cpan.org>
 
+v0.4.1	2026-08-31
+
+ - extend dash normalization to cover mojibake
+ - improve logging
+
 v0.4.0	2026-08-30
 
  [ Documentation ]

@@ -3588,6 +3588,39 @@ static int povw_can(pTHX_ SV *obj, const char *name) {
     return gv_fetchmethod_autoload(stash, name, 0) ? 1 : 0;
 }
 
+/* THE READ METHOD: `cached_query` where the store has it, `query` otherwise.
+ *
+ * The two differ only in whether the settled part of the window is recomputed,
+ * and `cached_query` decides for itself whether a query can be split at all -
+ * so a caller never has to know which it is getting. A store is a seam a host
+ * may implement itself, which is why asking for the newer name must not be a
+ * requirement to grow it. */
+static const char *povw_read_method(pTHX_ SV *store) {
+    return povw_can(aTHX_ store, "cached_query") ? "cached_query" : "query";
+}
+
+/* THE BUDGET AN AGGREGATE NEEDS, pushed onto a call being built.
+ *
+ * A PARTIAL GRAPH IS A POINTLESS GRAPH: one that stops scanning mid-window
+ * draws some other window and labels it with this one. The store's budgets
+ * default to 500,000 when left unset, so a chart that says nothing has to say
+ * so explicitly - these are the "no ceiling" spellings of all three.
+ *
+ * It is also what keeps the chart cheap. A chunk that truncates is never
+ * cached, because a short answer stored answers short for the whole life of
+ * the entry - so a figure left on the default ceiling has its busiest chunk
+ * rescanned on every single request, for ever. Measured on a 10GB store: one
+ * chunk of twenty-four hit the ceiling, and the figure never got faster than
+ * its cold cost until it was told not to stop. */
+#define POVW_NO_CEILING() STMT_START {                                     \
+    XPUSHs(sv_2mortal(newSVpvs("limit")));                                 \
+    XPUSHs(sv_2mortal(newSViv((IV)1 << 62)));                              \
+    XPUSHs(sv_2mortal(newSVpvs("hard_max")));                              \
+    XPUSHs(sv_2mortal(newSViv((IV)1 << 62)));                              \
+    XPUSHs(sv_2mortal(newSVpvs("max_rows")));                              \
+    XPUSHs(sv_2mortal(newSViv((IV)1 << 62)));                              \
+} STMT_END
+
 static void povw_panel_fill(pTHX_ HV *panel, SV *src_panel, SV *store,
                             SV *from, SV *to) {
     dSP;
@@ -3688,12 +3721,7 @@ static void povw_panel_fill(pTHX_ HV *panel, SV *src_panel, SV *store,
          * which all but the last few minutes has settled. `cached_query`
          * decides for itself whether the query can be split; it is not this
          * layer's business to know. */
-        /* `cached_query` WHERE THE STORE HAS IT, `query` otherwise. A store
-         * is a seam a host may implement itself, and the two differ only in
-         * whether the settled part is recomputed - so asking for the newer
-         * name must not be a requirement to grow it. */
-        n2 = call_method(povw_can(aTHX_ store, "cached_query")
-                         ? "cached_query" : "query", G_SCALAR);
+        n2 = call_method(povw_read_method(aTHX_ store), G_SCALAR);
         SPAGAIN;
         r = n2 ? SvREFCNT_inc(POPs) : NULL;
         PUTBACK;
@@ -4017,17 +4045,37 @@ static SV *povw_plot_ms(pTHX_ SV *ns_sv) {
  * failed page.
  */
 
+/* THE OPTIONS THIS SEAM CONSUMES, and therefore the ones a chunk query must
+ * not be given: the window is the chunk's, and the cache controls describe the
+ * cache rather than the scan. Everything else the caller passed is its
+ * business and travels through untouched - a rule rather than a list, so an
+ * option added to `query` tomorrow reaches a chunk without anybody
+ * remembering to come back here. */
+static int poc_consumed(const char *k) {
+    return strEQ(k, "from") || strEQ(k, "to") || strEQ(k, "now")
+        || strEQ(k, "lag_ns") || strEQ(k, "ttl") || strEQ(k, "cache")
+        || strEQ(k, "tenant")
+        || strEQ(k, "refresh_ns") || strEQ(k, "budget")
+        || strEQ(k, "deadline");
+}
+
 /* One plain scan. A die inside it is caught and becomes undef, because a
- * chunk that cannot be computed should not take the panel with it. */
-static SV *poc_plain(pTHX_ SV *store, SV *q, po_u64 from, po_u64 to) {
+ * chunk that cannot be computed should not take the panel with it.
+ *
+ * `extra` is the caller's own options, key and value alternating - the row
+ * budgets above all. They are the caller's SVs rather than copies: they are
+ * alive in @_ for the whole of the call that reached here. */
+static SV *poc_plain(pTHX_ SV *store, SV *q, po_u64 from, po_u64 to,
+                     SV **extra, int nextra) {
     dSP;
     SV *r = NULL;
-    int n;
+    int n, i;
     ENTER; SAVETMPS; PUSHMARK(SP);
     XPUSHs(store);
     XPUSHs(sv_2mortal(newSVsv(q)));
     XPUSHs(sv_2mortal(newSVpvs("from")));  XPUSHs(sv_2mortal(po_u64_to_sv(from)));
     XPUSHs(sv_2mortal(newSVpvs("to")));    XPUSHs(sv_2mortal(po_u64_to_sv(to)));
+    for (i = 0; i < nextra; i++) XPUSHs(extra[i]);
     PUTBACK;
     n = call_method("query", G_SCALAR | G_EVAL);
     SPAGAIN;
@@ -4046,11 +4094,17 @@ static SV *poc_plain(pTHX_ SV *store, SV *q, po_u64 from, po_u64 to) {
  * and a key somebody can read is a cache somebody can debug.
  *
  * NULL when the key would exceed what Punk::Cache accepts, which turns
- * chunking off for that query instead of croaking in the middle of a render. */
+ * chunking off for that query instead of croaking in the middle of a render.
+ *
+ * THE NAMESPACE CARRIES THE FORMAT. `po.chunk` entries were written before
+ * the caller's row budget reached a chunk, so any of them may hold a count
+ * that stopped short and a truncation flag that outlives the reason for it.
+ * Moving the namespace retires the lot at once, and a pool part way through
+ * an upgrade reads and writes two sets that cannot collide. */
 #define POC_KEY_MAX 4096
 static SV *poc_key(pTHX_ SV *store, SV *q, po_u64 start, po_u64 width,
                    SV *tenant) {
-    SV *k = newSVpvs("po.chunk");
+    SV *k = newSVpvs("po.chunk2");
     SV *t = tenant;
 
     if (!t && SvROK(store) && SvTYPE(SvRV(store)) == SVt_PVHV) {
@@ -4131,11 +4185,19 @@ static int poc_ingest(pTHX_ po_cres *acc, SV *res) {
         if (x && SvTRUE(*x)) acc->truncated = 1;
         x = hv_fetchs(m, "exact", 0);
         if (x && SvOK(*x) && !SvTRUE(*x)) acc->exact = 0;
+        x = hv_fetchs(m, "degraded", 0);
+        if (x && SvTRUE(*x)) acc->degraded = 1;
         x = hv_fetchs(m, "scanned_rows", 0);
         if (x && SvOK(*x)) {
             po_u64 sc = 0;
             (void)po_sv_to_u64(aTHX_ *x, &sc);
             acc->scanned += sc;
+        }
+        x = hv_fetchs(m, "scanned_bytes", 0);
+        if (x && SvOK(*x)) {
+            po_u64 sb = 0;
+            (void)po_sv_to_u64(aTHX_ *x, &sb);
+            acc->scanned_bytes += sb;
         }
     }
 
@@ -4183,6 +4245,193 @@ static int poc_ingest(pTHX_ po_cres *acc, SV *res) {
     return 1;
 }
 
+/* ---- one chunk, computed once across the pool -----------------------------
+ *
+ * `get` and `set` have no gap between them for anybody to wait in, so five
+ * workers rendering the same dashboard on a cold cache each scanned the same
+ * day. `Punk::Cache::compute` has one: it takes an exclusive lock beside the
+ * entry, and the workers that lose the race take the winner's answer rather
+ * than repeating its work.
+ *
+ * It wants a code reference, and the chunk to compute is not something a
+ * caller passes in - so this is an anonymous XSUB carrying its captures as
+ * magic, the same shape `cron_task` uses. The magic is also what frees them.
+ */
+static MGVTBL poc_blob_vtbl = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+/* WHAT THIS REFUSES IS THE POINT. It runs inside `compute`, which stores
+ * whatever comes back - and a cached undef is a value. So a chunk that did not
+ * compute, and a chunk that truncated, die here instead of returning: a scan
+ * that stopped short must not become an entry that answers short for the whole
+ * of its life. The caller computes those plainly and keeps them out. */
+static void poc_blob_thunk(pTHX_ CV *cv) {
+    dXSARGS;
+    MAGIC *mg = mg_find((SV *)cv, PERL_MAGIC_ext);
+    HV *o = (mg && mg->mg_obj && SvROK(mg->mg_obj)
+             && SvTYPE(SvRV(mg->mg_obj)) == SVt_PVHV)
+          ? (HV *)SvRV(mg->mg_obj) : NULL;
+    SV **f, **extra = NULL;
+    SV *store = NULL, *q = NULL, *r = NULL, *out = NULL;
+    AV *ex = NULL;
+    po_u64 from = 0, to = 0, b = 0;
+    po_cres one;
+    int nextra = 0;
+    SSize_t i, n;
+
+    if (!o) croak("Punk::Observe::Cache: the chunk closure lost its captures");
+    f = hv_fetchs(o, "store", 0);     if (f) store = *f;
+    f = hv_fetchs(o, "q", 0);         if (f) q = *f;
+    f = hv_fetchs(o, "from", 0);      if (f) (void)po_sv_to_u64(aTHX_ *f, &from);
+    f = hv_fetchs(o, "to", 0);        if (f) (void)po_sv_to_u64(aTHX_ *f, &to);
+    f = hv_fetchs(o, "bucket_ns", 0); if (f) (void)po_sv_to_u64(aTHX_ *f, &b);
+    f = hv_fetchs(o, "extra", 0);
+    if (f && SvROK(*f) && SvTYPE(SvRV(*f)) == SVt_PVAV) ex = (AV *)SvRV(*f);
+    if (!store || !q)
+        croak("Punk::Observe::Cache: the chunk closure lost its store");
+
+    n = ex ? av_len(ex) + 1 : 0;
+    if (n) {
+        Newx(extra, n, SV *);
+        for (i = 0; i < n; i++) {
+            SV **e = av_fetch(ex, i, 0);
+            extra[nextra++] = (e && *e) ? *e : &PL_sv_undef;
+        }
+    }
+    r = poc_plain(aTHX_ store, q, from, to, extra, nextra);
+    Safefree(extra);
+
+    po_cres_init(&one);
+    one.bucket_ns = b;
+    if (!poc_ingest(aTHX_ &one, r)) {
+        po_cres_free(&one);
+        if (r) SvREFCNT_dec(r);
+        croak("Punk::Observe::Cache: the chunk did not compute");
+    }
+    if (r) SvREFCNT_dec(r);
+    if (one.truncated) {
+        po_cres_free(&one);
+        croak("Punk::Observe::Cache: the chunk truncated");
+    }
+    {
+        size_t need = po_chunk_size(&one);
+        unsigned char *buf;
+        size_t len;
+        Newx(buf, need, unsigned char);
+        len = po_chunk_encode(&one, buf);
+        out = newSVpvn((const char *)buf, len);
+        Safefree(buf);
+    }
+    po_cres_free(&one);
+
+    /* `compute` calls this with no arguments, so there is no argument slot to
+     * answer in until one is made. */
+    EXTEND(SP, 1);
+    ST(0) = sv_2mortal(out);
+    XSRETURN(1);
+}
+
+/* AN ENTRY THAT WILL NOT DECODE HAS TO GO BEFORE IT CAN BE REPLACED.
+ *
+ * `compute` runs its code on a MISS, and a blob written by a superseded format
+ * is not a miss - it is a hit this version cannot read. Left in place it would
+ * be re-read and re-refused on every call until it expired, with the chunk
+ * scanned plainly each time behind it: a cache entry whose only effect is to
+ * stop the cache working. */
+static void poc_cache_del(pTHX_ SV *cache, SV *key) {
+    dSP;
+    if (!povw_can(aTHX_ cache, "delete")) return;
+    ENTER; SAVETMPS; PUSHMARK(SP);
+    XPUSHs(cache);
+    XPUSHs(key);
+    PUTBACK;
+    (void)call_method("delete", G_SCALAR | G_EVAL | G_DISCARD);
+    SPAGAIN;
+    PUTBACK;
+    FREETMPS; LEAVE;
+}
+
+/* The closure, run for its answer. NULL when it declined to produce one. */
+static SV *poc_call_code(pTHX_ SV *code) {
+    dSP;
+    SV *r = NULL;
+    int n;
+    ENTER; SAVETMPS; PUSHMARK(SP);
+    PUTBACK;
+    n = call_sv(code, G_SCALAR | G_EVAL);
+    SPAGAIN;
+    r = n ? SvREFCNT_inc(POPs) : NULL;
+    PUTBACK;
+    FREETMPS; LEAVE;
+    if (SvTRUE(ERRSV) || (r && !SvOK(r))) {
+        if (r) SvREFCNT_dec(r);
+        r = NULL;
+    }
+    return r;
+}
+
+/* The stored bytes for one chunk, or NULL when there was nothing worth
+ * storing. A cache without `compute` still gets its entry, just without the
+ * single-flight: a cache is a seam a host may implement itself, and needing
+ * the newer method in order to be cached at all would be a poor trade. */
+static SV *poc_fill(pTHX_ SV *cache, SV *key, IV ttl, SV *store, SV *q,
+                    po_u64 from, po_u64 to, po_u64 bucket_ns,
+                    SV **extra, int nextra) {
+    HV *o = newHV();
+    AV *ex = newAV();
+    CV *cv;
+    SV *code, *r = NULL;
+    int i;
+
+    for (i = 0; i < nextra; i++) av_push(ex, newSVsv(extra[i]));
+    hv_stores(o, "store",     newSVsv(store));
+    hv_stores(o, "q",         newSVsv(q));
+    hv_stores(o, "from",      po_u64_to_sv(from));
+    hv_stores(o, "to",        po_u64_to_sv(to));
+    hv_stores(o, "bucket_ns", po_u64_to_sv(bucket_ns));
+    hv_stores(o, "extra",     newRV_noinc((SV *)ex));
+
+    cv = newXS(NULL, poc_blob_thunk, __FILE__);
+    if (!cv) { SvREFCNT_dec((SV *)o); return NULL; }
+    /* Who owns the reference newXS returned depends on the perl: newer ones
+     * hand back an unowned anonymous CV, older ones may have parked it in a
+     * glob first. Take our own only in the second case. */
+    if (CvGV(cv) && GvCV(CvGV(cv)) == cv) SvREFCNT_inc_simple_void(cv);
+    sv_magicext((SV *)cv, sv_2mortal(newRV_noinc((SV *)o)),
+                PERL_MAGIC_ext, &poc_blob_vtbl, NULL, 0);
+    code = newRV_noinc((SV *)cv);
+
+    if (povw_can(aTHX_ cache, "compute")) {
+        dSP;
+        int n;
+        ENTER; SAVETMPS; PUSHMARK(SP);
+        XPUSHs(cache);
+        XPUSHs(key);
+        XPUSHs(sv_2mortal(newSViv(ttl)));
+        XPUSHs(code);
+        PUTBACK;
+        n = call_method("compute", G_SCALAR | G_EVAL);
+        SPAGAIN;
+        r = n ? SvREFCNT_inc(POPs) : NULL;
+        PUTBACK;
+        FREETMPS; LEAVE;
+        if (SvTRUE(ERRSV) || (r && !SvOK(r))) {
+            if (r) SvREFCNT_dec(r);
+            r = NULL;
+        }
+    }
+    else {
+        r = poc_call_code(aTHX_ code);
+        if (r) {
+            STRLEN bl = 0;
+            const unsigned char *bp = (const unsigned char *)SvPV(r, bl);
+            poc_cache_set(aTHX_ cache, key, bp, (size_t)bl, ttl);
+        }
+    }
+
+    SvREFCNT_dec(code);
+    return r;
+}
+
 /* The merged answer, in the shape every caller of `query` already reads.
  * Points before `min_at` are dropped: a chunk starts on a chunk edge, which
  * can be earlier than the window asked for, and a plain query would not have
@@ -4210,9 +4459,15 @@ static SV *poc_emit(pTHX_ const po_cres *acc, po_u64 min_at, int chunks) {
         av_push(series, newRV_noinc((SV *)sh));
     }
 
-    hv_stores(meta, "truncated",    newSViv(acc->truncated ? 1 : 0));
-    hv_stores(meta, "exact",        newSViv(acc->exact ? 1 : 0));
-    hv_stores(meta, "scanned_rows", po_u64_to_sv(acc->scanned));
+    /* EVERY FIGURE A PLAIN QUERY REPORTS. A page that reads `degraded` off a
+     * result got undef here and drew a store with an unreadable segment as a
+     * healthy one - the chunked path answering with fewer facts than the path
+     * it stands in for. */
+    hv_stores(meta, "truncated",     newSViv(acc->truncated ? 1 : 0));
+    hv_stores(meta, "exact",         newSViv(acc->exact ? 1 : 0));
+    hv_stores(meta, "degraded",      newSViv(acc->degraded ? 1 : 0));
+    hv_stores(meta, "scanned_rows",  po_u64_to_sv(acc->scanned));
+    hv_stores(meta, "scanned_bytes", po_u64_to_sv(acc->scanned_bytes));
 
     hv_stores(res, "ok",        newSViv(1));
     hv_stores(res, "shape",     newSVpvs("buckets"));

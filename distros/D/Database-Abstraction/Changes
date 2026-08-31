@@ -1,5 +1,32 @@
 Revision history for Database-Abstraction
 
+0.41	Sun Aug 30 09:39:17 AM EDT 2026
+	[ Enhancements ]
+	- XLSX backend: DBD::Excel driver; probe for .xlsx files after gzip/PSV/CSV,
+	  before XML; lazy require inside _open() so DBD::Excel is never loaded for
+	  other backends; type set to 'Excel'.
+	- Constructor-level table override: new() now accepts a table parameter that
+	  overrides the class-name-derived table/worksheet name for the lifetime of
+	  the object.  Validated against SAFE_QUALIFIED at construction time.
+	- Filename stem fix: dbname now falls back to the class name (not the table
+	  override), so table => 'Sheet2' queries a different worksheet within the
+	  same file without requiring an explicit dbname.
+	- Remote backend: .xlsx added to the remote extension probe list.
+	[ Bug Fixes ]
+	- Clone-path table injection guard: new() called on a blessed object (clone
+	  form) now validates the 'table' parameter against SAFE_QUALIFIED before
+	  merging, matching the id-validation fix introduced in 0.37.  Previously a
+	  hostile table name supplied to the clone form bypassed the guard entirely.
+	[ Tests ]
+	- t/xlsx.t: 19 tests covering XLSX basic queries, no_entry mode, table
+	  override (multi-worksheet), and unsafe-table-name rejection.
+	- t/unit.t: Section 21 (XLSX backend), test 20.4 (table injection guard),
+	  and LEDGER entry for unsafe-table-name state.
+	- t/integration.t: Section Q (XLSX backend end-to-end, 28 tests) covering
+	  worksheet isolation, table override, no_entry, multi-instance, and injection.
+	- t/edge_cases.t: EC18 (table parameter security, 12 boundary/injection tests)
+	  and EC19 (XLSX hostile conditions, 10 tests including corrupted files).
+
 0.40	Fri Aug 28 04:17:15 PM EDT 2026
 	[ Tests ]
 	- Added t/all-fuzz.t
