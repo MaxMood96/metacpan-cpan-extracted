@@ -2,13 +2,15 @@
 # SPDX-License-Identifier: Artistic-2.0
 
 use v5.26;
-use Object::Pad;
+use warnings;
+
+use Object::Pad 0.59;
 
 # ABSTRACT: an implementation of the Uratani-Takeda string searching algorithm
 
 package Algorithm::UrataniTakeda;
 
-our $VERSION = 'v0.1.5';
+our $VERSION = 'v0.1.6';
 
 use Carp ();
 use List::Util ();
@@ -26,7 +28,7 @@ class Algorithm::UrataniTakeda {
     field $shift1 = [];
     field $shift2 = [];
 
-    method enter($pattern) {
+    method $enter($pattern) {
 
         use integer;
 
@@ -57,7 +59,7 @@ class Algorithm::UrataniTakeda {
         push $left->@*, $n;
     }
 
-    method build_phi {
+    method $build_phi {
 
         use integer;
 
@@ -77,7 +79,7 @@ class Algorithm::UrataniTakeda {
         }
     }
 
-    method build_shift1 {
+    method $build_shift1 {
 
         use integer;
 
@@ -112,7 +114,7 @@ class Algorithm::UrataniTakeda {
 
     }
 
-    method build_shift2 {
+    method $build_shift2 {
 
         use integer;
 
@@ -220,16 +222,25 @@ class Algorithm::UrataniTakeda {
             Carp::croak sprintf( "Parameter 'patterns' cannot contain empty strings for \%s constructor", ref($self) )
               if List::Util::any { !defined($_) || $_ eq "" } @patterns;
 
-            $self->enter($_) for @patterns;
+            $self->$enter($_) for @patterns;
         }
         else {
             Carp::croak sprintf("Parameter 'patterns' cannot be empty for \%s constructor", ref($self) );
         }
 
-        $self->build_phi;
-        $self->build_shift1;
-        $self->build_shift2;
+        $self->$build_phi;
+        $self->$build_shift1;
+        $self->$build_shift2;
 
+    }
+
+    sub BUILDARGS( $class, @args ) {
+
+        if ( @args == 1 && ref( $args[0] ) eq "ARRAY" ) {
+            return $class->SUPER::BUILDARGS( patterns => $args[0] );
+        }
+
+        return $class->SUPER::BUILDARGS(@args);
     }
 
 }
@@ -244,7 +255,7 @@ __END__
 
 =for Pod::Coverage DOES META new
 
-=for Pod::Coverage build_phi build_shift1 build_shift2 enter
+=for Pod::Coverage BUILDARGS
 
 =for stopwords Aho Commentz Corasick Takeda Uratani
 
@@ -254,7 +265,7 @@ Algorithm::UrataniTakeda - an implementation of the Uratani-Takeda string search
 
 =head1 VERSION
 
-version v0.1.5
+version v0.1.6
 
 =head1 SYNOPSIS
 
@@ -262,7 +273,7 @@ version v0.1.5
 
     use experimental qw( signatures ); # for Perl versions before v5.36
 
-    my $m = Algorithm::UrataniTakeda->new( patterns => \@patterns );
+    my $m = Algorithm::UrataniTakeda->new( \@patterns );
 
     my $match = $m->first($text);
 
@@ -296,9 +307,15 @@ It combines the Aho-Corasick algorithm with the Boyer-Moore algorithm, and is si
 
 =head2 patterns
 
+    my $m = Algorithm::UrataniTakeda->new( patterns => \@patterns );
+
 This is a required array reference of strings to search for.
 
 It must not be empty or contain empty strings.
+
+Since version v0.1.6, the constructor can be called with an array reference that is be assumed to be the patterns:
+
+    my $m = Algorithm::UrataniTakeda->new( \@patterns );
 
 =head1 METHODS
 

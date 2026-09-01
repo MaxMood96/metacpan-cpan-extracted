@@ -24,7 +24,7 @@ Object::Meta - Library to manage raw data and meta data as one object but keepin
 
 package Object::Meta;
 
-our $VERSION = '1.2.0';
+our $VERSION = '1.2.1';
 
 #----------------------------------------------------------------------------
 #Dependencies

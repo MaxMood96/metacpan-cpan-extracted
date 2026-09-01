@@ -1,5 +1,241 @@
 Revision history for Robots-Validate:
 
+v0.4.0    2026-09-01 10:49:11+01:00 Europe/London
+  [Incompatible Changes]
+  - This is a complete rewrite, and the interface is not compatible.
+
+  - Bumped minimum Perl version to v5.24;
+
+  [Enhancements]
+  - This uses the Aho-Corasick algorithm to match multiple user-agent strings efficiently.
+
+  - The robot rules are in a configuration file, allowing the user to easily update their own rules.
+
+  - The robot rules have been expanded and updated.
+
+  - Support for caching the results has been added, GH#3.
+
+  - Added the validation_mode attribute to control how multiple user-agent matches are handled.
+
+  [Security]
+  - Add a max_forward_lookups attribute to limit the number of reverse DNS lookups. (CVE-2026-82309)
+
+  [Tests]
+  - Updated the tests to use Test2.
+
+  [Documentation]
+  - Updated the author email address.
+
+  - Updated the copyright year.
+
+  - Added a security policy.
+
+  - Added AI_POLICY.md.
+
+  [Toolchain]
+  - Use SigStore instead of Module::Signature to sign releases.
+
+v0.3.12   2026-08-29 09:58:02+01:00 Europe/London (TRIAL RELEASE)
+  [Incompatible Changes]
+  - Replaced the greedy attribute with validation_mode, which can be "first", "relaxed" or "strict".
+
+    This is more intuitive.
+
+  [Enhancements]
+  - Updated robot rules.
+
+  [Documentation]
+  - Clarified the behaviour of bad_robots in greedy mode.
+
+v0.3.11   2026-08-28 17:27:56+01:00 Europe/London (TRIAL RELEASE)
+  [Security]
+  - Add a max_matches attribute to limit the number of matches checked when using greedy matching.
+
+  - Add a max_forward_lookups attribute to limit the number of reverse DNS lookups. (CVE-2026-82309)
+
+  [Bug Fixes]
+  - Fixed use of cache failed when cache_options was not specified.
+
+  - Fixed false imposter failures from greedy evaluation.
+
+  - Fixed handling of empty domains list in the configuration.
+
+  [Documentation]
+  - Added missing minimum version for greedy attribute.
+
+  - Added AI_POLICY.md.
+
+  [Tests]
+  - Added more tests.
+
+  - Moved live DNS tests to the xt directory.
+
+v0.3.10   2026-08-28 10:06:04+01:00 Europe/London (TRIAL RELEASE)
+  [Enhancements]
+  - Added the greedy attribute to switch off checks for all user-agent substrings.
+
+  [Documentation]
+  - Added copyright and license to the robot rules file.
+
+  - Fixed inconsistent spelling.
+
+v0.3.9    2026-08-27 15:28:37+01:00 Europe/London (TRIAL RELEASE)
+  [Enhancements]
+  - Added the "ignore" feature. (GH#10)
+
+  - The behaviour was changed to check all potential user-agent substring matches.
+
+  - Updated robot rules.
+
+  [Documentation]
+  - Fix POD errors.
+
+  [Tests]
+  - Skip caching tests if CHI is not installed.
+
+  - Remove CHI from the test requirements.
+
+v0.3.8    2026-08-27 12:20:45+01:00 Europe/London (TRIAL RELEASE)
+  [Enhancements]
+  - Reverted back to using XS modules. There is no point using pure-Perl alternatives if this already uses Net::Patricia.
+
+  - Updated robot rules.
+
+  [Bug Fixes]
+  - Fixed _check_dns so that it correctly returns false instead of undef if there is no match.
+
+  [Documentation]
+  - Updated KNOWN ISSUES.
+
+  [Tests]
+  - Add a "live" test with Google DNS.
+
+v0.3.7    2026-08-26 17:39:55+01:00 Europe/London (TRIAL RELEASE)
+  [Enhancements]
+  - Switch to Try::Tiny over Syntax::Keyword::Try.
+
+  [Bug Fixes]
+  - bad_robot now returns undef for unknown results, like validate does.
+
+  - validate returns undef for unknown IPs without user agents.
+
+v0.3.6    2026-08-26 14:18:13+01:00 Europe/London (TRIAL RELEASE)
+  [Enhancements]
+  - User-agents are not matched against in a case-insensitive manner.
+
+  - Updated robot rules.
+
+  [Bug Fixes]
+  - Fixed typo in robot rules.
+
+  [Documentation]
+  - Documented potential rule conflicts.
+
+  - Improved documentation.
+
+v0.3.5    2026-08-25 17:54:33+01:00 Europe/London (TRIAL RELEASE)
+  [Enhancements]
+  - This uses the pure-Perl Algorithm::AhoCorasick module, but will use Algorithm::AhoCorasick::XS if it is available.
+
+  - Added bad_robot convenience method.
+
+  - cache_failure can be set in the cache_options as a global default.
+
+  [Bug Fixes]
+  - Fixed regression: cache_failure overwrote the default expires_in setting.
+
+  [Documentation]
+  - Added recommended modules to the REQUIREMENTS section of the README.
+
+  - Fixed POD errors.
+
+  - Updated SUPPORT section errors.
+
+  [Tests]
+  - Add tests for pure-Perl modules only.
+
+v0.3.4    2026-08-25 14:18:32+01:00 Europe/London (TRIAL RELEASE)
+  [Enhancements]
+  - Added the cache_failure option to invalidate.
+
+  - This changes the behaviour of caching before v0.3.0.
+
+  - Added more bots: Cotoyogi, MJ12Bot and SofyaBot.
+
+  [Documentation]
+  - Added missing items to Changes for v0.3.0.
+
+  - Updated KNOWN ISSUES.
+
+v0.3.3    2026-08-24 19:40:03+01:00 Europe/London (TRIAL RELEASE)
+  [Enhancements]
+  - Updated robot rules.
+
+  - Added devel/rebuild-robots-config utility to rebuild the robot rules.
+
+  - Switched the configuration parser to use TOML::Tiny by default, but TOML::XS if it is available.
+
+  [Documentation]
+  - Improved documentation.
+
+  [Tests]
+  - Added a missing prerequsite.
+
+  - Improved tests.
+
+v0.3.2    2026-08-23 22:11:38+01:00 Europe/London (TRIAL RELEASE)
+  [Security]
+  - Added missing initial dot to the domain suffixes for petalbot and visionheight,
+    which allowed an imposter domain such as fakepetalsearch.com.
+
+  [Bug Fixes]
+  - Fixed IPv6 DNS validation.
+
+  [Documentation]
+  - Removed duplicate CONTRIBUTOR.
+
+  - Documented why the initial dot for the domain suffix is important.
+
+  - Improved the SECURITY CONSIDERATIONS section.
+
+  - Updated automation policy to be "human supervised".
+
+  - Added link to TOML specification in SEE ALSO.
+
+v0.3.1    2026-08-23 01:44:55+01:00 Europe/London (TRIAL RELEASE)
+  [Documentation]
+  - Fixed error in Changes.
+
+v0.3.0    2026-08-23 01:36:04+01:00 Europe/London (TRIAL RELEASE)
+  [Incompatible Changes]
+  - This is a complete rewrite, and the interface is not compatible.
+
+  - Bumped minimum Perl version to v5.24;
+
+  [Enhancements]
+  - This uses the Aho-Corasick algorithm to match multiple user-agent strings efficiently.
+
+  - The robot rules are in a configuration file, allowing the user to easily update their own rules.
+
+  - The robot rules have been expanded and updated.
+
+  - Support for caching the results has been added, GH#3.
+
+  [Tests]
+  - Updated the tests to use Test2.
+
+  [Documentation]
+  - Updated the author email address.
+
+  - Updated the copyright year.
+
+  - Added a security policy.
+
+  [Toolchain]
+  - Use SigStore instead of Module::Signature to sign releases.
+
+  - Added Automation Policy and DOAP metadata.
+
 v0.2.9    2024-01-06 13:48:11+00:00 Europe/London
   [Incompatible Changes]
   - Bumped minimum Perl version to v5.14.

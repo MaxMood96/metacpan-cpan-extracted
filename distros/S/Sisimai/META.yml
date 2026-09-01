@@ -26,7 +26,7 @@ no_index:
 provides:
   Sisimai:
     file: lib/Sisimai.pm
-    version: v5.7.1
+    version: v5.7.2
   Sisimai::ARF:
     file: lib/Sisimai/ARF.pm
   Sisimai::Address:
@@ -290,11 +290,12 @@ requires:
   Time::Local: '1.19'
   Time::Piece: '1.29'
   perl: v5.26.0
-version: v5.7.1
+version: v5.7.2
 x_contributors:
   - '0xcdcdcdcd <0xcdcdcdcd@gmail.com>'
   - 'Adrian Yee <adrian@gt.net>'
   - 'Alexandre Derumier <aderumier@odiso.com>'
+  - 'Arpit Jain <arpitjain099@gmail.com>'
   - 'Jon Jensen <jon@endpoint.com>'
   - 'Jonathan Leroy <jonathan@inikup.com>'
   - 'Mutsutoshi Yoshimoto <negachov@gmail.com>'

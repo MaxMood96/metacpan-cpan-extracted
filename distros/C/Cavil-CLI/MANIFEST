@@ -3,6 +3,7 @@ Changes
 cpanfile
 docs/Architecture.md
 lib/Cavil/CLI.pm
+lib/Cavil/CLI/Baseline.pm
 lib/Cavil/CLI/Cache.pm
 lib/Cavil/CLI/Client.pm
 lib/Cavil/CLI/Config.pm
@@ -19,6 +20,7 @@ t/config.t
 t/lib/CavilCliTest.pm
 t/progress.t
 t/scan.t
+t/scenario_baseline.t
 t/scenario_cache_hit.t
 t/scenario_check_diff.t
 t/scenario_resume.t

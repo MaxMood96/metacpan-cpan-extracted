@@ -9,7 +9,7 @@ use Carp;
 
 # The following must be on the same line to ensure that $VERSION is read
 # correctly by PAUSE and installer tools. See docu of 'version'.
-use version 0.77; our $VERSION = version->declare("v3.0.3");
+use version 0.77; our $VERSION = version->declare("v3.0.4");
 
 
 sub new {
@@ -501,7 +501,7 @@ Text::Table::Read::RelationOn::Tiny - Read binary "relation on (over) a set" fro
 
 =head1 VERSION
 
-Version v3.0.3
+Version v3.0.4
 
 
 =head1 SYNOPSIS

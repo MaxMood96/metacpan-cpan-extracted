@@ -88,6 +88,21 @@ msgstr "Checks that classes using this role have the specified routines or featu
 msgid "Проверяет, что в классах, использующих эту роль, есть указанные фичи с указанными аспектами."
 msgstr "Checks that classes using this role have the specified features with the specified aspects."
 
+msgid "## Роль наследует роль"
+msgstr "## Role inherits role"
+
+msgid "Роль может наследовать другую роль через `with`. Так можно уточнять интерфейс: типы требующихся фичей (`req`) и методов (`:Isa`) либо остаются такими же, либо понижаются — становятся более узкими подтипами. Понижение проверяется оператором меньше (`<`): `Num < (Num | Object)`, так как `Num` — подтип объединения `Num | Object`."
+msgstr "A role can inherit another role via `with`. This way you can refine the interface: the types of required features (`req`) and methods (`:Isa`) either remain the same or are lowered - they become narrower subtypes. Demotion is checked by the less-than operator (`<`): `Num < (Num | Object)`, since `Num` is a subtype of the union `Num | Object`."
+
+msgid "Роль `Role::Animal` требует свойство `legs` широкого типа `Num | Object` и метод `sound` с сигнатурой `(Me => Str)`."
+msgstr "The role `Role::Animal` requires a property `legs` of the wide type `Num | Object` and the `sound` method with signature `(Me => Str)`."
+
+msgid "Роль `Role::Bird` наследует `Role::Animal`, но понижает тип `legs` до `Num`, а сигнатуру метода `sound` оставляет прежней."
+msgstr "The `Role::Bird` role inherits `Role::Animal`, but lowers the `legs` type to `Num`, and leaves the `sound` method signature the same."
+
+msgid "Класс `Ex::Sparrow` использует роль `Role::Bird` и реализует все её требования."
+msgstr "The `Ex::Sparrow` class uses the `Role::Bird` role and implements all its requirements."
+
 msgid "`use Aion` включает в модуль следующие аспекты для использования в `has`:"
 msgstr "`use Aion` includes the following aspects in the module for use in `has`:"
 

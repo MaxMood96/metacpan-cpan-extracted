@@ -3,7 +3,7 @@
 #
 package PDL::Fit::Levmar;
 
-our @EXPORT_OK = qw(levmar levmar_report levmar_chkjac levmar_der_lb levmar_der_lb_ub levmar_der_ub levmar_der_ levmar_diff_lb levmar_diff_lb_ub levmar_diff_ub levmar_diff_ _levmar_chkjac _levmar_chkjac_no_t );
+our @EXPORT_OK = qw(levmar levmar_report levmar_chkjac levmar_der_lb levmar_der_ub levmar_der_lb_ub levmar_der_ levmar_diff_lb levmar_diff_ub levmar_diff_lb_ub levmar_diff_ _levmar_chkjac _levmar_chkjac_no_t );
 our %EXPORT_TAGS = (Func=>\@EXPORT_OK);
 
 use PDL::Core;
@@ -11,7 +11,7 @@ use PDL::Exporter;
 use DynaLoader;
 
 
-   our $VERSION = '0.0110';
+   our $VERSION = '0.0111';
    our @ISA = ( 'PDL::Exporter','DynaLoader' );
    push @PDL::Core::PP, __PACKAGE__;
    bootstrap PDL::Fit::Levmar $VERSION;
@@ -1651,12 +1651,12 @@ sub levmar_chkjac {
 
 
 
-*levmar_der_lb_ub = \&PDL::levmar_der_lb_ub;
-
-
-
-
 *levmar_der_ub = \&PDL::levmar_der_ub;
+
+
+
+
+*levmar_der_lb_ub = \&PDL::levmar_der_lb_ub;
 
 
 
@@ -1671,12 +1671,12 @@ sub levmar_chkjac {
 
 
 
-*levmar_diff_lb_ub = \&PDL::levmar_diff_lb_ub;
-
-
-
-
 *levmar_diff_ub = \&PDL::levmar_diff_ub;
+
+
+
+
+*levmar_diff_lb_ub = \&PDL::levmar_diff_lb_ub;
 
 
 

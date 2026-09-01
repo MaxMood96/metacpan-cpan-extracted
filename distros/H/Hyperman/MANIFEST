@@ -64,6 +64,8 @@ t/34-perl-arena.t
 t/35-bus.t
 t/36-bus-wakeup.t
 t/37-ktls.t
+t/38-awaitable.t
+t/39-awaitable-conformance.t
 t/lib/HMTest.pm
 t/manifest.t
 t/pod-coverage.t

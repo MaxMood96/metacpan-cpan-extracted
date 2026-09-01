@@ -28,8 +28,11 @@
  * future can mirror its companion's state without translation */
 enum { PF_PENDING = 0, PF_DONE = 1, PF_FAILED = 2, PF_CANCELLED = 3 };
 
-/* reaction kinds queued against a pending future */
-enum { PFR_ON_READY = 0, PFR_ON_DONE = 1, PFR_ON_FAIL = 2 };
+/* reaction kinds queued against a pending future. ON_CANCEL is the odd one:
+ * what it holds may be a future rather than code, because Future.pm's
+ * on_cancel and the await protocol's AWAIT_CHAIN_CANCEL are one registration.
+ * These are internal - pk_abi.h publishes none of them. */
+enum { PFR_ON_READY = 0, PFR_ON_DONE = 1, PFR_ON_FAIL = 2, PFR_ON_CANCEL = 3 };
 
 typedef struct punk_future {
     int   state;          /* PF_* */
@@ -48,8 +51,13 @@ typedef struct punk_future {
 
 static void pf_detect(pTHX_ punk_future *pf);   /* stage D: pick the backend */
 
+/* Punk blesses several classes into an IV holding a struct pointer - SSE,
+ * Stream, Config, View, WebSocket - so SvROK && SvIOK alone would take any of
+ * them for a future and reinterpret the wrong struct. The class check is what
+ * makes a mistyped argument a croak rather than a silent misread. */
 static punk_future *pf_of(pTHX_ SV *self) {
-    if (!SvROK(self) || !SvIOK(SvRV(self)))
+    if (!SvROK(self) || !SvIOK(SvRV(self))
+        || !sv_derived_from(self, "Punk::Future"))
         croak("Punk::Future: not a future");
     return (punk_future *)INT2PTR(void *, SvIV(SvRV(self)));
 }
@@ -64,6 +72,17 @@ static punk_future *pf_new(pTHX) {
 
 static SV *pf_bless(pTHX_ punk_future *pf, const char *class) {
     return sv_setref_iv(newSV(0), class, PTR2IV(pf));
+}
+
+/* The class to bless into, from a class-method or an instance-method
+ * invocant. SvPV_nolen of a blessed reference is "Punk::Future=SCALAR(0x..)",
+ * and sv_setref_iv will bless into a stash of that name quite happily - one
+ * with no DESTROY, so the struct leaks while pf_of still accepts the result.
+ * Every constructor takes its class through here. */
+static const char *pf_class_of(pTHX_ SV *invocant) {
+    if (SvROK(invocant) && SvOBJECT(SvRV(invocant)))
+        return HvNAME(SvSTASH(SvRV(invocant)));
+    return SvPV_nolen(invocant);
 }
 
 /* call $cb->(@argv), trapping a die (a settled callback must not unwind the
@@ -87,7 +106,9 @@ static void pf_invoke(pTHX_ SV *cb, SV **argv, int argc) {
  * others get the settled values. Returns argc; fills *argv (borrowed). */
 static int pf_react_args(pTHX_ punk_future *pf, SV *self, int kind,
                          SV *self_slot[1], SV ***argv) {
-    if (kind == PFR_ON_READY) {
+    /* a cancelled future has no values, so on_cancel gets $self as on_ready
+     * does - which is also what Future.pm hands a cancel callback */
+    if (kind == PFR_ON_READY || kind == PFR_ON_CANCEL) {
         self_slot[0] = self;
         *argv = self_slot;
         return 1;
@@ -99,9 +120,22 @@ static int pf_react_args(pTHX_ punk_future *pf, SV *self, int kind,
 /* run a single queued reaction if its kind matches the settled state */
 static void pf_fire_one(pTHX_ punk_future *pf, SV *self, int kind, SV *cb) {
     int run = (kind == PFR_ON_READY)
-           || (kind == PFR_ON_DONE && pf->state == PF_DONE)
-           || (kind == PFR_ON_FAIL && pf->state == PF_FAILED);
-    if (run) {
+           || (kind == PFR_ON_DONE   && pf->state == PF_DONE)
+           || (kind == PFR_ON_FAIL   && pf->state == PF_FAILED)
+           || (kind == PFR_ON_CANCEL && pf->state == PF_CANCELLED);
+    if (!run) return;
+    /* on_cancel holds code OR a future: a future is cancelled, not called.
+     * Its cancel goes out as a method rather than through pf_of, so a future
+     * of any class works and nothing the caller handed us is ever taken for
+     * one of ours. */
+    if (kind == PFR_ON_CANCEL && !(SvROK(cb) && SvTYPE(SvRV(cb)) == SVt_PVCV)) {
+        if (SvROK(cb) && SvOBJECT(SvRV(cb)) && pcx_can(aTHX_ cb, "cancel")) {
+            SV *r = pcx_call_meth(aTHX_ cb, "cancel", NULL, 0, 0);
+            if (r) SvREFCNT_dec(r);
+        }
+        return;
+    }
+    {
         SV *self_slot[1], **argv;
         int argc = pf_react_args(aTHX_ pf, self, kind, self_slot, &argv);
         pf_invoke(aTHX_ cb, argv, argc);
@@ -336,6 +370,25 @@ static SV *pf_make_chain(pTHX_ SV *self, SV *done_cb, SV *fail_cb, int mode) {
     clos = sv_2mortal(punk_closure(aTHX_ pf_chain_cb, cap));
     pf_react(aTHX_ sf, self, PFR_ON_READY, clos);
     return g;
+}
+
+/* A new pending future of the same class. No per-instance state is copied -
+ * except the loop, which is not state but the only thing that can drive what
+ * is cloned from it. Future::AsyncAwait builds the future an async sub
+ * returns by cloning the one it suspended on, so a clone that lost its loop
+ * is a future nothing can settle and pf_await croaks on.
+ *
+ * pf_new has already run pf_detect, which reads the live worker loop - set
+ * for the whole of hm_loop_run - so inside a handler detect and inherit agree.
+ * They differ only at the edges, and each edge wants the opposite answer: a
+ * clone taken outside hm_loop_run needs the source's loop, and a clone of a
+ * future built before the worker loop came up needs the live one. Inheriting
+ * only when the source has one is right in both. */
+static SV *pf_clone(pTHX_ SV *self) {
+    punk_future *sf = pf_of(aTHX_ self);
+    punk_future *pg = pf_new(aTHX);
+    if (sf->is_loop) { pg->is_loop = 1; pg->abi = sf->abi; pg->loop = sf->loop; }
+    return pf_bless(aTHX_ pg, pf_class_of(aTHX_ self));
 }
 
 /* ---- combinators: needs_all / needs_any / wait_all / wait_any (stage C) --- *

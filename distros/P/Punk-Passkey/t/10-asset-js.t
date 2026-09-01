@@ -45,32 +45,40 @@ like($js, qr/isConditionalMediationAvailable/,
 
 my $node = `sh -c 'command -v node' 2>/dev/null`;
 chomp $node;
-plan skip_all => 'node is not installed; the runtime assertions are skipped'
-    unless $node && -x $node;
 
-my $dir = File::Temp->newdir;
-open my $fh, '>', "$dir/asset.js" or die $!;
-print {$fh} $js;
-close $fh;
+# A SKIP block, not skip_all: the assertions above have already run, and
+# skip_all after a test has run is not a skipped file, it is "you planned
+# 0 tests but ran 5" - a FAIL on any smoker without node, which is how
+# this was found.
+SKIP: {
+    skip 'node is not installed; the runtime assertions are skipped', 5
+        unless $node && -x $node;
 
-my $harness = "$FindBin::Bin/js/request-handling.js";
-ok(-f $harness, 'the fake browser is shipped') or done_testing, exit;
+    my $harness = "$FindBin::Bin/js/request-handling.js";
+    ok(-f $harness, 'the fake browser is shipped')
+        or skip 'the fake browser is not installed', 4;
 
-my $out = `"$node" "$harness" "$dir/asset.js" 2>&1`;
-my $ok  = $? == 0;
+    my $dir = File::Temp->newdir;
+    open my $fh, '>', "$dir/asset.js" or die $!;
+    print {$fh} $js;
+    close $fh;
 
-like($out, qr/PASS:/, 'the helper drives a login correctly under the rule')
-    or diag $out;
-ok($ok, 'and the harness exited clean') or diag $out;
+    my $out = `"$node" "$harness" "$dir/asset.js" 2>&1`;
+    my $ok  = $? == 0;
 
-unlike($out, qr/REFUSED-CONCURRENT/,
-    'no second credential request was made while one was outstanding - '
-  . 'which is exactly the failure a user sees as a button that does '
-  . 'nothing');
+    like($out, qr/PASS:/, 'the helper drives a login correctly under the rule')
+        or diag $out;
+    ok($ok, 'and the harness exited clean') or diag $out;
 
-like($out, qr/abort \| fetch:[^|]*options \| get:modal/,
-    'the sequence is: abort the autofill request, THEN ask for options '
-  . 'and open the modal - in that order, so the challenge the modal '
-  . 'gets is the one it will be checked against');
+    unlike($out, qr/REFUSED-CONCURRENT/,
+        'no second credential request was made while one was outstanding - '
+      . 'which is exactly the failure a user sees as a button that does '
+      . 'nothing');
+
+    like($out, qr/abort \| fetch:[^|]*options \| get:modal/,
+        'the sequence is: abort the autofill request, THEN ask for options '
+      . 'and open the modal - in that order, so the challenge the modal '
+      . 'gets is the one it will be checked against');
+}
 
 done_testing;

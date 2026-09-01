@@ -1,5 +1,8 @@
 Revision history for Punk-Observe
 
+0.06	2026-09-01
+	- Fixes: the histogram sum and health check ms tests compare a float64 by value, failed on a long double or quadmath perl
+
 0.05	2026-08-30
 	- Fixes: a cached panel is no longer partial - the caller's row budget reaches every chunk
 	- Fixes: a chunk that truncated is never stored, and entries from before this are retired

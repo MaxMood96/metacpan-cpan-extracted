@@ -152,7 +152,13 @@ sub ran_lines {
         '...the replay, from another process entirely');
     is($rb->{body}, $ra->{body},
         'byte-identical to what the first caller was sent');
-    like($ra->{body}, qr/"pid":\s*$ran[0]/,
+    # Compared as a VALUE, not as JSON text. The handler writes "$$" to
+    # the ran file before it encodes $$, and how much of that scalar's
+    # numeric identity survives being used as a string is perl's own
+    # business: 5.16 hands the encoder a string and spells it "12345",
+    # later perls keep IOK and spell it 12345. The body above is already
+    # asserted byte-identical to B's, so one side proves both.
+    is(file_json_decode($ra->{body})->{pid} + 0, $ran[0] + 0,
         'and both carry the pid of the one process that did the work');
 }
 

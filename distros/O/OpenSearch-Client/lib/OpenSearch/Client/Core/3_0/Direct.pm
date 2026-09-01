@@ -21,7 +21,7 @@
 # limitations under the License.
 
 package OpenSearch::Client::Core::3_0::Direct;
-$OpenSearch::Client::Core::3_0::Direct::VERSION = '3.007010';
+$OpenSearch::Client::Core::3_0::Direct::VERSION = '3.007011';
 use Moo;
 with 'OpenSearch::Client::Core::3_0::Role::API';
 with 'OpenSearch::Client::Role::Client::Direct';
@@ -73,7 +73,6 @@ has 'bulk_helper_class'    => ( is => 'rw' );
 has 'scroll_helper_class'  => ( is => 'rw' );
 has '_bulk_class'          => ( is => 'lazy' );
 has '_scroll_class'        => ( is => 'lazy' );
-has 'opensearch_version'   => ( is => 'lazy' );
 
 #---------------------------------------
 sub global_method_supported_in_version {
@@ -134,15 +133,6 @@ sub _build__scroll_class {
     my $scroll_class = $self->scroll_helper_class
         || 'Core::' . $self->api_version . '::Helper::Scroll';
     $self->_build_helper( 'scroll', $scroll_class );
-}
-
-#===================================
-sub _build_opensearch_version {
-#===================================
-    my $self  = shift;
-    my $resp  = $self->info();
-    my $os_version = $resp->{version}->{number};    
-    return $os_version;
 }
 
 #===================================
@@ -214,7 +204,7 @@ B<OpenSearch::Client::Core::3_0::Direct>
 
 =head1 VERSION
 
-version 3.007010
+version 3.007011
 
 =head1 SYNOPSIS
 
@@ -2335,16 +2325,6 @@ I<Method added in OpenSearch version 1.0>
     );
 
 L<OpenSearch documentation for update_by_query_rethrottle|https://docs.opensearch.org/latest/api-reference/>
-
-=head2 opensearch_version
-
-A lazy populated property with the version of the current OpenSearch cluster.
-
-    my $version = $os->opensearch_version;
-
-It is populated when first accessed by:
-
-    my $version = $os->info->{version}->{number};
 
 =head2 global_method_supported_in_version
 

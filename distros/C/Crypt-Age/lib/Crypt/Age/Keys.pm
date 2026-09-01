@@ -1,6 +1,6 @@
 package Crypt::Age::Keys;
 # ABSTRACT: Key generation and Bech32 encoding for age encryption
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 use Moo;
 use Carp qw(croak);
 use Crypt::PK::X25519;
@@ -41,7 +41,17 @@ sub encode_public_key {
 sub decode_public_key {
     my ($class, $encoded) = @_;
     my ($hrp, $bytes) = $class->bech32_decode($encoded);
-    croak "Invalid public key HRP: expected '$HRP_PUBLIC', got '$hrp'"
+    # $hrp is caller material, not a value from this module: bech32_decode
+    # returns everything before the last "1" of the string it was handed. For
+    # a real key of the other kind that is only the other type prefix, but a
+    # string whose HRP carries key characters reaches here too, so nothing of
+    # it is quoted. The check is against a single constant, so naming the
+    # expected value says everything the caller needs. Written out in full at
+    # decode_secret_key, where the same value is a secret; both read the same
+    # way on purpose.
+    croak 'Invalid public key HRP: expected the literal '.$HRP_PUBLIC
+        .' prefix, pass an age recipient rather than an identity or some '
+        .'other Bech32 string'
         unless lc($hrp) eq $HRP_PUBLIC;
     croak "Invalid public key length" unless length($bytes) == 32;
     return $bytes;
@@ -58,7 +68,27 @@ sub encode_secret_key {
 sub decode_secret_key {
     my ($class, $encoded) = @_;
     my ($hrp, $bytes) = $class->bech32_decode($encoded);
-    croak "Invalid secret key HRP: expected '$HRP_SECRET', got '$hrp'"
+    # The same croak as in decode_public_key, and the half where the quoted
+    # value could be a secret. $hrp is everything before the last "1" of the
+    # caller's string, so it is a prefix of what arrived.
+    #
+    # Reaching this croak takes a Bech32 string whose checksum verifies over
+    # the wrong HRP, which bounds it but does not make it safe. Measured on
+    # this module: a real key truncated anywhere dies earlier at "Invalid
+    # bech32: no separator", "Invalid bech32: empty data" or "Invalid bech32
+    # checksum", and one with trailing junk at "Invalid bech32 checksum" --
+    # none of those quote anything. So the string that gets here is
+    # constructed rather than mistyped; and a string constructed with the
+    # opening characters of a real identity as its HRP is precisely how those
+    # characters would be read back out of an exception, from inside this
+    # module, into a log the caller can no longer redact.
+    #
+    # As at the version-line croak in Crypt::Age::Header, the clause after the
+    # colon carries the requirement and the fix rather than a description of
+    # what arrived. The expected HRP is a constant of the format and is named.
+    croak 'Invalid secret key HRP: expected the literal '.$HRP_SECRET
+        .' prefix, pass an age identity rather than a recipient or some '
+        .'other Bech32 string'
         unless lc($hrp) eq $HRP_SECRET;
     croak "Invalid secret key length" unless length($bytes) == 32;
     return $bytes;
@@ -73,6 +103,7 @@ sub public_key_from_secret {
     my $public_bytes = $pk->export_key_raw('public');
     return $class->encode_public_key($public_bytes);
 }
+
 
 
 # Bech32 implementation (BIP-173)
@@ -137,8 +168,16 @@ sub bech32_encode {
     return $result;
 }
 
+
 sub bech32_decode {
     my ($class, $str) = @_;
+
+    # BIP-173: "Decoders MUST NOT accept strings where some characters are
+    # uppercase and some are lowercase". The checksum is computed over the
+    # lowercase form either way, so a mixed-case string would otherwise verify
+    # and decode; both age 1.2.1 and rage 0.12.1 reject it.
+    croak "Invalid bech32: mixed case"
+        if $str =~ /[a-z]/ && $str =~ /[A-Z]/;
 
     # Find separator
     my $sep_pos = rindex($str, '1');
@@ -146,12 +185,24 @@ sub bech32_decode {
     croak "Invalid bech32: empty data" if $sep_pos + 1 >= length($str);
 
     my $hrp = substr($str, 0, $sep_pos);
-    my $data_part = lc(substr($str, $sep_pos + 1));
+    my $data_part = substr($str, $sep_pos + 1);
 
-    # Decode data part
+    # Decode data part. The offending character is located, never quoted: no
+    # character of an encoded age key can reach this branch (every one of them
+    # is inside the charset by construction), so the only thing that could be
+    # copied into the exception is one byte of some other secret handed to this
+    # public method by mistake -- a passphrase, say. The offset counts from the
+    # start of $str rather than from the start of the data part, because $str
+    # is what the caller holds: substr($str, $N, 1) then lands on the character
+    # without the caller re-deriving where the separator was. Lowercasing one
+    # character at a time keeps that offset exact even where lc() of a single
+    # character is not a single character.
     my @data;
-    for my $c (split //, $data_part) {
-        croak "Invalid bech32 character: $c" unless exists $BECH32_CHAR_TO_VAL{$c};
+    for my $i (0 .. length($data_part) - 1) {
+        my $c = lc(substr($data_part, $i, 1));
+        croak "Invalid bech32 character at offset ".($sep_pos + 1 + $i)
+            .": expected a character of the Bech32 charset"
+            unless exists $BECH32_CHAR_TO_VAL{$c};
         push @data, $BECH32_CHAR_TO_VAL{$c};
     }
 
@@ -166,6 +217,7 @@ sub bech32_decode {
 
     return ($hrp, pack('C*', @$bytes));
 }
+
 
 sub _convert_bits {
     my ($class, $data, $from_bits, $to_bits, $pad) = @_;
@@ -211,7 +263,7 @@ Crypt::Age::Keys - Key generation and Bech32 encoding for age encryption
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -240,6 +292,8 @@ using Bech32, the same encoding used for Bitcoin SegWit addresses (BIP-173).
 
 Public keys use the human-readable part C<age> and are lowercase. Secret keys
 use the human-readable part C<age-secret-key-> and are uppercase.
+
+This is an internal module used by L<Crypt::Age>.
 
 =head2 generate_keypair
 
@@ -271,7 +325,19 @@ Returns a lowercase string starting with C<age1>.
 
 Decodes a Bech32-encoded age public key to raw bytes.
 
-Dies if the HRP is not C<age> or if the decoded data is not 32 bytes.
+Dies if the HRP is not C<age>, if the decoded data is not 32 bytes, or if the
+string mixes upper- and lowercase; see L</bech32_decode>. The HRP is compared
+case-insensitively, so an all-uppercase C<AGE1...> key is accepted as well.
+
+The HRP mismatch is reported as C<"Invalid public key HRP: expected the
+literal age prefix, pass an age recipient rather than an identity or some
+other Bech32 string">. It names the expected HRP, which is a constant of the
+format, and B<not> the one that arrived: the received HRP is everything before
+the last C<1> of the string that was passed in, so it is a prefix of the
+caller's own material. Here that material is a public key and no secret is at
+stake, but the message reads the same as L</decode_secret_key>'s, where it is.
+Callers matching on the old C<"expected 'age', got '...'"> wording see the new
+message instead.
 
 =head2 encode_secret_key
 
@@ -287,7 +353,28 @@ Returns an uppercase string starting with C<AGE-SECRET-KEY-1>.
 
 Decodes a Bech32-encoded age secret key to raw bytes.
 
-Dies if the HRP is not C<age-secret-key-> or if the decoded data is not 32 bytes.
+Dies if the HRP is not C<age-secret-key->, if the decoded data is not 32 bytes,
+or if the string mixes upper- and lowercase; see L</bech32_decode>. The HRP is
+compared case-insensitively, so an all-lowercase C<age-secret-key-1...> key is
+accepted as well as the uppercase form L</encode_secret_key> emits.
+
+The HRP mismatch is reported as C<"Invalid secret key HRP: expected the literal
+age-secret-key- prefix, pass an age identity rather than a recipient or some
+other Bech32 string">, and quotes no part of what arrived. The received HRP is
+everything before the last C<1> of the caller's string, so a string whose HRP
+is the opening characters of a real identity would have had those characters
+written into an exception raised inside this module, where the caller can no
+longer redact them.
+
+Reaching that croak needs a Bech32 string whose checksum verifies over the
+wrong HRP, so it is a constructed input rather than a mistyped one: a key
+truncated anywhere dies first with C<"Invalid bech32: no separator">,
+C<"Invalid bech32: empty data"> or C<"Invalid bech32 checksum">, and one with
+trailing junk with C<"Invalid bech32 checksum">, none of which quote anything
+either. The everyday way to reach it -- passing a public key here, or an
+identity to L</decode_public_key> -- puts only the other type's prefix in that
+position. Callers matching on the old C<"expected 'age-secret-key-', got
+'...'"> wording see the new message instead.
 
 =head2 public_key_from_secret
 
@@ -298,6 +385,62 @@ Derives the public key from a secret key.
 Takes a Bech32-encoded secret key and returns the corresponding Bech32-encoded
 public key. This is useful for when you have a secret key and need to know
 what public key it corresponds to.
+
+=head1 IMPLEMENTATION NOTES
+
+C<bech32_polymod>, C<bech32_hrp_expand>, C<bech32_create_checksum> and
+C<bech32_verify_checksum> below implement the checksum algorithm from BIP-173.
+They are called only by L</bech32_encode> and L</bech32_decode> in this same
+class, as plain functions rather than through the C<< $class->method(...) >>
+convention the rest of this module uses, and are not documented individually
+here.
+
+=head2 bech32_encode
+
+    my $encoded = Crypt::Age::Keys->bech32_encode($hrp, $bytes);
+
+Encodes C<$bytes> as Bech32 (BIP-173) with the given human-readable part
+C<$hrp>: converts the bytes from 8-bit to 5-bit groups, computes the checksum,
+and joins C<$hrp>, the C<1> separator, the data and the checksum through the
+Bech32 charset.
+
+This is the generic codec L</encode_public_key> and L</encode_secret_key> call;
+most callers want those instead, since they also know the age HRPs and enforce
+the 32-byte key length that this method does not.
+
+=head2 bech32_decode
+
+    my ($hrp, $bytes) = Crypt::Age::Keys->bech32_decode($encoded);
+
+Decodes a Bech32 (BIP-173) string, verifying its checksum. Returns the
+human-readable part exactly as it appeared in C<$encoded> (not lowercased) and
+the decoded data as raw bytes.
+
+This is the generic codec L</decode_public_key> and L</decode_secret_key> call;
+most callers want those instead, since they also check the HRP and the decoded
+length.
+
+Dies if there is no C<1> separator, if the data part is empty, if it contains a
+character outside the Bech32 charset, or if the checksum does not verify.
+
+The charset failure names the position rather than the character: C<Invalid
+bech32 character at offset N>, where C<N> is a 0-based offset into the string
+that was passed in -- not into the data part after the separator -- so
+C<substr($encoded, $N, 1)> is the character it rejected. Withholding the
+character is deliberate. Anything a caller passes reaches here, and a string
+that is not an age key at all -- a passphrase handed to this method by mistake
+-- would otherwise have one of its own bytes quoted back in an exception that
+tends to end up in a log. No byte of an actual key is at stake either way:
+every character of an encoded key is inside the charset, so none of them can
+reach this failure.
+
+BIP-173 also requires an encoding to be entirely uppercase or entirely
+lowercase, and this method enforces that: a string mixing the two dies with
+C<Invalid bech32: mixed case> before the separator is even looked for. An
+all-uppercase and an all-lowercase string are both accepted, and decode to the
+same bytes -- the checksum is verified against the lowercased HRP, since
+BIP-173 defines it over the lowercase form regardless of how the string is
+written.
 
 =head1 SEE ALSO
 

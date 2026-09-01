@@ -1,7 +1,7 @@
 # ABSTRACT: Rex SSH connection via Net::LibSSH (no SFTP required)
 
 package Rex::Interface::Connection::LibSSH;
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 use strict;
 use warnings;
 
@@ -145,7 +145,7 @@ Rex::Interface::Connection::LibSSH - Rex SSH connection via Net::LibSSH (no SFTP
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 

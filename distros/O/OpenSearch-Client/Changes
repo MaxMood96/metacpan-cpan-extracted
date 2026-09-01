@@ -1,5 +1,10 @@
 Revision history for OpenSearch::Client
 
+3.007011    2026-08-31
+            * Fixed property opensearch_version to return the correct
+              version when connected to a service that returns 7.10.2
+              with compatibility.override_main_response_version: true
+
 3.007010    2026-07-27
             * Added OpenSearch::Client::Transport::TryCatch to remove
               the need for additional user try { }catch { }; or eval

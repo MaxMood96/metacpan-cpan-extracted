@@ -30,5 +30,5 @@ resources:
   bugtracker: https://github.com/openSUSE/cavil-cli/issues
   license: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
   repository: https://github.com/openSUSE/cavil-cli.git
-version: '0.01'
+version: '0.02'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

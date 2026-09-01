@@ -1,7 +1,7 @@
 # ABSTRACT: Rex filesystem operations via exec channels (no SFTP)
 
 package Rex::Interface::Fs::LibSSH;
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 use strict;
 use warnings;
 
@@ -88,6 +88,22 @@ sub ls {
 
 sub glob {
     my ( $self, $pattern ) = @_;
+
+    # The pattern is intentionally NOT _q()-wrapped: the remote shell
+    # has to expand *, ?, [...] in place. Quoting would suppress globbing.
+    # The security-relevant asymmetry: every other path here is _q()-wrapped;
+    # glob is the one place we trust the remote shell to parse something
+    # beyond a literal token. As a defense against a malicious or malformed
+    # pattern reaching this method, reject any character that would let the
+    # pattern break out of the command structure beyond what globbing
+    # allows. Legitimate glob patterns contain only path bytes and the
+    # glob meta-chars *, ?, [...], {a,b}, /, ., -, _, ~.
+    die "LibSSH glob: pattern contains NUL byte\n"
+        if defined $pattern && index( $pattern, "\0" ) >= 0;
+    die "LibSSH glob: pattern contains shell metacharacter outside glob syntax\n"
+        if defined $pattern
+        && $pattern =~ /[\0';|&<>`$()\n\r\\]/;
+
     my $out = $self->_run("echo $pattern");
     chomp $out;
     return split /\s+/, $out;
@@ -157,9 +173,19 @@ sub download {
     close $fh;
 }
 
-# Shell-quote a single path component
+# Shell-quote a single path component.
+#
+# Single-quote wrap with '\''-escaping of embedded single quotes is the
+# canonical POSIX-safe form. Inside single quotes the shell performs no
+# expansion, so this defends against spaces, $, `, \, newlines and the
+# empty string automatically.
+#
+# NUL (\0) cannot be represented in argv (libc terminates arguments on
+# NUL), so reject it loudly rather than letting libssh silently truncate.
 sub _q {
     my ($path) = @_;
+    die "LibSSH _q: path contains NUL byte\n"
+        if defined $path && index( $path, "\0" ) >= 0;
     $path =~ s/'/'"'"'/g;
     return "'$path'";
 }
@@ -178,7 +204,7 @@ Rex::Interface::Fs::LibSSH - Rex filesystem operations via exec channels (no SFT
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 DESCRIPTION
 
@@ -190,6 +216,27 @@ This makes it suitable for servers that have no SFTP subsystem — minimal
 containers, embedded systems, or any host where C<set connection =E<gt>
 'OpenSSH'> would crash with C<Can't call method "stat" on an undefined
 value>.
+
+=head1 LIMITATIONS
+
+This class does not route filesystem operations through
+L<Rex::Interface::Fs::Sudo>. C<_run> hardcodes
+C<Rex::Interface::Exec-E<gt>create('LibSSH')> rather than letting
+C<create()> resolve via L<Rex::Interface::Connection::LibSSH/get_connection_type>,
+so operations reached from inside this class never get the Sudo wrap
+that C<get_connection_type> would normally select under
+C<L<Rex::is_sudo>>. This is a known limitation, not a bug: switching
+to the resolving form would change behaviour for every existing caller.
+Callers that need sudo-wrapped filesystem operations should use
+L<Rex::Interface::Fs::Sudo> explicitly.
+
+C<upload> and C<download> slurp the entire file into memory on both
+ends before sending or returning. This is fine for config files but
+not appropriate for large files. A future implementation could stream
+through L<Net::LibSSH::Channel::read> with an explicit length —
+C<read(undef)> reads zero bytes, so callers that pass through an
+optional C<$len> must default to slurping rather than passing it
+through unchanged.
 
 =head1 SEE ALSO
 

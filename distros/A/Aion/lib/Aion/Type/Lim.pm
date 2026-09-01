@@ -38,3 +38,59 @@ sub inc {
 }
 
 1;
+
+__END__
+
+=encoding utf-8
+
+=head1 NAME
+
+Aion::Type::Lim - граница со смещением для интервалов
+
+=head1 SYNOPSIS
+
+	use Aion::Type::Lim;
+	
+	Aion::Type::Lim->from(5) # => Closed[5]
+	Aion::Type::Lim->from(5)->inc # => Opened[5]
+	Aion::Type::Lim->from(5)->dec # => Opened[5]
+	
+	my $five_min = Aion::Type::Lim->from(5)->dec;
+	my $five_max = Aion::Type::Lim->from(5)->inc;
+	
+	$five_min == 5 # -> ""
+	$five_min < 5 # -> 1
+	$five_max > 5 # -> 1
+
+=head1 DESCRIPTION
+
+Предназначен для создания открытых границ в C<Range[from, to]>.
+
+Переопределяет оператор сравнения C<< E<lt>=E<gt> >> из которого выводятся остальные операторы сравнения: C<< E<lt> >>, C<< E<gt> >>, C<< E<lt>= >>, C<< E<gt>= >>, C<==>, C<!=>.
+
+=head1 SUBROUTINES
+
+=head2 from ($cls, $lim)
+
+Конструктор.
+
+=head2 dec ()
+
+Уменьшает сдвиг.
+
+=head2 inc ()
+
+Увеличивает сдвиг.
+
+=head1 AUTHOR
+
+Yaroslav O. Kosmina L<mailto:dart@cpan.org>
+
+=head1 LICENSE
+
+⚖ B<GPLv3>
+
+=head1 COPYRIGHT
+
+The Aion::Type::Lim module is copyright © 2026 Yaroslav O. Kosmina. Rusland. All rights reserved.
+

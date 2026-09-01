@@ -1,0 +1,5 @@
+%syntax-version=1.0.0
+%project=punk_authz
+%uri=https://metacpan.org/pod/Punk::Plugin::Authorisation
+
+grants 2026-08-23T15:00:00Z LNATION <email@lnation.org> # one row is one subject, one action, one object

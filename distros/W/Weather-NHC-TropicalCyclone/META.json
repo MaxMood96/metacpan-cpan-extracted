@@ -1,10 +1,10 @@
 {
-   "abstract" : "Provides a convenient interface to NHC's Tropical Cyclone JSON format.",
+   "abstract" : "Convenient access to NHC tropical cyclone status and products",
    "author" : [
       "danx <danx@cpan.org>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Dist::Zilla version 6.024, CPAN::Meta::Converter version 2.150010",
+   "generated_by" : "Dist::Zilla version 6.032, CPAN::Meta::Converter version 2.150010",
    "license" : [
       "perl_5"
    ],
@@ -19,52 +19,76 @@
             "ExtUtils::MakeMaker" : "0"
          }
       },
+      "develop" : {
+         "requires" : {
+            "Devel::Cover" : "1.40",
+            "Test::Pod" : "1.52"
+         }
+      },
       "runtime" : {
          "requires" : {
-            "Date::Calc" : "0",
-            "File::Temp" : "0",
-            "HTML::TreeBuilder" : "0",
-            "HTTP::Status" : "0",
+            "Dispatch::Fu" : "1.06",
             "HTTP::Tiny" : "0",
             "IO::Socket::SSL" : "0",
-            "JSON::XS" : "0",
-            "Object::Tiny" : "0",
-            "Util::H2O" : "0",
-            "Util::H2O::More" : "0",
-            "Validate::Tiny" : "0"
+            "JSON::PP" : "0",
+            "Scalar::Util" : "0",
+            "Time::Local" : "0",
+            "Util::H2O::More" : "v0.4.6",
+            "perl" : "5.010"
          }
       },
       "test" : {
          "requires" : {
             "File::Temp" : "0",
-            "Net::Ping" : "0",
-            "Test::Exception" : "0",
-            "Test::More" : "0"
+            "Test::More" : "0.98"
          }
       }
    },
    "provides" : {
       "Weather::NHC::TropicalCyclone" : {
          "file" : "lib/Weather/NHC/TropicalCyclone.pm",
-         "version" : "0.34"
+         "version" : "0.36"
       },
       "Weather::NHC::TropicalCyclone::ForecastAdvisory" : {
          "file" : "lib/Weather/NHC/TropicalCyclone/ForecastAdvisory.pm",
-         "version" : "0.34"
+         "version" : "0.36"
+      },
+      "Weather::NHC::TropicalCyclone::HTTP" : {
+         "file" : "lib/Weather/NHC/TropicalCyclone/HTTP.pm",
+         "version" : "0.36"
+      },
+      "Weather::NHC::TropicalCyclone::Resource" : {
+         "file" : "lib/Weather/NHC/TropicalCyclone/Resource.pm",
+         "version" : "0.36"
       },
       "Weather::NHC::TropicalCyclone::Storm" : {
          "file" : "lib/Weather/NHC/TropicalCyclone/Storm.pm",
-         "version" : "0.34"
+         "version" : "0.36"
       },
       "Weather::NHC::TropicalCyclone::StormTable" : {
          "file" : "lib/Weather/NHC/TropicalCyclone/StormTable.pm",
-         "version" : "0.34"
+         "version" : "0.36"
+      },
+      "Weather::NHC::TropicalCyclone::Validation" : {
+         "file" : "lib/Weather/NHC/TropicalCyclone/Validation.pm",
+         "version" : "0.36"
       }
    },
    "release_status" : "stable",
-   "version" : "0.34",
-   "x_generated_by_perl" : "v5.34.0",
-   "x_serialization_backend" : "Cpanel::JSON::XS version 4.27",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/oodler577/p5-weather-nhc-tropcialcyclone/issues"
+      },
+      "homepage" : "https://metacpan.org/dist/Weather-NHC-TropicalCyclone",
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/oodler577/p5-weather-nhc-tropcialcyclone.git",
+         "web" : "https://github.com/oodler577/p5-weather-nhc-tropcialcyclone"
+      }
+   },
+   "version" : "0.36",
+   "x_generated_by_perl" : "v5.40.0",
+   "x_serialization_backend" : "Cpanel::JSON::XS version 4.38",
    "x_spdx_expression" : "Artistic-1.0-Perl OR GPL-1.0-or-later"
 }
 

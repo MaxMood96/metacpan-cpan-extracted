@@ -1,0 +1,8 @@
+Revision history for Punk-Authorisation
+
+0.01    Unreleased
+        First release: Punk::Plugin::Authorisation, extracted from Punk-DIY
+        0.01 before it shipped.
+        - ADDS: example/authz-demo, a running application whose home page is
+          every rule against every row, showing which status each refusal
+          carries.

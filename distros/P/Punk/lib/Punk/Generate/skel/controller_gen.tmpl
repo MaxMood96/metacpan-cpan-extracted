@@ -1,8 +1,6 @@
 package {% app %}::Controller::{% ns %}::{% name %};
 
-use strict;
-use warnings;
-use parent 'Punk::Controller';
+use Punk::Controller;
 
 # Controller methods are plain subs receiving the context - no instance, no
 # dispatch overhead. Wire it from {% app %}:

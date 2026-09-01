@@ -1,6 +1,6 @@
 package Crypt::Age::Stanza::X25519;
 # ABSTRACT: X25519 recipient stanza for age encryption
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 use Moo;
 use Carp qw(croak);
 use Crypt::Age::Keys;
@@ -162,7 +162,7 @@ Crypt::Age::Stanza::X25519 - X25519 recipient stanza for age encryption
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -192,11 +192,17 @@ secret and unwrap the file key.
 
 This is the primary recipient type for age encryption.
 
+This is an internal module used by L<Crypt::Age>.
+
 =head2 ephemeral_public
 
 The ephemeral X25519 public key used for this stanza (raw bytes).
 
-Generated randomly during wrapping.
+Only set on the encrypt path: L</wrap> generates it and passes it to the
+constructor. A stanza built by L<Crypt::Age::Header/parse_from_fh> on the
+decrypt path leaves this C<undef> -- the same key is present there too, but
+base64-encoded in the inherited C<args> attribute (C<args-E<gt>[0]>), which is
+what L</unwrap> decodes for itself rather than reading this attribute.
 
 =head2 BUILD
 

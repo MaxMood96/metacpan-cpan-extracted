@@ -1,0 +1,5 @@
+%syntax-version=1.0.0
+%project=punk_apikey
+%uri=https://metacpan.org/pod/Punk::Plugin::APIKey
+
+api_keys 2026-08-23T12:00:00Z LNATION <email@lnation.org> # the API keys table

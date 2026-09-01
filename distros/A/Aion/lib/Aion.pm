@@ -2,7 +2,7 @@ package Aion;
 
 use common::sense;
 
-our $VERSION = "2.2";
+our $VERSION = "2.3";
 
 use Aion::Types qw//;
 use Aion::Meta::RequiresAnyFunction;
@@ -539,7 +539,7 @@ Aion - a postmodern object system for Perl 5, such as “Mouse”, “Moose”, 
 
 =head1 VERSION
 
-2.2
+2.3
 
 =head1 SYNOPSIS
 
@@ -853,6 +853,42 @@ Checks that classes using this role have the specified features with the specifi
 	}
 	
 	Omega3->new->x  # -> 12
+
+=head2 Role inherits role
+
+A role can inherit another role via C<with>. This way you can refine the interface: the types of required features (C<req>) and methods (C<:Isa>) either remain the same or are lowered - they become narrower subtypes. Demotion is checked by the less-than operator (C<< E<lt> >>): C<< Num E<lt> (Num | Object) >>, since C<Num> is a subtype of the union C<Num | Object>.
+
+The role C<Role::Animal> requires a property C<legs> of the wide type C<Num | Object> and the C<sound> method with signature C<< (Me =E<gt> Str) >>.
+
+	package Role::Animal { use Aion -role;
+	
+		req legs => (isa => Num | Object);
+		sub sound : Isa(Me => Str);
+	}
+
+The C<Role::Bird> role inherits C<Role::Animal>, but lowers the C<legs> type to C<Num>, and leaves the C<sound> method signature the same.
+
+	package Role::Bird { use Aion -role;
+	
+		with qw/Role::Animal/;
+		req legs => (isa => Num);
+		sub sound : Isa(Me => Str);
+	}
+
+The C<Ex::Sparrow> class uses the C<Role::Bird> role and implements all its requirements.
+
+	package Ex::Sparrow { use Aion;
+		with qw/Role::Bird/;
+	
+		has legs => (is => 'ro', isa => Num, default => 2);
+		sub sound : Isa(Me => Str) { 'chirp' }
+	
+		Num < (Num | Object)  # -> 1
+	}
+	
+	my $sparrow = Ex::Sparrow->new;
+	$sparrow->legs  # => 2
+	$sparrow->sound # => chirp
 
 =head1 ASPECTS
 

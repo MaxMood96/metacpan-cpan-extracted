@@ -1,9 +1,16 @@
 #!perl
 
-use Test::Most;
+use Test2::V0;
+
+use Test::File::ShareDir -share => {
+    -dist => {
+        "Robots-Validate" => "share"
+    }
+};
+
 use Net::DNS::Resolver::Mock;
 
-use_ok('Robots::Validate');
+use Robots::Validate;
 
 my $res = Net::DNS::Resolver::Mock->new;
 $res->zonefile_parse(
@@ -13,48 +20,134 @@ node-1.crawl.example.local 3600 A 192.168.1.1
 ZONE
 );
 
-my @robots = (
-    {
-        name   => 'example',
-        agent  => qr/\bexamplebot\b/,
-        domain => qr/\.crawl\.example\.local$/,
-    },
-);
+subtest 'domain as regexp' => sub {
 
-isa_ok my $rv = Robots::Validate->new(
-    resolver     => $res,
-    robots       => \@robots,
-    die_on_error => 0,
-  ),
-  'Robots::Validate';
+    my @robots = (
+        {
+            name    => 'example',
+            agents  => [qw( examplebot hoohabot )],
+            domain  => '/\.crawl\.example\.local$/',
+            network => [ '192.168.1.1' ],
+        },
+    );
 
-{
-    ok my $answer = $rv->validate('192.168.1.1'), 'validate only IP';
+    isa_ok my $rv = Robots::Validate->new(
+        resolver     => $res,
+        config       => \@robots,
+      ),
+      'Robots::Validate';
 
-    is_deeply $answer,
-      {
-        %{ $robots[0] },
-        hostname   => 'node-1.crawl.example.local',
-        ip_address => '192.168.1.1',
-      },
-      'answer';
+    ok $rv->_agents, "instantiate the internal configuration";
 
-}
+    is $rv->_match_ip('192.168.1.1') => 'example', '_match_ip';
+    is $rv->validate('192.168.1.1')  => [ "example", undef ], "validate IP with no UA string";
 
-ok $rv->validate(
-    '192.168.1.1', { agent => 'Morkzilla/5.0 examplebot/1.0' }
-    ),
-    'validate with UA string';
+    is
+      $rv->validate( '192.168.1.1', 'Morkzilla/5.0 examplebot/1.0' ),
+      [ "example" => "examplebot" ],
+      'validate with UA string';
 
-ok $rv->validate(
-    {
-        REMOTE_ADDR     => '192.168.1.1',
-        HTTP_USER_AGENT => 'Morkzilla/5.0 examplebot/1.0',
-    }),
-    'validate with UA string';
+    is
+      $rv->validate( '192.168.1.1', 'hoohabot/2.0' ),
+      [ "example" => "hoohabot" ],
+      'validate with UA string';
 
-ok !$rv->validate('192.168.1.2'), 'failed validtion';
+    ok $rv->validate( '192.168.1.1', { agent => 'Morkzilla/5.0 examplebot/1.0' } ), 'validate with args';
 
-ok !$rv->validate('192.168.1.1', { agent => 'Googlebot' } ), 'failed validtion with UA';
+    ok $rv->validate(
+        {
+            REMOTE_ADDR     => '192.168.1.1',
+            HTTP_USER_AGENT => 'Morkzilla/5.0 examplebot/1.0',
+        }
+      ),
+      'validate with UA string';
+
+    ok $rv->bad_robot(
+        {
+            REMOTE_ADDR     => '192.168.2.3',
+            HTTP_USER_AGENT => 'Morkzilla/5.0 examplebot/1.0',
+        }
+      ),
+      'bad_robot';
+
+    ok !$rv->validate('192.168.1.2'), 'failed validation';
+
+    is $rv->validate( '192.168.2.3', 'Morkzilla/5.0 examplebot/1.0' ), "", 'failed validation';
+
+    ok $rv->bad_robot( '192.168.2.3', 'Morkzilla/5.0 examplebot/1.0' ), 'bad_robot';
+
+    is $rv->validate( '192.168.7.6', 'Morkzilla/5.0 Chromezilla/1.2.3' ), undef, 'unknown UA';
+
+};
+
+subtest 'domain as array of strings' => sub {
+
+    my @robots = (
+        {
+            name   => 'example',
+            agents => [qw( examplebot hoohabot )],
+            domain => [qw( .crawl.example.local )],
+        },
+    );
+
+    isa_ok my $rv = Robots::Validate->new(
+        resolver     => $res,
+        config       => \@robots,
+        die_on_error => 0,
+      ),
+      'Robots::Validate';
+
+    is
+      $rv->validate( '192.168.1.1', 'Morkzilla/5.0 examplebot/1.0' ),
+      [ "example" => "examplebot" ],
+      'validate with UA string';
+
+    is
+      $rv->validate( '192.168.1.1', 'hoohabot/2.0' ),
+      [ "example" => "hoohabot" ],
+      'validate with UA string';
+
+    ok $rv->validate( '192.168.1.1', { agent => 'Morkzilla/5.0 examplebot/1.0' } ), 'validate with args';
+
+    ok $rv->validate(
+        {
+            REMOTE_ADDR     => '192.168.1.1',
+            HTTP_USER_AGENT => 'Morkzilla/5.0 examplebot/1.0',
+        }
+      ),
+      'validate with UA string';
+
+    ok !$rv->validate('192.168.1.2'), 'failed validation';
+
+    ok !$rv->validate( '192.168.2.3', 'Morkzilla/5.0 examplebot/1.0' ), 'failed validation';
+
+    ok !$rv->validate( '192.168.1.1', { agent => 'Googlebot' } ), 'failed validtion with UA';
+
+};
+
+subtest "no user agent" => sub {
+
+    my @robots = (
+        {
+            name    => 'example',
+            agents  => [qw( examplebot hoohabot )],
+            domain  => '/\.crawl\.example\.local$/',
+            network => [ '192.168.1.1' ],
+        },
+    );
+
+    isa_ok my $rv = Robots::Validate->new(
+        resolver     => $res,
+        config       => \@robots,
+      ),
+      'Robots::Validate';
+
+    is $rv->validate('192.168.1.2')  => undef, "unknown IP";
+    is $rv->bad_robot('192.168.1.2') => undef, "unknown IP";
+
+    is $rv->validate( '192.168.1.2', undef ) => undef, "unknown IP";
+    is $rv->validate( '192.168.1.2', '' )    => undef, "unknown IP";
+
+};
 
 done_testing;

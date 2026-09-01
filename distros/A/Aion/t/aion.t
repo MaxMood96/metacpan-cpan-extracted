@@ -332,6 +332,48 @@ package Omega3 { use Aion;
 local ($::_g0 = do {Omega3->new->x}, $::_e0 = do {12}); ::ok defined($::_g0) == defined($::_e0) && $::_g0 eq $::_e0, 'Omega3->new->x  # -> 12' or ::diag ::_struct_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
 
 # 
+# ## Роль наследует роль
+# 
+# Роль может наследовать другую роль через `with`. Так можно уточнять интерфейс: типы требующихся фичей (`req`) и методов (`:Isa`) либо остаются такими же, либо понижаются — становятся более узкими подтипами. Понижение проверяется оператором меньше (`<`): `Num < (Num | Object)`, так как `Num` — подтип объединения `Num | Object`.
+# 
+# Роль `Role::Animal` требует свойство `legs` широкого типа `Num | Object` и метод `sound` с сигнатурой `(Me => Str)`.
+# 
+::done_testing; }; subtest 'Роль наследует роль' => sub { 
+package Role::Animal { use Aion -role;
+
+	req legs => (isa => Num | Object);
+	sub sound : Isa(Me => Str);
+}
+
+# 
+# Роль `Role::Bird` наследует `Role::Animal`, но понижает тип `legs` до `Num`, а сигнатуру метода `sound` оставляет прежней.
+# 
+
+package Role::Bird { use Aion -role;
+
+	with qw/Role::Animal/;
+	req legs => (isa => Num);
+	sub sound : Isa(Me => Str);
+}
+
+# 
+# Класс `Ex::Sparrow` использует роль `Role::Bird` и реализует все её требования.
+# 
+
+package Ex::Sparrow { use Aion;
+	with qw/Role::Bird/;
+
+	has legs => (is => 'ro', isa => Num, default => 2);
+	sub sound : Isa(Me => Str) { 'chirp' }
+
+local ($::_g0 = do {Num < (Num | Object)}, $::_e0 = do {1}); ::ok defined($::_g0) == defined($::_e0) && $::_g0 eq $::_e0, '	Num < (Num | Object)  # -> 1' or ::diag ::_struct_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+}
+
+my $sparrow = Ex::Sparrow->new;
+local ($::_g0 = do {$sparrow->legs}, $::_e0 = "2"); ::ok $::_g0 eq $::_e0, '$sparrow->legs  # => 2' or ::diag ::_string_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+local ($::_g0 = do {$sparrow->sound}, $::_e0 = "chirp"); ::ok $::_g0 eq $::_e0, '$sparrow->sound # => chirp' or ::diag ::_string_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+
+# 
 # # ASPECTS
 # 
 # `use Aion` включает в модуль следующие аспекты для использования в `has`:

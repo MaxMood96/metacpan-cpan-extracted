@@ -1,0 +1,198 @@
+#!perl
+
+=head1 NAME
+
+rebuild-robots-config
+
+=head1 SYNOPSIS
+
+    perl devel/rebuild-robots-config robots.toml > rebuilt-robots.toml
+
+=head1 DESCRIPTION
+
+This is a quick-and-dirty tool for parsing, normalising and updating the F<robots.toml> configuration.
+
+One of the things that it can do is to read the network information and update that.
+(If the data cannot be parsed, then the existing data will not be overridden.)
+
+Each robot contains metadata of the form
+
+    ## Header-Field: Some value
+
+The metadata that are handled by this utility are
+
+=head2 Network
+
+    ## Network: http://example.com/some-bot-ip-list.json
+
+This is a URL containing data about what network blocks the robot connects from.
+
+Plain text is assumed to have one IP address or CIDR per line.
+
+JSON is assumed to be follow the common schema
+
+    {
+      "creationTime": "2026-08-24T14:45:49.000000",
+      "prefixes": [
+        {
+            "ipv6Prefix": "2001:4860:4801:2008::/64"
+        },
+        {
+            "ipv4Prefix": "74.125.219.96/27"
+        }
+      ]
+    }
+
+However, the means of parsing this can be overridden by setting L</Query>.
+
+It may be specified multiple times.
+
+=head2 Query
+
+    ## Query: .prefixes[] | .ipv4Prefix // .ipv6Prefix
+
+This is a query to feed into L<JQ::Lite> for querying JSON data.
+
+=head2 Date
+
+    ## Date: 2024-08-24
+
+This is the date that the network information was last updated.
+
+=head2 About
+
+    ## About: https://example.com
+
+This is a URL with general information about the robot.
+
+=head2 See-Also
+
+    ## See-Also: https://example.com/list-of-bots-in-html-that-cannot-be-parsed
+
+This contains additional reference information.
+
+=head2 Note
+
+    ## Note: This is a user-readable comment explaining something.
+
+This is a comment or note.
+
+=head1 SECURITY CONSIDERATIONS
+
+This utility will attempt to read information about the robots from and update the configuration.
+That involves retrieving files from websites, parsing them, and updating the configuration based on their contents.
+
+Please verify that the sources of information are trustworthy and that the configuration is not broken by updates.
+
+=head1 AUTHOR
+
+Robert Rothenberg <perl@rhizomnic.com>
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is Copyright (c) 2018-2026 by Robert Rothenberg.
+
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
+
+=cut
+
+use v5.24;
+use warnings;
+
+use File::Slurper qw( read_lines );
+use HTTP::Tiny;
+use JQ::Lite;
+use String::Util qw( trim );
+use TOML::Tiny qw( from_toml to_toml );
+
+use experimental qw( signatures );
+
+my ($year, $month, $day) = reverse( (localtime)[3..5] );
+my $date = sprintf('%4u-%02u-%02u', $year + 1900, $month + 1, $day );
+
+my $file = shift;
+
+my @lines = read_lines($file);
+
+my @buffer;
+for my $line (@lines) {
+
+    my $text = trim($line);
+    next if $text eq "";
+
+    if ( $text =~ /\A \[ [\w\-]+ \] \z/x ) {
+        process_section(\@buffer);
+        @buffer = ()
+    }
+
+    push @buffer, $text;
+}
+
+process_section(\@buffer);
+
+
+sub process_section($buffer) {
+    return unless $buffer->@*;
+
+    my @networks;
+    my %fields;
+
+    my sub _normalise_header($line) {
+        return $line unless $line =~ /\A \#\#+ \s* \w+(?:-\w+)* :/ax;
+        my ($field, $value) = $line =~ /\A \#\#+ \s* (\w+(?:-\w+)* ): \s* (\S.*) \z/x;
+        $field = lc($field) =~ s/\b([a-z])/\U$1/gr;
+        push @networks, $value if $field =~ /\A Network/ax;
+        $fields{$field} = $value;
+        return '## ' . $field . ': ' . $value;
+    }
+
+    my ($name, @lines ) = $buffer->@*;
+
+    my @info = map { _normalise_header($_) } grep { /\A \# /xa } @lines;
+
+    my $data = from_toml( join("\n", @lines) );
+
+    if ( @networks ) {
+
+        my $jq = JQ::Lite->new;
+
+        my @ips;
+        for my $url (@networks) {
+
+            my $res = HTTP::Tiny->new->get($url);
+            if ( $res->{success} ) {
+
+                my $type = $res->{headers}{"content-type"} // "";
+                if ( $type =~ m[ \A application / (json|octet-stream) \b ]x ) {
+
+                    my $query = $fields{Query} //  '.prefixes[] | .ipv4Prefix // .ipv6Prefix';
+                    push @ips, map { trim($_) } grep { !!$_ } $jq->run_query( $res->{content}, $query );
+
+                }
+                elsif ( $type eq "text/plain" ) {
+
+                    push @ips, map { trim($_) } grep { !!$_ } split /[\n\r]+/, $res->{content};
+                }
+            }
+            else {
+                warn "# Request to ${url} returned status " . $res->{status};
+            }
+        }
+
+        if (@ips) {
+            $data->{network} = \@ips;
+            @info = grep { $_ !~ /\A \#\# [ ] Date: /x } @info;
+            unshift @info, "## Date: $date";
+        }
+
+    }
+
+    my $text = to_toml($data);
+
+    push @info, '' if @info;
+
+    say join("\n", $name, @info, $text, '');
+
+}

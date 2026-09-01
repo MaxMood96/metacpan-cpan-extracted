@@ -1,5 +1,11 @@
 Revision history for Crypt-OpenSSL3
 
+0.013     2026-09-01 00:27:20+02:00 Europe/Brussels
+          - Add get_param method to X509::Store
+          - Handle invalid values in STACK_TO_ARRAY
+          - Add password callback support when reading private keys
+          - Made params argument to SKey import_SKEYMGMT optional
+
 0.012     2026-08-28 12:44:12+02:00 Europe/Brussels
           - Add version guards for OpenSSL 3.5
 

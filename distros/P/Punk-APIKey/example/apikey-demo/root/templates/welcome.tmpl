@@ -1,0 +1,47 @@
+{% if error %}<p class="bad">{% error %}</p>{% end %}
+
+<h2>Sign in</h2>
+
+<p>No password: this demo is about what a key can do, and a password field
+would be the one part of it nobody needed to read. Any address with an
+<code>@</code> works, and the account is created on first sight as an
+<code>admin</code>.</p>
+
+<form method="post" action="{% url.login %}" class="row">
+  {% raw csrf %}
+  <input name="email" type="email" required autocomplete="email"
+         placeholder="you@example.com" aria-label="email">
+  <button>Sign in</button>
+</form>
+
+<h3>What this demonstrates</h3>
+
+<p>A key is <strong>minted once</strong>. The plaintext is on the response
+that made it and nowhere else - the row keeps a SHA-256 digest and a short
+prefix, which is enough to recognise a key in a list and not enough to
+rebuild one.</p>
+
+<p><strong>Scopes are a flat set</strong> with a declared vocabulary:
+<code>write</code> does not imply <code>read</code> unless the application
+issues both, because an API scope is a permission and not a rank.</p>
+
+<p><strong>A key answers to its owner's standing.</strong> Suspend the
+account and every key stops; demote it and an <code>admin</code> scope drops
+while the rest keep working. The key's own row does not change.</p>
+
+<p><strong>Denial is an API's denial.</strong> 401 with
+<code>WWW-Authenticate: Bearer</code> for a credential that is not good, 403
+for a scope it lacks, and never a redirect - a browser is not what is on the
+other end of a key.</p>
+
+{% if users %}<h3>Accounts that exist</h3>
+<table>
+  <tr><th>id</th><th>email</th><th>role</th><th>standing</th></tr>
+{% for u in users %}  <tr>
+    <td><code>{% u.id %}</code></td>
+    <td>{% u.email %}</td>
+    <td><code>{% u.role %}</code></td>
+    <td>{% if u.suspended %}<b class="bad">suspended</b>{% else %}good{% end %}</td>
+  </tr>
+{% end %}</table>
+{% end %}

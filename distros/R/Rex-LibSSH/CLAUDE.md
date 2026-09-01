@@ -45,14 +45,40 @@ task 'deploy', '10.0.0.1', sub {
 ## Dependencies
 
 - `Net::LibSSH` (XS binding for libssh)
-- `Alien::libssh` (provides the libssh C library)
+- `Alien::libssh` (provides the libssh C library, via Net::LibSSH)
 - `Rex` (framework)
 
-## Build
+Consumed downstream by `Rex::GPU` and `Rex::Rancher`, which both
+`recommends 'Rex::LibSSH'` for Hetzner dedicated servers.
+
+## Build and test
 
 Uses `[@Author::GETTY]` Dist::Zilla plugin bundle.
 
 ```bash
+prove -lr t/                        # unit + integration
+prove -lv t/01-rex-integration.t    # the only test that opens a connection
 dzil build
 dzil test
 ```
+
+`t/01-rex-integration.t` spawns a real `sshd` via `t/lib/TestSSHD.pm` and
+`plan skip_all`s without `sshd`/`ssh-keygen` — the suite then reports success
+having connected to nothing. Always say whether it ran.
+
+## Delegation
+
+Delegate behavior-relevant code to the right agent instead of touching it
+yourself — principle and lane are in `.claude/rules/rex-libssh-rules.md`.
+
+| Task | Agent |
+|---|---|
+| Implement / refactor / debug anything under `lib/` | `rex-libssh-worker` (default) |
+| Write/extend tests, reproduce connection failures | `rex-libssh-test-writer` |
+| Pre-release audit | `rex-libssh-release-checker` |
+| POD | `rex-libssh-doc-writer` |
+
+The agents carry their skills via `briefing.skills` (see `.claude/agents/`);
+the main agent delegates rather than loading them. Skill sources live under
+`.claude/skills/` — `rex-libssh-core` is owned here, the rest are hardlinks
+(`manage-skills sync` after a clone).

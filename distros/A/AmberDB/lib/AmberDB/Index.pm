@@ -4,7 +4,7 @@ use 5.016;
 use warnings;
 use Carp qw(croak cluck);
 
-our $VERSION = '5.21.0';
+our $VERSION = '5.22.1';
 
 # =====================================================================
 # OPERATOR AND FIELD RESOLUTION HELPERS (Shared across Index modules)
@@ -75,8 +75,8 @@ sub _resolve_field_value {
 
 # my @vals = $adb->field_to_list($value, $mode, $table_path, $table_info, $blk);
 # Converts ARRAY ref, comma/semicolon delimited string or single value to a normalized list.
-# In 'write' mode, registers text strings into .str with auto-incrementing lastid, or validates rdbm.
-# In 'read' mode, resolves existing string IDs from .str without creating new entries.
+# In 'write' mode, registers text strings into .unq with auto-incrementing lastid, or validates rdbm.
+# In 'read' mode, resolves existing string IDs from .unq without creating new entries.
 # ------------------------------------------------
 sub field_to_list {
 
@@ -120,80 +120,108 @@ sub field_to_list {
 
     # 2. Mode-specific processing ('write' or 'read')
     $mode = lc($mode);
-    my $is_rdbm = $self->is_rdbm_block( $table_info, $blk );
+    my ( $target_table, $target_blk ) = $self->rdbm_target( $table_info, $blk );
 
-    if ($is_rdbm) {
-        # rdbm fields strictly expect numeric IDs
-        return grep { /^\d+$/ } @list;
+    if ($target_table) {
+        my @ids;
+        foreach my $item (@list) {
+            if ( $item =~ /^\d+$/ ) {
+                push @ids, $item;
+            }
+            elsif ( defined $target_blk ) {
+                my $target_table_path = $self->table_path($target_table);
+                my $target_unq        = "${target_table_path}_${target_blk}.unq";
+                my $nid;
+                if ( -e $target_unq || $self->{_db}->{$target_unq} ) {
+                    ($nid) = $self->index_get( $target_unq, "s:$item", 'raw' );
+                }
+                if ( !defined $nid || $nid eq '' ) {
+                    if ( $mode eq 'write' ) {
+                        my @new_rec;
+                        for ( my $i = 0 ; $i < $target_blk - 1 ; $i++ ) {
+                            $new_rec[$i] = '';
+                        }
+                        $new_rec[ $target_blk - 1 ] = $item;
+                        my $new_target_rid = $self->insert_id( $target_table, 0, @new_rec );
+                        if ($new_target_rid) {
+                            my $t_unq_opened = 0;
+                            if ( !$self->{_db}->{$target_unq} ) {
+                                $self->table_write($target_unq);
+                                $t_unq_opened = 1;
+                            }
+                            $self->index_put( $target_unq, "s:$item", $new_target_rid, 'raw' );
+                            $self->index_put( $target_unq, "n:$new_target_rid", $item, 'raw' );
+                            $self->index_put( $target_unq, 'lastid', $new_target_rid, 'raw' );
+                            if ($t_unq_opened) {
+                                $self->table_close($target_unq);
+                            }
+                            $nid = $new_target_rid;
+                        }
+                    }
+                }
+                push @ids, $nid if defined $nid && $nid ne '';
+            }
+        }
+        return @ids;
     }
 
-    # Non-rdbm (text/string) field handling via .str
-    my $str_path = "${table_path}_$blk.str";
+    # Non-rdbm (text/string) field handling via .unq
+    my $unq_path = "${table_path}_$blk.unq";
     my @result;
 
     if ( $mode eq 'write' ) {
-        my $str_opened = 0;
+        my $unq_opened = 0;
         my $lastid;
 
-        # Open .str for write only if not already open by caller
-        if ( !$self->{_db}->{$str_path} ) {
-            $self->table_write($str_path);
-            $str_opened = 1;
+        # Open .unq for write only if not already open by caller
+        if ( !$self->{_db}->{$unq_path} ) {
+            $self->table_write($unq_path);
+            $unq_opened = 1;
         }
 
         # Cache lastid once before iterating items
-        if ( -e $str_path || $self->{_db}->{$str_path} ) {
-            ($lastid) = $self->index_get( $str_path, 'lastid', 'raw' );
+        if ( -e $unq_path || $self->{_db}->{$unq_path} ) {
+            ($lastid) = $self->index_get( $unq_path, 'lastid', 'raw' );
         }
         $lastid //= 0;
 
         foreach my $item (@list) {
-            my ($nid) = $self->index_get( $str_path, "s:$item", 'raw' );
-            if ( !defined $nid || $nid eq '' ) {
-                ($nid) = $self->index_get( $str_path, $item, 'raw' );
-            }
+            my ($nid) = $self->index_get( $unq_path, "s:$item", 'raw' );
 
             if ( !defined $nid || $nid eq '' ) {
                 $lastid++;
                 $nid = $lastid;
-                $self->index_put( $str_path, "s:$item", $nid, 'raw' );
-                $self->index_put( $str_path, $item, $nid, 'raw' );
-                $self->index_put( $str_path, "n:$nid", $item, 'raw' );
-                $self->index_put( $str_path, $nid, $item, 'raw' );
-                $self->index_put( $str_path, 'lastid', $lastid, 'raw' );
+                $self->index_put( $unq_path, "s:$item", $nid, 'raw' );
+                $self->index_put( $unq_path, "n:$nid", $item, 'raw' );
+                $self->index_put( $unq_path, 'lastid', $lastid, 'raw' );
             }
             else {
                 # Ensure reverse mapping exists
-                my ($rev) = $self->index_get( $str_path, "n:$nid", 'raw' );
+                my ($rev) = $self->index_get( $unq_path, "n:$nid", 'raw' );
                 if ( !defined $rev || $rev eq '' ) {
-                    $self->index_put( $str_path, "n:$nid", $item, 'raw' );
-                    $self->index_put( $str_path, $nid, $item, 'raw' );
-                    $self->index_put( $str_path, "s:$item", $nid, 'raw' );
-                    $self->index_put( $str_path, $item, $nid, 'raw' );
+                    $self->index_put( $unq_path, "n:$nid", $item, 'raw' );
+                    $self->index_put( $unq_path, "s:$item", $nid, 'raw' );
                 }
             }
             push @result, $nid if defined $nid && $nid ne '';
         }
 
-        if ($str_opened) {
-            $self->table_close($str_path);
+        if ($unq_opened) {
+            $self->table_close($unq_path);
         }
     }
     elsif ( $mode eq 'read' ) {
-        my $str_opened = 0;
+        my $unq_opened = 0;
 
-        # Open .str for read only if exists and not already open by caller
-        if ( ( -e $str_path || $self->{_db}->{$str_path} ) && !$self->{_db}->{$str_path} ) {
-            $self->table_read($str_path);
-            $str_opened = 1;
+        # Open .unq for read only if exists and not already open by caller
+        if ( ( -e $unq_path || $self->{_db}->{$unq_path} ) && !$self->{_db}->{$unq_path} ) {
+            $self->table_read($unq_path);
+            $unq_opened = 1;
         }
 
         foreach my $item (@list) {
-            if ( -e $str_path || $self->{_db}->{$str_path} ) {
-                my ($nid) = $self->index_get( $str_path, "s:$item", 'raw' );
-                if ( !defined $nid || $nid eq '' ) {
-                    ($nid) = $self->index_get( $str_path, $item, 'raw' );
-                }
+            if ( -e $unq_path || $self->{_db}->{$unq_path} ) {
+                my ($nid) = $self->index_get( $unq_path, "s:$item", 'raw' );
                 if ( defined $nid && $nid ne '' ) {
                     push @result, $nid;
                 }
@@ -206,8 +234,8 @@ sub field_to_list {
             }
         }
 
-        if ($str_opened) {
-            $self->table_close($str_path);
+        if ($unq_opened) {
+            $self->table_close($unq_path);
         }
     }
     else {
@@ -217,19 +245,23 @@ sub field_to_list {
     return @result;
 }
 
-# my $bool = $adb->is_rdbm_block($table_info, $blk);
+# my ( $target_table, $target_blk ) = $adb->rdbm_target($table_info, $blk);
 # ------------------------------------------------
-sub is_rdbm_block {
+sub rdbm_target {
     my ( $self, $table_info, $blk ) = @_;
-    return 0 unless ref($table_info) eq 'HASH' && $table_info->{blocks};
-    return 0 unless defined $blk && exists $table_info->{blocks}->[$blk];
+    return unless ref($table_info) eq 'HASH' && $table_info->{blocks};
+    return unless defined $blk && exists $table_info->{blocks}->[$blk];
     my $b_def = $table_info->{blocks}->[$blk];
-    return 0 unless ref($b_def) eq 'HASH' && defined $b_def->{rdbm} && $b_def->{rdbm} ne '';
+    return unless ref($b_def) eq 'HASH' && defined $b_def->{rdbm} && $b_def->{rdbm} ne '';
     if ( ref( $b_def->{rdbm} ) eq 'HASH' ) {
-        return $b_def->{rdbm}->{table} ? 1 : 0;
+        my $t = $b_def->{rdbm}->{table};
+        my $b = $b_def->{rdbm}->{display} // 1;
+        return ( $t, $b );
     }
-    return 1 if $b_def->{rdbm} =~ /^[\w\-]+[;:,]\d+/;
-    return 0;
+    if ( $b_def->{rdbm} =~ /^([\w\-]+)[;:,](\d+)/ ) {
+        return ( $1, $2 );
+    }
+    return;
 }
 
 # my @record = $self->repeat_fields($table_info, @record);
@@ -251,6 +283,153 @@ sub repeat_fields {
     return @record;
 }
 
+# ( $ok, $err ) = $adb->unique_check( $table_path, $table_info, $rid, \@fields, $has_id );
+# Validates that any block with valid => "unique" is not already occupied by another record ID.
+# ------------------------------------------------
+sub unique_check {
+    my ( $self, $table_path, $table_info, $rid, $fields, $has_id ) = @_;
+    return 1 unless ref($table_info) eq 'HASH' && ref($table_info->{blocks}) eq 'ARRAY';
+    return 1 unless ref($fields) eq 'ARRAY' && @$fields;
+
+    my @blocks = @{ $table_info->{blocks} };
+    for ( my $i = 0 ; $i < @$fields ; $i++ ) {
+        my $blk_idx = $has_id ? $i : ( $i + 1 );
+        last if $blk_idx >= @blocks;
+
+        my $b = $blocks[$blk_idx];
+        next unless ref($b) eq 'HASH' && defined $b->{valid} && $b->{valid} =~ /unique/i;
+
+        my $val = $fields->[$i];
+        next unless defined $val && $val ne '';
+
+        my $unq_path = "${table_path}_${blk_idx}.unq";
+        next unless -e $unq_path || $self->{_db}->{$unq_path};
+
+        my ($existing_rid) = $self->index_get( $unq_path, "s:$val", 'raw' );
+
+        if ( defined $existing_rid && $existing_rid ne '' && ( !defined $rid || $existing_rid ne $rid ) ) {
+            my $b_name = $b->{name} || $b->{id} || "Block $blk_idx";
+            return ( 0, "Duplicate unique key '$val' on '$b_name' ($b->{id}) - already registered by record ID: $existing_rid" );
+        }
+    }
+    return 1;
+}
+
+# $adb->unique_add( $table_path, $table_info, \@records );
+# Registers unique fields into ${table_path}_${blk}.unq.
+# ------------------------------------------------
+sub unique_add {
+    my ( $self, $table_path, $table_info, $records ) = @_;
+    return unless ref($table_info) eq 'HASH' && ref($table_info->{blocks}) eq 'ARRAY';
+    return unless ref($records) eq 'ARRAY' && @$records;
+
+    my @blocks = @{ $table_info->{blocks} };
+    for ( my $blk = 1 ; $blk < @blocks ; $blk++ ) {
+        my $b = $blocks[$blk];
+        next unless ref($b) eq 'HASH' && defined $b->{valid} && $b->{valid} =~ /unique/i;
+
+        my $unq_path = "${table_path}_${blk}.unq";
+        my $unq_opened = 0;
+        if ( !$self->{_db}->{$unq_path} ) {
+            $self->table_write($unq_path);
+            $unq_opened = 1;
+        }
+
+        foreach my $rec (@$records) {
+            my $rid = $rec->[0];
+            my $val = $rec->[$blk];
+            next unless defined $val && $val ne '';
+
+            $self->index_put( $unq_path, "s:$val", $rid, 'raw' );
+            $self->index_put( $unq_path, "n:$rid", $val, 'raw' );
+            $self->index_put( $unq_path, 'lastid', $rid, 'raw' );
+        }
+
+        if ($unq_opened) {
+            $self->table_close($unq_path);
+        }
+    }
+}
+
+# $adb->unique_del( $table_path, $table_info, \@records );
+# Removes entries from ${table_path}_${blk}.unq upon record deletion.
+# ------------------------------------------------
+sub unique_del {
+    my ( $self, $table_path, $table_info, $records ) = @_;
+    return unless ref($table_info) eq 'HASH' && ref($table_info->{blocks}) eq 'ARRAY';
+    return unless ref($records) eq 'ARRAY' && @$records;
+
+    my @blocks = @{ $table_info->{blocks} };
+    for ( my $blk = 1 ; $blk < @blocks ; $blk++ ) {
+        my $b = $blocks[$blk];
+        next unless ref($b) eq 'HASH' && defined $b->{valid} && $b->{valid} =~ /unique/i;
+
+        my $unq_path = "${table_path}_${blk}.unq";
+        next unless -e $unq_path || $self->{_db}->{$unq_path};
+
+        my $unq_opened = 0;
+        if ( !$self->{_db}->{$unq_path} ) {
+            $self->table_write($unq_path);
+            $unq_opened = 1;
+        }
+
+        foreach my $rec (@$records) {
+            my $rid = $rec->[0];
+            my $val = $rec->[$blk];
+            next unless defined $val && $val ne '';
+
+            $self->index_del( $unq_path, "s:$val" );
+            $self->index_del( $unq_path, "n:$rid" );
+        }
+
+        if ($unq_opened) {
+            $self->table_close($unq_path);
+        }
+    }
+}
+
+# $adb->unique_modify( $table_path, $table_info, \@pairs );
+# Updates ${table_path}_${blk}.unq when unique field values change.
+# ------------------------------------------------
+sub unique_modify {
+    my ( $self, $table_path, $table_info, $pairs ) = @_;
+    return unless ref($table_info) eq 'HASH' && ref($table_info->{blocks}) eq 'ARRAY';
+    return unless ref($pairs) eq 'ARRAY' && @$pairs;
+
+    my @blocks = @{ $table_info->{blocks} };
+    for ( my $blk = 1 ; $blk < @blocks ; $blk++ ) {
+        my $b = $blocks[$blk];
+        next unless ref($b) eq 'HASH' && defined $b->{valid} && $b->{valid} =~ /unique/i;
+
+        my $unq_path = "${table_path}_${blk}.unq";
+        my $unq_opened = 0;
+        if ( !$self->{_db}->{$unq_path} ) {
+            $self->table_write($unq_path);
+            $unq_opened = 1;
+        }
+
+        foreach my $pair (@$pairs) {
+            my ( $rid, $old_rec, $new_rec ) = @$pair;
+            my $ov = $old_rec->[$blk] // '';
+            my $nv = $new_rec->[$blk] // '';
+            next if $ov eq $nv;
+
+            if ( $ov ne '' ) {
+                $self->index_del( $unq_path, "s:$ov" );
+            }
+            if ( $nv ne '' ) {
+                $self->index_put( $unq_path, "s:$nv", $rid, 'raw' );
+                $self->index_put( $unq_path, "n:$rid", $nv, 'raw' );
+                $self->index_put( $unq_path, 'lastid', $rid, 'raw' );
+            }
+        }
+
+        if ($unq_opened) {
+            $self->table_close($unq_path);
+        }
+    }
+}
+
 # $adb->match_add($table_path, $table_info, \@records);
 # $adb->match_del($table_path, $table_info, \@records);
 # $adb->match_modify($table_path, $table_info, \@pairs);
@@ -268,14 +447,14 @@ sub match_add {
     my %acc;
 
     foreach my $blk ( @{ $table_info->{match_block} } ) {
-        my $str_path = "${table_path}_$blk.str";
-        my $is_rdbm = $self->is_rdbm_block( $table_info, $blk );
+        my $unq_path = "${table_path}_$blk.unq";
+        my ( $is_rdbm ) = $self->rdbm_target( $table_info, $blk );
 
-        # Batch open .str for write to optimize multiple records
-        my $str_opened = 0;
+        # Batch open .unq for write to optimize multiple records
+        my $unq_opened = 0;
         if ( !$is_rdbm ) {
-            $self->table_write($str_path);
-            $str_opened = 1;
+            $self->table_write($unq_path);
+            $unq_opened = 1;
         }
 
         foreach my $rec (@$records) {
@@ -285,8 +464,8 @@ sub match_add {
             push @{ $acc{$blk}{$_} }, $rid for @ids;
         }
 
-        if ($str_opened) {
-            $self->table_close($str_path);
+        if ($unq_opened) {
+            $self->table_close($unq_path);
         }
     }
 
@@ -316,13 +495,13 @@ sub match_del {
     my %acc;
 
     foreach my $blk ( @{ $table_info->{match_block} } ) {
-        my $str_path = "${table_path}_$blk.str";
-        my $is_rdbm = $self->is_rdbm_block( $table_info, $blk );
+        my $unq_path = "${table_path}_$blk.unq";
+        my ( $is_rdbm ) = $self->rdbm_target( $table_info, $blk );
 
-        my $str_opened = 0;
-        if ( !$is_rdbm && -e $str_path ) {
-            $self->table_read($str_path);
-            $str_opened = 1;
+        my $unq_opened = 0;
+        if ( !$is_rdbm && -e $unq_path ) {
+            $self->table_read($unq_path);
+            $unq_opened = 1;
         }
 
         foreach my $rec (@$records) {
@@ -332,8 +511,8 @@ sub match_del {
             push @{ $acc{$blk}{$_} }, $rid for @ids;
         }
 
-        if ($str_opened) {
-            $self->table_close($str_path);
+        if ($unq_opened) {
+            $self->table_close($unq_path);
         }
     }
 
@@ -369,13 +548,13 @@ sub match_modify {
     my ( %del_acc, %add_acc );
 
     foreach my $blk ( @{ $table_info->{match_block} } ) {
-        my $str_path = "${table_path}_$blk.str";
-        my $is_rdbm = $self->is_rdbm_block( $table_info, $blk );
+        my $unq_path = "${table_path}_$blk.unq";
+        my ( $is_rdbm ) = $self->rdbm_target( $table_info, $blk );
 
-        my $str_opened = 0;
+        my $unq_opened = 0;
         if ( !$is_rdbm ) {
-            $self->table_write($str_path);
-            $str_opened = 1;
+            $self->table_write($unq_path);
+            $unq_opened = 1;
         }
 
         foreach my $pair (@$pairs) {
@@ -397,8 +576,8 @@ sub match_modify {
             }
         }
 
-        if ($str_opened) {
-            $self->table_close($str_path);
+        if ($unq_opened) {
+            $self->table_close($unq_path);
         }
     }
 
@@ -655,31 +834,31 @@ sub records_del {
     }
 }
 
-# my $rw_link = $adb->set_seourl($table, $record);
-# my $rw_link = $adb->set_seourl($table, $record, 1);
+# my $rw_link = $adb->set_slug($table, $record);
+# my $rw_link = $adb->set_slug($table, $record, 1);
 # ------------------------------------------------
-sub set_seourl {
+sub set_slug {
 
     my ( $self, $table, $record, $write ) = @_;
 
-    $self->{seo_max_len} ||= 64;
+    $self->{slug_max_len} ||= 64;
 
     $table or return;
     (defined $record && ref($record) eq "ARRAY") or return;
     my $table_info = $self->table_info($table);
-    $table_info->{seo_block} or return;
+    $table_info->{slug_block} or return;
 
-    # To get seourl value, first the table_path
+    # To get slug value, first the table_path
     my $table_path = $self->table_path($table);
-    my $rwt0_path  = "${table_path}_0.rwt";
-    my $rwt1_path  = "${table_path}_1.rwt";
+    my $slg0_path  = "${table_path}_0.slg";
+    my $slg1_path  = "${table_path}_1.slg";
 
     my ( $val, %db_rw0, %db_rw1 );
 
-# blocks -> rdbm must be defined to read from other related files.
+    # blocks -> rdbm must be defined to read from other related files.
     my $rw_link;
     my $fields = [ @{$record} ];
-    for my $i ( @{ $table_info->{seo_block} } ) {
+    for my $i ( @{ $table_info->{slug_block} } ) {
         $fields->[$i] =~ s/[;,].*// if defined $fields->[$i];
         my $blok = $table_info->{blocks}->[$i] || {};
         if ( defined $blok->{rdbm} && ref( $blok->{rdbm} ) ne 'HASH' && $blok->{rdbm} =~ /([\w]+)[;:,]([\d]+)/ ) {
@@ -705,8 +884,8 @@ sub set_seourl {
         # ascii and cleaned representation
         $fields->[$i] = lc( $self->to_ascii( $fields->[$i] ) );
         $fields->[$i] =~ s/[^a-z0-9]+/-/g;
-        if ( length( $fields->[$i] ) > $self->{seo_max_len} ) {
-            $fields->[$i] = substr( $fields->[$i], 0, $self->{seo_max_len} );
+        if ( length( $fields->[$i] ) > $self->{slug_max_len} ) {
+            $fields->[$i] = substr( $fields->[$i], 0, $self->{slug_max_len} );
         }
         $fields->[$i] =~ s/^\-|\-$//;
         $fields->[$i] or next;
@@ -714,39 +893,39 @@ sub set_seourl {
         $rw_link .= $fields->[$i];
     }
 
-    # write mode (atomically locks both _1.rwt and _0.rwt to avoid race conditions)
+    # write mode (atomically locks both _1.slg and _0.slg to avoid race conditions)
     if ($write) {
-        my $ok1 = $self->table_write($rwt1_path);
+        my $ok1 = $self->table_write($slg1_path);
         unless ($ok1) {
-            $self->transact_error( $rwt1_path, "cannot open" );
+            $self->transact_error( $slg1_path, "cannot open" );
             return;
         }
 
-        my $ok0 = $self->table_write($rwt0_path);
+        my $ok0 = $self->table_write($slg0_path);
         unless ($ok0) {
-            $self->table_close($rwt1_path);
-            $self->transact_error( $rwt0_path, "cannot open" );
+            $self->table_close($slg1_path);
+            $self->transact_error( $slg0_path, "cannot open" );
             return;
         }
 
-        my $recs_val = $self->recs_get( $rwt1_path, $rw_link )->{$rw_link};
+        my $recs_val = $self->recs_get( $slg1_path, $rw_link )->{$rw_link};
         if ( $recs_val && $recs_val ne $record->[0] ) {
             $rw_link .= "-$record->[0]";
         }
-        $self->recs_put( $rwt1_path, [ $rw_link, $record->[0] ] );
-        $self->recs_put( $rwt0_path, [ $record->[0], $rw_link ] );
+        $self->recs_put( $slg1_path, [ $rw_link, $record->[0] ] );
+        $self->recs_put( $slg0_path, [ $record->[0], $rw_link ] );
 
-        $self->table_close($rwt1_path);
-        $self->table_close($rwt0_path);
+        $self->table_close($slg1_path);
+        $self->table_close($slg0_path);
     }
 
     return $rw_link;
 }
 
-# my ($links) = $adb->get_seourl($table, 0, @records_ids);
-# my ($links) = $adb->get_seourl($table, 1, @records_ids);
+# my ($links) = $adb->get_slug($table, 0, @records_ids);
+# my ($links) = $adb->get_slug($table, 1, @records_ids);
 # ------------------------------------------------
-sub get_seourl {
+sub get_slug {
 
     my ( $self, $table, $type, @records ) = @_;
 
@@ -757,25 +936,25 @@ sub get_seourl {
     scalar @records or return {};
     $type //= 0;
 
-    # To get seourl value, first the table_path
+    # To get slug value, first the table_path
     my $table_path = $self->table_path($table);
     my $table_info = $self->table_info($table);
-    return {} unless $table_info->{seo_block};
-    return {} unless -e "${table_path}_$type.rwt";
+    return {} unless $table_info->{slug_block};
+    return {} unless -e "${table_path}_$type.slg";
 
-    my $rwt_path = "${table_path}_$type.rwt";
-    return {} unless -e $rwt_path;
+    my $slg_path = "${table_path}_$type.slg";
+    return {} unless -e $slg_path;
 
-    $self->table_read($rwt_path) or return {};
+    $self->table_read($slg_path) or return {};
     my @rids = map {
         my $rid = ref($_) eq "ARRAY" ? $_->[0] : $_;
         $rid =~ s/^\///;
         $rid =~ s/\/$//;
         $rid;
     } @records;
-    my $vals = $self->recs_get( $rwt_path, @rids );
+    my $vals = $self->recs_get( $slg_path, @rids );
     $links->{$_} = $vals->{$_} for @rids;
-    $self->table_close($rwt_path);
+    $self->table_close($slg_path);
 
     return $links;
 }
@@ -1151,25 +1330,25 @@ __END__
 
 =head1 NAME
 
-AmberDB::Index - Inverted search, exact field match, binary sort, and SEO URL rewrite indexing engine
+AmberDB::Index - Inverted search, exact field match, binary sort, and URL slug rewrite indexing engine
 
 =head1 SYNOPSIS
 
   # Indexing methods are called directly on the AmberDB instance ($adb):
 
-  # 1. SEO URL Slug generation and reverse lookup (.rwt)
-  my $slug     = $adb->set_seourl("catalog_product", $record_ref, 1);
-  my $slug_map = $adb->get_seourl("catalog_product", 0, 101, 102);
+  # 1. URL Slug generation and reverse lookup (.slg)
+  my $slug     = $adb->set_slug("catalog_product", $record_ref, 1);
+  my $slug_map = $adb->get_slug("catalog_product", 0, 101, 102);
 
-  # 2. Normalization of array or delimited values into clean lists and .str IDs
-  my @str_ids  = $adb->field_to_list($raw_val, 'write', $table_path, $table_info, $blk);
+  # 2. Normalization of array or delimited values into clean lists and .unq IDs
+  my @unq_ids  = $adb->field_to_list($raw_val, 'write', $table_path, $table_info, $blk);
 
   # 3. Monotonic sort key generation for fixed-width sorting (.srt)
   my $key      = $adb->normalize_sort_key("1250.50", "num");
 
 =head1 DESCRIPTION
 
-C<AmberDB::Index> manages flat-file inverted search indexes (C<.src>), exact field matching indexes (C<.fld>), primary key lists (C<.inx>), binary pre-sorted record indexes (C<.srt>), and bidirectional SEO URL rewrite dictionaries (C<.rwt>).
+C<AmberDB::Index> manages flat-file inverted search indexes (C<.src>), exact field matching indexes (C<.fld>), primary key lists (C<.inx>), binary pre-sorted record indexes (C<.srt>), and bidirectional URL slug rewrite dictionaries (C<.slg>).
 
 Facet forward indexing (C<.fac>) is handled by C<AmberDB::Index::Facet>, and dual-tier cold record indexing (C<.jinx>, C<.jfld>, C<.jsrc>) is managed by C<AmberDB::Index::Junk>.
 
@@ -1181,8 +1360,8 @@ B<Inheritance Note:> C<AmberDB> inherits from C<AmberDB::Index> via C<use parent
 
 Converts ARRAY references, comma/semicolon-delimited strings, or single scalars into a normalized list of trimmed values.
 =over 4
-=item * In C<'write'> mode: Registers text values into the per-block string dictionary (C<_${blk}.str>) with auto-incrementing numeric IDs (or validates foreign key IDs for RDBM fields).
-=item * In C<'read'> mode: Resolves existing string IDs from C<_${blk}.str> without creating new dictionary entries.
+=item * In C<'write'> mode: Registers text values into the per-block unique/dictionary index (C<_${blk}.unq>) with auto-incrementing numeric IDs (or validates foreign key IDs for RDBM fields).
+=item * In C<'read'> mode: Resolves existing string IDs from C<_${blk}.unq> without creating new dictionary entries.
 =back
 
   my @ids = $adb->field_to_list("Red, Blue, Green", 'write', $path, $info, 3);
@@ -1198,29 +1377,29 @@ Normalizes an input value into a fixed-width byte key for fast monotonic sorting
 
   my $sort_key = $adb->normalize_sort_key("249.90", "num");
 
-=head2 set_seourl($table_id, $record, [$write_mode])
+=head2 set_slug($table_id, $record, [$write_mode])
 
-Generates a URL-friendly ASCII slug from designated schema title blocks and registers bidirectional mapping in C<_0.rwt> (Record ID -E<gt> Slug) and C<_1.rwt> (Slug -E<gt> Record ID).
+Generates a URL-friendly ASCII slug from designated schema title blocks (C<slug_block>) and registers bidirectional mapping in C<_0.slg> (Record ID -E<gt> Slug) and C<_1.slg> (Slug -E<gt> Record ID).
 
-  my $slug = $adb->set_seourl("catalog_product", \@record, 1);
+  my $slug = $adb->set_slug("catalog_product", \@record, 1);
   # => "kablosuz-bluetooth-kulaklik"
 
-=head2 get_seourl($table_id, [$type], @record_or_slug_ids)
+=head2 get_slug($table_id, [$type], @record_or_slug_ids)
 
-Resolves SEO URL slugs or reverse-maps slugs back to record IDs.
+Resolves URL slugs or reverse-maps slugs back to record IDs.
 =over 4
-=item * C<$type = 0>: Returns C<{ record_id =E<gt> slug }> (default, reads C<_0.rwt>).
-=item * C<$type = 1>: Returns C<{ slug =E<gt> record_id }> (reads C<_1.rwt>).
+=item * C<$type = 0>: Returns C<{ record_id =E<gt> slug }> (default, reads C<_0.slg>).
+=item * C<$type = 1>: Returns C<{ slug =E<gt> record_id }> (reads C<_1.slg>).
 =back
 
-  my $urls = $adb->get_seourl("catalog_product", 0, 101, 102);
+  my $slugs = $adb->get_slug("catalog_product", 0, 101, 102);
   # => { 101 => "kablosuz-kulaklik", 102 => "akilli-saat" }
 
-=head2 is_rdbm_block($table_info, $blk)
+=head2 rdbm_target($table_info, $blk)
 
-Returns C<1> if the specified schema block is configured as a relational foreign key (RDBM), C<0> otherwise.
+Returns C<($target_table, $target_blk)> if the specified schema block is configured as a relational foreign key (RDBM), or empty list / undef otherwise.
 
-  my $is_fk = $adb->is_rdbm_block($schema, 2);
+  my ($target_table, $target_blk) = $adb->rdbm_target($schema, 2);
 
 =head2 repeat_fields($table_info, @record)
 

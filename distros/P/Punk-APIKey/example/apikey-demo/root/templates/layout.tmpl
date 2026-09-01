@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% title | default('API key demo') %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1><a href="/">Punk::Plugin::APIKey</a></h1>
+  <p class="lede">One keyword. Long-lived credentials that answer to their
+  owner's current standing.</p>
+</header>
+
+<main>
+{% content %}
+</main>
+
+<footer><small>The database is a file under var/, and the session key is
+minted at boot - restarting the server signs everybody out and leaves the
+keys where they are. Every key you mint here is real: it will authenticate
+until you revoke it or drop the file.</small></footer>
+</body>
+</html>

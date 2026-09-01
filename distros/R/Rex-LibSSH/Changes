@@ -1,5 +1,20 @@
 Revision history for Rex-LibSSH
 
+0.003     2026-09-01 00:07:32Z
+  - exec() now matches the 3-arg signature Rex::Commands::Run invokes
+    ($cmd, $path, $option), so env hashes and shell options actually
+    reach the SSH channel.
+  - Reject paths containing NUL bytes in _q() and shell metacharacters
+    in glob() patterns; the latter closes an injection vector through
+    the remote shell expansion step that other paths avoid by being
+    quoted.
+  - Add t/04-no-sftp.t and t/lib/TestSSHDNoSFTP.pm to prove every
+    Fs/File operation works against an sshd without a Subsystem sftp
+    line — the environment this distribution was built for.
+  - Document that Fs::LibSSH never routes through Rex::Interface::Fs::Sudo
+    (known limitation, not a bug) and that upload/download/read-mode open
+    hold the whole file in memory on both ends.
+
 0.002     2026-03-29 04:09:31Z
   - Reset session timeout to 0 after connect to allow long-running commands
 

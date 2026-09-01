@@ -12,6 +12,13 @@
  */
 
 #define PERL_NO_GET_CONTEXT
+
+/* See the NO_XSLOCKS note in Archive.xs: under Strawberry's
+ * PERL_IMPLICIT_SYS, XSUB.h would rewrite this file's malloc/free into
+ * perl's allocator while its sibling translation units keep libc's, and
+ * a buffer allocated here would be freed to the wrong pool. */
+#define NO_XSLOCKS
+
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"

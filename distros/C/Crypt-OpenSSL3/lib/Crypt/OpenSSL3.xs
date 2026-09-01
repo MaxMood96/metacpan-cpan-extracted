@@ -170,13 +170,14 @@ DUPLICATING_TYPE(BN, BigNum, BigNum);
 #define BN_CTX_dup(old) BN_CTX_new()
 DUPLICATING_TYPE(BN_CTX, BigNum__Context, BigNum::Context)
 
-static void* ASN1_VALUE_dup(int type, void* value) {
-    if (type == V_ASN1_NULL || type == V_ASN1_BOOLEAN) {
-		return value;
+static void* ASN1_TYPE_dupvalue(ASN1_TYPE* any) {
+	int type = ASN1_TYPE_get(any);
+    if (type == V_ASN1_NULL || type == V_ASN1_BOOLEAN || type == V_ASN1_UNDEF) {
+		return (void*)(long)any->value.boolean;
     } else if (type == V_ASN1_OBJECT) {
-        return OBJ_dup(value);
+        return OBJ_dup(any->value.object);
     } else {
-        return ASN1_STRING_dup(value);
+        return ASN1_STRING_dup(any->value.utf8string);
     }
 }
 
@@ -204,7 +205,7 @@ static int ASN1_DECODER_dup(pTHX_ MAGIC* mg, CLONE_PARAMS* params) {
 	ASN1_DECODER* buffer = (ASN1_DECODER*)mg->mg_ptr;
 	STRLEN used = buffer->ptr - buffer->begin;
 	STRLEN len;
-	buffer->begin = SvPVbyte(mg->mg_obj, len);
+	buffer->begin = (unsigned char*)SvPVbyte(mg->mg_obj, len);
 	buffer->ptr = buffer->begin + used;
 	buffer->end = buffer->begin + len;
 	return 0;
@@ -336,7 +337,7 @@ SV* S_ASN1_DECODER_new(pTHX_ SV* input) {
 	SV* buffer = newSVsv(input);
 	ASN1_DECODER tmp;
 	STRLEN len;
-	tmp.begin = tmp.ptr = SvPVbyte(buffer, len);
+	tmp.begin = tmp.ptr = (unsigned char*)SvPVbyte(buffer, len);
 	tmp.end = tmp.begin + len;
 	SV* result = newSV(0);
 	MAGIC* mg = sv_magicext(newSVrv(result, "Crypt::OpenSSL3::ASN1::Decoder"), buffer, PERL_MAGIC_ext, &Crypt__OpenSSL3__ASN1__Decoder_magic, (const char*)&tmp, sizeof(ASN1_DECODER));
@@ -434,7 +435,7 @@ SV* S_EDIPARTYNAME_to_string(pTHX_ EDIPARTYNAME* edi) {
 		sv_catpvs(result, "@");
 		const unsigned char* data = ASN1_STRING_get0_data(edi->nameAssigner);
 		int length = ASN1_STRING_length(edi->nameAssigner);
-		sv_catpvn(result, data, length);
+		sv_catpvn(result, (const char*)data, length);
 	}
 	return result;
 }
@@ -738,14 +739,26 @@ static int EVP_PKEY_verify_init_ex2(EVP_PKEY_CTX *ctx, EVP_SIGNATURE *algo, cons
 	}
 
 #define STACK_FROM_ARRAY(TYPE, var, arg)\
-	var = sk_ ## TYPE ## _new(NULL);\
-	if (SvROK(arg) && SvTYPE(SvRV(arg)) == SVt_PVAV) {\
-		for (int i = 0; i < av_count((AV*)SvRV(arg)); ++i) {\
-			TYPE* value = get_ ## TYPE(aTHX_ *av_fetch((AV*)SvRV(arg), i, FALSE));\
-			if (value)\
-				sk_ ## TYPE ## _push(var, value);\
-		}\
-	}
+	STMT_START {\
+		if (SvROK(arg) && SvTYPE(SvRV(arg)) == SVt_PVAV) {\
+			var = sk_ ## TYPE ## _new(NULL);\
+			if (!var)\
+				croak("Could not allocate " #TYPE " stack");\
+			for (ssize_t i = 0; i < (ssize_t)av_count((AV*)SvRV(arg)); ++i) {\
+				SV** svp = av_fetch((AV*)SvRV(arg), i, FALSE);\
+				if (!svp || !*svp)\
+					continue;\
+				TYPE* value = get_ ## TYPE(aTHX_ *svp);\
+				if (value)\
+					sk_ ## TYPE ## _push(var, value);\
+				else {\
+					sk_ ## TYPE ## _free(var);\
+					croak("Invalid value in " #TYPE " stack");\
+				}\
+			}\
+		} else \
+			croak("Invalid array of " #TYPE);\
+	} STMT_END
 
 #define STACK_MEMBER_UPREF(TYPE, stack)\
 	STMT_START {\
@@ -899,6 +912,34 @@ DEFINE_PROVIDED_CALLBACK(EVP_MAC)
 DEFINE_PROVIDED_CALLBACK(EVP_KDF)
 DEFINE_PROVIDED_CALLBACK(EVP_SIGNATURE)
 
+static int pem_password_callback(char *buf, int size, int rwflag, void *u) {
+	dTHX;
+	dSP;
+	int result = -1;
+
+	SV* callback = (SV*)u;
+	ENTER;
+	SAVETMPS;
+	PUSHMARK(sp);
+	mXPUSHs(newSViv(rwflag));
+	PUTBACK;
+	int ret = call_sv(callback, G_SCALAR|G_EVAL);
+	SPAGAIN;
+	SV* returnee = ret > 0 ? POPs : &PL_sv_undef;
+	if (SvOK(returnee) && !SvTRUE(ERRSV)) {
+		STRLEN length;
+		const char* value = SvPVbyte(returnee, length);
+		if (length <= INT_MAX && (STRLEN)size >= length) {
+			Copy(value, buf, length, char);
+			result = (int)length;
+		}
+	}
+	PUTBACK;
+	FREETMPS;
+	LEAVE;
+	return result;
+}
+
 static ASN1_INTEGER* TS_RESP_CTX_serial_callback(struct TS_resp_ctx* ctx, void* data) {
 	dTHX;
 	dSP;
@@ -941,6 +982,8 @@ static int TS_RESP_CTX_time_callback(struct TS_resp_ctx* ctx, void* data, long *
 		*sec = SvIV(ST(0));
 		result = 1;
 	}
+	SP -= ret;
+	PUTBACK;
 	FREETMPS;
 	LEAVE;
 	return result;
@@ -1354,7 +1397,7 @@ NO_OUTPUT int PEM_read(Crypt::OpenSSL3::BIO bp, OUTLIST char *name, OUTLIST char
 C_ARGS: bp, &name, &header, &ptr, &len
 POSTCALL:
 	if (RETVAL)
-		data = newSVpvn(ptr, len);
+		data = newSVpvn((const char*)ptr, len);
 	else
 		XSRETURN_EMPTY;
 CLEANUP:
@@ -1439,7 +1482,7 @@ POSTCALL:
 	if (RETVAL >= 0)
 		set_buffer_length(out, RETVAL);
 
-Crypt::OpenSSL3::BigNum BN_bin2bn(const unsigned char *s, int length(s))
+Crypt::OpenSSL3::BigNum BN_bin2bn(class, const unsigned char *s, int length(s))
 INTERFACE: BN_bin2bn BN_lebin2bn BN_native2bn
 C_ARGS: s, XSauto_length_of_s, NULL
 
@@ -1455,7 +1498,7 @@ POSTCALL:
 	if (RETVAL >= 0)
 		set_buffer_length(out, RETVAL);
 
-Crypt::OpenSSL3::BigNum BN_signed_bin2bn(const unsigned char *s, int length(s))
+Crypt::OpenSSL3::BigNum BN_signed_bin2bn(class, const unsigned char *s, int length(s))
 INTERFACE: BN_signed_bin2bn BN_signed_lebin2bn BN_signed_native2bn
 C_ARGS: s, XSauto_length_of_s, NULL
 
@@ -1466,7 +1509,7 @@ INTERFACE: BN_bn2hex  BN_bn2dec
 CLEANUP:
 	OPENSSL_free(RETVAL);
 
-NO_OUTPUT int BN_hex2bn(OUTLIST Crypt::OpenSSL3::BigNum a, const char *str)
+NO_OUTPUT int BN_hex2bn(class, OUTLIST Crypt::OpenSSL3::BigNum a, const char *str)
 INIT:
 	a = NULL;
 INTERFACE: BN_hex2bn BN_dec2bn
@@ -1486,7 +1529,7 @@ C_ARGS: a, ptr
 POSTCALL:
 	set_buffer_length(out, RETVAL);
 
-Crypt::OpenSSL3::BigNum BN_mpi2bn(unsigned char *s, int length(s))
+Crypt::OpenSSL3::BigNum BN_mpi2bn(class, unsigned char *s, int length(s))
 C_ARGS: s, XSauto_length_of_s, NULL
 
 Success BN_check_prime(Crypt::OpenSSL3::BigNum p, Crypt::OpenSSL3::BigNum::Context ctx)
@@ -1666,7 +1709,7 @@ size_t OBJ_length(Crypt::OpenSSL3::ASN1::Object obj)
 
 SV* OBJ_get_data(Crypt::OpenSSL3::ASN1::Object obj)
 CODE:
-	const char* data = OBJ_get0_data(obj);
+	const char* data = (const char*)OBJ_get0_data(obj);
 	size_t length = OBJ_length(obj);
 	RETVAL = newSVpvn(data, length);
 OUTPUT: RETVAL
@@ -2236,12 +2279,7 @@ INIT:
 	void* value = NULL;
 	if (a) {
 		type = ASN1_TYPE_get(a);
-		if (type == V_ASN1_NULL || type == V_ASN1_BOOLEAN)
-			value = a->value.ptr;
-		else if (type == V_ASN1_OBJECT)
-			value = OBJ_dup(a->value.object);
-		else
-			value = ASN1_STRING_dup(a->value.ia5string);
+		value = ASN1_TYPE_dupvalue(a);
 	}
 C_ARGS: alg, ASN1_OBJECT_dup(aobj), type, value
 
@@ -2320,7 +2358,7 @@ MODULE = Crypt::OpenSSL3	PACKAGE = Crypt::OpenSSL3::X509::Attribute	PREFIX = X50
 
 
 Crypt::OpenSSL3::X509::Attribute X509_ATTRIBUTE_create(class, Crypt::OpenSSL3::NID nid, Crypt::OpenSSL3::ASN1::Value type)
-C_ARGS: nid, ASN1_TYPE_get(type), ASN1_VALUE_dup(ASN1_TYPE_get(type), type->value.ptr)
+C_ARGS: nid, ASN1_TYPE_get(type), ASN1_TYPE_dupvalue(type)
 POSTCALL:
 	if (!RETVAL)
 		XSRETURN_UNDEF;
@@ -2349,7 +2387,7 @@ bool X509_ATTRIBUTE_set_data(Crypt::OpenSSL3::X509::Attribute attr, int attrtype
 
 SV* X509_ATTRIBUTE_get_data(Crypt::OpenSSL3::X509::Attribute attr, int idx, int type)
 CODE:
-	void* ptr = X509_ATTRIBUTE_get0_data(attr, idx, type, NULL);
+	const void* ptr = X509_ATTRIBUTE_get0_data(attr, idx, type, NULL);
 	if (!ptr)
 		RETVAL = &PL_sv_undef;
 	else if (type == V_ASN1_OBJECT)
@@ -2502,47 +2540,47 @@ POSTCALL:
 		set_buffer_length(hash, len);
 
 bool X509_NAME_add_entry_by_txt(Crypt::OpenSSL3::X509::Name name, const char *field, SV* data, int loc, int set)
-	const char* bytes;
+	const unsigned char* bytes;
 	int type, len;
 	size_t strlen;
 INIT:
 	if (SvUTF8(data)) {
 		type = MBSTRING_UTF8;
-		bytes = SvPVutf8(data, strlen);
+		bytes = (unsigned char*)SvPVutf8(data, strlen);
 	} else {
 		type = MBSTRING_ASC;
-		bytes = SvPVbyte(data, strlen);
+		bytes = (unsigned char*)SvPVbyte(data, strlen);
 	}
 	len = strlen;
 C_ARGS: name, field, type, bytes, len, loc, set
 
 
 bool X509_NAME_add_entry_by_OBJ(Crypt::OpenSSL3::X509::Name name, Crypt::OpenSSL3::ASN1::Object obj, SV* data, int loc, int set)
-	const char* bytes;
+	const unsigned char* bytes;
 	int type, len;
 	size_t strlen;
 INIT:
 	if (SvUTF8(data)) {
 		type = MBSTRING_UTF8;
-		bytes = SvPVutf8(data, strlen);
+		bytes = (unsigned char*)SvPVutf8(data, strlen);
 	} else {
 		type = MBSTRING_ASC;
-		bytes = SvPVbyte(data, strlen);
+		bytes = (unsigned char*)SvPVbyte(data, strlen);
 	}
 	len = strlen;
 C_ARGS: name, obj, type, bytes, len, loc, set
 
 bool X509_NAME_add_entry_by_NID(Crypt::OpenSSL3::X509::Name name, Crypt::OpenSSL3::NID nid, SV* data, int loc, int set)
-	const char* bytes;
+	const unsigned char* bytes;
 	int type, len;
 	size_t strlen;
 INIT:
 	if (SvUTF8(data)) {
 		type = MBSTRING_UTF8;
-		bytes = SvPVutf8(data, strlen);
+		bytes = (unsigned char*)SvPVutf8(data, strlen);
 	} else {
 		type = MBSTRING_ASC;
-		bytes = SvPVbyte(data, strlen);
+		bytes = (unsigned char*)SvPVbyte(data, strlen);
 	}
 	len = strlen;
 C_ARGS: name, nid, type, bytes, len, loc, set
@@ -2635,6 +2673,12 @@ PPCODE:
 	STACK_OF(X509)* stack = X509_STORE_get1_all_certs(xs);
 	STACK_TO_STACK(X509, stack);
 
+SV* X509_STORE_get_param(Crypt::OpenSSL3::X509::Store xs)
+CODE:
+	X509_VERIFY_PARAM* ptr = X509_STORE_get0_param(xs);
+	RETVAL = make_X509_VERIFY_PARAM_args(aTHX_ ptr, xs_arg);
+OUTPUT: RETVAL
+
 
 MODULE = Crypt::OpenSSL3	PACKAGE = Crypt::OpenSSL3::X509::Store::Context	PREFIX = X509_STORE_CTX_
 
@@ -2660,8 +2704,10 @@ POSTCALL:
 			SV* untrusted_sv = make_X509_STACK(aTHX_ untrusted);
 			av_store((AV*)ctx_magic->mg_obj, 2, untrusted_sv);
 		}
-	} else if (untrusted)
+	} else if (untrusted) {
+		X509_STORE_CTX_set0_untrusted(ctx, NULL);
 		sk_X509_pop_free(untrusted, X509_free);
+	}
 
 #if OPENSSL_VERSION_PREREQ(3, 2)
 
@@ -2695,7 +2741,6 @@ CODE:
 	X509_VERIFY_PARAM* ptr = X509_STORE_CTX_get0_param(ctx);
 	RETVAL = make_X509_VERIFY_PARAM_args(aTHX_ ptr, ctx_arg);
 OUTPUT: RETVAL
-
 
 void X509_STORE_CTX_get_untrusted(Crypt::OpenSSL3::X509::Store::Context ctx)
 PPCODE:
@@ -3012,7 +3057,7 @@ INIT:
 	unsigned char* buffer;
 C_ARGS: sct, &buffer
 POSTCALL:
-	out = newSVpvn(buffer, RETVAL);
+	out = newSVpvn((const char*)buffer, RETVAL);
 
 bool SCT_set_log_id(Crypt::OpenSSL3::X509::Transparency::Timestamp sct, const unsigned char *log_id, size_t length(log_id))
 
@@ -4609,9 +4654,9 @@ Crypt::OpenSSL3::SKey EVP_SKEY_import_raw_key(class, const char *skeymgmtname, u
 C_ARGS: NULL, skeymgmtname, key, XSauto_length_of_key, propquery
 
 #if OPENSSL_VERSION_PREREQ(3,6)
-Crypt::OpenSSL3::SKey EVP_SKEY_import_SKEYMGMT(class, Crypt::OpenSSL3::SKey::Management skeymgmt, int selection, SV* params)
+Crypt::OpenSSL3::SKey EVP_SKEY_import_SKEYMGMT(class, Crypt::OpenSSL3::SKey::Management skeymgmt, int selection, SV* params = undef)
 INIT:
-	OSSL_PARAM* real_params = params ? params_for(EVP_SKEYMGMT_get0_imp_settable_params(skeymgmt), params) : NULL;
+	OSSL_PARAM* real_params = SvOK(params) ? params_for(EVP_SKEYMGMT_get0_imp_settable_params(skeymgmt), params) : NULL;
 C_ARGS: NULL, skeymgmt, selection, real_params
 #endif
 
@@ -4620,7 +4665,7 @@ CODE:
 	const unsigned char* key;
 	size_t len;
 	if (EVP_SKEY_get0_raw_key(skey, &key, &len))
-		RETVAL = newSVpvn(key, len);
+		RETVAL = newSVpvn((const char*)key, len);
 	else
 		RETVAL = &PL_sv_undef;
 OUTPUT: RETVAL
@@ -4730,8 +4775,8 @@ CODE:
 #endif
 	{
 		size_t key_length;
-		unsigned char* key_ptr = SvPV(key, key_length);
-		if (key_length != EVP_CIPHER_get_key_length(type))
+		unsigned char* key_ptr = (unsigned char*)SvPV(key, key_length);
+		if (key_length != (size_t)EVP_CIPHER_get_key_length(type))
 			XSRETURN_NO;
 		RETVAL = EVP_CipherInit_ex2(ctx, type, key_ptr, iv, enc, params);
 	}
@@ -4927,11 +4972,11 @@ POSTCALL:
 		set_buffer_length(digest, outlen);
 #endif
 
-bool EVP_MD_CTX_sign_init(Crypt::OpenSSL3::MD::Context ctx, Crypt::OpenSSL3::MD type, Crypt::OpenSSL3::PKey pkey, Crypt::OpenSSL3::PKey::Context pctx = NULL)
-C_ARGS: ctx, pctx ? &pctx : NULL, type, NULL, pkey
+bool EVP_MD_CTX_sign_init(Crypt::OpenSSL3::MD::Context ctx, Crypt::OpenSSL3::MD type, Crypt::OpenSSL3::PKey pkey)
+C_ARGS: ctx, NULL, type, NULL, pkey
 
-bool EVP_MD_CTX_sign_init_ex(Crypt::OpenSSL3::MD::Context ctx, const char* mdname, Crypt::OpenSSL3::PKey pkey, Crypt::OpenSSL3::PKey::Context pctx = NULL, const char* props = NULL)
-C_ARGS: ctx, pctx ? &pctx : NULL, mdname, NULL, props, pkey, NULL
+bool EVP_MD_CTX_sign_init_ex(Crypt::OpenSSL3::MD::Context ctx, const char* mdname, Crypt::OpenSSL3::PKey pkey, const char* props = NULL)
+C_ARGS: ctx, NULL, mdname, NULL, props, pkey, NULL
 
 bool EVP_MD_CTX_sign_update(Crypt::OpenSSL3::MD::Context ctx, const char *d, size_t length(d))
 
@@ -4957,8 +5002,8 @@ CODE:
 		RETVAL = &PL_sv_undef;
 OUTPUT: RETVAL
 
-bool EVP_MD_CTX_verify_init(Crypt::OpenSSL3::MD::Context ctx, SV* type, Crypt::OpenSSL3::PKey pkey, Crypt::OpenSSL3::PKey::Context pctx = NULL)
-C_ARGS: ctx, pctx ? &pctx : NULL, SvOK(type) ? get_EVP_MD(aTHX_ type) : NULL, NULL, pkey
+bool EVP_MD_CTX_verify_init(Crypt::OpenSSL3::MD::Context ctx, SV* type, Crypt::OpenSSL3::PKey pkey)
+C_ARGS: ctx, NULL, SvOK(type) ? get_EVP_MD(aTHX_ type) : NULL, NULL, pkey
 	
 bool EVP_MD_CTX_verify_update(Crypt::OpenSSL3::MD::Context ctx, const char *d, size_t length(d))
 
@@ -5064,7 +5109,7 @@ CODE:
 #endif
 	{
 		size_t key_length;
-		unsigned char* key_ptr = SvPV(key, key_length);
+		unsigned char* key_ptr = (unsigned char*)SvPV(key, key_length);
 		RETVAL = EVP_MAC_init(ctx, key_ptr, key_length, params);
 	}
 OUTPUT: RETVAL
@@ -5250,7 +5295,16 @@ CODE:
 		set_buffer_length(key, length);
 
 Crypt::OpenSSL3::PKey EVP_PKEY_read_pem_private_key(class, Crypt::OpenSSL3::BIO bio, SV* password_cb = undef, const char* propq = "")
-C_ARGS: bio, NULL, NULL, NULL, NULL, propq
+	pem_password_cb* password_fptr = NULL;
+	void* password_arg = NULL;
+INIT:
+	if (SvROK(password_cb)) {
+		password_fptr = pem_password_callback;
+		password_arg = password_cb;
+	} else if (SvOK(password_cb)){
+		password_arg = SvPV_nolen(password_cb);
+	}
+C_ARGS: bio, NULL, password_fptr, password_arg, NULL, propq
 POSTCALL:
 	if (!RETVAL)
 		XSRETURN_UNDEF;
@@ -5723,7 +5777,7 @@ CODE:
 	int ret = OSSL_ENCODER_to_data(ctx, &pdata, &pdata_len);
 	if (!ret)
 		XSRETURN_UNDEF;
-	RETVAL = newSVpvn(pdata, pdata_len);
+	RETVAL = newSVpvn((const char*)pdata, pdata_len);
 	OPENSSL_free(pdata);
 OUTPUT: RETVAL
 

@@ -1,0 +1,13 @@
+-pbp     # Start with Perl Best Practices defaults
+-w       # Show all warnings
+-nst     # Do not output to STDOUT
+-b       # Backup original file
+-i=4     # 4-column indentation
+-ci=4    # Continuation indentation
+-l=120   # Max line length 120
+-pt=2    # Medium parenthesis tightness
+-sbt=2   # Medium square bracket tightness
+-bt=2    # Medium brace tightness
+-nsfs    # No space before semicolons
+-nolq    # Do not outdent long quoted strings
+-wbb="% + - * / x != == >= <= =~ !~ < > | & = **= += *= &= <<= &&= -= /= |= >>= ||= //= .= %= ^= x="

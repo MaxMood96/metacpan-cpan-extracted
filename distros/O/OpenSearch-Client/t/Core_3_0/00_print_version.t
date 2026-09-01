@@ -27,9 +27,10 @@ my $es = do "os_sync.pl" or die( $@ || $! );
 
 eval {
     my $v = $es->info->{version};
+    my $realversion = $es->opensearch_version;
     diag "";
     diag "";
-    diag "Testing against OpenSearch v" . $v->{number};
+    diag "Testing against OpenSearch version " . $realversion;
     for ( sort keys %$v ) {
         diag sprintf "%-20s: %s", $_, $v->{$_};
     }

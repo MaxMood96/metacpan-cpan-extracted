@@ -1,0 +1,99 @@
+{% if notice %}<p class="try">{% notice %}</p>{% end %}
+
+<h2>{% me.email %}</h2>
+<p class="quiet">
+  role <code>{% me.role %}</code> &middot;
+  {% if me.suspended %}<b class="bad">suspended</b>{% else %}good standing{% end %}
+  &middot; <a href="{% url.home %}">accounts</a>
+</p>
+
+<h3>Mint one</h3>
+
+<form method="post" action="{% url.keys_issue %}">
+  {% raw csrf %}
+  <label>Label <input name="label" required placeholder="CI"></label>
+  <label>Scopes <input name="scopes" value="read write admin"
+         placeholder="read write admin"></label>
+  <label>Kind
+    <select name="kind">
+      <option value="live">live (sk_live_)</option>
+      <option value="test">test (sk_test_)</option>
+    </select>
+  </label>
+  <label>Requests a minute <input name="rate" type="number" min="1"
+         placeholder="unlimited"></label>
+  <button>Issue</button>
+</form>
+
+<h3>Issued</h3>
+
+{% if keys %}<table>
+  <tr><th>id</th><th>prefix</th><th>label</th><th>kind</th><th>scopes</th>
+      <th>rate</th><th>last used</th><th>state</th><th></th></tr>
+{% for k in keys %}  <tr>
+    <td><code>{% k.id %}</code></td>
+    <td><code>{% k.prefix %}</code></td>
+    <td>{% k.label %}</td>
+    <td><code>{% k.kind %}</code></td>
+    <td><code>{% k.scopes | default('-') %}</code></td>
+    <td>{% k.rate_per_min | default('-') %}</td>
+    <td>{% k.last_used | default('never') %}</td>
+    <td>{% if k.revoked %}<b class="bad">revoked</b>{% else %}live{% end %}</td>
+    <td>{% if k.revoked %}{% else %}<form method="post"
+            action="/keys/{% k.id %}/revoke">{% raw csrf %}
+          <button class="link">revoke</button>
+        </form>{% end %}</td>
+  </tr>
+{% end %}</table>
+
+<p class="quiet">No whole key is on this page and none is stored: the prefix
+is the kind's prefix plus the first eight random characters.</p>
+{% else %}<p class="quiet">None yet.</p>
+{% end %}
+
+<h3>Spend one</h3>
+
+<pre><code>KEY=sk_live_...
+
+# read
+curl -H "Authorization: Bearer $KEY" localhost:5000/api/v1/whoami
+curl -H "Authorization: Bearer $KEY" localhost:5000/api/v1/notes
+
+# write
+curl -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+     -d '{"body":"from CI"}' localhost:5000/api/v1/notes
+
+# admin
+curl -H "Authorization: Bearer $KEY" localhost:5000/api/v1/admin/stats</code></pre>
+
+<p class="quiet">Each block needs the scope above it. A key holding only
+<code>read</code> gets <code>403 Forbidden</code> on the write - which is the
+guard working, not a misconfiguration.</p>
+
+<p class="quiet"><code>/whoami</code> answers with the effective scopes beside
+what the row claims: the one place the narrowing below is visible as data
+rather than as a refusal.</p>
+
+<h3>Change your standing, then try the key again</h3>
+
+<p class="quiet">These edit the <code>users</code> row the plugin reads
+through <code>owner_model</code>. Nothing about the key's own row changes.</p>
+
+<div class="row">
+  <form method="post" action="{% url.keys_demote %}">{% raw csrf %}
+    <button>demote to member</button></form>
+  <form method="post" action="{% url.keys_promote %}">{% raw csrf %}
+    <button>promote to admin</button></form>
+  <form method="post" action="{% url.keys_suspend %}">{% raw csrf %}
+    <button>suspend</button></form>
+  <form method="post" action="{% url.keys_restore %}">{% raw csrf %}
+    <button>restore</button></form>
+</div>
+
+<p class="try"><strong>Demoted</strong>: <code>/api/v1/admin/stats</code>
+answers 403 and everything else keeps working - the key was narrowed, not
+refused. <strong>Suspended</strong>: every route answers 403, because the
+caller has already proved they hold the key and there is nothing to hide.</p>
+
+<form method="post" action="{% url.logout %}">{% raw csrf %}
+  <button class="link">sign out</button></form>

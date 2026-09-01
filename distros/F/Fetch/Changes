@@ -1,5 +1,10 @@
 Revision history for Fetch
 
+0.21    2026-09-01
+        - Fetch::Future implements the Future::AsyncAwait::Awaitable API,
+          so await works on a request inside an async sub.
+        - Fetch::Future->on_cancel, taking a code reference or a future.
+
 0.20    2026-08-31
         - A cancelled deadline can no longer fail the next request on
           any backend: the loop names timers by a counter, not by the

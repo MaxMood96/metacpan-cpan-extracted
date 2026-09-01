@@ -1,5 +1,12 @@
 Revision history for DBIx-Loop
 
+0.09    2026-09-01
+        - DBIx::Loop::Future implements the Future::AsyncAwait::Awaitable
+          API, so await works on a query inside an async sub. It reports no
+          cancellation, having none.
+        - Document which future class each loop adapter hands back, and what
+          that costs.
+
 0.08    2026-08-31
         - A prepare that fails on a handle without RaiseError carries the
           driver's error, not a placeholder

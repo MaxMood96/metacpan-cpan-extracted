@@ -8,7 +8,7 @@ WriteMakefile(
     MIN_PERL_VERSION => '5.010',
     test             => { TESTS => 't/*.t' },
     BUILD_REQUIRES   => {
-        'ExtUtils::MakeMaker' => '6.46',
+        'ExtUtils::MakeMaker' => '6.55',
         'Test::More'          => '0',
         'Test::Pod'           => '0',
         'Pod::Coverage'       => '0',

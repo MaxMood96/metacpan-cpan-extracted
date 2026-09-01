@@ -1,0 +1,4 @@
+---
+distro: perl-critic-policy-prohibitpipeopen
+version: 1.000
+author_path: T/TE/TEODESIAN/perl-critic-policy-prohibitpipeopen-1.000.tar.gz

@@ -26,6 +26,7 @@ include/ppk/ppk_ctx.h
 include/ppk/ppk_plugin.h
 include/ppk/ppk_reg.h
 include/ppk/ppk_sig.h
+lib/Punk/Model/Passkey.pm
 lib/Punk/Passkey.pm
 lib/Punk/Plugin/Passkey.pm
 lib/Punk/Plugin/Passkey/sqitch/mysql/deploy/passkeys.sql
@@ -50,6 +51,7 @@ t/07-schema.t
 t/08-authenticate.t
 t/09-plugin.t
 t/10-asset-js.t
+t/11-model.t
 t/fixtures/README
 t/fixtures/auth-webauthn-io.txt
 t/fixtures/cbor-appendix-a.json

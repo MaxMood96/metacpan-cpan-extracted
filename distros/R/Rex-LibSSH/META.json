@@ -29,7 +29,7 @@
       },
       "runtime" : {
          "requires" : {
-            "Net::LibSSH" : "0.001",
+            "Net::LibSSH" : "0.003",
             "Rex" : "v1.16.0"
          }
       },
@@ -39,6 +39,28 @@
             "IO::Socket::INET" : "0",
             "Test::More" : "0.98"
          }
+      }
+   },
+   "provides" : {
+      "Rex::Interface::Connection::LibSSH" : {
+         "file" : "lib/Rex/Interface/Connection/LibSSH.pm",
+         "version" : "0.003"
+      },
+      "Rex::Interface::Exec::LibSSH" : {
+         "file" : "lib/Rex/Interface/Exec/LibSSH.pm",
+         "version" : "0.003"
+      },
+      "Rex::Interface::File::LibSSH" : {
+         "file" : "lib/Rex/Interface/File/LibSSH.pm",
+         "version" : "0.003"
+      },
+      "Rex::Interface::Fs::LibSSH" : {
+         "file" : "lib/Rex/Interface/Fs/LibSSH.pm",
+         "version" : "0.003"
+      },
+      "Rex::LibSSH" : {
+         "file" : "lib/Rex/LibSSH.pm",
+         "version" : "0.003"
       }
    },
    "release_status" : "stable",
@@ -53,10 +75,10 @@
          "web" : "https://github.com/Getty/rex-libssh"
       }
    },
-   "version" : "0.002",
+   "version" : "0.003",
    "x_Dist_Zilla" : {
       "perl" : {
-         "version" : "5.036000"
+         "version" : "5.040001"
       },
       "plugins" : [
          {
@@ -87,11 +109,6 @@
          {
             "class" : "Dist::Zilla::Plugin::MetaYAML",
             "name" : "@Author::GETTY/@Filter/MetaYAML",
-            "version" : "6.037"
-         },
-         {
-            "class" : "Dist::Zilla::Plugin::License",
-            "name" : "@Author::GETTY/@Filter/License",
             "version" : "6.037"
          },
          {
@@ -145,6 +162,11 @@
             "version" : "6.037"
          },
          {
+            "class" : "Dist::Zilla::Plugin::LicenseFile",
+            "name" : "@Author::GETTY/LicenseFile",
+            "version" : "0.002"
+         },
+         {
             "class" : "Dist::Zilla::Plugin::MetaConfig",
             "name" : "@Author::GETTY/MetaConfig",
             "version" : "6.037"
@@ -158,6 +180,38 @@
             "class" : "Dist::Zilla::Plugin::PodSyntaxTests",
             "name" : "@Author::GETTY/PodSyntaxTests",
             "version" : "6.037"
+         },
+         {
+            "class" : "Dist::Zilla::Plugin::Test::ChangesHasContent",
+            "name" : "@Author::GETTY/Test::ChangesHasContent",
+            "version" : "0.011"
+         },
+         {
+            "class" : "Dist::Zilla::Plugin::MetaProvides::Package",
+            "config" : {
+               "Dist::Zilla::Plugin::MetaProvides::Package" : {
+                  "finder_objects" : [
+                     {
+                        "class" : "Dist::Zilla::Plugin::FinderCode",
+                        "name" : "@Author::GETTY/MetaProvides::Package/AUTOVIV/:InstallModulesPM",
+                        "version" : "6.037"
+                     }
+                  ],
+                  "include_underscores" : 0
+               },
+               "Dist::Zilla::Role::MetaProvider::Provider" : {
+                  "$Dist::Zilla::Role::MetaProvider::Provider::VERSION" : "2.002004",
+                  "inherit_missing" : 1,
+                  "inherit_version" : 1,
+                  "meta_noindex" : 1
+               },
+               "Dist::Zilla::Role::ModuleMetadata" : {
+                  "Module::Metadata" : "1.000038",
+                  "version" : "0.006"
+               }
+            },
+            "name" : "@Author::GETTY/MetaProvides::Package",
+            "version" : "2.004003"
          },
          {
             "class" : "Dist::Zilla::Plugin::GithubMeta",
@@ -178,12 +232,12 @@
             "class" : "Dist::Zilla::Plugin::Git::CheckFor::CorrectBranch",
             "config" : {
                "Dist::Zilla::Role::Git::Repo" : {
-                  "git_version" : "2.39.5",
+                  "git_version" : "2.47.3",
                   "repo_root" : "."
                }
             },
             "name" : "@Author::GETTY/Git::CheckFor::CorrectBranch",
-            "version" : "0.014"
+            "version" : "0.015"
          },
          {
             "class" : "Dist::Zilla::Plugin::Prereqs::FromCPANfile",
@@ -360,7 +414,7 @@
                   "changelog" : "Changes"
                },
                "Dist::Zilla::Role::Git::Repo" : {
-                  "git_version" : "2.39.5",
+                  "git_version" : "2.47.3",
                   "repo_root" : "."
                },
                "Dist::Zilla::Role::Git::StringFormatter" : {
@@ -377,12 +431,12 @@
                   "branch" : null,
                   "changelog" : "Changes",
                   "signed" : 0,
-                  "tag" : "0.002",
+                  "tag" : "0.003",
                   "tag_format" : "%v",
                   "tag_message" : "v%V"
                },
                "Dist::Zilla::Role::Git::Repo" : {
-                  "git_version" : "2.39.5",
+                  "git_version" : "2.47.3",
                   "repo_root" : "."
                },
                "Dist::Zilla::Role::Git::StringFormatter" : {
@@ -428,12 +482,13 @@
                      "Makefile.PL"
                   ],
                   "allow_dirty_match" : [
+                     "(?^:^bin/)",
                      "(?^:^lib/.*\\.pm$)"
                   ],
                   "changelog" : "Changes"
                },
                "Dist::Zilla::Role::Git::Repo" : {
-                  "git_version" : "2.39.5",
+                  "git_version" : "2.47.3",
                   "repo_root" : "."
                },
                "Dist::Zilla::Role::Git::StringFormatter" : {
@@ -453,12 +508,17 @@
                   "remotes_must_exist" : 1
                },
                "Dist::Zilla::Role::Git::Repo" : {
-                  "git_version" : "2.39.5",
+                  "git_version" : "2.47.3",
                   "repo_root" : "."
                }
             },
             "name" : "@Author::GETTY/Git::Push",
             "version" : "2.052"
+         },
+         {
+            "class" : "Dist::Zilla::Plugin::GitHub::CreateRelease",
+            "name" : "@Author::GETTY/GitHub::CreateRelease",
+            "version" : "0.0012"
          },
          {
             "class" : "Dist::Zilla::Plugin::FinderCode",
@@ -509,6 +569,11 @@
             "class" : "Dist::Zilla::Plugin::FinderCode",
             "name" : ":NoFiles",
             "version" : "6.037"
+         },
+         {
+            "class" : "Dist::Zilla::Plugin::FinderCode",
+            "name" : "@Author::GETTY/MetaProvides::Package/AUTOVIV/:InstallModulesPM",
+            "version" : "6.037"
          }
       ],
       "zilla" : {
@@ -520,8 +585,8 @@
       }
    },
    "x_authority" : "cpan:GETTY",
-   "x_generated_by_perl" : "v5.36.0",
-   "x_serialization_backend" : "Cpanel::JSON::XS version 4.38",
+   "x_generated_by_perl" : "v5.40.1",
+   "x_serialization_backend" : "Cpanel::JSON::XS version 4.43",
    "x_spdx_expression" : "Artistic-1.0-Perl OR GPL-1.0-or-later"
 }
 

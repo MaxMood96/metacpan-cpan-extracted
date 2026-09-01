@@ -2,346 +2,221 @@ package Weather::NHC::TropicalCyclone::Storm;
 
 use strict;
 use warnings;
-
-use HTTP::Tiny ();
-use HTTP::Status qw/:constants/;
+use Scalar::Util qw/reftype/;
 use Util::H2O::More qw/baptise/;
-use Validate::Tiny    ();
-use HTML::TreeBuilder ();
+use Weather::NHC::TropicalCyclone::HTTP ();
+use Weather::NHC::TropicalCyclone::Resource ();
+use Weather::NHC::TropicalCyclone::Validation ();
 
 our $DEFAULT_GRAPHICS_ROOT = q{https://www.nhc.noaa.gov/storm_graphics};
 our $DEFAULT_BTK_ROOT      = q{https://ftp.nhc.noaa.gov/atcf/btk};
-our $CLASSIFICATIONS       = {
-    TD  => q{Tropical Depression},
-    STD => q{Subtropical Depression},
-    TS  => q{Tropical Storm},
-    HU  => q{Hurricane},
-    STS => q{Subtropical Storm},
-    PTC => q{Post-tropical Cyclone / Remnants},
-    TY  => q{Typhoon (we don't use this currently)},
-    PC  => q{Potential Tropical Cyclone},
-};
+our $CLASSIFICATIONS       = Weather::NHC::TropicalCyclone::Validation->classifications;
 
-# constructor
+our @COMPAT_FIELDS = qw/
+  latitudelongitude latitude_numberic kmzFile34kt kmzFile50kt kmzFile64kt
+/;
+
+our @FIELDS = qw/
+  id binNumber name classification intensity pressure latitude longitude
+  latitudeNumeric longitudeNumeric movementDir movementSpeed lastUpdate
+  publicAdvisory forecastAdvisory windSpeedProbabilities forecastDiscussion
+  forecastGraphics forecastTrack windWatchesWarnings trackCone initialWindExtent
+  forecastWindRadiiGIS bestTrackGIS earliestArrivalTimeTSWindsGIS
+  mostLikelyTimeTSWindsGIS windSpeedProbabilitiesGIS stormSurgeWatchWarningGIS
+  potentialStormSurgeFloodingGIS peakSurgeKML
+/;
+
 sub new {
-    my ( $pkg, $self ) = @_;
+    my ( $class, $data, %args ) = @_;
+    die qq{Storm constructor requires a hash reference\n} if reftype($data) ne q{HASH};
 
-    my $v          = Validate::Tiny->new;
-    my $validation = $v->check( $self, $pkg->_get_validation_rules );
-    if ( not $v->success ) {
-        die qq{Field validation errors found creating package instance for: } . join( q{, }, keys %{ $validation->error } ) . qq{\n};
+    for my $field (qw/id binNumber name classification/) {
+        die qq{Field validation errors found creating package instance for: $field\n}
+          if !exists $data->{$field} || !defined $data->{$field} || $data->{$field} eq q{};
+    }
+    if ( !exists $CLASSIFICATIONS->{ $data->{classification} } ) {
+        die qq{Field validation errors found creating package instance for: classification\n};
     }
 
-    my @fields =
-      (qw/id binNumber name classification intensity pressure latitudelongitude latitude_numberic movementDir movementSpeed lastUpdate publicAdvisory forecastAdvisory windSpeedProbabilities forecastDiscussion forecastGraphics forecastTrack windWatchesWarnings trackCone initialWindExtent forecastWindRadiiGIS bestTrackGIS earliestArrivalTimeTSWindsGIS mostLikelyTimeTSWindsGIS windSpeedProbabilitiesGIS kmzFile34kt kmzFile50kt kmzFile64kt stormSurgeWatchWarningGIS potentialStormSurgeFloodingGIS/);
-
-    return baptise -recurse, $self, $pkg, @fields;
+    my %copy = %$data;
+    my $self = baptise -recurse, \%copy, $class, @FIELDS, @COMPAT_FIELDS, q{_http};
+    $self->{_http} = $args{http} || Weather::NHC::TropicalCyclone::HTTP->new;
+    return $self;
 }
 
 sub _get_validation_rules {
-    my $self = shift;
     return {
-        fields => [qw/id binNumber name classification/],
-        checks => [
-            [qw/id binNumber name classification/] => Validate::Tiny::is_required(),
-            classification                         => sub {
-                my ( $value, $params ) = @_;
-
-                # branch, if true indicates failed validation
-                if ( not grep { /$value/ } ( keys %$CLASSIFICATIONS ) ) {
-                    return q{Invalid classification, not defined in NHC specification.};
-                }
-
-                # indicates successful validation
-                return undef;
-            },
-        ],
+        required        => [qw/id binNumber name classification/],
+        classifications => { %{$CLASSIFICATIONS} },
     };
 }
 
 sub _fetch_text_types {
-    my $self = shift;
-
-    # white list of resources and URL attributes they provide
-    my $types = {
-        text => [qw/publicAdvisory forecastAdvisory forecastDiscussion windSpeedProbabilities/],
-    };
-
-    return $types;
+    return { text => Weather::NHC::TropicalCyclone::Resource->text_resources };
 }
 
 sub _fetch_data_types {
-    my $self = shift;
-
-    # white list of resources and URL attributes they provide
-    my $types = {
-        zipFile          => [qw/forecastTrack windWatchesWarnings trackCone initialWindExtent forecastWindRadiiGIS bestTrackGIS potentialStormSurgeFloodingGIS/],
-        kmzFile          => [qw/forecastTrack windWatchesWarnings trackCone initialWindExtent forecastWindRadiiGIS bestTrackGIS earliestArrivalTimeTSWindsGIS mostLikelyTimeTSWindsGIS/],
-        zipFile5km       => [qw/windSpeedProbabilitiesGIS/],
-        zipFile0p5deg    => [qw/windSpeedProbabilitiesGIS/],
-        kmzFile34kt      => [qw/windSpeedProbabilitiesGIS/],
-        kmzFile50kt      => [qw/windSpeedProbabilitiesGIS/],
-        kmzFile64kt      => [qw/windSpeedProbabilitiesGIS/],
-        kmlFile          => [qw/stormSurgeWatchWarningGIS/],
-        zipFileTidalMask => [qw/potentialStormSurgeFloodingGIS/],
-    };
-
-    return $types;
+    return Weather::NHC::TropicalCyclone::Resource->file_types;
 }
 
-# get storm classification "real classification"
 sub kind {
     my $self = shift;
-    die qq{'classification' field not set\n} if not $self->classification;
-    die qq{Unknown storm classification\n}   if not $CLASSIFICATIONS->{ $self->classification };
+    die qq{'classification' field not set\n} if !$self->classification;
+    die qq{Unknown storm classification\n} if !exists $CLASSIFICATIONS->{ $self->classification };
     return $CLASSIFICATIONS->{ $self->classification };
 }
 
-# determine basin based on binNumber
 sub basin {
     my $self = shift;
-    die qq{'binNumber' field not set\n} if not $self->binNumber;
-
-    # allow for easy querying of "basin"
-    my $BASINS = {
-        atlantic => qr/^AT[1-5]$/i,
-        pacific  => qr/^EP[1-5]$/i,
-    };
-    for my $basin ( keys %$BASINS ) {
-        return $basin if $self->binNumber =~ $BASINS->{$basin};
-    }
+    my $bin = $self->binNumber;
+    die qq{'binNumber' field not set\n} if !defined $bin || $bin eq q{};
+    return q{atlantic}        if $bin =~ /^AT[1-5]$/i;
+    return q{pacific}         if $bin =~ /^EP[1-5]$/i;    # historical return value
+    return q{central_pacific} if $bin =~ /^CP[1-5]$/i;
     return undef;
 }
 
-# attempts to get base graphics directory, then scrapes
-# the index page for the files and returns an array reference
-# of all image addresses for this storm
 sub fetch_forecastGraphics_urls {
     my $self = shift;
+    my $graphics = $self->{forecastGraphics};
+    return [] if !defined $graphics || reftype($graphics) ne q{HASH} || !$graphics->{url};
 
-    my $url = $self->forecastGraphics->url;
+    my $response = $self->{_http}->get( $graphics->{url} );
+    my $html = $response->{content} // q{};
+    my ($prefix) = $html =~ m{storm_graphics/(.+?)/refresh};
+    return [] if !$prefix;
 
-    my $http = HTTP::Tiny->new;
+    my $base = "$DEFAULT_GRAPHICS_ROOT/$prefix";
+    $response = $self->{_http}->get($base);
+    $html = $response->{content} // q{};
 
-    my $response = $http->get($url);
-
-    my $html = $response->{content};
-
-    $html =~ m/storm_graphics\/(.+)\/refresh/;
-    my $prefix = $1;
-    return [] if not $prefix;
-
-    my $base = sprintf( qq{%s/%s}, $DEFAULT_GRAPHICS_ROOT, $prefix );
-    $response = $http->get($base);
-
-    $html = $response->{content};
-    my $id   = uc $self->id;
-    my @imgs = ( $html =~ m/href="($id.+\.png)"/g );
-    @imgs = map { qq{$base/$_} } @imgs;
-
-    return \@imgs;
+    my $id = uc $self->id;
+    my @images = ( $html =~ m{href=["']($id[^"']+\.png)["']}gi );
+    return [ map { "$base/$_" } @images ];
 }
 
-# rolls up requesting url and extracting text inside of the <pre></pre>
-# tag into one subroutine
 sub _get_text {
     my ( $self, $resource, $local_file ) = @_;
+    die qq{Resource '$resource' is not a supported text resource\n}
+      if Weather::NHC::TropicalCyclone::Resource->kind( $resource, undef ) ne q{text};
 
-    # note, accessors like "->advNum" are generated in Weather::NHC::TropicalCyclone using Util::H2O::h2o
-    if ( not( $self->$resource->advNum or $self->$resource->issuance or $self->$resource->url ) ) {
-        die qq{Resource must be one of: 'publicAdvisory', 'forecastAdvisory', or 'forecastDiscssion'\n};
-    }
+    my $object = $self->{$resource};
+    return undef if !defined $object || reftype($object) ne q{HASH} || !$object->{url};
 
-    my $url = $self->$resource->url;
+    my $response = $self->{_http}->get( $object->{url} );
+    my $text = _extract_pre_text( $response->{content} // q{}, $object->{url} );
 
-    my $http = HTTP::Tiny->new;
-
-    my $response = $http->get($url);
-
-    # extract actual advisory text from <pre></pre> and return just that text
-    my $htb = HTML::TreeBuilder->new;
-    $htb->parse( $response->{content} );
-
-    my $pre = $htb->look_down( '_tag', 'pre' );
-
-    if ($local_file) {
-        open my $fh, q{>}, $local_file or die qq{Failed to open '$local_file' for writing: $!\n};
-        print $fh $pre->as_text;
-        close $fh;
-    }
-
-    return ( $pre->as_text, $self->$resource->advNum, $local_file );
+    _write_file( $local_file, $text ) if defined $local_file;
+    return ( $text, $object->{advNum}, $local_file );
 }
 
-# optionally provide a local file name to save fetched file to
 sub fetch_publicAdvisory {
     my ( $self, $local_file ) = @_;
     return $self->_get_text( q{publicAdvisory}, $local_file );
 }
 
-# optionally provide a local file name to save fetched file to
 sub fetch_forecastAdvisory {
     my ( $self, $local_file ) = @_;
     return $self->_get_text( q{forecastAdvisory}, $local_file );
 }
 
-# in this case, the $local_file is the file to which the ATCF data is saved,
-# the forecast advisory is only handled as text; ATCF is returned as an arrary
-# ref
 sub fetch_forecastAdvisory_as_atcf {
     my ( $self, $local_file ) = @_;
-    my ( $text, $advNum, $_ignore ) = $self->_get_text(q{forecastAdvisory});
+    my ( $text, $adv_num ) = $self->_get_text(q{forecastAdvisory});
     require Weather::NHC::TropicalCyclone::ForecastAdvisory;
 
-    my $fst_ref   = Weather::NHC::TropicalCyclone::ForecastAdvisory->new( input_text => $text, output_file => $local_file );
-    my $atcf_text = $fst_ref->extract_atcf;
-
-    # save file if $local_file is passed
-    if ($local_file) {
-        $fst_ref->save_atcf;
-    }
-
-    return ( $fst_ref->as_atcf, $advNum, $local_file );
+    my $forecast = Weather::NHC::TropicalCyclone::ForecastAdvisory->new(
+        input_text  => $text,
+        output_file => $local_file,
+    );
+    $forecast->extract_atcf;
+    $forecast->save_atcf if defined $local_file;
+    return ( $forecast->as_atcf, $adv_num, $local_file );
 }
 
-# optionally provide a local file name to save fetched file to
 sub fetch_forecastDiscussion {
     my ( $self, $local_file ) = @_;
     return $self->_get_text( q{forecastDiscussion}, $local_file );
 }
 
-# optionally provide a local file name to save fetched file to
 sub fetch_windspeedProbabilities {
     my ( $self, $local_file ) = @_;
     return $self->_get_text( q{windSpeedProbabilities}, $local_file );
 }
 
-# optionally provide a local file name to save fetched file to
-sub fetch_forecastTrack {
-    my ( $self, $type, $local_file ) = @_;
-    return $self->_get_file( q{forecastTrack}, $type, $local_file );
-}
+sub fetch_forecastTrack                  { my $s = shift; return $s->_get_file( q{forecastTrack},                  @_ ) }
+sub fetch_windWatchesWarnings            { my $s = shift; return $s->_get_file( q{windWatchesWarnings},            @_ ) }
+sub fetch_trackCone                      { my $s = shift; return $s->_get_file( q{trackCone},                      @_ ) }
+sub fetch_initialWindExtent              { my $s = shift; return $s->_get_file( q{initialWindExtent},              @_ ) }
+sub fetch_forecastWindRadiiGIS           { my $s = shift; return $s->_get_file( q{forecastWindRadiiGIS},           @_ ) }
+sub fetch_bestTrackGIS                   { my $s = shift; return $s->_get_file( q{bestTrackGIS},                   @_ ) }
+sub fetch_earliestArrivalTimeTSWindsGIS  { my $s = shift; return $s->_get_file( q{earliestArrivalTimeTSWindsGIS},  @_ ) }
+sub fetch_mostLikelyTimeTSWindsGIS       { my $s = shift; return $s->_get_file( q{mostLikelyTimeTSWindsGIS},       @_ ) }
+sub fetch_windSpeedProbabilitiesGIS      { my $s = shift; return $s->_get_file( q{windSpeedProbabilitiesGIS},      @_ ) }
+sub fetch_stormSurgeWatchWarningGIS      { my $s = shift; return $s->_get_file( q{stormSurgeWatchWarningGIS},      @_ ) }
+sub fetch_potentialStormSurgeFloodingGIS { my $s = shift; return $s->_get_file( q{potentialStormSurgeFloodingGIS}, @_ ) }
+sub fetch_peakSurgeKML                   { my $s = shift; return $s->_get_file( q{peakSurgeKML},                   @_ ) }
 
-# optionally provide a local file name to save fetched file to
-sub fetch_windWatchesWarnings {
-    my ( $self, $type, $local_file ) = @_;
-    return $self->_get_file( q{windWatchesWarnings}, $type, $local_file );
-}
-
-# optionally provide a local file name to save fetched file to
-sub fetch_trackCone {
-    my ( $self, $type, $local_file ) = @_;
-    return $self->_get_file( q{trackCone}, $type, $local_file );
-}
-
-# optionally provide a local file name to save fetched file to
-sub fetch_initialWindExtent {
-    my ( $self, $type, $local_file ) = @_;
-    return $self->_get_file( q{initialWindExtent}, $type, $local_file );
-}
-
-# optionally provide a local file name to save fetched file to
-sub fetch_forecastWindRadiiGIS {
-    my ( $self, $type, $local_file ) = @_;
-    return $self->_get_file( q{forecastWindRadiiGIS}, $type, $local_file );
-}
-
-# optionally provide a local file name to save fetched file to
-sub fetch_bestTrackGIS {
-    my ( $self, $type, $local_file ) = @_;
-    return $self->_get_file( q{bestTrackGIS}, $type, $local_file );
-}
-
-# optionally provide a local file name to save fetched file to
-sub fetch_earliestArrivalTimeTSWindsGIS {
-    my ( $self, $type, $local_file ) = @_;
-    return $self->_get_file( q{earliestArrivalTimeTSWindsGIS}, $type, $local_file );
-}
-
-# optionally provide a local file name to save fetched file to
-sub fetch_mostLikelyTimeTSWindsGIS {
-    my ( $self, $type, $local_file ) = @_;
-    return $self->_get_file( q{mostLikelyTimeTSWindsGIS}, $type, $local_file );
-}
-
-# optionally provide a local file name to save fetched file to
-sub fetch_windSpeedProbabilitiesGIS {
-    my ( $self, $type, $local_file ) = @_;
-    return $self->_get_file( q{windSpeedProbabilitiesGIS}, $type, $local_file );
-}
-
-# optionally provide a local file name to save fetched file to
-sub fetch_stormSurgeWatchWarningGIS {
-    my ( $self, $type, $local_file ) = @_;
-    return $self->_get_file( q{stormSurgeWatchWarningGIS}, $type, $local_file );
-}
-
-# optionally provide a local file name to save fetched file to
-sub fetch_potentialStormSurgeFloodingGIS {
-    my ( $self, $type, $local_file ) = @_;
-    return $self->_get_file( q{potentialStormSurgeFloodingGIS}, $type, $local_file );
-}
-
-# rolls up requesting file, based on url associated with file key ("url" key is not specified)
 sub _get_file {
-    my ( $self, $resource, $urlKey, $local_file ) = @_;
+    my ( $self, $resource, $type, $local_file ) = @_;
 
-    my $types = $self->_fetch_data_types;
-
-    # make sure $urlKey is provided by the resource (defined in $types hash ref above)
-    die qq{'$urlKey' is not a valid type provided by '$resource'.\n} if not grep { /$resource/ } ( @{ $types->{$urlKey} } );
-
-    # check to make sure $resource is not 'null'
-    return undef if ref $self->$resource ne q{HASH} and not $self->$resource->{$urlKey};
-
-    my $url = $self->$resource->{$urlKey};
-
-    # extract file name from URL if no $local_file is specified
-    if ( not $local_file ) {
-
-        # extract file name from the end of the URL
-        $url =~ m/\/([a-zA-Z0-9_]+)\.([a-zA-Z]+)$/;
-        $local_file = qq{$1.$2};
+    if ( !Weather::NHC::TropicalCyclone::Resource->is_valid_file_type( $resource, $type ) ) {
+        die qq{'$type' is not a valid type provided by '$resource'.\n};
     }
 
-    my $http = HTTP::Tiny->new;
+    my $object = $self->{$resource};
+    return undef if !defined $object || reftype($object) ne q{HASH} || !$object->{$type};
 
-    my $response = $http->mirror( $url, $local_file );
+    my $url = $object->{$type};
+    $local_file //= _filename_from_url($url);
+    $self->{_http}->mirror( $url, $local_file );
 
-    if ( not $response->{success} ) {
-        my $status = $response->{status} // q{Unknown};
-        die qq{Download of $url failed. HTTP status: $status\n};
-    }
-
-    # bestTrackGIS resource doesn't provide "advNum" per specification
-    # so it doesn't try to deref an method that may not exist
-
-    # 'can($method)' is a limitation of what Util:H2O::h2o gives us, unfortunately
-    my $advNum = ( $self->$resource->can('advNum') ) ? $self->$resource->advNum // q{N/A} : q{N/A};
-    return ( $local_file, $advNum );
+    my $adv_num = exists $object->{advNum} && defined $object->{advNum}
+      ? $object->{advNum}
+      : q{N/A};
+    return ( $local_file, $adv_num );
 }
-
-# auxillary methods to fetch the best track ".dat" file via NHC's FTP over HTTPS
 
 sub fetch_best_track {
     my ( $self, $local_file ) = @_;
-
-    my $btk_file = sprintf( "b%s.dat", $self->id );
-    my $url      = sprintf( "%s/%s",   $DEFAULT_BTK_ROOT, $btk_file );
-
+    my $btk_file = sprintf q{b%s.dat}, $self->id;
+    my $url = "$DEFAULT_BTK_ROOT/$btk_file";
     $local_file //= $btk_file;
-
-    my $http = HTTP::Tiny->new;
-
-    my $response = $http->mirror( $url, $local_file );
-
-    if ( not $response->{success} ) {
-        my $status = $response->{status} // q{Unknown};
-        die qq{Download of $url failed. HTTP status: $status\n};
-    }
-
-    # bestTrackGIS resource doesn't provide "advNum" per specification
+    $self->{_http}->mirror( $url, $local_file );
     return $local_file;
+}
+
+sub _extract_pre_text {
+    my ( $html, $url ) = @_;
+    my ($text) = $html =~ m{<pre\b[^>]*>(.*?)</pre>}is;
+    die qq{No <pre> advisory text found at $url\n} if !defined $text;
+
+    # NHC text products are intentionally plain inside <pre>. Decode the small
+    # set of entities that can appear without pulling in a full HTML parser.
+    $text =~ s/<[^>]+>//g;
+    $text =~ s/&nbsp;/ /gi;
+    $text =~ s/&lt;/</gi;
+    $text =~ s/&gt;/>/gi;
+    $text =~ s/&quot;/"/gi;
+    $text =~ s/&#39;/'/gi;
+    $text =~ s/&amp;/&/gi;
+    $text =~ s/&#(\d+);/chr($1)/ge;
+    return $text;
+}
+
+sub _filename_from_url {
+    my ($url) = @_;
+    my ($file) = $url =~ m{/([^/?]+)(?:\?.*)?$};
+    die qq{Unable to determine local filename from URL '$url'\n} if !defined $file || $file eq q{};
+    return $file;
+}
+
+sub _write_file {
+    my ( $file, $content ) = @_;
+    open my $fh, q{>}, $file or die qq{Failed to open '$file' for writing: $!\n};
+    print {$fh} $content;
+    close $fh or die qq{Failed to close '$file': $!\n};
+    return $file;
 }
 
 1;
@@ -350,194 +225,184 @@ __END__
 
 =head1 NAME
 
-Weather::NHC::TropicalCyclone::Storm - Provides a convenient interface to individual storm sections
-delivered inside of the NHC Tropical Cyclone JSON file. 
+Weather::NHC::TropicalCyclone::Storm - one active storm from NHC CurrentStorms.json
 
 =head1 SYNOPSIS
 
-   use strict;
-   use warnings;
-   use Weather::NHC::TropicalCyclone ();
-   
-   my $nhc = Weather::NHC::TropicalCyclone->new;
-   $nhc->fetch;
-   
-   my $storms_ref = $nhc->active_storms;
-   my $count = @$storms_ref;
-   
-   print qq{$count storms found\n};
-   
-   foreach my $storm (@$storms_ref) {
-     print $storm->name . qq{\n};
-     my ($text, $advNum, $local_file) = $storm->fetch_publicAdvisory($storm->id.q{.fst});
-     print qq{$local_file saved for Advisory $advNum\n};
-     rename $local_file, qq{$advNum.$local_file};
-   }
+    my $nhc = Weather::NHC::TropicalCyclone->new;
+    $nhc->fetch;
+
+    for my $storm ( @{ $nhc->active_storms } ) {
+        printf "%s %s: %s\n", $storm->id, $storm->name, $storm->kind;
+
+        my ( $text, $adv_num ) = $storm->fetch_forecastAdvisory;
+        my ( $file, $gis_adv ) = $storm->fetch_trackCone('kmzFile');
+    }
 
 =head1 DESCRIPTION
 
-Given JSON returned by the NHC via C<https://www.nhc.noaa.gov/CurrentStorms.json>,
-this module creates a covenient object for encapsulating each storm and fetching
-the data associated with them.
+A Storm object wraps one object from NHC's C<activeStorms> array.  Scalar storm
+properties are available as accessors and nested product objects remain ordinary
+hash-based H2O objects, so callers can use either accessor or hash syntax.
 
-=head1 METHODS
+Version 0.36 centralizes the product/type matrix in
+L<Weather::NHC::TropicalCyclone::Resource>.  The historical convenience methods
+below are retained as thin wrappers around shared text and file download paths.
+This also leaves a clean boundary for a future bulk-download API.
 
-Each storm instances provides an accessor for each field. In addition to this, each
-field that represents data (text extractible via C<.shtml> or a downloadable file)
-also provides a C<fetch_*> method.
+=head1 STORM INFORMATION
 
-=head2 Text Extracted from C<.shtml>
+The fields advertised by current NHC data include:
 
-Optional parameter naming a file to save the extracted text to.
+    id
+    binNumber
+    name
+    classification
+    intensity
+    pressure
+    latitude
+    longitude
+    latitudeNumeric
+    longitudeNumeric
+    movementDir
+    movementSpeed
+    lastUpdate
 
-Returns a list of 3 values: extracted text, advisory number, and local file (if optional
-parameter is provided to the called method. 
+NHC may add fields. Unknown fields are preserved by the top-level client.
 
-Provided methods include:
+=head2 Historical compatibility accessors
 
-=over 3
+The 0.35 constructor generated several top-level accessors that were not actual
+current NHC field names: C<latitudelongitude>, C<latitude_numberic>,
+C<kmzFile34kt>, C<kmzFile50kt>, and C<kmzFile64kt>. Version 0.36 retains those
+accessors for source compatibility, but new code should use C<latitudeNumeric>
+and the corresponding fields under C<windSpeedProbabilitiesGIS> instead.
 
-=item C<fetch_publicAdvisory>
+=head2 kind
 
-=item C<fetch_forecastAdvisory>
+Returns a human-readable description of the NHC C<classification> abbreviation.
 
-=item C<fetch_forecastDiscussion>
+=head2 basin
 
-=item C<fetch_windspeedProbabilities>
+Returns C<atlantic> for C<AT1>-C<AT5>, C<pacific> for C<EP1>-C<EP5> (the
+historical return value), and C<central_pacific> for the currently observed
+C<CP1>-C<CP5> bins.
 
-=item C<_get_text>
+=head1 TEXT PRODUCTS
 
-Internal method used by all of the fetch methods that extract text from the linked
-C<.shtml> files.
+These methods fetch the NHC HTML product and return the text inside its C<pre>
+element. Each accepts an optional local filename and returns text, advisory
+number, and that filename.
 
-=back
+=head2 fetch_publicAdvisory
 
-=head2 Directly Downloadable Files 
+Fetches the current public advisory text.
 
-Optional parameter naming a file to save the extracted text to.
+=head2 fetch_forecastAdvisory
 
-Returns a list of 2 values: name of saved local file and advisory (if provided).
+Fetches the current forecast/advisory text.
 
-Provided methods include:
+=head2 fetch_forecastDiscussion
 
-=over 3
+Fetches the current forecast discussion text.
 
-=item C<fetch_forecastTrack>
+=head2 fetch_windspeedProbabilities
 
-=item C<fetch_windWatchesWarnings>
+Fetches the current wind-speed probability text product.
 
-=item C<fetch_trackCone>
+=head1 GIS AND DOWNLOADABLE PRODUCTS
 
-=item C<fetch_initialWindExtent>
+The following methods accept a product representation such as C<zipFile>,
+C<kmzFile>, C<kmzFile34kt>, or C<kmlFile>, plus an optional local filename.
+They return the saved filename and advisory number. Products without an advisory
+number return C<N/A> for that value. A currently unavailable NHC product returns
+C<undef>.
 
-=item C<fetch_forecastWindRadiiGIS>
+=head2 fetch_forecastTrack
 
-=item C<fetch_earliestArrivalTimeTSWindsGIS>
+Downloads the requested forecast-track representation.
 
-=item C<fetch_mostLikelyTimeTSWindsGIS>
+=head2 fetch_windWatchesWarnings
 
-=item C<fetch_windSpeedProbabilitiesGIS>
+Downloads the requested wind-watch/warning representation when NHC provides it.
 
-=item C<fetch_stormSurgeWatchWarningGIS>
+=head2 fetch_trackCone
 
-=item C<fetch_potentialStormSurgeFloodingGIS>
+Downloads the requested forecast-cone representation.
 
-=item C<fetch_bestTrackGIS>
+=head2 fetch_initialWindExtent
 
-Note: This resource doesn't provide an advisory. C<N/A> is returned in its place.
+Downloads the requested initial wind-extent representation.
 
-=item C<_get_file>
+=head2 fetch_forecastWindRadiiGIS
 
-Internal method used by all of the fetch methods that downloads files.
+Downloads the requested forecast wind-radii GIS representation.
 
-=back
+=head2 fetch_bestTrackGIS
 
-=head2 Auxillary Methods
+Downloads the requested best-track GIS representation.
 
-=over 3
+=head2 fetch_earliestArrivalTimeTSWindsGIS
 
-=item C<fetch_forecastAdvisory_as_atcf>
+Downloads the requested earliest reasonable tropical-storm-wind arrival-time representation.
 
-An optional parameter may be passed that designates a file in which to save the
-forecast advisory in ATCF format. Returns a list, item 1 is the array reference
-containing the ATCF data; if the optional file name was passed, the same value
-is passed. If no local file name is passed, this value with be undef.
+=head2 fetch_mostLikelyTimeTSWindsGIS
 
-   # to get $atcf_ref without saving to a file
-   my ($atcf_ref, $advNum_atcf, $saved_file) = $storm->fetch_forecastAdvisory_as_atcf($file);
+Downloads the requested most-likely tropical-storm-wind arrival-time representation.
 
-   # to save ATCF format to a file
-   my $file = q{my.fst};
-   my ($atcf_ref, $advNum_atcf, $saved_file) = $storm->fetch_forecastAdvisory_as_atcf($file);
+=head2 fetch_windSpeedProbabilitiesGIS
 
-Fetches the forecast advisory, converts the forecast advisory into ATCF format,
-then returns an array reference containing each full ATCF record as an element
-in the array reference.
+Downloads a requested GIS wind-speed-probability representation.
 
-This method internally uses <fetch_forecastAdvisory> without an intermediate file
-save, the uses methods provided by the provide module, C<Weather::NHC::TropicalCyclone::ForecastAdvisory>.
+=head2 fetch_stormSurgeWatchWarningGIS
 
-=item C<fetch_forecastGraphics_urls>
+Downloads the storm-surge watch/warning KML product when available.
 
-Uses the URL provided by the C<forecastGraphics> fields to determine the location
-of the base graphics directory. The default index page returned by the web server
-is scraped to get a fully resolved list of all graphics available for the storm.
+=head2 fetch_potentialStormSurgeFloodingGIS
 
-Returns list of graphics URLs as an array reference. A method to download all of
-the graphics is not provided at this time. But give the list of URLs, it's trivial
-to write a loop to download any number of these images using C<HTTP::Tiny>'s
-C<mirror> method. See C<perldoc HTTP::Tiny> for more information.
+Downloads a requested potential storm-surge flooding GIS product.
 
-If the base directory for the image URLs can't be determined, this method returns
-an empty array reference. It is up to the caller to determine that none were returned.
+=head2 fetch_peakSurgeKML
 
-=item C<fetch_best_track>
+Downloads the peak-surge KML product when available.
 
-Accepts an optional parameter that defines the local file to save this file as.
+C<peakSurgeKML> is present in current NHC status data and is frequently C<null>
+when the product does not apply.
 
-Attempts to fetch the best track C<.dat> file that. This URL is not provided directly
-by the JSON file, but can be easily derived by using using C<$DEFAULT_BTK_ROOT> and
-composing the filename using the C<id> accessor. This method combines this with a fetch
-over HTTPS (using C<HTTP::Tiny>'s C<mirror> method). 
+=head1 OTHER PRODUCTS
 
-This method returns just the local file name.
+=head2 fetch_forecastGraphics_urls
 
-=item C<kind>
+Returns an array reference containing the currently advertised PNG graphic URLs
+for the storm. Returns an empty array reference if no graphics directory can be
+determined.
 
-Returns a C<Human meaningful> name for the kind of storm is represented by the
-reference. Based on the specification, the following kinds are returned based
-on the C<classification> value:
+=head2 fetch_best_track
 
-   NHC |     Meaningful Kind
-   --- | -------------------------------------
-   TD  | Tropical Depression
-   STD | Subtropical Depression
-   TS  | Tropical Storm
-   HU  | Hurricane
-   STS | Subtropical Storm
-   PTC | Post-tropical Cyclone / Remnants
-   TY  | Typhoon (we don't use this currently)
-   PC  | Potential Tropical Cyclone
+Downloads the preliminary best-track C<b<storm-id>.dat> file from NHC's ATCF
+best-track directory. The optional argument overrides the local filename.
 
+=head2 fetch_forecastAdvisory_as_atcf
 
-=back
+Fetches the current forecast/advisory, converts it to ATCF forecast records using
+L<Weather::NHC::TropicalCyclone::ForecastAdvisory>, and returns the ATCF array
+reference, advisory number, and optional saved filename.
 
-=head1 ENVIRONMENT
+=head1 RESOURCE CATALOG
 
-Default ackage variables:
+The product/type relationships used by these methods live in
+L<Weather::NHC::TropicalCyclone::Resource>. Keeping that information declarative
+makes it possible for a later release to provide filtered bulk downloads by
+product family, category, representation, or file extension without duplicating
+the download implementation.
 
-=over 3
+=head1 DEFAULT URLS
 
-=item C<$DEFAULT_GRAPHICS_ROOT>
+C<$DEFAULT_GRAPHICS_ROOT> is the NHC storm graphics root.
+C<$DEFAULT_BTK_ROOT> is the HTTPS ATCF preliminary best-track root.
 
-defines the base URL used to determine the list of graphics available for the storm
-
-=item C<$DEFAULT_BTK_ROOT>
-
-defines the base URL used to fetch the best track C<.dat> file
-
-=back
-
-=head1 COPYRIGHT and LICENSE
+=head1 LICENSE
 
 This module is distributed under the same terms as Perl itself.
+
+=cut

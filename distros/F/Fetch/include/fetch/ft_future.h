@@ -574,6 +574,41 @@ XS_INTERNAL(hm_xs_ondone_cb) {
     XSRETURN_EMPTY;
 }
 
+/* Run one on_cancel target: a code ref is called with the future, anything
+ * else is treated as a future and cancelled. Both spellings are needed
+ * because the await protocol registers each - a code block through
+ * AWAIT_ON_CANCEL, a future through AWAIT_CHAIN_CANCEL. */
+static void hmf_cancel_target(pTHX_ SV *thing, SV *self) {
+    dSP;
+    if (!(thing && SvROK(thing))) return;
+    ENTER; SAVETMPS; PUSHMARK(SP);
+    if (SvTYPE(SvRV(thing)) == SVt_PVCV) {
+        XPUSHs(self);
+        PUTBACK;
+        call_sv(thing, G_DISCARD);
+    } else {
+        XPUSHs(thing);
+        PUTBACK;
+        call_method("cancel", G_DISCARD);
+    }
+    FREETMPS; LEAVE;
+}
+
+/* on_cancel filter: b = target. Cancel callbacks ride the on_ready list
+ * rather than a slot of their own, so this fires on every settlement and
+ * drops everything that is not a cancellation. */
+XS_INTERNAL(hm_xs_oncancel_cb);
+XS_INTERNAL(hm_xs_oncancel_cb) {
+    dXSARGS;
+    hm_clos *cl = hm_clos_of(aTHX_ cv);
+    SV *f;
+    if (!cl || items < 1) XSRETURN_EMPTY;
+    f = ST(0);
+    if (hmf_state(aTHX_ f) == HMF_CANCELLED)
+        hmf_cancel_target(aTHX_ cl->b, f);
+    XSRETURN_EMPTY;
+}
+
 /* ---- convergent combinators --------------------------------------------- *
  * a = result future, b = remaining-count SV, c = subfutures AV ref,
  * i = mode. */

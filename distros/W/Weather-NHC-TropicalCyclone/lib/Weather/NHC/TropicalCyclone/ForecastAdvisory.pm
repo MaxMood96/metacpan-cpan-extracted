@@ -2,8 +2,7 @@ package Weather::NHC::TropicalCyclone::ForecastAdvisory;
 
 use strict;
 use warnings;
-use Date::Calc;
-use Getopt::Long;
+use Time::Local qw/timegm/;
 use Util::H2O::More qw/baptise/;
 
 sub new {
@@ -26,7 +25,10 @@ sub extract_and_save_atcf {
 
 sub save_atcf {
     my $self = shift;
-    open( my $fh, q{>}, $self->output_file ) || die qq{Failed to open output ATCF file} . $self->output_file . qq{ : $!.\n};
+    my $output_file = $self->output_file;
+    die qq{No output_file was provided for saving ATCF data.\n}
+      if !defined $output_file || $output_file eq q{};
+    open( my $fh, q{>}, $output_file ) || die qq{Failed to open output ATCF file $output_file : $!.\n};
     my $output_ref = $self->as_atcf;
     print $fh join( qq{\n}, @$output_ref );
     close $fh;
@@ -351,13 +353,15 @@ sub extract_atcf {
                 $forecast_month++;
                 if ( $forecast_month > 12 ) {
                     $forecast_month = 1;
+                    $forecast_year++;
                 }
             }
 
             # Determine the time in hours (forecast period) between the current
             # forecast and the nowcast time
-            ( my $ddays, my $dhrs, my $dsec ) = Date::Calc::Delta_DHMS( $nowcast_year, $nowcast_month, $nowcast_day, $nowcast_hour, 0, 0, $forecast_year, $forecast_month, $forecast_day, $forecast_hour, 0, 0 );
-            my $forecast_period = $ddays * 24 + $dhrs;
+            my $nowcast_epoch = timegm( 0, 0, $nowcast_hour, $nowcast_day, $nowcast_month - 1, $nowcast_year );
+            my $forecast_epoch = timegm( 0, 0, $forecast_hour, $forecast_day, $forecast_month - 1, $forecast_year );
+            my $forecast_period = int( ( $forecast_epoch - $nowcast_epoch ) / 3600 );
             substr( $atcf_line, 29, 4 ) = sprintf( "%4d", $forecast_period );
 
             # Get the next line and parse the isotachs
@@ -432,7 +436,7 @@ module's C<save_as_atcf> method.
   use warnings;
   use Weather::NHC::TropicalCyclone ();
   use Weather::NHC::TropicalCyclone::Forecast ();
-  
+
   my $nhc = Weather::NHC::TropicalCyclone->new;
   $nhc->fetch;
   my $storms_ref = $nhc->active_storms;

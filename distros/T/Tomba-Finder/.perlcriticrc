@@ -1,0 +1,17 @@
+severity = 3
+verbose  = %f:%l:%c: %m (%p, Severity: %s)\n
+
+[TestingAndDebugging::RequireUseStrict]
+severity = 5
+
+[TestingAndDebugging::RequireUseWarnings]
+severity = 5
+
+[Variables::ProhibitPunctuationVars]
+severity = 2
+
+[-Subroutines::ProhibitSubroutinePrototypes]
+
+[-ControlStructures::ProhibitPostfixControls]
+
+[-ValuesAndExpressions::ProhibitConstantPragma]

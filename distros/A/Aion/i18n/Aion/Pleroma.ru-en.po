@@ -21,6 +21,54 @@ msgid "* AION_PLEROMA_INI – файл аннотаций. По умолчани
 msgstr "* AION_PLEROMA_INI – annotation file. Defaults to `etc/annotation/eon.ann`.\n"
 "* AION_PLEROMA_AUTOWARE – load modules automatically, even if they are not specified in the configuration. Default is `1`."
 
+msgid "В `etc/*.yml` можно добавить ключ `aion.eon` с описанием дополнительных эонов. Это позволяет собирать эоны декларативно: задавать аргументы конструктора (именованные или упорядоченные), вызывать методы после создания и передавать ссылки на другие эоны через `@`."
+msgstr "You can add the `aion.eon` key to `etc/*.yml` with a description of additional eons. This allows you to assemble eons declaratively: specify constructor arguments (named or ordered), call methods after creation, and pass references to other eons via `@`."
+
+msgid "Опишем классы эонов."
+msgstr "Let us describe the classes of eons."
+
+msgid "Файл lib/Ex/Eon/Astronomer.pm:"
+msgstr "File lib/Ex/Eon/Astronomer.pm:"
+
+msgid "Файл lib/Ex/Eon/Planet.pm:"
+msgstr "File lib/Ex/Eon/Planet.pm:"
+
+msgid "Теперь конфигурация эонов. У эона-учёного `Ex::Eon::Galileo` аргументы заданы упорядоченно (`arguments` — массив), после создания вызывается метод `observe` со ссылкой на другой эон (`@Ex::Eon::Saturn`). У планет `arguments` — хеш, а аргумент `discoverer` ссылается (`@`) на эон учёного."
+msgstr "Now the configuration of the eons. The eon-scientist `Ex::Eon::Galileo` has arguments specified in order (`arguments` is an array), after creation the `observe` method is called with a link to another eon (`@Ex::Eon::Saturn`). For planets, `arguments` is a hash, and the `discoverer` argument refers (`@`) to the scientist's eon."
+
+msgid "Файл etc/aion/eon.yml:"
+msgstr "File etc/aion/eon.yml:"
+
+msgid "Загрузим конфигурацию из `etc/aion/eon.yml`, создадим контейнер и запросим эоны."
+msgstr "Let's load the configuration from `etc/aion/eon.yml`, create a container and request eons."
+
+msgid "Каждый эон в `aion.eon` описывается строкой или хешем."
+msgstr "Each eon in `aion.eon` is described by a string or hash."
+
+msgid "Строка задаёт конструктор `'класс#метод'` (или просто `'класс'`), метод по умолчанию — `new`. Так создаются самые простые эоны без аргументов."
+msgstr "The line specifies the constructor `'class#method'` (or just `'class'`), the default method is `new`. This is how the simplest eons are created without arguments."
+
+msgid "Хеш может содержать ключи:"
+msgstr "The hash can contain the keys:"
+
+msgid ""
+"* `class` – класс (пакет) эона. Если не указан и ключ эона похож на имя класса (`/^[\\w:]+$/`), используется сам ключ.\n"
+"* `method` – метод класса-конструктора. По умолчанию `new`.\n"
+"* `arguments` – аргументы конструктора:\n"
+"  * хеш – именованные аргументы (`new => %hash`);\n"
+"  * массив – упорядоченные аргументы (`new => @array`).\n"
+"* `calls` – список вызовов методов после создания эона. Каждый вызов — имя метода (без аргументов) или массив `[имя_метода, аргументы...]`."
+msgstr ""
+"* `class` – class (package) of the eon. If not specified and the eon key is similar to the class name (`/^[\\w:]+$/`), the key itself is used.\n"
+"* `method` – method of the constructor class. Defaults to `new`.\n"
+"* `arguments` – constructor arguments:\n"
+"* hash – named arguments (`new => %hash`);\n"
+"* array – ordered arguments (`new => @array`).\n"
+"* `calls` – list of method calls after eon creation. Each call is a method name (without arguments) or an array `[method_name, arguments...]`."
+
+msgid "Значение аргумента (или элемента вызова), начинающееся с `@`, воспринимается как ссылка на другой эон: `@ключ` заменяется порождённым эоном из контейнера."
+msgstr "An argument (or call element) value starting with `@` is treated as a reference to another eon: `@key` is replaced by the child eon from the container."
+
 msgid "Файл с аннотациями."
 msgstr "Annotation file."
 

@@ -1,5 +1,5 @@
 package Photonic::WE::ST::Green;
-$Photonic::WE::ST::Green::VERSION = '0.024';
+$Photonic::WE::ST::Green::VERSION = '0.025';
 
 =encoding UTF-8
 
@@ -9,7 +9,7 @@ Photonic::WE::ST::Green
 
 =head1 VERSION
 
-version 0.024
+version 0.025
 
 =head1 COPYRIGHT NOTICE
 
@@ -92,6 +92,10 @@ Array of L<Photonic::WE::ST::GreenP> structures, one for each direction.
 
 The Green's tensor calculated
 
+=item * symmetric
+
+Only the symmetric part of the tensor is required.
+
 =item * nhActual
 
 The actual number of Haydock coefficients used in the last calculation
@@ -114,11 +118,13 @@ The macroscopic dielectric tensor
 
 use namespace::autoclean;
 use PDL::Lite;
+use PDL::Core;
+use PDL::MatrixOps;
 use PDL::NiceSlice;
 use Photonic::WE::ST::Haydock;
 use Photonic::WE::ST::GreenP;
 use Photonic::Types -all;
-use Photonic::Utils qw(tensor make_haydock make_greenp wave_operator any_complex  triangle_coords);
+use Photonic::Utils qw(tensor make_haydock make_greenp any_complex  triangle_coords);
 use List::Util qw(all);
 use Moo;
 use MooX::StrictConstructor;
@@ -150,21 +156,21 @@ has 'waveOperator' =>  (is=>'lazy', isa=>PDLComplex, init_arg=>undef,
 has 'epsilonTensor' =>  (is=>'lazy', isa=>PDLComplex, init_arg=>undef,
                          documentation=>'macroscopic response');
 
-with 'Photonic::Roles::KeepStates', 'Photonic::Roles::UseMask';
-
 has 'cHaydock' =>(
     is=>'lazy', isa=>ArrayRef[Haydock],
     init_arg=>undef,
     documentation=>'Array of Haydock calculators for complex projection');
+
+has 'symmetric' => (
+    is=>'ro', required=>1, default=>0,
+    documentation=>'Flags only symmetric part required');
 
 has 'cGreenP'=>(
     is=>'lazy', isa=>ArrayRef[InstanceOf['Photonic::WE::ST::GreenP']],
     init_arg=>undef,
     documentation=>'Array of projected G calculators for complex projection');
 
-has 'symmetric' => (
-    is=>'ro', required=>1, default=>0,
-    documentation=>'Flags only symmetric part required');
+with 'Photonic::Roles::KeepStates', 'Photonic::Roles::UseMask';
 
 sub _build_greenTensor {
     my $self=shift;
@@ -187,7 +193,7 @@ sub _build_greenTensor {
        *$cpairs->(:,*1)
        *$symmetric)->sumover->sumover
       ;
-    $asy *= PDL->i();
+    $asy *= i();
     # This is wrong: $asy -= $asy->transpose;
     $asy = $asy-$asy->transpose;
     $symmetric+$asy;
@@ -216,7 +222,7 @@ sub _build_cGreenP {
 
 sub _build_waveOperator {
     my $self=shift;
-    wave_operator($self->greenTensor, $self->geometry->ndims);
+    $self->greenTensor->inv;
 }
 
 sub _build_epsilonTensor {
@@ -235,7 +241,7 @@ sub _build_epsilonTensor {
         $k2=$k->inner($k);
         $kk=$k->outer($k);
     }
-    my $id=PDL::MatrixOps::identity($k);
+    my $id=identity($k);
     $wave+$k2/$q2*$id - $kk/$q2;
 }
 

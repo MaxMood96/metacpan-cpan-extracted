@@ -27,9 +27,15 @@ DESCRIPTION
 
 RECENT CHANGES
 
-    Changes for version 0.012 (2026-08-28)
+    Changes for version 0.013 (2026-09-01)
 
-      * Add version guards for OpenSSL 3.5
+      * Add get_param method to X509::Store
+
+      * Handle invalid values in STACK_TO_ARRAY
+
+      * Add password callback support when reading private keys
+
+      * Made params argument to SKey import_SKEYMGMT optional
 
     See the Changes file for more details.
 

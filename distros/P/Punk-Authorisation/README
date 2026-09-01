@@ -1,0 +1,33 @@
+Punk-Authorisation
+
+    May this user act on this row.
+
+    $c->may('doc.edit', $doc) or return $c->deny;
+
+Punk::Plugin::Authorisation is row-level authorisation for a Punk
+application. `auth_guard` answers "may this user reach this route" and an API
+key's scope answers "may this credential call this operation"; neither can
+answer "may this user act on this row", and that is where the commonest
+authorisation bug in a web application lives - the controller that loads a
+row by an id from the request and forgets to ask whose it is.
+
+The rules are the application's and live in one package it owns. What this
+distribution provides is the machinery around them: collecting them, refusing
+to guess at a name nobody defined, turning a refusal into the right status,
+and - when it is asked for - a grants table for what one user hands another.
+
+INSTALLATION
+
+    perl Makefile.PL
+    make
+    make test
+    make install
+
+Needs Punk 0.32 or newer, for $app->auth_config. The grants half needs a
+database and nothing else.
+
+LICENSE AND COPYRIGHT
+
+This software is Copyright (c) 2026 by LNATION <email@lnation.org>.
+
+This is free software, licensed under the Artistic License 2.0.

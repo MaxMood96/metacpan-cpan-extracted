@@ -29,7 +29,7 @@ File::Access::Driver - Convenient File Access with "Batteries included"
 
 package File::Access::Driver;
 
-our $VERSION = '1.0.2';
+our $VERSION = '1.0.3';
 
 #----------------------------------------------------------------------------
 #Dependencies
@@ -221,6 +221,8 @@ sub setFileDirectory {
 
 This method sets the base name of the file.
 
+This will also close open file handles and free in-memory cache.
+
 B<Parameters:>
 
 =over 4
@@ -228,8 +230,6 @@ B<Parameters:>
 =item C<NAME>
 
 The base name of the file.
-
-This will also close open file handles and free in-memory cache.
 
 =back
 
@@ -432,6 +432,22 @@ sub setFileTime {
     return $irs;
 }
 
+=head3 setBuffered ( BUFFERED )
+
+This method enables or disables the in-memory buffer.
+
+B<Parameters:>
+
+=over 4
+
+=item C<BUFFERED>
+
+If the in-memory buffer should be enabled or disabled. (Possible values: C< 0 > | C< 1 >)
+
+=back
+
+=cut
+
 sub setBuffered {
     my $self = $_[0];
 
@@ -457,6 +473,24 @@ sub setBuffered {
         $self->{'_buffered'} = 1;
     }
 }
+
+=head3 setPersistent ( PERSISTENT )
+
+This method enables or disables the persistent mode.
+
+If the persistent mode is enabled the file is kept open.
+
+B<Parameters:>
+
+=over 4
+
+=item C<PERSISTENT>
+
+If the filehandle should be kept open. (Possible values: C< 0 > | C< 1 >)
+
+=back
+
+=cut
 
 sub setPersistent {
     my $self = $_[0];
@@ -1047,6 +1081,22 @@ sub writeLine {
     return $self->appendLine( $_[1] );
 }
 
+=head3 Delete ()
+
+This method deletes the file from the file system.
+
+It will return C< 1 > if the file could be deleted.
+
+If it could not be deleted it sets the B<Error Code> and the B<Error String>.
+
+B<Returns:>
+
+It returns C< 1 > if the file could be deleted or if it did not exist.
+
+Or C< 0 > if the file could not be deleted.
+
+=cut
+
 sub Delete {
     my $self = $_[0];
     my $irs  = 0;
@@ -1133,7 +1183,7 @@ sub _closeFile {
 
 =head3 Clear ()
 
-This method closed the file handle and frees the in-memory cache
+This method closed the file handle and frees the in-memory buffer
 and resets also the in-memory file attributes.
 
 =cut
@@ -1173,7 +1223,7 @@ sub clearErrors {
 
 =head3 freeResources ()
 
-This method closed the file handle and frees the in-memory cache.
+This method closed the file handle and frees the in-memory buffer.
 
 =cut
 
@@ -1194,13 +1244,43 @@ sub freeResources {
 #----------------------------------------------------------------------------
 #Consultation Methods
 
+=head3 getFileDirectory ()
+
+This method returns the directory of the file.
+
+B<Returns:>
+
+The directory of the file. It is terminated with a trailing slash C< / >.
+
+=cut
+
 sub getFileDirectory {
     return $_[0]->{'_directory_name'};
 }
 
+=head3 getFileName ()
+
+This method returns the base name of the file.
+
+B<Returns:>
+
+The base name of the file.
+
+=cut
+
 sub getFileName {
     return $_[0]->{'_file_name'};
 }
+
+=head3 getFilePath ()
+
+This method returns the complete path of the file.
+
+B<Returns:>
+
+The complete path of the file.
+
+=cut
 
 sub getFilePath {
     return $_[0]->{'_directory_name'} . $_[0]->{'_file_name'};
@@ -1306,6 +1386,16 @@ sub getFileSize {
     return $self->{'_file_size'};
 }
 
+=head3 Exists ()
+
+This method checks if the file exists in the file system.
+
+B<Returns:>
+
+It returns C< 1 > if the file exists otherwise C< 0 >.
+
+=cut
+
 sub Exists {
     my $self = $_[0];
     my $irs  = 0;
@@ -1384,7 +1474,7 @@ sub isPersistent {
 }
 
 sub getReportString {
-    return \$_[0]->{"_report"};
+    return \$_[0]->{'_report'};
 }
 
 sub getErrorString {

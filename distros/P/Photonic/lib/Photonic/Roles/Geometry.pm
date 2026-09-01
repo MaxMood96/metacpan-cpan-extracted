@@ -1,5 +1,5 @@
 package Photonic::Roles::Geometry;
-$Photonic::Roles::Geometry::VERSION = '0.024';
+$Photonic::Roles::Geometry::VERSION = '0.025';
 
 =encoding UTF-8
 
@@ -37,6 +37,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA  02110-1301 USA
 use Moo::Role;
 
 use PDL::Lite;
+use PDL::MatrixOps;
 use PDL::NiceSlice;
 use Photonic::Types -all;
 use Photonic::Utils qw(any_complex lu_decomp make_dyads triangle_coords);
@@ -48,9 +49,9 @@ requires 'B'; #characteristic function
 
 has 'L' =>(is=>'lazy', isa => PDLObj,
 	   documentation=>'array of unit cell size');
-has 'units'=>(is=>'lazy', isa=>PDLObj,
+has 'units'=>(is=>'lazy', isa=>PDLObj, init_arg => undef,
      documentation=>'Basis of unit vectors');
-has 'primitive'=>(is=>'lazy', isa=>PDLObj, required=>1, # required?
+has 'primitive'=>(is=>'lazy', isa=>PDLObj,
 		  documentation=>'Primitive directions');
 has 'primitiveNorm'=>(is=>'lazy', isa=>PDLObj, init_arg=>undef,
 		  documentation=>'Normalized primitive vectors');
@@ -100,7 +101,7 @@ sub _build_L {
 
 sub _build_units {
     my $self=shift;
-    PDL::MatrixOps::identity($self->B->ndims); # unit vectors
+    identity($self->B->ndims); # unit vectors
 }
 
 sub _build_primitive {
@@ -212,26 +213,26 @@ sub _build_unitPairs {
     my $self=shift;
     my $nd=$self->ndims;
     my $units=$self->units;
-    my $pairs = PDL->zeroes($nd, $nd * ($nd + 1) / 2);
+    my $pairs = PDL->zeroes($nd, ($nd * ($nd + 1)) / 2);
     my $pairs_slice = $pairs->mv(1, 0);
-    my $indexes = triangle_coords($nd, 1);
+    my $indices = triangle_coords($nd, 1);
     $pairs_slice .= (
-      $units->indexND($indexes(0))+
-      $units->indexND($indexes(1))
+      $units->indexND($indices(0))+
+      $units->indexND($indices(1))
     )->transpose->norm->transpose;
-    $pairs;
+    $pairs;  #xy,n
 }
 
 sub _build_cUnitPairs {
     my $self=shift;
     my $nd=$self->ndims;
     my $units=$self->units;
-    my $cpairs = PDL->zeroes($nd, $nd * ($nd - 1) / 2)->r2C;
+    my $cpairs = PDL->zeroes($nd, ($nd * ($nd - 1)) / 2)->r2C;
     my $cpairs_slice = $cpairs->mv(1, 0);
-    my $indexes = triangle_coords($nd);
+    my $indices = triangle_coords($nd);
     $cpairs_slice .= PDL::czip(
-      $units->indexND($indexes(0)),
-      $units->indexND($indexes(1))
+      $units->indexND($indices(0)),
+      $units->indexND($indices(1))
     );
     $cpairs_slice /= sqrt($cpairs_slice->abs2->transpose->sumover);
     $cpairs;
@@ -281,7 +282,7 @@ Photonic::Roles::Geometry
 
 =head1 VERSION
 
-version 0.024
+version 0.025
 
 =head1 SYNOPSIS
 
@@ -295,9 +296,10 @@ version 0.024
 =item (for developers)
 
     package Photonic::Geometry::FromB;
-    $Photonic::Geometry::Geometry::VERSION = '0.024';
+    $Photonic::Geometry::Geometry::VERSION = '0.025';
     use namespace::autoclean;
     use Moo;
+    use Moo::StrictConstructor;
     has 'B' =>(is=>'ro', isa=>PDLObj, required=>1,
 	       documentation=>'characteristic function');
     with 'Photonic::Roles::Geometry';
@@ -320,19 +322,13 @@ The characteristic function as PDL
 
 =back
 
-=head1 ACCESSORS (read write)
+=head1 ACCESSORS (read only)
 
 =over 4
 
 =item * Direction0
 
 Direction of the zero length wavevector
-
-=back
-
-=head1 ACCESSORS (read only)
-
-=over 4
 
 =item * L
 
@@ -341,6 +337,19 @@ Unit cell sizes as a ndims pdl.
 =item * units
 
 Basis C<e>_i of basis vectors for the lattice
+
+=item * primitive
+
+Primitive vectors of the unit cell. Only direction is
+relevant. Specify for non-cubic non-orthorhombic lattices
+
+=item * primitiveNorm
+
+Normalized primitive vectors
+
+=item * dualNorm
+
+Normalized reciprocal primitive vectors.
 
 =item * dims
 

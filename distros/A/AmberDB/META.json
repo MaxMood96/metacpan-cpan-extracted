@@ -73,6 +73,6 @@
          "web" : "https://github.com/marufcetin/amberdb"
       }
    },
-   "version" : "v5.21.0",
+   "version" : "v5.22.1",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Carp ();
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 require XSLoader;
 XSLoader::load('DBIx::Loop', $VERSION);
@@ -19,7 +19,7 @@ DBIx::Loop - non-blocking DBI on your event loop
 
 =head1 VERSION
 
-Version 0.06
+Version 0.09
 
 =cut
 
@@ -252,6 +252,31 @@ that ecosystem (IO::Async C<Future>, C<Mojo::Promise>, AnyEvent condvar). One
 conformance suite (t/lib/AdapterConformance.pm) proves every adapter behaves
 identically. Adapters with a C-side loop (Hyperman) can install a C vtable so
 readiness dispatches with no Perl call frame.
+
+=head2 Futures and the loop you are on
+
+A query hands back whatever the adapter's C<new_future> makes, so the class
+you get - and therefore what you can do with it - depends on the loop:
+
+    IO::Async      Future                 (see also to_native)
+    Mojo           Mojo::Promise
+    Hyperman       Hyperman::Future
+    AnyEvent, POE  DBIx::Loop::Future
+
+All four can be awaited inside an C<async sub>, so this is portable:
+
+    use Future::AsyncAwait;
+    my @rows = await $db->query('SELECT * FROM things');
+
+On Hyperman that needs Hyperman 0.40 or newer, which is where its future
+gained the await protocol. An older one fails the await rather than the
+C<use>, so the symptom is a missing C<AWAIT_IS_READY> inside your future.
+
+What differs is what else the future offers. L<DBIx::Loop::Future> is the
+smallest of the four: one-shot, and with no cancellation. Code that cancels a
+query, or that expects the combinators of L<Future>, is written against the
+loop it runs on rather than against every loop. C<to_native> bridges a query
+future into an ecosystem's own type where one exists.
 
 =head1 OBSERVING STATEMENTS
 

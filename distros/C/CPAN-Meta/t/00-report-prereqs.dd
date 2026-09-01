@@ -86,7 +86,7 @@ do { my $x = {
                     },
        'runtime' => {
                       'requires' => {
-                                      'CPAN::Meta::Requirements' => '2.121',
+                                      'CPAN::Meta::Requirements' => '2.145',
                                       'CPAN::Meta::YAML' => '0.011',
                                       'Carp' => '0',
                                       'Encode' => '0',

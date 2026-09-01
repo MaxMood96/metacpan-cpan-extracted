@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::X509::Store;
-$Crypt::OpenSSL3::X509::Store::VERSION = '0.012';
+$Crypt::OpenSSL3::X509::Store::VERSION = '0.013';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::X509::Store - An X509 certificate store
 
 =head1 VERSION
 
-version 0.012
+version 0.013
 
 =head1 METHODS
 
@@ -30,6 +30,8 @@ version 0.012
 =head2 add_cert
 
 =head2 get_all_certs
+
+=head2 get_param
 
 =head2 load_file
 

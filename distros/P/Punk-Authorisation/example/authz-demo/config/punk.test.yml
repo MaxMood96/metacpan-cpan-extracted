@@ -1,0 +1,6 @@
+# The test layer, read after config/punk.yml when PUNK_ENV=test.
+#
+# A database of its own, so `prove t/` does not disturb the one the server
+# uses - and one under var/, so deleting it is obvious and safe.
+database:
+  dsn: dbi:SQLite:dbname=var/test/authz-demo.db

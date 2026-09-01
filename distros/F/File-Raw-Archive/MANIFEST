@@ -3,6 +3,7 @@ Archive.xs
 Changes
 extract.c
 include/archive_plugin.h
+include/arch_compat.h
 include/arch_io.h
 include/extract.h
 include/marshal.h

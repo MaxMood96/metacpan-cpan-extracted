@@ -13,15 +13,12 @@
 #include "archive_plugin.h"
 #include "extract.h"
 
+#include "arch_compat.h"
+
 #include <errno.h>
-#include <fcntl.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <utime.h>
 
 #define ARCHIVE_PATH_MAX 4096
 #define ARCHIVE_DATA_CHUNK (64 * 1024)
@@ -30,18 +27,33 @@
  * Path safety
  * ============================================================ */
 
+/* A separator for the platform we are about to write on. Archive members
+ * always name their components with '/', but Windows accepts '\' just as
+ * well, so an entry called "..\..\evil" walks out of the destination on a
+ * scanner that only knows about '/'. Both are separators everywhere here:
+ * a POSIX filename really containing a backslash is then split into two
+ * components, which is a harmless over-refusal, and refusing is the side
+ * to be wrong on. */
+static int
+archive_is_sep(char c)
+{
+    return c == '/' || c == '\\';
+}
+
 int
 archive_path_is_safe(const char *name, size_t name_len)
 {
     size_t i = 0;
     if (name_len == 0) return 0;
-    if (name[0] == '/') return 0;            /* absolute */
+    if (archive_is_sep(name[0])) return 0;   /* absolute */
+    /* "C:foo" and "C:\foo" are both anchored to a drive on Windows. */
+    if (name_len >= 2 && name[1] == ':') return 0;
     while (i < name_len) {
         size_t start = i;
-        while (i < name_len && name[i] != '/') i++;
+        while (i < name_len && !archive_is_sep(name[i])) i++;
         size_t comp = i - start;
         if (comp == 2 && name[start] == '.' && name[start + 1] == '.') return 0;
-        if (i < name_len) i++;               /* skip the '/' */
+        if (i < name_len) i++;               /* skip the separator */
     }
     return 1;
 }
@@ -68,7 +80,7 @@ archive_mkpath(const char *path, uint32_t mode)
             struct stat st;
             if (stat(buf, &st) < 0) {
                 if (errno != ENOENT) { buf[i] = saved; return -1; }
-                if (mkdir(buf, mode ? mode : 0755) < 0 && errno != EEXIST) {
+                if (arch_mkdir(buf, mode ? mode : 0755) < 0 && errno != EEXIST) {
                     buf[i] = saved;
                     return -1;
                 }
@@ -117,10 +129,10 @@ int
 archive_extract_symlink(const char *out_path, const char *target)
 {
     struct stat st;
-    if (lstat(out_path, &st) == 0 && S_ISLNK(st.st_mode)) {
+    if (arch_lstat(out_path, &st) == 0 && arch_is_symlink(&st)) {
         unlink(out_path);
     }
-    if (symlink(target, out_path) < 0) return -1;
+    if (arch_symlink(target, out_path) < 0) return -1;
     return 0;
 }
 
@@ -132,7 +144,7 @@ int
 archive_apply_metadata_fd(int fd, const ArchiveEntry *e, int apply_xattrs)
 {
     if (e->mode) {
-        if (fchmod(fd, e->mode & 07777) < 0) return -1;
+        if (arch_fchmod(fd, e->mode & 07777) < 0) return -1;
     }
     if (apply_xattrs && e->xattrs && e->xattr_count > 0) {
         if (archive_apply_xattrs(fd, e->xattrs, e->xattr_count) < 0) return -1;
@@ -197,7 +209,7 @@ archive_extract_entry(pTHX_ const ArchivePlugin *plugin,
 
     if (errstage) *errstage = NULL;
 
-    fd = open(out_path, O_WRONLY | O_CREAT | O_TRUNC,
+    fd = open(out_path, O_WRONLY | O_CREAT | O_TRUNC | ARCH_O_BINARY,
               e->mode ? (mode_t)(e->mode & 07777) : (mode_t)0644);
     if (fd < 0) {
         if (errstage) *errstage = "open";
@@ -250,7 +262,7 @@ archive_extract_bytes(const ArchiveEntry *e,
 
     if (errstage) *errstage = NULL;
 
-    fd = open(out_path, O_WRONLY | O_CREAT | O_TRUNC,
+    fd = open(out_path, O_WRONLY | O_CREAT | O_TRUNC | ARCH_O_BINARY,
               e->mode ? (mode_t)(e->mode & 07777) : (mode_t)0644);
     if (fd < 0) {
         if (errstage) *errstage = "open";

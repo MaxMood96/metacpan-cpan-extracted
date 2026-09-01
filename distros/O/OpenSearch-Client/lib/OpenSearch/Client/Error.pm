@@ -20,7 +20,7 @@
 # limitations under the License.
 
 package OpenSearch::Client::Error;
-$OpenSearch::Client::Error::VERSION = '3.007010';
+$OpenSearch::Client::Error::VERSION = '3.007011';
 our $DEBUG = 0;
 
 @OpenSearch::Client::Error::Internal::ISA     = __PACKAGE__;
@@ -198,7 +198,7 @@ OpenSearch::Client::Error - Errors thrown by OpenSearch::Client
 
 =head1 VERSION
 
-version 3.007010
+version 3.007011
 
 =head1 DESCRIPTION
 

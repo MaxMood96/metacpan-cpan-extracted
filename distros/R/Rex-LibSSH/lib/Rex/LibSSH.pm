@@ -1,7 +1,7 @@
 # ABSTRACT: Rex connection backend using Net::LibSSH (no SFTP required)
 
 package Rex::LibSSH;
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 use strict;
 use warnings;
 
@@ -19,7 +19,7 @@ Rex::LibSSH - Rex connection backend using Net::LibSSH (no SFTP required)
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 

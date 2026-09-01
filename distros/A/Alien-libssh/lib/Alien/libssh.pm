@@ -1,7 +1,7 @@
 # ABSTRACT: Find or build libssh, the SSH library
 
 package Alien::libssh;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 use strict;
 use warnings;
 use parent 'Alien::Base';
@@ -20,7 +20,7 @@ Alien::libssh - Find or build libssh, the SSH library
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 
@@ -36,7 +36,8 @@ L<Alien::libssh> provides the C library L<libssh|https://www.libssh.org/>
 for use by other CPAN modules that need to link against it.
 
 It first checks whether a system C<libssh> is available via C<pkg-config>.
-If not, it downloads and builds libssh from source using CMake.
+If not, it builds the bundled libssh source with CMake; no network access
+is required.
 
 =head1 SEE ALSO
 
@@ -59,7 +60,7 @@ Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
+This software is copyright (c) 2026 by Torsten Raudssus <torsten@raudssus.de> L<https://raudssus.de/>.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

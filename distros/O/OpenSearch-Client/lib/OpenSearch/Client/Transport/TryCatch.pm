@@ -1,5 +1,5 @@
 package OpenSearch::Client::Transport::TryCatch;
-$OpenSearch::Client::Transport::TryCatch::VERSION = '3.007010';
+$OpenSearch::Client::Transport::TryCatch::VERSION = '3.007011';
 use Moo;
 
 use URI();
@@ -73,7 +73,7 @@ OpenSearch::Client::Transport::TryCatch - Provides interface between the client 
 
 =head1 VERSION
 
-version 3.007010
+version 3.007011
 
 =head1 DESCRIPTION
 

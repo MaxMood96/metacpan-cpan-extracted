@@ -1,0 +1,5 @@
+%syntax-version=1.0.0
+%project=apikeydemo
+
+users 2026-08-31T12:00:00Z LNATION <email@lnation.org> # accounts, roles and standing
+notes [users] 2026-08-31T12:00:00Z LNATION <email@lnation.org> # what the guarded API serves

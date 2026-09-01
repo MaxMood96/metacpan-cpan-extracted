@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% title | default('Punk::Plugin::Authorisation demo') %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1><a href="/">Punk::Plugin::Authorisation</a></h1>
+  <p class="lede">May this user act on this row? The rules live in
+  <code>lib/AuthzDemo/Authorisation.pm</code>; every controller just asks.</p>
+
+  <nav>
+  {% if user %}
+    <span>acting as <code>{% user.email %}</code>
+      <em>({% user.role %})</em></span>
+    <form method="post" action="/logout"><button>Sign out</button></form>
+  {% else %}
+    <span>signed out</span>
+  {% end %}
+    <form method="post" action="/signin" class="inline">
+      <select name="user_id">
+      {% for u in users %}
+        <option value="{% u.id %}">{% u.email %} - {% u.role %}</option>
+      {% end %}
+      </select>
+      <button>Act as</button>
+    </form>
+  </nav>
+</header>
+
+{% if notice %}<p class="notice {% kind %}">{% raw notice %}</p>{% end %}
+
+<main>
+{% content %}
+</main>
+
+<footer><small>Three rungs: <code>member</code>, <code>editor</code>,
+<code>admin</code>. The ladder belongs to the <code>auth</code> keyword and
+the plugin reads it back, so it is written once. Everything is in memory -
+restart and the grants are gone.</small></footer>
+</body>
+</html>

@@ -1,0 +1,6 @@
+%syntax-version=1.0.0
+%project=authzdemo
+
+user_role [punk_auth:users] 2026-08-31T12:00:00Z LNATION <email@lnation.org> # the rung each account sits on
+docs 2026-08-31T12:00:01Z LNATION <email@lnation.org> # the rows every rule is about
+demo_data [user_role docs] 2026-08-31T12:00:02Z LNATION <email@lnation.org> # three people, three documents

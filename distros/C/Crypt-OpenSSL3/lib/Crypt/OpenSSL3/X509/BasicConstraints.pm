@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::X509::BasicConstraints;
-$Crypt::OpenSSL3::X509::BasicConstraints::VERSION = '0.012';
+$Crypt::OpenSSL3::X509::BasicConstraints::VERSION = '0.013';
 use strict;
 use warnings;
 
@@ -19,7 +19,7 @@ Crypt::OpenSSL3::X509::BasicConstraints - An X509 BasicConstraints extension
 
 =head1 VERSION
 
-version 0.012
+version 0.013
 
 =head1 METHODS
 

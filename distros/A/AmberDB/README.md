@@ -12,21 +12,21 @@
 
 ## Key Features
 
-- 🏎️ **Ultra High-Performance**: Leverages Berkeley DB (`DB_File`) hash storage with $O(1)$ binary slicing and configurable in-memory buffers.
-- 🧱 **JOIN-Free JSON-like Extensible Block Records**: Eliminates complex relational SQL `JOIN` overhead by storing hierarchical, extensible block records. Newly added blocks and attributes are automatically indexed on the fly for low-latency multi-dimensional querying.
-- ⚙️ **Schema-Driven Dynamic Runtime Manipulation**: Table-specific schemas govern field validations, encodings, and index mappings. Schemas and values are fully mutable and can be modified dynamically at runtime without requiring table recreation or migrations.
-- 📦 **8-Byte Packed Binary Indexing**: Primary and secondary indexes use unified 8-byte packed binary buffers (`Q*` / `a8*`), enabling $O(1)$ substring slicing, sub-millisecond pagination, and memory-efficient `keys_only` scalar pipelines.
-- 🔍 **Intelligent & Locale-Aware Accent Search**: Advanced full-text search engine (`.src`) equipped with regional language and accent intelligence, phonetic devoicing (`b/d/g -> p/t/k`), circumflex/accent unfolding (`â/î/û -> a/i/u`), apostrophe suffix stop-words, and prefix wildcard matching.
-- 🏷️ **Columnar Facet Indexing (`.fac`)**: High-performance multi-dimensional facet filtering with index-level bitwise intersections and bidirectional string dictionaries (`.str`) for e-commerce, catalogs, and large categorical datasets.
-- 🗄️ **Multi-Tier Junk & Lifecycle Management**: Segregates active records from historical/archived data (`.db` master vs `.jnk` tier) with seamless single-pass hybrid queries (`jnktype => 'A' | 'B' | 'AB' | 'BA'`).
-- 🛡️ **ACID-Compliant Undo-Journal Transactions**: Full ACID multi-table transactions with disk-backed journaling (`.txn`), Strict Two-Phase Locking (Strict 2PL), automatic LIFO rollback upon failure or abnormal process exit, and orphaned journal recovery.
-- 💾 **2-Pillar Disaster Recovery & Native `.amberdb` Archiving**: 
+- **Ultra High-Performance**: Leverages Berkeley DB (`DB_File`) hash storage with $O(1)$ binary slicing and configurable in-memory buffers.
+- **JOIN-Free JSON-like Extensible Block Records**: Eliminates complex relational SQL `JOIN` overhead by storing hierarchical, extensible block records. Newly added blocks and attributes are automatically indexed on the fly for low-latency multi-dimensional querying.
+- **Schema-Driven Dynamic Runtime Manipulation**: Table-specific schemas govern field validations, encodings, and index mappings. Schemas and values are fully mutable and can be modified dynamically at runtime without requiring table recreation or migrations.
+- **8-Byte Packed Binary Indexing**: Primary and secondary indexes use unified 8-byte packed binary buffers (`Q*` / `a8*`), enabling $O(1)$ substring slicing, sub-millisecond pagination, and memory-efficient `keys_only` scalar pipelines.
+- **Intelligent & Locale-Aware Accent Search**: Advanced full-text search engine (`.src`) equipped with regional language and accent intelligence, phonetic devoicing (`b/d/g -> p/t/k`), circumflex/accent unfolding (`â/î/û -> a/i/u`), apostrophe suffix stop-words, and prefix wildcard matching.
+- **Columnar Facet Indexing (`.fac`)**: High-performance multi-dimensional facet filtering with index-level bitwise intersections and bidirectional string dictionaries (`.str`) for e-commerce, catalogs, and large categorical datasets.
+- **Multi-Tier Junk & Lifecycle Management**: Segregates active records from historical/archived data (`.db` master vs `.jnk` tier) with seamless single-pass hybrid queries (`jnktype => 'A' | 'B' | 'AB' | 'BA'`).
+- **ACID-Compliant Undo-Journal Transactions**: Full ACID multi-table transactions with disk-backed journaling (`.txn`), Strict Two-Phase Locking (Strict 2PL), automatic LIFO rollback upon failure or abnormal process exit, and orphaned journal recovery.
+- **2-Pillar Disaster Recovery & Native `.amberdb` Archiving**: 
   - **Pillar 1 (Continuous Recovery Stream):** Automatic append-only audit stream in `backup/YYYY/YYYY-MM-DD.csv` capturing every `insert`, `modify`, and `delete`.
   - **Pillar 2 (Native Portable Archive):** Compressed, portable `.amberdb` archives containing schemas (`schema/*.table`, `schema/*.dbase`) and authoritative data files (`tables/*.db`, `tables/*.del`, `tables/*.aut`, `tables/*.cnt`, `tables/*_*.str`) with SHA-256 integrity verification. Derived indexes are excluded to save space and reconstructed deterministically on restore.
-- 🔒 **Multi-Granularity Concurrency Control**: Non-blocking shared reads and exclusive writes at both table-level and individual record-level using OS-native `flock`.
-- 🌐 **Multilingual Locale Engine**: Out-of-the-box support for 9 languages (`en`, `tr`, `de`, `fr`, `es`, `ja`, `ru`, `ar`, `az`) with language-specific case folding (e.g. Turkish `ı/I` and `i/İ`), collation, currency, and date formatting.
-- 🚀 **High-Throughput 2-Phase Batch Operations**: High-performance batch ingestion pipeline (`insert_list`, `modify_list`, `delete_list`) opens master `.db` once for batch writing and executes single-pass index merging (`.inx`, `.src`, `.fld`, `.fac`, `.srt`), delivering 50x-100x faster ETL data imports without per-record locking overhead.
-- ⚡ **RAM-Disk Acceleration**: Integrated CLI tools and automation for mounting `tmpfs` (Linux) or `ImDisk` (Windows) for sub-microsecond in-memory table access.
+- **Multi-Granularity Concurrency Control**: Non-blocking shared reads and exclusive writes at both table-level and individual record-level using OS-native `flock`.
+- **Multilingual Locale Engine**: Out-of-the-box support for 9 languages (`en`, `tr`, `de`, `fr`, `es`, `ja`, `ru`, `ar`, `az`) with language-specific case folding (e.g. Turkish `ı/I` and `i/İ`), collation, currency, and date formatting.
+- **High-Throughput 2-Phase Batch Operations**: High-performance batch ingestion pipeline (`insert_list`, `modify_list`, `delete_list`) opens master `.db` once for batch writing and executes single-pass index merging (`.inx`, `.src`, `.fld`, `.fac`, `.srt`), delivering 50x-100x faster ETL data imports without per-record locking overhead.
+- **RAM-Disk Acceleration**: Integrated CLI tools and automation for mounting `tmpfs` (Linux) or `ImDisk` (Windows) for sub-microsecond in-memory table access.
 
 ---
 
@@ -71,18 +71,18 @@ dbstore/
 | `.src` | **Full-Text Search Index** |  **Yes** (`set_index`) | Word-level token inverted index (`search_block`) |
 | `.srt` | **Sorted Index** |  **Yes** (`set_index`) | Pre-sorted binary array of record IDs (`sort_block`) |
 | `.fac` | **Facet Navigation Index** |  **Yes** (`set_index`) | Forward bitset index for faceted filter navigation (`facet_block`) |
-| `.rwt` | **SEO URL Slug Map** |  **Yes** (`set_index`) | Bidirectional map: `_0.rwt` (ID→Slug) and `_1.rwt` (Slug→ID) |
+| `.slg` | **URL Slug Map** |  **Yes** (`set_index`) | Bidirectional map: `_0.slg` (ID→Slug) and `_1.slg` (Slug→ID) |
 | `.jinx`| **Junk Record Index** |  **Yes** (`set_index`) | Binary primary index for cold/archived records (`use_junk`) |
 | `.jfld`| **Junk Match Index** |  **Yes** (`set_index`) | Field match index for cold records (`jnktype => 'B'/'AB'`) |
 | `.jsrc`| **Junk Full-Text Search** |  **Yes** (`set_index`) | Word-level inverted index for cold records (`jnktype => 'B'/'AB'`) |
 | **Runtime & Backup Files** | | | |
-| `.amberdb` | **Native Database Archive** | 📦 Portable Archive | Compressed tar archive with schemas, data files, and SHA-256 manifest |
-| `.csv` | **Continuous WAL Stream** | 🛡️ Append-Only Log | Daily chronological audit stream (`backup/YYYY/YYYY-MM-DD.csv`) |
-| `.cnt` | **View / Hit Counter** | ⚠️ Counter State | High-throughput concurrent counter store (`use_counter`) |
-| `.txn` | **Transaction Undo Journal** | ⚠️ Transient (Runtime) | Active transaction rollback journal file (`txn/`) |
-| `.cache` | **L2 Shared Cache** |  Yes (RAM-Disk) | L2 RAM-Disk shared cache file (`cache/`) |
-| `.tmp` | **Disk Buffer File** | ⚠️ Transient (Staging) | Disk staging buffer file under `dbstore/buffer/` (`buffer_write`) |
-| `.lock` | **Process Mutex Lock** | ⚠️ Transient (Mutex) | OS `flock` process synchronization lock file |
+| `.amberdb` | **Native Database Archive** | Portable Archive | Compressed tar archive with schemas, data files, and SHA-256 manifest |
+| `.csv` | **Continuous WAL Stream** | Append-Only Log | Daily chronological audit stream (`backup/YYYY/YYYY-MM-DD.csv`) |
+| `.cnt` | **View / Hit Counter** | Counter State | High-throughput concurrent counter store (`use_counter`) |
+| `.txn` | **Transaction Undo Journal** | Transient (Runtime) | Active transaction rollback journal file (`txn/`) |
+| `.cache` | **Shared RAM-Disk Cache** | Yes (RAM-Disk) | RAM-Disk shared cache file (`cache/`) |
+| `.tmp` | **Disk Buffer File** | Transient (Staging) | Disk staging buffer file under `dbstore/buffer/` (`buffer_write`) |
+| `.lock` | **Process Mutex Lock** | Transient (Mutex) | OS `flock` process synchronization lock file |
 
 ---
 
@@ -90,8 +90,12 @@ dbstore/
 
 ### Via CPAN (Recommended)
 
+AmberDB can be installed directly from CPAN across Linux, macOS, and Windows (Strawberry Perl / MSYS2 / MSYS64):
+
 ```bash
 cpanm AmberDB
+# or
+cpan AmberDB
 ```
 
 ### Manual Build from Source
@@ -105,7 +109,7 @@ make test
 make install
 ```
 
-*(On Windows with Strawberry Perl, use `gmake` or `dmake`)*
+*(On Windows, you can also install locally via `cpanm .` or `cpan .`)*
 
 ---
 
@@ -135,12 +139,12 @@ my $id = $adb->insert_id("catalog_products", 0, "Wireless Headphones", "Electron
 print "Created Product ID: $id\n";
 
 # --- READ ---
-my $product = $adb->read_id("catalog_products", $id);
-print "Product Title: $product->[1]\n";
+my @product = $adb->read_id("catalog_products", $id);
+print "Product Title: $product[1]\n";
 
 # --- UPDATE ---
-$product->[3] = 129.99; # Update Price
-$adb->modify_id("catalog_products", @$product);
+$product[3] = 129.99; # Update Price
+$adb->modify_id("catalog_products", @product);
 
 # --- DELETE ---
 $adb->delete_id("catalog_products", $id);
@@ -209,25 +213,24 @@ AmberDB provides full **ACID-compliant transactions** via disk-backed undo-journ
 # Start atomic multi-table transaction
 $adb->transact_start();
 
-eval {
-    # 1. Deduct balance (acquires record lock, writes undo log)
-    my $account = $adb->read_id("user_account", $user_id);
-    $account->[2] -= 100.00;
-    $adb->modify_id("user_account", @$account);
+# 1. Check & deduct balance (acquires record lock, writes undo log)
+my @account = $adb->read_id("user_account", $user_id);
+if ($account[2] < 100.00) {
+    $adb->transact_error("user_account", "Insufficient balance");
+} else {
+    $account[2] -= 100.00;
+    $adb->modify_id("user_account", @account);
 
     # 2. Create order
     my $order_id = $adb->insert_id("order_master", 0, $user_id, 100.00, "COMPLETED");
+}
 
-    # 3. Commit transaction (releases locks, removes journal)
-    my $status = $adb->transact_end();
-    if ($status->{status} eq 'rollback') {
-        die "Transaction rolled back automatically!";
-    }
-};
-if ($@) {
-    # Explicit manual rollback if an external exception occurred
-    $adb->transact_rollback();
-    warn "Transaction failed: $@";
+# 3. Finalize transaction (commits if clean, automatically rolls back on error)
+my $status = $adb->transact_end();
+if ($status->{status} eq 'commit') {
+    print "Order created and balance deducted successfully.\n";
+} else {
+    warn "Transaction aborted and changes rolled back automatically.\n";
 }
 ```
 
@@ -343,25 +346,26 @@ Supported Languages: **English (`en`)**, **Turkish (`tr`)**, **German (`de`)**, 
 Full comprehensive guides are available in the [`docs/`](docs/) directory:
 
 - 📖 **English Documentation**:
-  - [AmberDB Database System & Architecture Guide](docs/en/AmberDB_User-Guide.en.md)
-  - [AmberDB::Locale User Guide](docs/en/AmberDB-Locale_User-Guide.en.md)
+  - [AmberDB Database System & Architecture Guide](docs/EN.AmberDB_User-Guide.md)
+  - [AmberDB::Locale User Guide](docs/EN.AmberDB-Locale_User-Guide.md)
 - 📖 **Türkçe Dokümantasyon**:
-  - [AmberDB Veritabanı Sistemi & Mimari Rehberi](docs/tr/AmberDB_Veritabani_Sistemi.md)
-  - [AmberDB::Locale Kullanım Rehberi](docs/tr/AmberDB-Locale_Kullanim_Rehberi.md)
+  - [AmberDB Veritabanı Sistemi & Mimari Rehberi](docs/TR.AmberDB_Veritabani_Sistemi.md)
+  - [AmberDB::Locale Kullanım Rehberi](docs/TR.AmberDB-Locale_Kullanim_Rehberi.md)
 
 ---
 
 ## Running Tests
 
-AmberDB contains an extensive test suite covering core operations, indexing, transactions, search, facets, concurrency, locales, and backups:
+AmberDB includes an exhaustive test suite covering core operations, indexing, transactions, search, facets, locales, and backups, along with multi-process concurrency stress tests:
 
 ```bash
-# Run all tests via prove
+# Run standard unit & integration test suite (39 test files, 390+ assertions)
 prove -l t/
 
-# Or via standard MakeMaker
-perl Makefile.PL
-make test
+# Run multi-process concurrency & stress test suite (cross-platform Linux & Windows)
+prove -l xt/
+# or directly:
+perl -Ilib xt/amberdb_concurrency_stress.t
 ```
 
 ---

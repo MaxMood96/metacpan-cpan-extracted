@@ -3,7 +3,7 @@ package Fetch::Future;
 use strict;
 use warnings;
 
-our $VERSION = '0.16';
+our $VERSION = '0.21';
 
 # An external event loop may install an awaiter here so ->get/->await on a
 # pending future pumps it when we are not already inside a running loop.
@@ -32,7 +32,7 @@ Fetch::Future - a fast, native, Future-compatible async result
 =head1 DESCRIPTION
 
 An asynchronous result with an API compatible with CPAN L<Future>:
-C<done>/C<fail>/C<cancel>, C<on_ready>/C<on_done>/C<on_fail>,
+C<done>/C<fail>/C<cancel>, C<on_ready>/C<on_done>/C<on_fail>/C<on_cancel>,
 C<then>/C<else>/C<followed_by>/C<transform>, C<get>/C<await>, and the
 convergent combinators C<wait_all>/C<wait_any>/C<needs_all>/C<needs_any>.
 
@@ -94,6 +94,14 @@ cancelled). Returns the future.
 
 Call C<< $cb->(@values) >> on success, or C<< $cb->(@failure) >> on failure.
 Return the future.
+
+=head2 on_cancel($cb) / on_cancel($future)
+
+Given a coderef, call C<< $cb->($future) >> when this future is cancelled;
+given another future, cancel that one with it. Registering on a future that
+has already been cancelled runs the target at once. Registering on one that
+completed normally drops it, because that future will never cancel. Returns
+the future.
 
 =head1 CHAINING
 
@@ -168,6 +176,32 @@ C<< isa('Future') >>.
     my $f = Fetch::Future->from_future($cpan_future);
 
 A Fetch::Future that mirrors the given CPAN L<Future>.
+
+=head1 ASYNC/AWAIT
+
+This class implements the C<Future::AsyncAwait::Awaitable> API, so a request
+can be awaited directly:
+
+    use Future::AsyncAwait;
+
+    async sub fetch_title {
+        my $res = await $ua->get($_[0]);
+        return $res->content =~ m{<title>(.*?)</title>}s ? $1 : undef;
+    }
+
+Whatever it awaited, an C<async sub> returns a CPAN L<Future> by default.
+Naming this class at import makes it return one of these instead:
+
+    use Future::AsyncAwait future_class => 'Fetch::Future';
+
+Cancelling the future an C<async sub> returned cancels whichever future it is
+suspended on.
+
+An C<async sub> takes its loop from the first request it awaits, so one that
+awaits requests made on two different loops cannot be awaited from outside
+either. This is the same single-loop rule a chain of C<then> follows. The
+C<AWAIT_*> methods are the protocol; call the documented names above rather
+than those.
 
 =head1 AUTHOR
 

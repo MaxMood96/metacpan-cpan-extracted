@@ -1,5 +1,5 @@
 package Photonic::WE::S::Haydock;
-$Photonic::WE::S::Haydock::VERSION = '0.024';
+$Photonic::WE::S::Haydock::VERSION = '0.025';
 
 =encoding UTF-8
 
@@ -9,7 +9,7 @@ Photonic::WE::S::Haydock
 
 =head1 VERSION
 
-version 0.024
+version 0.025
 
 =head1 SYNOPSIS
 
@@ -135,7 +135,7 @@ use Carp;
 use Photonic::Types -all;
 use Photonic::Utils qw(VSProd any_complex GtoR RtoG);
 use Moo;
-use MooX::StrictConstructor;
+#use MooX::StrictConstructor;
 
 has 'metric'=>(is=>'ro', isa => InstanceOf['Photonic::WE::S::Metric'],
 	       handles=>{B=>'B', ndims=>'ndims', dims=>'dims',
@@ -200,23 +200,22 @@ sub changesign { #don't change sign
 
 sub _build_firstState { #\delta_{G0}
     my $self=shift;
-    my $v=PDL->zeroes(2,@{$self->dims})->r2C; #pm:nx:ny...
-    my $arg=join ',', ':', ("(0)") x $self->ndims; #:,(0),(0),... ndims times
+    my $v=PDL->zeroes(@{$self->dims})->r2C; #nx:ny...
+    my $arg=join ',', ("(0)") x $self->ndims; #(0),(0),... ndims times
     $v->slice($arg).=1/sqrt(2);
     my $e=$self->polarization; #xy
     my $d=$e->dim(0);
     confess "Polarization has wrong dimensions. " .
 	  " Should be $d-dimensional complex vector, got ($e)."
 	unless any_complex($e) && $e->dim(0)==$d;
-    my $modulus2=$e->abs2->sumover;
+    my $modulus=$e->magnover->re;
     confess "Polarization should be non null" unless
-	$modulus2 > 0;
-    $e=$e/sqrt($modulus2);
+	$modulus > 0;
+    $e=$e/$modulus;
     $self->_normalizedPolarization($e);
-    #I'm using the same polarization for k and for -k. Could be
-    #different (for chiral systems, for example (maybe I should conjugate to avoid null states)
-    my $phi=$e*$v(*1); #initial state ordinarily normalized #suspicious, what about circular polarization?
-    # xy:pm:nx:ny
+    #Use same helicity for k and for -k, conjugate polarization, for allowing chirality
+    my $phi=pdl($e, $e->conj)*$v->(*1,*1); #initial state ordinarily normalized
+                       # xy:pm:nx:ny
     return $phi;
 }
 

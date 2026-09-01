@@ -9,7 +9,7 @@ use Crypt::Age::Header;
 use namespace::clean;
 
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 sub generate_keypair {
     my ($class) = @_;
@@ -23,10 +23,44 @@ sub encrypt {
     my $plaintext  = $args{plaintext}  // croak "plaintext required";
     my $recipients = $args{recipients} // croak "recipients required";
 
-    open my $ifh, '<:raw', \$plaintext or die "open on input string: $!";
+    # This is perl's own test for the in-memory open below, hoisted so it can
+    # say what is wrong. PerlIO::scalar downgrades the string in place
+    # (sv_utf8_downgrade) and, when that cannot be done, warns "Strings with
+    # code points over 0xFF may not be mapped into in-memory file handles" and
+    # returns EINVAL -- so the open croaked "open on input string: Invalid
+    # argument", which tells a caller who passed decoded characters nothing at
+    # all. Running the test first replaces that with a message naming the
+    # cause, and the warning never happens because the open is never reached.
+    #
+    # Not utf8::is_utf8: it reports the internal representation, so a pure
+    # ASCII string that happens to be stored upgraded answers true while
+    # holding nothing above 0xFF. What decides this is the content.
+    #
+    # Not a /[^\x00-\xff]/ scan either, though both are free on an unflagged
+    # string (perl short-circuits: downgrade on the flag, the regex on the
+    # optimizer knowing that class cannot match a non-UTF-8 target -- measured
+    # at 2000 passes over 16 MiB in under 0.01s CPU for both). They part on a
+    # flagged string: over 16 MiB, downgrade costs 32ms against the regex's
+    # 55ms, and it *is* the scan perl is about to do, so it leaves the string
+    # downgraded and perl's repeat of it is then a flag test. The regex pays
+    # for that scan twice. Worth it either way, but this way costs least.
+    #
+    # Mutating our own copy is safe and changes nothing a caller can see:
+    # downgrading converts the representation, never the value, %args and the
+    # lexical are both copies, and on success perl's open performs this very
+    # conversion anyway. A failure leaves the string untouched.
+    #
+    # One bit comes back, which is all that may be reported anyway: the offset
+    # a scan would yield is derived from the caller's plaintext, and plaintext
+    # does not go into error messages.
+    utf8::downgrade($plaintext, 1)
+        or croak 'plaintext must be a byte string: it holds a code point '
+            .'above 0xFF, encode it before passing it in';
+
+    open my $ifh, '<:raw', \$plaintext or croak "open on input string: $!";
 
     my $output = '';
-    open my $ofh, '>:raw', \$output or die "open on output string: $!";
+    open my $ofh, '>:raw', \$output or croak "open on output string: $!";
 
     $class->_encrypt_fh($ifh, $ofh, $recipients);
 
@@ -40,10 +74,17 @@ sub decrypt {
     my $ciphertext = $args{ciphertext} // croak "ciphertext required";
     my $identities = $args{identities} // croak "identities required";
 
-    open my $ifh, '<:raw', \$ciphertext or die "open on input string: $!";
+    # Same test, same reasons as in encrypt above; the advice differs because
+    # age ciphertext is binary, so a wide character in it means the caller
+    # decoded bytes that were never text rather than forgot to encode text.
+    utf8::downgrade($ciphertext, 1)
+        or croak 'ciphertext must be a byte string: it holds a code point '
+            .'above 0xFF, read it with :raw rather than decoding it';
+
+    open my $ifh, '<:raw', \$ciphertext or croak "open on input string: $!";
 
     my $output = '';
-    open my $ofh, '>:raw', \$output or die "open on output string: $!";
+    open my $ofh, '>:raw', \$output or croak "open on output string: $!";
 
     $class->_decrypt_fh($ifh, $ofh, $identities);
 
@@ -56,8 +97,32 @@ sub _encrypt_fh {
     binmode($ifh, ':raw') or croak "cannot binmode input filehandle: $!";
     binmode($ofh, ':raw') or croak "cannot binmode output filehandle: $!";
 
-    croak "recipients must be an array ref" unless ref($recipients) eq 'ARRAY';
-    croak "at least one recipient required" unless @$recipients;
+    # Same skeleton as the shape checks in Crypt::Age::Header -- <param> must
+    # be a <Type>, then a clause carrying the requirement and its reason, then
+    # the fix -- because this guard and Header::create's fire on the identical
+    # caller mistake and only differ in which layer catches it first. This one
+    # always does: create is called below with the list this already accepted,
+    # so its message is unreachable from here and a caller who searched for
+    # one wording had to find the other.
+    #
+    # The reason is this layer's, not create's: create wraps the file key once
+    # per entry, while what a caller of encrypt sees is that every entry ends
+    # up able to decrypt. Nothing is interpolated, for the reason written out
+    # at create -- the mistake that puts a bare string here is the swap of
+    # recipient and identity, so the value is not reliably a public one.
+    croak 'recipients must be an ArrayRef: this method encrypts to every '
+        .'entry, pass [$recipient] rather than $recipient'
+        if ref($recipients) ne 'ARRAY';
+    # The emptiness case, moved onto the same skeleton in the same change that
+    # gave Header::create a guard of its own. Leaving it on its old wording
+    # would have rebuilt, for the empty list, exactly the divergence the shape
+    # checks above were just brought out of. The reason is this layer's again:
+    # what a caller of encrypt sees is not a header without stanzas but a
+    # result nobody can open.
+    croak 'recipients must not be empty: this method encrypts to every entry, '
+        .'so with none the result can never be decrypted, pass at least one '
+        .'recipient'
+        unless @$recipients;
 
     # Generate random file key
     my $file_key = Crypt::Age::Primitives->generate_file_key;
@@ -111,8 +176,29 @@ sub _decrypt_fh {
     binmode($ifh, ':raw') or croak "cannot binmode input filehandle: $!";
     binmode($ofh, ':raw') or croak "cannot binmode output filehandle: $!";
 
-    croak "identities must be an array ref" unless ref($identities) eq 'ARRAY';
-    croak "at least one identity required" unless @$identities;
+    # The counterpart to the recipients check in _encrypt_fh, in the same form
+    # and ahead of unwrap_file_key's own check for the same reason. The clause
+    # is this layer's: unwrap_file_key tries each entry against each stanza,
+    # while what a caller of decrypt sees is that the file opens if any one
+    # entry fits.
+    #
+    # Never interpolate $identities. A bare string in this parameter is an
+    # identity, and this croak stands between it and the dereference in
+    # unwrap_file_key that would otherwise put 32 characters of secret key
+    # material into an exception; a message quoting it here would reintroduce
+    # exactly that leak one frame earlier.
+    croak 'identities must be an ArrayRef: this method decrypts with '
+        .'whichever entry matches, pass [$identity] rather than $identity'
+        if ref($identities) ne 'ARRAY';
+    # The counterpart, in the same form and moved in the same change. Unlike
+    # the recipients side this one closes no defect: unwrap_file_key already
+    # croaks "No matching identity found" for an empty list -- measured, not
+    # assumed -- so nothing was ever silently accepted here. It moves so that
+    # the empty list reads one way on both sides of the API.
+    croak 'identities must not be empty: this method decrypts with whichever '
+        .'entry matches, so with none there is nothing that could match, '
+        .'pass at least one identity'
+        unless @$identities;
 
     # Parse header
     my $header = Crypt::Age::Header->parse_from_fh($ifh);
@@ -177,7 +263,7 @@ Crypt::Age - Perl implementation of age encryption (age-encryption.org)
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -185,7 +271,7 @@ version 0.002
 
     # Generate keypair
     my ($public, $secret) = Crypt::Age->generate_keypair();
-    # $public  = "age1ql3z7hjy..."
+    # $public  = "age19ljhmg68..."
     # $secret  = "AGE-SECRET-KEY-1..."
 
     # Encrypt data
@@ -231,6 +317,23 @@ primitives are provided by L<CryptX>.
 Files encrypted with Crypt::Age can be decrypted with the C<age> and C<rage>
 command-line tools, and vice versa.
 
+Two APIs are provided, and they differ in memory use. L</encrypt> and
+L</decrypt> take and return in-memory strings, so the whole plaintext or
+ciphertext has to fit in memory at once, both as the argument and as the
+returned value. L</encrypt_file>, L</decrypt_file>, L</encrypt_filehandle> and
+L</decrypt_filehandle> stream instead: they read and write in 64 KiB chunks, so
+memory use stays bounded regardless of how large the file is.
+
+Every method here is byte-oriented: it encrypts and decrypts octets, never
+characters. The string API takes and returns byte strings; the file and
+filehandle API forces C<:raw> on every handle it touches, which removes an
+C<:encoding> layer the caller may have set on one. So encode a character
+string -- anything that has been through C<Encode::decode> or arrived through
+an C<:encoding> layer -- before you hand it over. L</encrypt> and L</decrypt>
+reject one outright when they can tell.
+
+See L</LIMITATIONS> below for what this module does not implement.
+
 =head2 generate_keypair
 
     my ($public_key, $secret_key) = Crypt::Age->generate_keypair();
@@ -273,7 +376,44 @@ Returns the encrypted data in age format, which includes a text header followed
 by the encrypted payload. The file key is wrapped separately for each recipient,
 allowing any of them to decrypt the data.
 
+C<recipients> must really be an ArrayRef; a single recipient still goes in a
+list of one. Every other shape is refused before the file key is generated,
+with C<"recipients must be an ArrayRef: this method encrypts to every entry,
+pass [$recipient] rather than $recipient">. As elsewhere in this distribution
+the clause after the colon carries the requirement and its reason rather than a
+description of what arrived, and quotes no part of the argument.
+
+It must also be non-empty, and is refused with C<"recipients must not be
+empty: this method encrypts to every entry, so with none the result can never
+be decrypted, pass at least one recipient">. That message replaces the older
+C<"at least one recipient required">; the check itself is unchanged and has
+always been there. Encrypting to nobody produces a file whose file key is
+wrapped for no one and therefore lost with the plaintext, and the age header
+grammar requires at least one recipient stanza in any case.
+
 The returned data can be written to a file or transmitted directly.
+
+C<plaintext> and the returned ciphertext are both held in memory in full. For
+large data, use L</encrypt_file> or L</encrypt_filehandle>, which stream in 64
+KiB chunks instead.
+
+C<plaintext> must be a B<byte string>. Encode a character string first:
+
+    use Encode qw( encode );
+
+    my $ciphertext = Crypt::Age->encrypt(
+        plaintext  => encode('UTF-8', $characters),
+        recipients => \@public_keys,
+    );
+
+A C<plaintext> holding a code point above C<0xFF> cannot be encrypted at all
+and is rejected before anything else happens, with C<"plaintext must be a byte
+string: it holds a code point above 0xFF, encode it before passing it in">.
+
+A character string whose code points all happen to fit in a byte is B<not>
+caught, because nothing distinguishes it from bytes: it is encrypted as those
+bytes, which is Latin-1, and L</decrypt> hands Latin-1 back. Encoding
+explicitly is the only way to decide which bytes get encrypted.
 
 =head2 decrypt
 
@@ -296,9 +436,38 @@ Parameters:
 
 Returns the decrypted plaintext.
 
+C<identities> must really be an ArrayRef; a single identity still goes in a
+list of one -- the likeliest way to get this wrong, since one identity does not
+look like a list. Every other shape is refused before the header is parsed,
+with C<"identities must be an ArrayRef: this method decrypts with whichever
+entry matches, pass [$identity] rather than $identity">, which quotes no byte
+of the argument: a bare string in this parameter is a secret key.
+
+It must also be non-empty, and is refused with C<"identities must not be
+empty: this method decrypts with whichever entry matches, so with none there is
+nothing that could match, pass at least one identity">. That message replaces
+the older C<"at least one identity required">, so that an empty list reads the
+same way on both sides of the API; the check itself is unchanged.
+
 The method tries each identity against each recipient stanza in the header until
-one successfully unwraps the file key. Dies if no matching identity is found or
-if the MAC verification fails.
+one successfully unwraps the file key. Dies on the same conditions as
+L</decrypt_file>, except file I/O errors -- this method never opens a file. It
+also rejects a C<ciphertext> holding a code point above C<0xFF> before
+attempting any of that; see below for the exact message.
+
+C<ciphertext> must be a B<byte string>, and so is the plaintext this method
+returns. age ciphertext is binary, so read it with C<:raw> and never through
+an C<:encoding> layer; decode the returned plaintext yourself if the message
+was text. A C<ciphertext> holding a code point above C<0xFF> is rejected
+before anything else happens, with C<"ciphertext must be a byte string: it
+holds a code point above 0xFF, read it with :raw rather than decoding it">.
+
+C<ciphertext> and the returned plaintext are both held in memory in full. For
+large data, use L</decrypt_file> or L</decrypt_filehandle>, which stream in 64
+KiB chunks instead. Because this method never returns a value on failure, a
+decryption that dies here does not expose any partial plaintext to the caller
+-- contrast L</decrypt_filehandle>, which writes to a caller-supplied handle
+and so can leave an authenticated-but-incomplete prefix behind.
 
 =head2 encrypt_file
 
@@ -325,7 +494,13 @@ Parameters:
 The output file will be in age format and can be decrypted with the C<age> or
 C<rage> command-line tools.
 
-Returns C<1> on success. Dies on error (file not found, permission denied, etc).
+Returns C<1> on success. Dies if a required argument is missing, if
+C<recipients> is not a non-empty ArrayRef -- L</encrypt> quotes the two
+messages, one for the shape and one for the empty list -- if a recipient
+string is not a valid Bech32 C<age1...> public key, if C<binmode> fails on
+either handle, or on file I/O errors.
+Reads and writes the file in 64 KiB chunks, so memory use does not grow with
+the size of the file.
 
 =head2 encrypt_filehandle
 
@@ -350,12 +525,24 @@ Parameters:
 
 =back
 
-Both filehandles will be forced to be C<:raw> using C<binmode>.
+Both filehandles will be forced to be C<:raw> using C<binmode>. That removes
+every layer the caller had set, C<:encoding> included, so what is encrypted is
+the bytes in C<input> and never characters decoded from them. This method
+therefore needs no byte-string check of its own, unlike L</encrypt>: a handle
+delivers octets by the time it is read from here.
 
 The output stream will be in age format and can be decrypted with the C<age> or
 C<rage> command-line tools.
 
-Returns C<1> on success. Dies on error (file not found, permission denied, etc).
+Returns C<1> on success. Dies if a required argument is missing, if
+C<recipients> is not a non-empty ArrayRef -- L</encrypt> quotes the two
+messages, one for the shape and one for the empty list -- if a recipient string
+is not a valid Bech32 C<age1...> public key, or if C<binmode> fails on either
+handle. Unlike L</encrypt_file>, this method never opens or closes a file
+itself -- C<input> and C<output> are handles the caller already has open -- so
+it cannot die with a "file not found" or "permission denied" error; that is the
+caller's concern before the handle is passed in. Streams in 64 KiB chunks, so
+memory use does not grow with the amount of data written.
 
 =head2 decrypt_file
 
@@ -379,8 +566,21 @@ Parameters:
 
 =back
 
-Returns C<1> on success. Dies if no matching identity is found, if the MAC
-verification fails, or on file I/O errors.
+Returns C<1> on success. Dies if a required argument is missing, if
+C<identities> is not a non-empty ArrayRef -- L</decrypt> quotes the two
+messages, one for the shape and one for the empty list -- if the header is
+invalid, if no identity matches any stanza, if the MAC verification fails,
+if payload authentication fails, if C<binmode> fails on either handle, or on
+file I/O errors.
+
+Reads the input and writes the output in 64 KiB chunks, so memory use does not
+grow with the size of the file. B<This means a failure does not undo what was
+already written>: every chunk that authenticated before the error is already
+in C<output> on disk once this method dies. Each such chunk is individually
+authentic, but the file as a whole is not -- that is exactly what the error
+reports. Treat a partial C<output> as undecrypted and discard it; do not rely
+on the bytes that made it out. See L<Crypt::Age::Primitives/decrypt_payload_fh>
+for the same guarantee stated at the primitive layer.
 
 =head2 decrypt_filehandle
 
@@ -405,8 +605,32 @@ Parameters:
 
 =back
 
-Returns C<1> on success. Dies if no matching identity is found, if the MAC
-verification fails, or on I/O errors.
+Both filehandles will be forced to be C<:raw> using C<binmode>. That removes
+every layer the caller had set, C<:encoding> included, so C<input> is read as
+the binary it is and C<output> receives plaintext bytes -- decode them
+yourself if the message was text.
+
+Returns C<1> on success. Dies if a required argument is missing, if
+C<identities> is not a non-empty ArrayRef -- L</decrypt> quotes the two
+messages, one for the shape and one for the empty list -- if the header is
+invalid, if no identity matches any stanza, if the MAC verification fails,
+if payload authentication fails, or if C<binmode> fails on either handle.
+Unlike L</decrypt_file>, this method never opens or closes a file itself --
+C<input> and C<output> are handles the caller already has open -- so it cannot
+die with a "file not found" or "permission denied" error; that is the
+caller's concern before the handle is passed in.
+
+Decryption streams: plaintext is written to C<output> one 64 KiB chunk at a
+time as each chunk authenticates, so memory use does not grow with the amount
+of data decrypted. B<This also means a failure does not undo what was already
+written.> If the payload is truncated or corrupt, every chunk that
+authenticated before the error is already in C<output> when this method dies;
+each of those chunks is individually authentic, but the message as a whole is
+not, which is exactly what the error reports. A caller must treat whatever
+reached C<output> as unauthenticated and discard it, rather than as a decrypted
+message merely because its individual bytes checked out. See
+L<Crypt::Age::Primitives/decrypt_payload_fh> for the same guarantee stated at
+the primitive layer.
 
 =head1 KEY FORMAT
 
@@ -415,14 +639,14 @@ verification fails, or on I/O errors.
 Public keys are Bech32-encoded X25519 public keys with the human-readable
 part C<age>:
 
-    age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
+    age19ljhmg68e43yx9fgm2k9lwefquc0la5y4lzvlshdjzv47kxt8d6qr9vf4p
 
 =head2 Secret Keys
 
 Secret keys are uppercase Bech32-encoded X25519 secret keys with the
 human-readable part C<AGE-SECRET-KEY->:
 
-    AGE-SECRET-KEY-1QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ3290DG
+    AGE-SECRET-KEY-1QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ8H00W3
 
 =head1 INTEROPERABILITY
 
@@ -437,6 +661,45 @@ This module is designed to be compatible with:
 =back
 
 Files encrypted with Crypt::Age can be decrypted with these tools and vice versa.
+
+=head1 LIMITATIONS
+
+Only the C<X25519> recipient type is implemented, and it is complete in both
+directions: keypair generation, header creation and parsing, wrapping and
+unwrapping, and the header MAC. Not implemented:
+
+=over 4
+
+=item * scrypt (passphrase) recipients
+
+=item * SSH recipients
+
+=item * the post-quantum and tagged recipient types (C<mlkem768x25519> and
+similar)
+
+=item * ASCII armor
+
+=back
+
+A stanza of one of these types is not rejected outright: the format requires
+unrecognized stanza types to be ignored, and this implementation does that (see
+L<Crypt::Age::Header/parse_from_fh>), so a file with both an C<X25519>
+recipient and, say, a C<scrypt> one still decrypts normally for an identity
+that matches the C<X25519> stanza. But a file whose recipients are all of
+these unsupported types dies: L</decrypt> and the other decrypt methods raise
+C<"No matching identity found">, since L<Crypt::Age::Header/unwrap_file_key>
+only tries stanzas it recognizes as C<X25519>. An armored file fails even
+earlier, because its first line is not the literal C<age-encryption.org/v1>
+version line that L<Crypt::Age::Header/parse_from_fh> requires. On the encrypt
+side, passing a recipient string that is not a Bech32 C<age1...> public key
+dies with C<"Unsupported recipient format at index N: expected an age1
+recipient">, C<N> being that recipient's position in the C<recipients> array.
+A suffix names what arrived instead wherever that can be said without quoting
+it: a string that looks like a secret key adds C<", got an AGE-SECRET-KEY-1
+identity">, and an C<undef> entry adds C<", got undef">. The rejected string
+itself is never quoted back: it may be a secret key passed where a recipient
+belongs, and the message would carry it into the caller's logs. See
+L<Crypt::Age::Header/create>.
 
 =head1 SECURITY
 
@@ -465,6 +728,12 @@ final-chunk flag.
 =item * L<https://github.com/C2SP/C2SP/blob/main/age.md> - age format specification
 
 =item * L<CryptX> - Cryptographic toolkit providing all primitives
+
+=item * L<Crypt::Age::Header> - Header parsing, generation and the header MAC
+
+=item * L<Crypt::Age::Stanza> - Base recipient stanza class
+
+=item * L<Crypt::Age::Stanza::X25519> - X25519 recipient stanza
 
 =item * L<Crypt::Age::Keys> - Key generation and encoding
 

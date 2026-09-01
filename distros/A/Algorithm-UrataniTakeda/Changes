@@ -1,5 +1,14 @@
 Revision history for Algorithm-UrataniTakeda:
 
+v0.1.6    2026-08-31 11:56:31+01:00 Europe/London
+  [Enhancements]
+  - Allowed the constructor to simply contain an array reference of patterns.
+
+  - Changed internal methods to lexical methods so that they are effectively private.
+
+  [Bug Fixes]
+  - Enable warnings for Object::Pad versions after 0.800.
+
 v0.1.5    2026-08-30 09:32:15+01:00 Europe/London
   [Enhancements]
   - Improved performance by memoising the shift function.

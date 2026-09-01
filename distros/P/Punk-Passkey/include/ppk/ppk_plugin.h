@@ -1003,12 +1003,90 @@ XS_INTERNAL(ppk_h_verify) {
  * which is the check being skipped. Neither degrades into something
  * partly working; they degrade into something that looks like it works.
  */
+/* Make sure the model the ceremonies read exists by the time a request
+ * asks for it.
+ *
+ * When the application registered one under the configured name, or has
+ * one discoverable in its own Model namespace, that is the one. Otherwise
+ * the class shipped here is registered under its full name, which Punk
+ * takes as a class rather than as a name in the application's namespace.
+ *
+ * The trap: naming ANY model turns auto-discovery off unless it was asked
+ * for explicitly (punk_compile.h: autoflag = explicit ? explicit :
+ * !named), so an application relying on a bare `model;` to find its own
+ * classes would lose them the moment this plugin named one. Put it back
+ * first.
+ */
+static void ppk_ensure_model(pTHX_ SV *app, HV *cfg, const char *shipped) {
+    SV *name = ppk_hv_get(aTHX_ cfg, "model");
+    HV *apph;
+    SV *models, *auto_sv;
+    STRLEN nl;
+    const char *np;
+    int named = 0;
+
+    if (!(name && SvOK(name))) return;
+    np = SvPV_const(name, nl);
+    if (memchr(np, ':', nl)) return;        /* already a class: the app's */
+
+    apph = SvROK(app) ? (HV *)SvRV(app) : NULL;
+    if (!apph) return;
+
+    models = ppk_hv_get(aTHX_ apph, "models");
+    if (models && SvROK(models) && SvTYPE(SvRV(models)) == SVt_PVAV) {
+        AV *av = (AV *)SvRV(models);
+        SSize_t i, n = av_len(av) + 1;
+        for (i = 0; i < n; i++) {
+            SV **e = av_fetch(av, i, 0);
+            if (!(e && *e && SvOK(*e))) continue;
+            if (sv_eq(*e, name)) return;    /* the application named it */
+            named++;
+        }
+    }
+
+    {   /* <App>::Model::<Name>, theirs if it exists at all */
+        SV *caller = sv_2mortal(ppk_call(aTHX_ app, "caller_class", NULL, 0));
+        SV *full = sv_2mortal(newSVsv(caller));
+        SV *req;
+        sv_catpvs(full, "::Model::");
+        sv_catsv(full, name);
+        /* Already in the symbol table: a model class declared inline rather
+         * than in a file of its own. `require` cannot see one - it looks for
+         * a file - and answering "they have none" here would register the
+         * shipped class over the top of theirs, which is the silent wrong
+         * table rather than an error. Punk's own discovery has the same
+         * case (punk_compile.h) and it is checked the same way. */
+        if (sv_derived_from(full, "Punk::Model")) return;
+        req = sv_2mortal(newSVpvs("require "));
+        sv_catsv(req, full);
+        sv_catpvs(req, "; 1");
+        eval_pv(SvPV_nolen(req), FALSE);
+        if (!SvTRUE(ERRSV)) return;
+    }
+
+    auto_sv = ppk_hv_get(aTHX_ apph, "model_auto");
+    if (!named && !(auto_sv && SvOK(auto_sv))) {
+        SV *one = sv_2mortal(newSViv(1));
+        SvREFCNT_dec(ppk_call(aTHX_ app, "model_auto", &one, 1));
+    }
+    {
+        SV *req = sv_2mortal(newSVpvs("require "));
+        SV *cls = sv_2mortal(newSVpv(shipped, 0));
+        SV *argv[1];
+        sv_catpv(req, shipped);
+        sv_catpvs(req, "; 1");
+        eval_pv(SvPV_nolen(req), TRUE);
+        argv[0] = cls;
+        SvREFCNT_dec(ppk_call(aTHX_ app, "model_class", argv, 1));
+        (void)hv_stores(cfg, "model", newSVpv(shipped, 0));
+    }
+}
+
 XS_INTERNAL(ppk_oc_check);
 XS_INTERNAL(ppk_oc_check) {
     dXSARGS;
     HV *cfg = ppk_cfg_of(aTHX_ cv);
     SV *app;
-    PERL_UNUSED_VAR(cfg);
     if (items < 1) XSRETURN_EMPTY;
     app = ST(0);
     if (!(app && SvROK(app) && SvTYPE(SvRV(app)) == SVt_PVHV)) XSRETURN_EMPTY;
@@ -1022,6 +1100,7 @@ XS_INTERNAL(ppk_oc_check) {
               "party id and the origin check come from the application's "
               "declared origin, and taking them from the request would let "
               "a caller choose which site's credentials it is presenting");
+    ppk_ensure_model(aTHX_ app, cfg, "Punk::Model::Passkey");
     XSRETURN_EMPTY;
 }
 
@@ -1209,12 +1288,19 @@ static void ppk_plugin_register(pTHX_ SV *app, SV *optsv) {
     ppk_helper(aTHX_ app, "passkey_challenge",        ppk_h_challenge,   cfg);
     ppk_helper(aTHX_ app, "passkey_verify",           ppk_h_verify,      cfg);
 
-    /* the boot check, at to_app */
+    /* The boot check and the model, both at to_app: `session`, `host` and
+     * `model` may each be declared after this line, so none of them can be
+     * settled at `plugin`. On a Punk too old to have on_compile the model
+     * is still settled here, which is right whenever the application
+     * declared its own before the plugin line. */
     if (ppk_can(aTHX_ app, "on_compile")) {
         SV *argv[2];
         argv[0] = sv_2mortal(ppk_closure(aTHX_ ppk_oc_check, cfg));
         argv[1] = sv_2mortal(newSVpvs("Punk::Plugin::Passkey"));
         SvREFCNT_dec(ppk_call(aTHX_ app, "on_compile", argv, 2));
+    }
+    else {
+        ppk_ensure_model(aTHX_ app, cfg, "Punk::Model::Passkey");
     }
 }
 

@@ -13,6 +13,18 @@
  */
 
 #define PERL_NO_GET_CONTEXT
+
+/* Strawberry perl is built with PERL_IMPLICIT_SYS, under which XSUB.h
+ * rewrites the plain names - malloc, calloc, realloc, free, open, close,
+ * read, write, stat, mkdir, utime - into macros that dereference my_perl.
+ * Two consequences here, both fatal: the static helpers below are plain C
+ * with no interpreter to hand, and this file frees buffers that marshal.c
+ * and tar.c allocated with libc malloc, which through PerlMem_free is a
+ * free to the wrong pool - a runtime corruption that smokes green. This
+ * dist owns what it allocates end to end and never takes a pointer from
+ * perl's allocator, so turning the whole rewrite off is the honest fix. */
+#define NO_XSLOCKS
+
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
@@ -58,16 +70,15 @@
 #include "extract.h"
 #include "marshal.h"
 
+#include "arch_compat.h"
+
 #include <errno.h>
-#include <fcntl.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
-#include <utime.h>
+#ifndef _WIN32
+#  include <sys/wait.h>       /* the parallel extractor's waitpid; no Windows equivalent */
+#endif
 
 #define ARCHIVE_PATH_MAX 4096
 
@@ -196,7 +207,7 @@ open_reader(pTHX_ SV *path_sv, HV *opts)
     archive_pull_fn pull;
     void *src;
 
-    fd = open(SvPV_nolen(path_sv), O_RDONLY);
+    fd = open(SvPV_nolen(path_sv), O_RDONLY | ARCH_O_BINARY);
     if (fd < 0) croak("File::Raw::Archive: cannot open '%s': %s",
                       SvPV_nolen(path_sv), strerror(errno));
 
@@ -272,7 +283,8 @@ open_writer(pTHX_ SV *path_sv, HV *opts)
         }
     }
 
-    fd = open(SvPV_nolen(path_sv), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    fd = open(SvPV_nolen(path_sv),
+              O_WRONLY | O_CREAT | O_TRUNC | ARCH_O_BINARY, 0644);
     if (fd < 0) croak("File::Raw::Archive: cannot open '%s' for write: %s",
                       SvPV_nolen(path_sv), strerror(errno));
 
@@ -997,6 +1009,24 @@ do_worker_loop(int job_fd, int err_fd)
     }
 }
 
+#ifdef _WIN32
+
+/* No fork(2), so parallel_supported() has already forced parallel back
+ * to 1 and the call site's `parallel > 1` branch is dead. It still has
+ * to compile, and this is what it compiles to. */
+static void
+do_extract_all_parallel(pTHX_ archive_handle_t *h,
+                        const char *dest, size_t dest_len,
+                        int parallel, int apply_xattrs,
+                        SV *filter_sv, int unsafe_paths)
+{
+    PERL_UNUSED_ARG(parallel);
+    do_extract_all_seq(aTHX_ h, dest, dest_len, apply_xattrs,
+                       unsafe_paths, filter_sv);
+}
+
+#else
+
 typedef struct {
     int   write_fd;
     pid_t pid;
@@ -1298,6 +1328,8 @@ do_extract_all_parallel(pTHX_ archive_handle_t *h,
     }
 }
 
+#endif /* !_WIN32 */
+
 /* ============================================================
  * Custom-op accessor infrastructure (Entry methods)
  * ============================================================
@@ -1528,7 +1560,7 @@ CODE:
     if (SvROK(opts_sv) && SvTYPE(SvRV(opts_sv)) == SVt_PVHV)
         opts = (HV *)SvRV(opts_sv);
 
-    fd = open(SvPV_nolen(path_sv), O_RDONLY);
+    fd = open(SvPV_nolen(path_sv), O_RDONLY | ARCH_O_BINARY);
     if (fd < 0) croak("File::Raw::Archive: cannot open '%s': %s",
                       SvPV_nolen(path_sv), strerror(errno));
 
@@ -1663,7 +1695,8 @@ CODE:
         }
     }
 
-    fd = open(SvPV_nolen(path_sv), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    fd = open(SvPV_nolen(path_sv),
+              O_WRONLY | O_CREAT | O_TRUNC | ARCH_O_BINARY, 0644);
     if (fd < 0) croak("File::Raw::Archive: cannot open '%s' for write: %s",
                       SvPV_nolen(path_sv), strerror(errno));
 

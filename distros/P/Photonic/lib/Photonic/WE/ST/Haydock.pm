@@ -1,5 +1,5 @@
 package Photonic::WE::ST::Haydock;
-$Photonic::WE::ST::Haydock::VERSION = '0.024';
+$Photonic::WE::ST::Haydock::VERSION = '0.025';
 
 =encoding UTF-8
 
@@ -9,7 +9,7 @@ Photonic::WE::ST::Haydock
 
 =head1 VERSION
 
-version 0.024
+version 0.025
 
 =head1 SYNOPSIS
 
@@ -132,12 +132,14 @@ use strict;
 use warnings;
 use namespace::autoclean;
 use PDL::Lite;
+use PDL::Core;
+use PDL::MatrixOps;
 use PDL::NiceSlice;
 use Carp;
 use Photonic::Types -all;
 use Photonic::Utils qw(VSProd any_complex GtoR RtoG);
 use Moo;
-use MooX::StrictConstructor;
+#use MooX::StrictConstructor;
 
 has 'metric'=>(is=>'ro', isa => InstanceOf['Photonic::WE::ST::Metric'],
 	       handles=>{B=>'B', ndims=>'ndims', dims=>'dims',
@@ -155,7 +157,7 @@ sub applyOperator {
     my $psi=shift; #psi is xy:pm:nx:ny...
     my $mask=undef;
     $mask=$self->mask if $self->use_mask;
-    my $id=PDL::MatrixOps::identity($self->ndims);
+    my $id=identity($self->ndims);
     my $gpsi=$self->applyMetric($psi);
     # gpsi is xy:pm:nx:ny. Get cartesian and pm out of the way and
     my $gpsi_r=GtoR($gpsi, $self->ndims, 2)->mv(1,-1); #xy:nx:ny:pm
@@ -220,10 +222,10 @@ sub _build_firstState { #\delta_{G0}
     confess "Polarization has wrong dimensions. " .
 	  " Should be $d-dimensional complex vector, got ($e)."
 	unless any_complex($e) && $e->dim(0)==$d;
-    my $modulus2=$e->abs2->sumover;
+    my $modulus=$e->magnover->re;
     confess "Polarization should be non null" unless
-	$modulus2 > 0;
-    $e=$e/sqrt($modulus2);
+	$modulus > 0;
+    $e=$e/$modulus;
     $self->_normalizedPolarization($e);
     #Use same helicity for k and for -k, conjugate polarization, for allowing chirality
     my $phi=pdl($e, $e->conj)*$v->(*1,*1); #initial state ordinarily normalized

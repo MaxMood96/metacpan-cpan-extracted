@@ -2,6 +2,7 @@
 use strict;
 use warnings;
 use Test::More;
+use File::Temp qw(tempfile);
 use Crypt::Age::Header;
 use Crypt::Age::Keys;
 use Crypt::Age::Primitives;
@@ -483,6 +484,831 @@ use Crypt::Age::Stanza::X25519;
         like($@, qr/Invalid age stanza #2 start line/,
             'and reports it as a bad stanza start line');
     }
+}
+
+# Ticket #22 regression, the recipient-format half: Header::create's
+# rejection of a non-age1 recipient used to interpolate the caller's string
+# directly into the croak ("Unsupported recipient format: $recipient"), so
+# a caller who swapped recipient and identity got the whole secret key
+# echoed into the exception, and from there into whatever logs it. The fix
+# rebuilds the message from literals plus the recipient's 0-based array
+# index and, when the string matches /^AGE-SECRET-KEY-1/i, a hint that
+# classifies against that public format prefix without copying a byte of
+# the caller's string.
+#
+# The bad entry sits at index 1, not 0, so the index actually has to be
+# computed rather than being coincidentally right. The decisive assertion
+# is the negative one: it searches the message for a slice of the secret
+# rather than comparing against the expected text, so it still catches a
+# future edit that echoes some other slice of the string.
+{
+    my ($public)     = Crypt::Age::Keys->generate_keypair;
+    my (undef, $secret) = Crypt::Age::Keys->generate_keypair;
+    my $file_key = Crypt::Age::Primitives->generate_file_key;
+
+    # A non-identity, non-age1 string at the same non-zero index: the base
+    # message, with no identity hint.
+    my $err_plain = do {
+        local $@;
+        eval { Crypt::Age::Header->create($file_key, [$public, 'not-an-age-key']) };
+        $@;
+    };
+    like($err_plain,
+        qr/^Unsupported recipient format at index 1: expected an age1 recipient\b/,
+        'a non-identity recipient at index 1 gets the base message with the correct index');
+    unlike($err_plain, qr/got an AGE-SECRET-KEY-1 identity/,
+        'and no identity hint, since the string does not look like one');
+
+    # A secret key at the same index: the base message plus the identity
+    # hint, and no leaked key material.
+    my $err_secret = do {
+        local $@;
+        eval { Crypt::Age::Header->create($file_key, [$public, $secret]) };
+        $@;
+    };
+    like($err_secret,
+        qr/^Unsupported recipient format at index 1: expected an age1 recipient, got an AGE-SECRET-KEY-1 identity/,
+        'a secret key at index 1 gets the base message plus the identity hint, with the correct index');
+
+    my $needle = substr($secret, 8, 20);
+    is(length($needle), 20, 'fixture: probed substring is 20 bytes long');
+    ok(index($err_secret, $needle) == -1,
+        'no characteristic slice of the secret key leaks into the message');
+}
+
+# Ticket #25 regression: an undef entry in either array used to reach a
+# pattern match and emit "Use of uninitialized value" from library code --
+# twice from Header::create (the age1 prefix test and the identity hint),
+# once per X25519 stanza from unwrap_file_key. The warnings arrived ahead of
+# the message that explains the problem, and a caller cannot switch off
+# warnings that are enabled inside this distribution.
+#
+# The decisive assertions below are the is_deeply(\@warnings, []) ones. The
+# croak was already correct before the fix and its checks would have passed
+# against the old code too; only the warning count actually pins this ticket.
+{
+    my ($public)  = Crypt::Age::Keys->generate_keypair;
+    my ($public2) = Crypt::Age::Keys->generate_keypair;
+    my $file_key  = Crypt::Age::Primitives->generate_file_key;
+
+    # undef at a non-zero index, so the reported index has to be computed.
+    my @warnings;
+    my $err = do {
+        local $SIG{__WARN__} = sub { push @warnings, @_ };
+        local $@;
+        eval { Crypt::Age::Header->create($file_key, [$public, undef]) };
+        $@;
+    };
+    is_deeply(\@warnings, [],
+        'an undef recipient is rejected without any warning');
+    like($err,
+        qr/^Unsupported recipient format at index 1: expected an age1 recipient, got undef/,
+        'and with the index and ", got undef" in the message shape #22 established');
+
+    # Named through the same ", got ..." slot as the identity hint, so the
+    # two classifications stay mutually exclusive rather than accumulating.
+    unlike($err, qr/got an AGE-SECRET-KEY-1 identity/,
+        'and not also the identity hint, which undef must not reach');
+
+    # Index 0 as well: the message must not merely be right by coincidence
+    # for the one position the case above uses.
+    my @warnings_first;
+    my $err_first = do {
+        local $SIG{__WARN__} = sub { push @warnings_first, @_ };
+        local $@;
+        eval { Crypt::Age::Header->create($file_key, [undef, $public]) };
+        $@;
+    };
+    is_deeply(\@warnings_first, [],
+        'an undef recipient at index 0 is rejected without any warning');
+    like($err_first,
+        qr/^Unsupported recipient format at index 0: expected an age1 recipient, got undef/,
+        'and names index 0, so the index is computed and not hardcoded');
+
+    # The identity array is the other half of the ticket. It has the same
+    # hole -- a pattern match on undef, once per X25519 stanza -- but not the
+    # same contract: an identity that does not match is skipped, not fatal.
+    # So the fix there removes the warnings and must leave that behaviour
+    # alone. Two recipients, hence two stanzas, so a per-stanza warning would
+    # show up as two.
+    my ($public3, $secret3) = Crypt::Age::Keys->generate_keypair;
+    my $header = Crypt::Age::Header->create($file_key, [$public2, $public3]);
+    is(scalar @{$header->stanzas}, 2, 'fixture: header carries two X25519 stanzas');
+
+    my @warnings_id;
+    my $unwrapped = do {
+        local $SIG{__WARN__} = sub { push @warnings_id, @_ };
+        eval { $header->unwrap_file_key([undef, $secret3]) };
+    };
+    is_deeply(\@warnings_id, [],
+        'an undef identity is skipped without any warning');
+    is($unwrapped, $file_key,
+        'and a later valid identity still unwraps the file key, as before the fix');
+
+    # A list with nothing usable in it still ends at the croak, not at a
+    # warning and not at a silent success.
+    my @warnings_none;
+    my $err_none = do {
+        local $SIG{__WARN__} = sub { push @warnings_none, @_ };
+        local $@;
+        eval { $header->unwrap_file_key([undef, undef]) };
+        $@;
+    };
+    is_deeply(\@warnings_none, [],
+        'an all-undef identity list warns not at all');
+    like($err_none, qr/^No matching identity found/,
+        'and still fails with the unchanged no-match error');
+}
+
+# Ticket #30, the third instance of the class #26 fixed in Crypt::Age and #28
+# in Crypt::Age::Primitives: parse maps the scalar behind its ScalarRef into an
+# in-memory handle, and perl refuses to map one holding a code point above
+# 0xFF -- it warned "Strings with code points over 0xFF may not be mapped into
+# in-memory file handles", the open then failed, and the croak read "Invalid
+# age input: cannot read", which is true but names no cause and suggests no
+# fix. A scan before the open replaces that with a message naming both; the
+# open is never reached on this path, so the warning is gone too -- asserted,
+# not suppressed.
+#
+# The scan is deliberate where the other three downgrade: the parameter is the
+# caller's own scalar behind a ref, not a copy off @_, so this check reads it
+# and never writes to it.
+{
+    my $wide = "age-encryption.org/v1\n\x{100} not bytes";
+    my $offset = 0;
+
+    my ($err, $line, @warn);
+    {
+        local $SIG{__WARN__} = sub { push @warn, $_[0] };
+        local $@;
+        $line = __LINE__ + 1;
+        eval { Crypt::Age::Header->parse(\$wide, \$offset) };
+        $err = $@;
+    }
+
+    ok($err, 'parse with a wide-character data ref dies');
+    like($err,
+        qr/^data must be a byte string: it holds a code point above 0xFF, read it with :raw rather than decoding it\b/,
+        'the message names the parameter, the cause and the fix');
+    unlike($err, qr/Invalid age input: cannot read/,
+        'parse no longer reports only that it could not read');
+    is_deeply(\@warn, [],
+        'the check runs before the open, so perl emits no >0xFF warning');
+    unlike($err, qr{Crypt/Age/Header\.pm},
+        'parse croaks: Header.pm is not blamed as the origin');
+    my $where = quotemeta(__FILE__).' line '.$line;
+    like($err, qr/$where/,
+        'parse reports the caller position in this test file');
+    ok(index($err, 'not bytes') == -1,
+        'no part of the input appears in the error');
+
+    # The one thing the non-mutating scan buys over a utf8::downgrade through
+    # the ref: a rejected $data comes back exactly as the caller had it,
+    # internal representation included.
+    ok(utf8::is_utf8($wide),
+        'the rejected data ref is left flagged -- the check never wrote to it');
+    is($wide, "age-encryption.org/v1\n\x{100} not bytes",
+        'and its value is untouched');
+    is($offset, 0, 'and the offset ref was never advanced');
+}
+
+# Ticket #31, the argument shapes parse never checked. Its first parameter is
+# documented as a ScalarRef and used to go straight to open, which is a
+# filesystem open for everything that is not one: a plain string named a file,
+# undef warned about the caller's mistake from inside Header.pm, and any other
+# ref croaked "Invalid age input: cannot read", naming neither cause nor fix.
+# All three now fail one type check before the open. This replaces #30's block
+# over the same three shapes -- that one recorded the behaviour of the day so
+# the wide-character scan could be shown not to disturb it, which was a
+# characterization, never a claim that it was right.
+my $ref_msg = 'data must be a ScalarRef: this method opens it, and a plain '
+    .'string is a filename, pass \$data rather than $data';
+
+{
+    for my $case (['a plain string', "age-encryption.org/v1\nnot-a-ref"],
+                  ['undef', undef],
+                  ['an ARRAY ref', [1, 2]]) {
+        my ($what, $arg) = @$case;
+        my $offset = 0;
+
+        my ($err, $line, @warn);
+        {
+            local $SIG{__WARN__} = sub { push @warn, $_[0] };
+            local $@;
+            $line = __LINE__ + 1;
+            eval { Crypt::Age::Header->parse($arg, \$offset) };
+            $err = $@;
+        }
+
+        like($err, qr/^\Q$ref_msg\E\b/,
+            "$what is rejected by type, naming the parameter and the fix");
+        unlike($err, qr/Invalid age input: cannot read/,
+            "$what no longer arrives as a failed read");
+        unlike($err, qr/not-a-ref/,
+            "$what leaves no caller input in the message");
+        is_deeply(\@warn, [],
+            "$what reaches no open, so nothing warns out of Header.pm");
+        unlike($err, qr{Crypt/Age/Header\.pm},
+            "$what croaks: Header.pm is not blamed as the origin");
+        my $where = quotemeta(__FILE__).' line '.$line;
+        like($err, qr/$where/,
+            "$what reports the caller position in this test file");
+        is($offset, 0, "$what left the offset ref untouched");
+    }
+}
+
+# Ticket #31, the half that is not cosmetics. Before the type check a plain
+# string was a filename, so parse opened and read that file: given a path to a
+# readable age header it returned a Crypt::Age::Header built from the file's
+# bytes and advanced the caller's $offset past them. The fixture below is a
+# real, readable file holding a header this parser accepts, which is what makes
+# the assertion falsifiable -- without the check parse succeeds here.
+{
+    my ($public) = Crypt::Age::Keys->generate_keypair;
+    my $file_key = Crypt::Age::Primitives->generate_file_key;
+    my $header_bytes = Crypt::Age::Header->create($file_key, [$public])->to_string;
+
+    my ($fh, $path) = tempfile(UNLINK => 1);
+    binmode($fh, ':raw');
+    print $fh $header_bytes;
+    close $fh;
+    ok(-r $path, 'fixture: the file exists and is readable');
+
+    my $offset = 0;
+    my $parsed = eval { Crypt::Age::Header->parse($path, \$offset) };
+    my $err = $@;
+
+    is($parsed, undef,
+        'a plain string naming a readable file does not open and parse it');
+    like($err, qr/^\Q$ref_msg\E\b/, 'it is a type error instead');
+    ok(index($err, $path) == -1,
+        'and the path the caller passed is not echoed into the error');
+    is($offset, 0, 'the offset ref was not advanced past that file');
+
+    # Counter-proof that the fixture really is parseable, so the assertion
+    # above measures the type check and not an unreadable file.
+    my $data = $header_bytes;
+    my $data_offset = 0;
+    my $ok = Crypt::Age::Header->parse(\$data, \$data_offset);
+    is(scalar @{$ok->stanzas}, 1,
+        'the same bytes behind a ScalarRef still parse');
+    is($data_offset, length($header_bytes),
+        'and advance the offset to the end of the header');
+}
+
+# Ticket #32, the same defect class as #31 one argument further in. parse's
+# second parameter is an out-parameter -- it seeks to the offset the ref holds
+# and writes the new one back through it -- but nothing checked its shape, so
+# every wrong one reached a raw dereference: a plain string died with perl's
+# "Can't use string (\"...\") as a SCALAR ref while \"strict refs\" in use",
+# quoting the caller's own string and blaming a line in Header.pm, undef died
+# with "Can't use an undefined value as a SCALAR reference", and another kind
+# of ref with "Not a SCALAR reference". A caller who passes the two arguments
+# the other way round puts a whole ciphertext where that quoted string comes
+# from, which is why the message below carries the requirement and its reason
+# and no part of the argument.
+my $offset_msg = 'offset must be a ScalarRef: this method writes the new '
+    .'offset back through it, pass \$offset rather than $offset';
+
+{
+    # A real, parseable header as the first argument, so nothing before the
+    # offset check can account for the failure: without the check this call
+    # gets past the open and dies at the seek.
+    my ($public) = Crypt::Age::Keys->generate_keypair;
+    my $file_key = Crypt::Age::Primitives->generate_file_key;
+    my $data = Crypt::Age::Header->create($file_key, [$public])->to_string;
+
+    my $marker = 'CALLER-INPUT-MUST-NOT-LEAK-HERE';
+
+    for my $case (['a plain string', $marker],
+                  ['undef', undef],
+                  ['an ARRAY ref', [1, 2]]) {
+        my ($what, $arg) = @$case;
+
+        my ($err, $line, @warn);
+        {
+            local $SIG{__WARN__} = sub { push @warn, $_[0] };
+            local $@;
+            $line = __LINE__ + 1;
+            eval { Crypt::Age::Header->parse(\$data, $arg) };
+            $err = $@;
+        }
+
+        like($err, qr/^\Q$offset_msg\E\b/,
+            "$what is rejected by type, naming the parameter and the fix");
+        unlike($err, qr/strict refs/,
+            "$what no longer arrives as perl's own dereference error");
+        ok(index($err, $marker) == -1,
+            "$what leaves no caller input in the message");
+        is_deeply(\@warn, [],
+            "$what reaches no dereference, so nothing warns out of Header.pm");
+        unlike($err, qr{Crypt/Age/Header\.pm},
+            "$what croaks: Header.pm is not blamed as the origin");
+        my $where = quotemeta(__FILE__).' line '.$line;
+        like($err, qr/$where/,
+            "$what reports the caller position in this test file");
+    }
+
+    # Both argument shapes are settled before anything looks at the data, so a
+    # call that is malformed in its second argument is reported as that, not as
+    # a complaint about the first one's contents. This is the documented order.
+    my $wide = "age-encryption.org/v1\n\x{100} not bytes";
+    my $err_order = do {
+        local $@;
+        eval { Crypt::Age::Header->parse(\$wide, $marker) };
+        $@;
+    };
+    like($err_order, qr/^\Q$offset_msg\E\b/,
+        'the offset shape is checked before the data is scanned for bytes');
+
+    # Counter-proof that the loop above measures the type check: the same call
+    # with a ScalarRef offset parses and reports where the payload starts.
+    my $offset = 0;
+    my $parsed = Crypt::Age::Header->parse(\$data, \$offset);
+    is(scalar @{$parsed->stanzas}, 1,
+        'a ScalarRef offset still parses the header');
+    is($offset, length($data),
+        'and the new offset is written back through it');
+}
+
+# Ticket #30 counter-proof: the check may reject only what perl cannot map. A
+# header stored upgraded whose code points all fit in a byte is bytes, and it
+# is what rules out utf8::is_utf8 as the test -- that would answer true here
+# and refuse a header perl maps happily.
+#
+# It also records the limit of the non-mutating scan, so that nobody documents
+# more than it does: on this path perl's own open downgrades the referenced
+# scalar in place, so the caller's $str comes back unflagged. The scan does not
+# prevent that and never could -- it only keeps the rejection path above clean.
+{
+    my ($public) = Crypt::Age::Keys->generate_keypair;
+    my $file_key = Crypt::Age::Primitives->generate_file_key;
+    my $str = Crypt::Age::Header->create($file_key, [$public])->to_string;
+
+    utf8::upgrade($str);
+    ok(utf8::is_utf8($str), 'fixture: the header string really is stored upgraded');
+
+    my $offset = 0;
+    my $parsed = eval { Crypt::Age::Header->parse(\$str, \$offset) };
+    is($@, '', 'an upgraded header within Latin-1 is bytes and still parses');
+    is(scalar @{$parsed->stanzas}, 1, 'and yields its stanza');
+    is($offset, length($str), 'and the offset still lands at the end of the header');
+
+    ok(!utf8::is_utf8($str),
+        "perl's in-memory open downgraded the caller's scalar, not our check");
+}
+
+# Ticket #33, the same series one step further in: the argument shapes are both
+# right and the content is missing. parse(\my $undef, \my $offset) passes #31's
+# ScalarRef check (it really is one) and #32's offset check, and then used to
+# emit ten "Use of uninitialized value" warnings out of Header.pm before
+# croaking -- one from the byte-string scan, seven from reading an in-memory
+# handle opened on an undefined scalar, and two from the version line that
+# readline handed back as undef. Every one of them carried a Header.pm line
+# number for a mistake made one frame up, and a caller can act on none of them.
+#
+# The undefined referent gets its own croak rather than being normalized to the
+# empty string and left to the version-line croak: "there is nothing behind the
+# ref you gave me" and "these bytes are not an age file" are different mistakes
+# with different fixes, and this series has consistently named the cause instead
+# of burying it under a more general message.
+my $undef_msg = 'data must refer to a defined scalar: this method reads the '
+    .'age file out of it, assign the bytes before passing \$data';
+
+{
+    my ($err, $line, @warn);
+    my $offset = 0;
+    {
+        local $SIG{__WARN__} = sub { push @warn, $_[0] };
+        local $@;
+        my $undef;
+        $line = __LINE__ + 1;
+        eval { Crypt::Age::Header->parse(\$undef, \$offset) };
+        $err = $@;
+    }
+
+    is_deeply(\@warn, [],
+        'a ScalarRef to an undefined scalar warns nothing out of Header.pm');
+    like($err, qr/^\Q$undef_msg\E\b/,
+        'it is refused by its own croak, naming the cause and the fix');
+    unlike($err, qr/Invalid age version/,
+        'and not folded into the "not an age file" croak, which is a different mistake');
+    like($err, qr/^\Q$undef_msg\E at /,
+        'nothing is interpolated between the message and the croak position');
+    unlike($err, qr{Crypt/Age/Header\.pm},
+        'it croaks: Header.pm is not blamed as the origin');
+    my $where = quotemeta(__FILE__).' line '.$line;
+    like($err, qr/$where/,
+        'the croak reports the caller position in this test file');
+    is($offset, 0, 'the offset ref was left untouched');
+}
+
+# The neighbour path, which the fix above must not take over: an empty $data is
+# a legitimate "not an age file" and keeps the plain version-line croak. It was
+# not warning-free before this ticket either -- two of the ten above are shared
+# with it, raised by chomp and eq on the undef that readline returns at end of
+# input -- so this assertion is the record that the two paths now differ in
+# their message and agree in warning nothing.
+{
+    my ($err, @warn);
+    my $offset = 0;
+    {
+        local $SIG{__WARN__} = sub { push @warn, $_[0] };
+        local $@;
+        my $data = '';
+        eval { Crypt::Age::Header->parse(\$data, \$offset) };
+        $err = $@;
+    }
+
+    is_deeply(\@warn, [],
+        'an empty $data warns nothing out of Header.pm either');
+    like($err,
+        qr/^Invalid age version: expected the literal age-encryption\.org\/v1 version line at /,
+        'and still gets the plain version-line croak, with nothing interpolated');
+    unlike($err, qr/\Q$undef_msg\E/,
+        'empty bytes are data that arrived, not a ref to nothing');
+}
+
+# Same absence one frame down, at the line the fix actually sits on: a handle
+# already at end of input has no version line to read, and reports that without
+# warning first. parse_from_fh is public, and Crypt::Age::decrypt reaches it
+# directly rather than through parse, so this is the path an empty ciphertext
+# takes through the string API.
+{
+    my $empty = '';
+    open my $fh, '<:raw', \$empty or die "open: $!";
+
+    my ($err, @warn);
+    {
+        local $SIG{__WARN__} = sub { push @warn, $_[0] };
+        local $@;
+        eval { Crypt::Age::Header->parse_from_fh($fh) };
+        $err = $@;
+    }
+
+    is_deeply(\@warn, [],
+        'parse_from_fh on a handle at end of input warns nothing');
+    like($err, qr/^Invalid age version: expected the literal /,
+        'and reports the missing version line');
+}
+
+# Ticket #34, the same series in the other pair of public methods -- and the one
+# entry in it that leaks a secret. create and unwrap_file_key both dereferenced
+# their list parameter without checking it, so a caller who passed a bare string
+# instead of an ArrayRef got perl's own message, which quotes the first 32
+# characters of the offending string:
+#
+#     Can't use string ("AGE-SECRET-KEY-1FAKEFAKEFAKEFAKE"...) as an ARRAY ref
+#
+# For unwrap_file_key that string is an B<identity>, so the exception carried
+# secret key material into whatever log caught it, written from inside this
+# module where the caller can no longer redact it. For create the string is a
+# public key and so not a secret, but it is the identical defect one call away,
+# and the swap of recipient and identity -- both are plain strings -- is exactly
+# how a secret reaches create too. That swap is covered below on both methods.
+#
+# The markers here are 26 and 23 characters on purpose, and the real-key cases
+# assert on a 31-character prefix rather than the whole string. Perl truncates
+# the quoted string at 32, so anything longer never appears in the message even
+# in the red state, and a "nothing leaked" assertion built on it passes without
+# being able to fail. Every key here is fabricated or freshly generated.
+my $recipients_msg = 'recipients must be an ArrayRef: this method wraps the '
+    .'file key once per entry, pass [$recipient] rather than $recipient';
+my $identities_msg = 'identities must be an ArrayRef: this method tries each '
+    .'entry in turn, pass [$identity] rather than $identity';
+
+{
+    my ($public) = Crypt::Age::Keys->generate_keypair;
+    my $file_key = Crypt::Age::Primitives->generate_file_key;
+
+    my $marker = 'age1LEAKMARKERRECIPIENT';
+
+    for my $case (['a bare recipient string', $marker],
+                  ['undef',                   undef],
+                  ['a HASH ref',              { $marker => 1 }]) {
+        my ($what, $arg) = @$case;
+
+        my ($err, $line, @warn);
+        {
+            local $SIG{__WARN__} = sub { push @warn, $_[0] };
+            local $@;
+            $line = __LINE__ + 1;
+            eval { Crypt::Age::Header->create($file_key, $arg) };
+            $err = $@;
+        }
+
+        like($err, qr/^\Q$recipients_msg\E\b/,
+            "$what is rejected by type, naming the parameter and the fix");
+        unlike($err, qr/strict refs|ARRAY reference/,
+            "$what no longer arrives as perl's own dereference error");
+        ok(index($err, $marker) == -1,
+            "$what leaves no caller input in the message");
+        is_deeply(\@warn, [],
+            "$what reaches no dereference, so nothing warns out of Header.pm");
+        unlike($err, qr{Crypt/Age/Header\.pm},
+            "$what croaks: Header.pm is not blamed as the origin");
+        my $where = quotemeta(__FILE__).' line '.$line;
+        like($err, qr/$where/,
+            "$what reports the caller position in this test file");
+    }
+
+    # The swap: a caller who passes an identity where the recipient belongs
+    # puts a secret key into this parameter, bare. The assertion is on the
+    # first 31 characters rather than the whole key, because the whole key is
+    # 62 and perl would only ever have quoted 32 of them -- an index() on the
+    # full string cannot fail and would prove nothing.
+    #
+    # Every assertion in this sub-block is an index() inside ok(), never a
+    # like()/unlike() on $err and never is_deeply on the warnings. Those print
+    # the value they were given when they fail, so a red state here would put
+    # the same 32 characters of a real key into the test output that the bug
+    # puts into the caller's log -- measured, not assumed: the first run of
+    # this block did exactly that. ok() prints its name and nothing else.
+    my ($public2, $secret) = Crypt::Age::Keys->generate_keypair;
+    {
+        my ($err, @warn);
+        {
+            local $SIG{__WARN__} = sub { push @warn, $_[0] };
+            local $@;
+            eval { Crypt::Age::Header->create($file_key, $secret) };
+            $err = $@;
+        }
+
+        ok(index($err, $recipients_msg) == 0,
+            'a bare identity in place of the recipient list is a type error');
+        ok(index($err, substr($secret, 0, 31)) == -1,
+            'and no part of that secret key reaches the message');
+        ok(index($err, 'AGE-SECRET-KEY-1') == -1,
+            'not even the identity prefix');
+        is(scalar @warn, 0, 'and nothing warns out of Header.pm');
+    }
+
+    # Counter-proof that the cases above measure the type check and not a
+    # recipient this method could not have used anyway.
+    my $header = Crypt::Age::Header->create($file_key, [$public]);
+    is(scalar @{$header->stanzas}, 1,
+        'the same recipient inside an ArrayRef still produces its stanza');
+}
+
+{
+    my ($public, $secret) = Crypt::Age::Keys->generate_keypair;
+    my $file_key = Crypt::Age::Primitives->generate_file_key;
+    my $header = Crypt::Age::Header->create($file_key, [$public]);
+
+    my $marker = 'AGE-SECRET-KEY-1LEAKMARKER';
+
+    for my $case (['a bare identity string', $marker],
+                  ['undef',                  undef],
+                  ['a HASH ref',             { $marker => 1 }]) {
+        my ($what, $arg) = @$case;
+
+        my ($err, $line, @warn);
+        {
+            local $SIG{__WARN__} = sub { push @warn, $_[0] };
+            local $@;
+            $line = __LINE__ + 1;
+            eval { $header->unwrap_file_key($arg) };
+            $err = $@;
+        }
+
+        like($err, qr/^\Q$identities_msg\E\b/,
+            "$what is rejected by type, naming the parameter and the fix");
+        unlike($err, qr/strict refs|ARRAY reference/,
+            "$what no longer arrives as perl's own dereference error");
+        ok(index($err, $marker) == -1,
+            "$what leaves no key material in the message");
+        ok(index($err, 'LEAKMARKER') == -1,
+            "$what leaves no fragment of it either");
+        unlike($err, qr/AGE-SECRET-KEY-1/i,
+            "$what does not even name the identity prefix");
+        is_deeply(\@warn, [],
+            "$what reaches no dereference, so nothing warns out of Header.pm");
+        unlike($err, qr{Crypt/Age/Header\.pm},
+            "$what croaks: Header.pm is not blamed as the origin");
+        my $where = quotemeta(__FILE__).' line '.$line;
+        like($err, qr/$where/,
+            "$what reports the caller position in this test file");
+    }
+
+    # The real thing, which is the likeliest way to reach this at all: one
+    # identity, passed bare because a single identity does not look like a
+    # list. Asserted on 31 characters, for the reason given above.
+    # Assertions by index() inside ok() again, for the reason written out over
+    # the same shape in the create block above: this is the one call in the
+    # distribution whose wrong argument is a whole secret key, so nothing here
+    # may print $err.
+    {
+        my ($err, @warn);
+        {
+            local $SIG{__WARN__} = sub { push @warn, $_[0] };
+            local $@;
+            eval { $header->unwrap_file_key($secret) };
+            $err = $@;
+        }
+
+        ok(index($err, $identities_msg) == 0,
+            'a bare, valid identity is a type error, not a silent success');
+        ok(index($err, substr($secret, 0, 31)) == -1,
+            'and no part of that secret key reaches the message');
+        ok(index($err, 'AGE-SECRET-KEY-1') == -1,
+            'not even the identity prefix');
+        is(scalar @warn, 0, 'and nothing warns out of Header.pm');
+    }
+
+    # Counter-proof that the cases above measure the type check and not a
+    # header that could not be unwrapped in the first place.
+    is($header->unwrap_file_key([$secret]), $file_key,
+        'the same identity inside an ArrayRef still unwraps the file key');
+}
+
+# Ticket #36, the last of this series. create checked the shape of its
+# recipients list, above, but never its length. An empty ArrayRef passed every
+# check and returned a header with no stanzas at all -- a version line and a
+# MAC over it -- which wraps the file key for nobody. The spec's grammar is
+# "header = v1-line 1*stanza end", one or more, so that is not a useless
+# header, it is not a header. Measured on a file built from one: rage 0.12.1
+# refuses it outright as "Unknown age format", age 1.2.1 parses it and then
+# reports "no identity matched any of the recipients". Both are right, and both
+# say so long after the file key -- which exists only inside that file -- was
+# the last way back to the plaintext.
+my $recipients_empty_msg = 'recipients must not be empty: this method wraps '
+    .'the file key once per entry, so a header with no stanzas can never be '
+    .'unwrapped, pass at least one recipient';
+
+{
+    my ($public, $secret) = Crypt::Age::Keys->generate_keypair;
+    my $file_key = Crypt::Age::Primitives->generate_file_key;
+
+    my ($err, $line, @warn);
+    {
+        local $SIG{__WARN__} = sub { push @warn, $_[0] };
+        local $@;
+        $line = __LINE__ + 1;
+        eval { Crypt::Age::Header->create($file_key, []) };
+        $err = $@;
+    }
+
+    # The whole message up to croak's " at FILE line N." tail, not a prefix:
+    # a wording that drifts, or picks up an interpolated suffix, stops
+    # matching here.
+    like($err, qr/^\Q$recipients_empty_msg\E(?: at |\z)/,
+        'an empty recipients list is refused with exactly the documented message');
+    is_deeply(\@warn, [], 'and nothing warns on the way');
+    unlike($err, qr{Crypt/Age/Header\.pm},
+        'it croaks: Header.pm is not blamed as the origin');
+    my $where = quotemeta(__FILE__).' line '.$line;
+    like($err, qr/$where/, 'and it reports the caller position in this test file');
+
+    # The claim the assertion above replaces. Before the fix this call
+    # returned a Crypt::Age::Header with zero stanzas, and it was that object
+    # -- not an exception -- that made the file it started unrecoverable, so
+    # the regression to guard against is a silent success, not a wrong text.
+    my $built = eval { Crypt::Age::Header->create($file_key, []) };
+    is($built, undef, 'and no header object is returned for an empty list');
+
+    # The shape check fires first for anything that is not an ArrayRef, so the
+    # two messages answer two different mistakes and cannot be confused.
+    eval { Crypt::Age::Header->create($file_key, {}) };
+    like($@, qr/^\Q$recipients_msg\E\b/,
+        'a non-ArrayRef is still answered by the shape check, not the emptiness one');
+
+    # Counter-proof that the block measures the emptiness check and not a
+    # create that stopped working.
+    my $header = Crypt::Age::Header->create($file_key, [$public]);
+    is(scalar @{$header->stanzas}, 1,
+        'a single-entry list still produces exactly one stanza');
+    is($header->unwrap_file_key([$secret]), $file_key,
+        'and the header it builds still unwraps');
+
+    # unwrap_file_key, measured rather than assumed while fixing #36, and left
+    # alone because it is not the same defect: an empty identity list is
+    # already fatal there, so nothing is silently accepted and nothing is
+    # lost. Pinned here so that stays true -- if this ever returns instead of
+    # dying, the read side has grown the defect the write side just lost.
+    my $unwrapped = eval { $header->unwrap_file_key([]) };
+    is($unwrapped, undef, 'an empty identities list unwraps nothing');
+    like($@, qr/No matching identity found/,
+        'and is fatal already, which is why unwrap_file_key is not part of this fix');
+}
+
+
+# Ticket #39, the read-side counterpart to #36. The spec's header grammar is
+# "header = v1-line 1*stanza end" (c2sp.org/age, "ABNF definition of file
+# header") -- one or more stanzas, never zero -- and the prose above the ABNF
+# says it again: "followed by one or more recipient stanzas". #36 made
+# Header::create refuse to BUILD such a header on the write side; nothing
+# enforced the same clause on the read side. A version line followed directly
+# by the "---" MAC footer passed every check in parse_from_fh and returned a
+# Header with an empty stanza list and a MAC that even verifies (it is a
+# well-formed MAC over a header the grammar forbids) -- so the file only
+# failed later, at unwrap_file_key, with "No matching identity found", naming
+# the caller's keys as the cause of a file that is addressed to nobody at all.
+#
+# Measured on such a file: rage 0.12.1 refuses it at parse time as "Unknown
+# age format"; age 1.2.1 parses it and reports "no identity matched any of the
+# recipients". This implementation was the most permissive of the three; the
+# guard added in parse_from_fh now refuses at the point the grammar is
+# actually violated, with a message naming that cause, nothing else.
+#
+# The guard sits after the "no valid header MAC line" croak on purpose, so a
+# TRUNCATED header -- a version line and nothing else -- keeps reporting that
+# the handle ran out rather than being folded into the stanza-less message.
+# That boundary is asserted below too, since it is the reason the guard lives
+# where it does and not earlier in the function.
+my $no_stanza_msg = 'age header must carry at least one recipient stanza: '
+    .'the file key is wrapped once per stanza, so a header with none can '
+    .'never be unwrapped by anyone, decrypt a file encrypted to at least one '
+    .'recipient';
+
+{
+    my $mac64 = Crypt::Age::Stanza::encode_base64_no_padding("\x00" x 32);
+    my $no_stanza_header = "age-encryption.org/v1\n--- $mac64\n";
+
+    # parse_from_fh: the entry point the guard actually lives in.
+    {
+        open my $fh, '<:raw', \$no_stanza_header or die "open: $!";
+
+        my ($err, $line, @warn);
+        {
+            local $SIG{__WARN__} = sub { push @warn, $_[0] };
+            local $@;
+            $line = __LINE__ + 1;
+            eval { Crypt::Age::Header->parse_from_fh($fh) };
+            $err = $@;
+        }
+
+        # Anchored end to end (only croak's own " at FILE line N." suffix may
+        # follow), so nothing from the file's content -- and nothing else --
+        # is interpolated into the documented message.
+        like($err, qr/^\Q$no_stanza_msg\E(?: at |\z)/,
+            'parse_from_fh refuses a complete, stanza-less header with exactly the documented message');
+        is_deeply(\@warn, [], 'and nothing warns on the way');
+        unlike($err, qr{Crypt/Age/Header\.pm},
+            'it croaks: Header.pm is not blamed as the origin');
+        my $where = quotemeta(__FILE__).' line '.$line;
+        like($err, qr/$where/, 'and it reports the caller position in this test file');
+    }
+
+    # parse: the \$data/\$offset wrapper. It has no guard of its own here --
+    # this checks that it inherits parse_from_fh's, not that it duplicates it.
+    {
+        my $offset = 0;
+        my ($err, $line, @warn);
+        {
+            local $SIG{__WARN__} = sub { push @warn, $_[0] };
+            local $@;
+            $line = __LINE__ + 1;
+            eval { Crypt::Age::Header->parse(\$no_stanza_header, \$offset) };
+            $err = $@;
+        }
+
+        like($err, qr/^\Q$no_stanza_msg\E(?: at |\z)/,
+            'parse refuses the same header with the same message');
+        is_deeply(\@warn, [], 'and nothing warns on the way');
+        my $where = quotemeta(__FILE__).' line '.$line;
+        like($err, qr/$where/, 'reported through parse, the caller position is still this test file');
+        is($offset, 0, 'and the offset ref is left untouched');
+    }
+}
+
+# The truncated header: a version line and nothing after it. This must keep
+# reporting "Invalid age file, no valid header MAC line" -- its cause is that
+# the handle ran out, a different defect from a complete header that simply
+# carries no stanzas. This is the split the guard's placement (after the
+# MAC-line croak, not before it) exists to preserve.
+{
+    my $truncated = "age-encryption.org/v1\n";
+
+    my $offset = 0;
+    my $err = do {
+        local $@;
+        eval { Crypt::Age::Header->parse(\$truncated, \$offset) };
+        $@;
+    };
+
+    like($err, qr/^Invalid age file, no valid header MAC line\b/,
+        'a truncated header (version line only) still reports the MAC-line failure');
+    unlike($err, qr/\Q$no_stanza_msg\E/,
+        'and not the stanza-less message, even though it too parsed zero stanzas');
+}
+
+# Counter-proof: a regular one-stanza header still parses through both entry
+# points, so the two blocks above measure the new guard and not a parser that
+# stopped accepting valid headers.
+{
+    my ($public, $secret) = Crypt::Age::Keys->generate_keypair;
+    my $file_key = Crypt::Age::Primitives->generate_file_key;
+    my $header_text = Crypt::Age::Header->create($file_key, [$public])->to_string;
+
+    my $offset = 0;
+    my $parsed = Crypt::Age::Header->parse(\$header_text, \$offset);
+    is(scalar @{$parsed->stanzas}, 1, 'a normal one-stanza header still parses via parse');
+    is($parsed->unwrap_file_key([$secret]), $file_key,
+        'and still unwraps the file key');
+
+    open my $fh, '<:raw', \$header_text or die "open: $!";
+    my $parsed_fh = Crypt::Age::Header->parse_from_fh($fh);
+    is(scalar @{$parsed_fh->stanzas}, 1, 'and still parses via parse_from_fh directly');
 }
 
 done_testing;

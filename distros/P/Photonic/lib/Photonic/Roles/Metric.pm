@@ -1,5 +1,5 @@
 package Photonic::Roles::Metric;
-$Photonic::Roles::Metric::VERSION = '0.024';
+$Photonic::Roles::Metric::VERSION = '0.025';
 
 =encoding UTF-8
 
@@ -9,7 +9,7 @@ Photonic::Roles::Metric
 
 =head1 VERSION
 
-version 0.024
+version 0.025
 
 =head1 COPYRIGHT NOTICE
 
@@ -111,9 +111,11 @@ has 'epsilon'   => (is=>'ro', isa=>PDLObj, required=>1,
 has 'wavenumber'=> (is=>'ro', isa=>PDLObj, required=>1,
                    documentation=>'Vacuum wavenumber w/c');
 has 'wavevector'=> (is=>'ro', isa=>PDLObj, required=>1,
-                   documentation=>'Wave vector');
+		    documentation=>'Wave vector');
+
 requires qw(value); #provided by metric instances
 
 no Moo::Role;
 
 1;
+

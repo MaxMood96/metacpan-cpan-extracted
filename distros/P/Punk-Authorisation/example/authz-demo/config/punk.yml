@@ -1,0 +1,26 @@
+# AuthzDemo configuration. `session` and `auth` stay in lib/AuthzDemo.pm:
+# the plugin reads the role ladder back out of `auth`, and keeping them in one
+# file is the whole argument for not repeating `rank` here.
+
+views:
+  Stencil:
+    template_dir: root/templates
+    wrapper: layout.tmpl
+
+static:
+  /static: root/static
+
+# SQLite, in a file beside the application. The tables are NOT created here or
+# at boot - `punk sqitch deploy` creates them, from three schema projects: the
+# `auth` keyword's users table, this application's own changes, and the
+# punk_authz grants table the plugin registers. See the README.
+database:
+  dsn: dbi:SQLite:dbname=authz-demo.db
+
+models: [ User, Doc ]
+
+# No `plugins:` block, deliberately: this file is read by `config`, which
+# registers what it names straight away - and that is before the `auth` line
+# in lib/AuthzDemo.pm has declared the role ladder the plugin reads. See the
+# comment there. An application whose plugin does not depend on `auth` can
+# register it here.

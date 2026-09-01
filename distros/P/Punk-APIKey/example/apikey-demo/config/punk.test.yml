@@ -1,0 +1,8 @@
+# The test environment. PUNK_ENV=test.
+
+database:
+  # Its OWN directory, and that is not fussiness: Sqitch keeps the sqlite
+  # registry as sqitch.db beside the target database, so a test database in
+  # the same directory as the development one would share its registry and be
+  # told everything is already deployed - into an empty database.
+  dsn: dbi:SQLite:dbname=var/test/app.db

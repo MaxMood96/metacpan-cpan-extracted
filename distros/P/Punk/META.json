@@ -44,7 +44,8 @@
          "recommends" : {
             "DBI" : "0",
             "Eshu" : "0",
-            "Future" : "0"
+            "Future" : "0",
+            "Future::AsyncAwait" : "0.66"
          },
          "requires" : {
             "Apophis" : "0.05",
@@ -68,6 +69,6 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.38",
+   "version" : "0.40",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

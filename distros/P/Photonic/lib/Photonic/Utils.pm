@@ -1,5 +1,8 @@
 package Photonic::Utils;
-$Photonic::Utils::VERSION = '0.024';
+
+use warnings;
+use strict;
+$Photonic::Utils::VERSION = '0.025';
 
 =encoding UTF-8
 
@@ -35,14 +38,15 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA  02110-1301 USA
 
 # Collection of subroutines. Thus, no Moo
 require Exporter;
-@ISA=qw(Exporter);
-@EXPORT_OK=qw(vectors2Dlist tile RtoG GtoR
+our @ISA=qw(Exporter);
+our @EXPORT_OK=qw(vectors2Dlist tile RtoG GtoR
     HProd MHProd EProd VSProd SProd
-    corner_rotate mvN top_slice linearCombineIt lentzCF any_complex tensor
+    corner_rotate mvN top_slice linearCombine
+    lentzCF any_complex tensor
     make_haydock make_greenp
     cartesian_product dummyN triangle_coords incarnate_as
-    wave_operator apply_longitudinal_projection make_dyads
-    cgtsv lu_decomp lu_solve
+    apply_longitudinal_projection make_dyads
+    cgtsv lu_decomp lu_solve convert_units upper_sqrt
 );
 use PDL::LiteF;
 use PDL::FFTW3;
@@ -52,21 +56,23 @@ use Storable qw(dclone);
 require PDL::LinearAlgebra::Real;
 require PDL::LinearAlgebra::Complex;
 require List::Util;
-use warnings;
-use strict;
+
 
 sub top_slice :lvalue {
+    # slices an ndarray for a given last dimension
     my ($pdl, $index) = @_;
     my $slice_arg = join ',', (map ':', 1..($pdl->ndims-1)), $index;
     $pdl->slice($slice_arg);
 }
 
 sub dummyN {
+    # Inserts a block of $how_many dummy dimensions of size $dim_size
+    # (default 1) starting at dimension $where (default 0) into an
+    # ndarray $pdl.
   my ($pdl, $how_many, $where, $dim_size) = @_;
   return $pdl if $how_many <= 0;
   my $ndims=$pdl->ndims;
   $where //= 0;
-  local $_;
   $_ = !$_ ? 0 : $_ > 0 ? $_ : $ndims + $_ + 1 for $where;
   $dim_size //= 1;
   my @before = (':') x $where;
@@ -74,27 +80,22 @@ sub dummyN {
   $pdl->slice($slice_arg);
 }
 
-sub linearCombineIt { #complex linear combination of states
+sub linearCombine { #complex linear combination of states
     my ($coefficients, $states, $thread_dims)=@_;
     $thread_dims //= 0;
     $coefficients=dummyN($coefficients, $states->ndims-$coefficients->ndims);
     ($coefficients*$states)->mv(-$thread_dims-1,0)->sumover;
 }
 
-sub any_complex {
+sub any_complex { # test if an ndarray is any kind of complex
     grep ref $_ && ($_->isnull || !$_->type->real), @_;
-}
-
-sub wave_operator {
-    my ($green, $nd) = @_;
-    lu_solve([lu_decomp($green)], r2C(PDL::MatrixOps::identity($nd)));
 }
 
 sub cartesian_product {
   my ($s1, $s2) = @_;
-  my $ndims_target = List::Util::max(2, map $_->ndims, $s1, $s2);
-  $_ = dummyN($_, $ndims_target-$_->ndims) for grep $_->ndims < $ndims_target, $s1, $s2;
   my ($nd1, $nd2) = map $_->ndims, $s1, $s2;
+  my $ndims_target = List::Util::max(2, $nd1, $nd2);
+  $_ = dummyN($_, $ndims_target-$_->ndims) for grep $_->ndims < $ndims_target, $s1, $s2;
   my @dims = $s1->dims;
   $dims[-2] += $s2->dim(-2); # X1+X2
   $dims[-1] *= $s2->dim(-1); # m*n
@@ -105,8 +106,11 @@ sub cartesian_product {
   $res;
 }
 
-sub triangle_coords {
-  my ($n, $inc_diag) = @_;
+sub triangle_coords { # indices of lower triangular matrix, with or without diagonal
+    my (
+	$n,           # dimension
+	$inc_diag     # include diagonal
+	) = @_;
   my $x = xvals($n, $n);
   my $y = yvals($n, $n);
   my $mask = $inc_diag ? $x >= $y : $x > $y;
@@ -114,7 +118,17 @@ sub triangle_coords {
 }
 
 sub tensor {
-    my ($data, $decomp, $nd, $dims, $skip) = @_;
+    # build a symmetric tensor T_ij from its projections along the unit pair directions
+    # v_ij=e_i+e_j (normalized) i<=j (0,0), (0,1)...(1,1),(1,2)....
+    # The first argument are the projections. The second the LU decomposition of the matrix
+    # v_tt' with t the index of ij and t' that of i'j'. The third is the dimension of space.
+    my ($data,    # projections of the tensor
+	$decomp,  # LU decomposition of the unit vectors matrix
+	$nd,      # dimension of space
+	$dims,    # dimensions of tensor (may be >2 i.e., for nonlinear response,
+	          # T_kij, symmetric in ij)
+	$skip     # number of extra dimensions at front, to be skipped
+	) = @_;
     $skip //= 0;
     my $backsub = lu_solve($decomp, mvN($data, 0, $skip-1, -1));
     $backsub = mvN($backsub, -$skip, -1, 0) if $skip;
@@ -126,30 +140,46 @@ sub tensor {
     $tensor;
 }
 
-my @HAYDOCK_PARAMS = qw(
-  nh keepStates smallH
-);
+my @HAYDOCK_PARAMS = qw(nh keepStates smallH);
 sub make_haydock {
-  my ($self, $class, $pairs, $add_geom, @extra_attributes) = @_;
-  # This must change if G is not symmetric
-  [ map incarnate_as($class, $self, [ @HAYDOCK_PARAMS, @extra_attributes ],
-      _haydock_extra($self, $_, $add_geom),
-  ), $pairs->dog ];
+    # make array of haycodk calculators
+    my ($self,            # calling object
+	$class,           # class name for the Haydock calculator
+	$polarizations,   # array of polarizations for each calculator
+	$add_geom,        # use geometry (1) or metric (0)
+	@extra_attributes # additional attributes
+	) = @_;
+    # This must change if G is not symmetric
+    [ map incarnate_as($class, $self, [ @HAYDOCK_PARAMS, @extra_attributes ],
+		       _haydock_extra($self, $_, $add_geom),
+      ),
+      $polarizations->dog
+    ];
 }
 
 sub _haydock_extra {
-  my ($self, $u, $add_geom) = @_;
-  my $obj = dclone($add_geom ? $self->geometry : $self->metric);
-  $obj = $obj->new(%$obj, Direction0=>$u) if $add_geom; #add G0 direction
-  $add_geom ? (geometry=>$obj) : (metric=>$obj, polarization=>$u->r2C);
+    # clone and modify the appropriate geometry or metric for a given polarization
+    my ($self,    # calling object
+	$pol,       # polarization
+	$add_geom # choose to add geometry (1) or metric (0)
+	) = @_;
+    my $obj = dclone($add_geom ? $self->geometry : $self->metric);
+    $obj = $obj->new(%$obj, Direction0=>$pol) if $add_geom; #add G0 direction
+    $add_geom ? (geometry=>$obj) : (metric=>$obj, polarization=>$pol->r2C);
 }
 
 my @GREENP_PARAMS = qw(nh smallE);
 sub make_greenp {
-  my ($self, $class, $method, @extra_attributes) = @_;
-  $method ||= 'haydock';
-  [ map incarnate_as($class, $self, [ @GREENP_PARAMS, @extra_attributes ], haydock=>$_),
-      @{$self->$method}
+    # make array of projected Green functions
+    my ($self,             # the calling object
+	$projected_green,  # the class name for the projected Green function
+	$haydocks,         # method name for list of Haydock calculators
+	@extra_attributes  # to initialize the class of green projections
+	) = @_;
+    $haydocks //= 'haydock';
+    [ map incarnate_as($projected_green, $self,
+		       [ @GREENP_PARAMS, @extra_attributes ], haydock=>$_),
+      @{$self->$haydocks}
   ];
 }
 
@@ -267,7 +297,7 @@ sub VSProd { #Vector-Spinor product between two vector fields in reciprocal
     my $first_mG=$first->slice($sl); #xy:pm:nx:ny
     $first_mG=corner_rotate($first_mG, 2, $ndims-1); #rotate psi_{G=0} to opposite corner with coords. (0,0,...)
     my $prod=$first_mG*$second; #xy:pm:nx:ny
-    # clump all except xy.
+    # clump all except xy. #??
     $prod->mv(0, -1) #nx:ny:xy:pm
 	->clump(-1)  #nx*ny*xy*pm
 	->sumover;
@@ -351,6 +381,7 @@ sub vectors2Dlist { #2D vector fields ready for gnuploting
 sub cgtsv {
     confess "Wrong number of arguments" unless @_ == 4;
     my ($c, $d, $e, $b) = map $_->new_or_inplace, @_;
+    $e=$e->copy if $e->address==$c->address; # Avoid duplicate arguments, as they are modified below
     my $i = PDL::LinearAlgebra::Complex::cgtsv($c, $d, $e, $b);
     confess "Error solving tridiag system: info=$i" if $i->any;
     $b;
@@ -405,11 +436,13 @@ sub apply_longitudinal_projection {
 }
 
 sub make_dyads {
+    # given V_n=e_i+e_j (normalized) the n-th sum of pairs of unit vectors
+    # build the matrix M_mn=F_ij V_mi Vmj with F_ij=1 or 2, according to whether i==j
     my ($nd, $unitPairs) = @_;
     my $ne = $nd*($nd+1)/2; #number of symmetric matrix elements
     my $matrix = PDL->zeroes($ne, $ne);
-    my $indexes = triangle_coords($nd, 1); # col0,col1=x,y
-    my $i_plus_seq = cartesian_product($indexes, sequence($ne)); # col2=seq
+    my $indices = triangle_coords($nd, 1); # xy, n
+    my $i_plus_seq = cartesian_product($indices, sequence($ne)); # col2=seq
     $i_plus_seq = cartesian_product($i_plus_seq, ones(2, 1)); # col3,4=ones
     $i_plus_seq->slice('(3)') .= sequence($ne)->dummy(1, $ne)->clump(-1); # col3=sequence of coords
     $i_plus_seq->slice('(4)') += $i_plus_seq->slice('(0)') != $i_plus_seq->slice('(1)'); # col4=factor
@@ -417,6 +450,50 @@ sub make_dyads {
       $i_plus_seq->slice('(4)')*$unitPairs->indexND($i_plus_seq->dice([0,2])) *
       $unitPairs->indexND($i_plus_seq->slice('1:2'));
     return $matrix;
+}
+
+# Variables for convert_units below
+my $pi=4*atan2(1,1);
+my $hbarc=1973.269631; # eV AA
+my $c= 299_792_458.; # m/s
+my %m=(am=>1e-18, fm=>1e-15, pm=>1e-12, AA=>1e-10, nm=>1e-9, mu=>1e-6,
+       mm=>1e-3, cm=>1e-2,
+       dm=>1e-1, m=>1., km=>1e3, as=>1e-18*$c, fs=>1e-15*$c,
+       ps=>1e-12*$c, ns=>1e-9*$c, mus=>1e-6*$c, ms=>1e-3*$c, s=>$c);
+my %Hz=(Hz=>1., kHz=>1e3, MHz=>1e6, GHz=>1e9, THz=>1e12, cm1=>1e2*$c,
+	meV=>(1e-3*$c)/(2*$pi*$hbarc*1e-10),
+	eV=>($c)/(2*$pi*$hbarc*1e-10),
+	keV=>(1e3*$c)/(2*$pi*$hbarc*1e-10),
+	MeV=>(1e6*$c)/(2*$pi*$hbarc*1e-10),
+	GeV=>(1e9*$c)/(2*$pi*$hbarc*1e-10),
+	TeV=>(1e12*$c)/(2*$pi*$hbarc*1e-10),
+	PeV=>(1e15*$c)/(2*$pi*$hbarc*1e-10),
+    );
+
+sub convert_units{
+    # Valid: am, fm, pm, AA, nm, mm, cm, dm, m, km, fs, ps, ns, ms, s, Hz, kHz, MHz, GHz
+    # THz, cm1, meV, eV, keV, MeV, GeV, TeV, PeV
+    my ($in, $units, $outunits)=@_;
+    return $in*$m{$units}/$m{$outunits} if $m{$units} && $m{$outunits};
+    return $c/($in*$m{$units}*$Hz{$outunits}) if $m{$units} && $Hz{$outunits};
+    return $c/($in*$Hz{$units}*$m{$outunits}) if $Hz{$units} && $m{$outunits};
+    return $in*$Hz{$units}/$Hz{$outunits} if $Hz{$units} && $Hz{$outunits};
+    confess "Unknown conversion: $units to $outunits";
+}
+
+thread_define '_upper_sqrt_aux(x();[o]s())', over {
+    my $x=shift;
+    my $s=shift;
+    my $t=sqrt($x);
+    $t=-$t if $t->im <0 || ($t->im==0 && $t->re < 0);
+    $s.=$t;
+};
+
+sub upper_sqrt { # sqrt in upper half plane
+    my $x=shift;
+    my $r=null;
+    _upper_sqrt_aux($x, $r);
+    return $r;
 }
 
 1;
@@ -430,7 +507,7 @@ Photonic::Utils
 
 =head1 VERSION
 
-version 0.024
+version 0.025
 
 =head1 SYNOPSIS
 
@@ -460,7 +537,7 @@ ndarray.
 Adds C<$how_many> (no-op if <= 0) dummy dimensions of size C<$dim_size>
 (default 1) in the C<$which_dim> (default 0) position.
 
-=item * $r=linearCombineIt($c, $it, $thread_dims)
+=item * $r=linearCombine($c, $it, $thread_dims)
 
 Complex linear combination of states. $c is a 'complex'
 ndarray and $it is an ndarray of states from a L<Photonic::Roles::Haydock>.
@@ -562,20 +639,14 @@ True if any of the args are a complex PDL.
 
 =item * cartesian_product
 
-Given two ndarrays a(Z,x1,m), b(Z,x2,n), return c(Z,x1+x2,m*n), with
-each row from C<b> appended to all rows from C<a>. C<Z> can be empty
-but must be compatible; the shorter one will be "dummied up" from the
-zero end as necessary.
+Given two ndarrays a(x1,m), b(x2,n), return c(x1+x2,m*n), with
+each row from C<b> appended to all rows from C<a>. If one of them is
+1D, a dummy first index is added.
 
 =item * tensor
 
 Given a complex PDL, an LU decomposition array-ref as returned by
 L</lu_decomp>, and the size of the tensor, returns the tensor.
-
-=item * wave_operator
-
-Given a Green tensor and number of dimension in the geometry, returns
-a wave operator.
 
 =item * make_haydock
 
@@ -629,4 +700,27 @@ returns a matrix of dyads of unit vector pairs
 B<d>^{ij}_{kl}=B<u>^{i}_{kl}B<u>^{j}_{kl} as 2d matrix, adjusted for
 symmetry.
 
+=item * convert_units
+
+     my $out=convert_units($in, $from, $to);
+
+Converts units between wavelength, period, frequency and energy. C<$in> is the
+amount of C<$from> units, which correspond to C<$out> of C<$to> units. C<$from>
+and C<$to> can be any of
+   am, fm, pm, AA, nm, mu, mm, cm, dm, m, km,
+   as, fs, ps, ns, mus, ms, s
+   Hz, kHz, MHz, GHz, THz, cm1,	meV, eV, keV,
+   MeV, GeV, TeV, PeV
+When converting from wavelength and period to frequency and
+energy the relations is an inverse proportion.
+
+=item * upper_sqrt
+
+    my $sqrt=$z->upper_sqrt;
+
+Takes square root with non-negative imaginary part, i.e.,
+with branch cut along the negative real axis.
+
 =back
+
+=cut

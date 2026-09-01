@@ -1,0 +1,10 @@
+<h2>{% doc.title %}</h2>
+<p class="quiet">owned by <code>{% owner.email %}</code>{% if doc.public %},
+and public{% end %}</p>
+
+<p>You are reading this because <code>doc.read</code> allowed it. Had it
+refused, this page would be the status the rule chose rather than this
+text - and for somebody else's private document that status is a 404, so
+there is no way to tell from the outside whether the row exists.</p>
+
+<p><a href="/">Back</a></p>

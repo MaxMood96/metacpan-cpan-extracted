@@ -1,0 +1,92 @@
+<h2>Who may do what</h2>
+
+<p>Every cell below is one call to <code>$c-&gt;may($action, $doc)</code>,
+asked as the page is drawn. A blank cell is a refusal, and the number is the
+status <code>$c-&gt;deny</code> would send: <strong>403</strong> when you are
+allowed to know the row exists, <strong>404</strong> when you are not.</p>
+
+{% if user %}
+<table class="matrix">
+  <thead>
+    <tr><th>document</th><th>owner</th>
+        <th>read</th><th>edit</th><th>publish</th><th>delete</th><th>share</th></tr>
+  </thead>
+  <tbody>
+  {% for doc in docs %}
+    <tr>
+      <td><a href="/doc/{% doc.id %}">{% doc.title %}</a>
+        {% if doc.public %}<span class="tag">public</span>{% end %}</td>
+      <td><code>{% doc.owner.email %}</code></td>
+      {% for a in doc.actions %}
+      <td class="{% if a.may %}yes{% else %}no{% end %}">
+        {% if a.may %}yes{% else %}<span class="status">{% a.status %}</span>{% end %}
+      </td>
+      {% end %}
+    </tr>
+  {% end %}
+  </tbody>
+</table>
+{% else %}
+<p class="quiet">Nobody is signed in, so every rule refuses. Pick somebody
+above.</p>
+{% end %}
+
+<h2>The documents</h2>
+
+{% for doc in docs %}
+<section class="doc">
+  <h3>{% doc.title %}</h3>
+  <p class="quiet">owned by <code>{% doc.owner.email %}</code>{% if doc.public %},
+    and public{% end %}</p>
+
+  {% if doc.shared %}
+  <p class="quiet">shared for editing with:
+    {% for s in doc.shared %}<code>{% s.email %}</code> {% end %}</p>
+  {% end %}
+
+  <div class="actions">
+    <form method="post" action="/doc/{% doc.id %}/edit" class="inline">
+      <input name="title" value="{% doc.title %}" size="24">
+      <button>Edit</button>
+    </form>
+    <form method="post" action="/doc/{% doc.id %}/publish" class="inline">
+      <button>Publish</button>
+    </form>
+    <form method="post" action="/doc/{% doc.id %}/delete" class="inline">
+      <button>Delete</button>
+    </form>
+  </div>
+
+  <div class="actions">
+    <form method="post" action="/doc/{% doc.id %}/share" class="inline">
+      <select name="user_id">
+      {% for u in users %}<option value="{% u.id %}">{% u.email %}</option>{% end %}
+      </select>
+      <button>Grant edit</button>
+    </form>
+    <form method="post" action="/doc/{% doc.id %}/unshare" class="inline">
+      <select name="user_id">
+      {% for u in users %}<option value="{% u.id %}">{% u.email %}</option>{% end %}
+      </select>
+      <button>Revoke</button>
+    </form>
+  </div>
+</section>
+{% end %}
+
+<h2>Things worth trying</h2>
+
+<ol class="try">
+  <li>As <code>alice</code>, edit <em>Bob's draft</em>: <strong>404</strong>.
+    Not 403 - a 403 on somebody else's id confirms the row is there.</li>
+  <li>As <code>alice</code> (a <code>member</code>), publish <em>her own</em>
+    notes: <strong>403</strong>. She knows it exists, she is simply not on a
+    high enough rung.</li>
+  <li>As <code>alice</code>, grant <code>bob</code> edit on her notes, then
+    act as <code>bob</code> and edit them. Then revoke, and try again: it
+    stops working on the next request, because nothing is cached.</li>
+  <li>As <code>carol</code> (an <code>admin</code>), delete anything. Then try
+    to grant yourself edit on Alice's notes: <strong>404</strong>. Being an
+    admin is not the same as being the owner, which is the difference between
+    a role and a grant.</li>
+</ol>

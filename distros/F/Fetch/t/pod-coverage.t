@@ -21,4 +21,7 @@ eval "use Pod::Coverage $min_pc";
 plan skip_all => "Pod::Coverage $min_pc required for testing POD coverage"
     if $@;
 
-all_pod_coverage_ok();
+# The AWAIT_* methods are the Future::AsyncAwait::Awaitable protocol, called
+# by that module rather than by a user, and documented as a whole under
+# Fetch::Future's ASYNC/AWAIT section rather than one entry at a time.
+all_pod_coverage_ok( { also_private => [qr/^AWAIT_/] } );

@@ -170,6 +170,7 @@ lib/Punk/Cache/Memory.pm
 lib/Punk/Command.pm
 lib/Punk/Config.pm
 lib/Punk/Context.pm
+lib/Punk/AsyncAwait.pm
 lib/Punk/Controller.pm
 lib/Punk/DevError.pm
 lib/Punk/Future.pm
@@ -243,6 +244,7 @@ t/0022-pod-coverage.t
 t/0100-dsl.t
 t/0101-import.t
 t/0102-install-kw.t
+t/0107-controller-import.t
 t/0103-host.t
 t/0104-favicon.t
 t/0105-host-allow.t
@@ -322,6 +324,9 @@ t/0914-session-pool.t
 t/0915-session-store-synopsis.t
 t/1000-futures.t
 t/1001-future.t
+t/1002-awaitable.t
+t/1003-awaitable-conformance.t
+t/1050-asyncawait.t
 t/1010-ws-codec.t
 t/1011-ws-live.t
 t/1020-sse.t

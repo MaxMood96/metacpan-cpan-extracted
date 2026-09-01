@@ -1,12 +1,15 @@
 # ABSTRACT: Rex command execution via Net::LibSSH exec channels
 
 package Rex::Interface::Exec::LibSSH;
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 use strict;
 use warnings;
 
 use Rex;
+use Rex::Config;
 use Rex::Logger;
+use Rex::Commands;
+use Rex::Interface::Shell;
 use Rex::Interface::Exec::Base;
 use base qw(Rex::Interface::Exec::Base);
 
@@ -16,9 +19,51 @@ sub new {
     return bless {%args}, $proto;
 }
 
+# 3-arg signature is the one Rex::Commands::Run::run actually invokes:
+#   $exec->exec($cmd, $path, $option)
+# The 2-arg form on Base.pm leaves $path glued onto $option, which means
+# the env hash never reaches us. Mimic Rex::Interface::Exec::SSH here so
+# environment variables are routed through a shell wrapper.
 sub exec {
-    my ( $self, $cmd, $option ) = @_;
-    return $self->direct_exec( $cmd, $option // {} );
+    my ( $self, $cmd, $path, $option ) = @_;
+
+    Rex::Logger::debug("LibSSH/preparing: $cmd");
+
+    my $shell;
+    if ( $option && $option->{_force_sh} ) {
+        $shell = Rex::Interface::Shell->create("Sh");
+    }
+    else {
+        $shell = $self->shell;
+    }
+
+    $shell->set_locale("C");
+    $shell->path($path);
+
+    if ( Rex::Config->get_source_global_profile ) {
+        $shell->source_global_profile(1);
+    }
+    if ( Rex::Config->get_source_profile ) {
+        $shell->source_profile(1);
+    }
+
+    if ( $option && exists $option->{env} ) {
+        $shell->set_environment( $option->{env} );
+    }
+
+    my $wrapped = $shell->exec( $cmd, $option );
+    Rex::Logger::debug("LibSSH/executing: $wrapped");
+
+    my ( $out, $err ) = $self->_exec( $wrapped, $option );
+
+    Rex::Logger::debug($out) if $out;
+    if ($err) {
+        Rex::Logger::debug("========= ERR ============");
+        Rex::Logger::debug($err);
+        Rex::Logger::debug("========= ERR ============");
+    }
+
+    return wantarray ? ( $out, $err ) : $out;
 }
 
 sub _exec {
@@ -68,7 +113,7 @@ Rex::Interface::Exec::LibSSH - Rex command execution via Net::LibSSH exec channe
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 DESCRIPTION
 

@@ -1,4 +1,9 @@
 Revision history for Punk-Passkey
 
+0.02    2026-08-31
+	- update Punk min version
+	- Add: Punk::Model::Passkey, registered when the application declares none
+	- Fix t/10-asset-js.t skips the node assertions without breaking its plan
+
 0.01    2026-08-30
 	First version

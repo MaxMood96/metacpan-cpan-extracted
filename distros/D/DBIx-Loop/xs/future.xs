@@ -1,5 +1,14 @@
 MODULE = DBIx::Loop        PACKAGE = DBIx::Loop::Future
 
+# The AWAIT_* methods are the Future::AsyncAwait::Awaitable API, which is how
+# `await $f` reaches one of these inside an async sub. Most are aliases of the
+# method they correspond to, so the protocol costs nothing beyond the XSUB it
+# already resolves to.
+#
+# This future has no cancelled state - see AWAIT_IS_CANCELLED - so the three
+# cancellation methods take the constant-false/no-op form the specification
+# provides for implementations without it.
+
 PROTOTYPES: DISABLE
 
 SV *
@@ -11,14 +20,65 @@ new(class)
     OUTPUT:
         RETVAL
 
+# An already-settled future. Nothing can have registered on one this new, so
+# neither settles through fire(): the callback queue is empty by construction.
+SV *
+AWAIT_NEW_DONE(class, ...)
+        SV *class
+    CODE:
+    {
+        dbil_future *f;
+        AV *res = newAV();
+        int i;
+        RETVAL = dbil_future_new(aTHX_
+            SvROK(class) ? sv_reftype(SvRV(class), 1) : SvPV_nolen(class));
+        f = dbil_future_of(aTHX_ RETVAL);
+        for (i = 1; i < items; i++) av_push(res, newSVsv(ST(i)));
+        f->result = newRV_noinc((SV *)res);
+        f->state  = 1;
+    }
+    OUTPUT:
+        RETVAL
+
+SV *
+AWAIT_NEW_FAIL(class, ...)
+        SV *class
+    CODE:
+    {
+        dbil_future *f;
+        RETVAL = dbil_future_new(aTHX_
+            SvROK(class) ? sv_reftype(SvRV(class), 1) : SvPV_nolen(class));
+        f = dbil_future_of(aTHX_ RETVAL);
+        f->error = newSVsv(items > 1 ? ST(1)
+                                     : sv_2mortal(newSVpvs("Failed\n")));
+        f->state = 2;
+    }
+    OUTPUT:
+        RETVAL
+
+# A new pending future of the same class. The instance is not modified and no
+# per-instance state is copied; this future carries no loop of its own, so
+# there is nothing else to hand on.
+SV *
+AWAIT_CLONE(self)
+        SV *self
+    CODE:
+        (void)dbil_future_of(aTHX_ self);   /* croak early if not one */
+        RETVAL = dbil_future_new(aTHX_ sv_reftype(SvRV(self), 1));
+    OUTPUT:
+        RETVAL
+
 SV *
 done(self, ...)
         SV *self
+    ALIAS:
+        AWAIT_DONE = 1
     CODE:
     {
         dbil_future *f = dbil_future_of(aTHX_ self);
         AV *res = newAV();
         int i;
+        PERL_UNUSED_VAR(ix);
         if (f->state)
             croak("DBIx::Loop::Future: already settled");
         for (i = 1; i < items; i++) av_push(res, newSVsv(ST(i)));
@@ -30,16 +90,24 @@ done(self, ...)
     OUTPUT:
         RETVAL
 
+# Declared with a slurpy tail only so AWAIT_FAIL can share the body: the
+# protocol may hand a failure more than one value, where fail() documents
+# exactly one. The arity check below is the one xsubpp generated before.
 SV *
-fail(self, error)
+fail(self, ...)
         SV *self
-        SV *error
+    ALIAS:
+        AWAIT_FAIL = 1
     CODE:
     {
-        dbil_future *f = dbil_future_of(aTHX_ self);
+        dbil_future *f;
+        PERL_UNUSED_VAR(ix);
+        if (items < 2)
+            croak("Usage: DBIx::Loop::Future::fail(self, error)");
+        f = dbil_future_of(aTHX_ self);
         if (f->state)
             croak("DBIx::Loop::Future: already settled");
-        f->error = newSVsv(error);
+        f->error = newSVsv(ST(1));
         f->state = 2;
         dbil_future_fire(aTHX_ self, f);
         RETVAL = SvREFCNT_inc(self);
@@ -51,9 +119,12 @@ SV *
 on_ready(self, cb)
         SV *self
         SV *cb
+    ALIAS:
+        AWAIT_ON_READY = 1
     CODE:
     {
         dbil_future *f = dbil_future_of(aTHX_ self);
+        PERL_UNUSED_VAR(ix);
         if (!SvROK(cb) || SvTYPE(SvRV(cb)) != SVt_PVCV)
             croak("DBIx::Loop::Future->on_ready: need a coderef");
         if (f->state) {
@@ -102,7 +173,10 @@ then(self, on_done = &PL_sv_undef, on_fail = &PL_sv_undef)
 int
 is_ready(self)
         SV *self
+    ALIAS:
+        AWAIT_IS_READY = 1
     CODE:
+        PERL_UNUSED_VAR(ix);
         RETVAL = dbil_future_of(aTHX_ self)->state != 0;
     OUTPUT:
         RETVAL
@@ -123,6 +197,30 @@ is_failed(self)
     OUTPUT:
         RETVAL
 
+# This future settles exactly once, into done or failed; there is no third
+# outcome and no cancel method to reach one. The protocol allows an
+# implementation without cancellation to answer constantly here and to ignore
+# the two registration methods, which is what these do.
+int
+AWAIT_IS_CANCELLED(self)
+        SV *self
+    CODE:
+        (void)dbil_future_of(aTHX_ self);   /* croak early if not one */
+        RETVAL = 0;
+    OUTPUT:
+        RETVAL
+
+void
+AWAIT_ON_CANCEL(self, thing)
+        SV *self
+        SV *thing
+    ALIAS:
+        AWAIT_CHAIN_CANCEL = 1
+    CODE:
+        PERL_UNUSED_ARG(self);
+        PERL_UNUSED_ARG(thing);
+        PERL_UNUSED_VAR(ix);
+
 SV *
 failure(self)
         SV *self
@@ -134,12 +232,21 @@ failure(self)
     OUTPUT:
         RETVAL
 
+# get already reads rather than waits, which is what AWAIT_GET wants.
+# AWAIT_WAIT is meant to run the event system until the future is ready, and
+# this distribution has no blocking wait to run - awaiting is the loop's job -
+# so it is the same method, and a toplevel await on a pending future gets the
+# same advice as a premature get.
 void
 get(self)
         SV *self
+    ALIAS:
+        AWAIT_GET  = 1
+        AWAIT_WAIT = 2
     PPCODE:
     {
         dbil_future *f = dbil_future_of(aTHX_ self);
+        PERL_UNUSED_VAR(ix);
         if (f->state == 0)
             croak("DBIx::Loop::Future->get: future is not ready "
                   "(await it on your event loop first)");

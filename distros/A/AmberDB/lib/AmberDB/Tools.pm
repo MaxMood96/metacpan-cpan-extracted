@@ -5,7 +5,7 @@ use warnings;
 use Carp qw(croak cluck);
 use File::Spec;
 
-our $VERSION = '5.21.0';
+our $VERSION = '5.22.1';
 my $CREATED = '2018-10-08';
 
 # Constructor
@@ -286,13 +286,13 @@ sub set_fields {
     exists( $table_info->{match_block} ) or return;
 
     foreach my $line ( @{ $table_info->{match_block} } ) {
-        my $str_path = "${table_path}_$line.str";
-        my $is_rdbm = $adb->is_rdbm_block( $table_info, $line );
+        my $unq_path = "${table_path}_$line.unq";
+        my ( $is_rdbm ) = $adb->rdbm_target( $table_info, $line );
 
-        my $str_opened = 0;
+        my $unq_opened = 0;
         if ( !$is_rdbm ) {
-            $adb->table_write($str_path);
-            $str_opened = 1;
+            $adb->table_write($unq_path);
+            $unq_opened = 1;
         }
 
         foreach my $record (@records) {
@@ -312,8 +312,8 @@ sub set_fields {
             }
         }
 
-        if ($str_opened) {
-            $adb->table_close($str_path);
+        if ($unq_opened) {
+            $adb->table_close($unq_path);
         }
     }
 
@@ -457,7 +457,7 @@ sub set_rwlnkall {
     return unless -e "$table_path.$adb->{db_ext}";
 
     my $table_info = $adb->table_info($tableid);
-    return unless $table_info && $table_info->{seo_block};
+    return unless $table_info && $table_info->{slug_block};
 
     # Read records from table if input is empty
     if ( !scalar @records ) {
@@ -473,27 +473,27 @@ sub set_rwlnkall {
     }
 
     # Delete old files.
-    my $rwfh0_path = "${table_path}_0.rwt";
-    my $rwfh1_path = "${table_path}_1.rwt";
-    my $tmp0_path  = "$rwfh0_path.tmp";
-    my $tmp1_path  = "$rwfh1_path.tmp";
+    my $slg0_path = "${table_path}_0.slg";
+    my $slg1_path = "${table_path}_1.slg";
+    my $tmp0_path = "$slg0_path.tmp";
+    my $tmp1_path = "$slg1_path.tmp";
 
     unlink($tmp0_path);
     unlink($tmp1_path);
 
-    my ( @rwt0_records, @rwt1_records );
+    my ( @slg0_records, @slg1_records );
     my %seen_links;
 
     @records = $adb->db_sortid( $tableid, @records );
     foreach my $record (@records) {
-        my $rw_link = $adb->set_seourl( $tableid, $record );
+        my $rw_link = $adb->set_slug( $tableid, $record );
         next unless defined $rw_link && length $rw_link;
         if ( exists $seen_links{$rw_link} ) {
             $rw_link .= "-$record->[0]";
         }
         $seen_links{$rw_link} = $record->[0];
-        push @rwt0_records, [ $record->[0], $rw_link ];
-        push @rwt1_records, [ $rw_link, $record->[0] ];
+        push @slg0_records, [ $record->[0], $rw_link ];
+        push @slg1_records, [ $rw_link, $record->[0] ];
     }
 
     $adb->table_write($tmp0_path)
@@ -501,7 +501,7 @@ sub set_rwlnkall {
         cluck "[DB_TOOL] $tmp0_path can't be written.\n";
         return 0;
       };
-    $adb->recs_put( $tmp0_path, @rwt0_records );
+    $adb->recs_put( $tmp0_path, @slg0_records );
     $adb->table_close($tmp0_path);
 
     $adb->table_write($tmp1_path)
@@ -509,18 +509,18 @@ sub set_rwlnkall {
         cluck "[DB_TOOL] $tmp1_path can't be written.\n";
         return 0;
       };
-    $adb->recs_put( $tmp1_path, @rwt1_records );
+    $adb->recs_put( $tmp1_path, @slg1_records );
     $adb->table_close($tmp1_path);
 
-    unlink($rwfh0_path);
-    unlink($rwfh1_path);
+    unlink($slg0_path);
+    unlink($slg1_path);
 
-    rename( $tmp0_path, $rwfh0_path );
-    rename( $tmp1_path, $rwfh1_path );
+    rename( $tmp0_path, $slg0_path );
+    rename( $tmp1_path, $slg1_path );
 
-    $self->{say} .= "    - ReWrite link kayitlari olusturuluyor: \n";
-    $self->{say} .= "          * $rwfh0_path \n";
-    $self->{say} .= "          * $rwfh1_path \n";
+    $self->{say} .= "    - Slug indexes are being created.: \n";
+    $self->{say} .= "          * $slg0_path \n";
+    $self->{say} .= "          * $slg1_path \n";
 
     return 1;
 }
@@ -1289,7 +1289,7 @@ sub dump {
     my $manifest = {
         format          => "AmberDB Archive",
         format_version  => 1,
-        amberdb_version => $AmberDB::VERSION || $VERSION || "5.21.0",
+        amberdb_version => $AmberDB::VERSION || $VERSION,
         created_at      => "$date_iso " . sprintf( "%02d:%02d:%02d", (localtime)[2], (localtime)[1], (localtime)[0] ),
         dbase_dir       => $adb->path('dbase_dir'),
         tables          => {},
@@ -1391,9 +1391,9 @@ sub dump {
             }
         }
 
-        # D. Collect Authoritative String Dictionaries (_*.str)
-        my @str_files = glob "${tpath}_*.str";
-        foreach my $fpath (@str_files) {
+        # D. Collect Authoritative String Dictionaries (_*.unq)
+        my @unq_files = glob "${tpath}_*.unq";
+        foreach my $fpath (@unq_files) {
             next unless -e $fpath;
             open my $dfh, "<:raw", $fpath or next;
             local $/ = undef;
@@ -1717,7 +1717,7 @@ Builds inverted exact match index files (C<_${blk}.fld>) for fields specified in
 
 =head2 set_filters($table_id, [@records])
 
-Builds columnar facet forward index files (C<_${blk}.fac>) and bidirectional string dictionaries (C<_${blk}.str>) for blocks configured in schema C<facet_block>.
+Builds columnar facet forward index files (C<_${blk}.fac>) and bidirectional string dictionaries (C<_${blk}.unq>) for blocks configured in schema C<facet_block>.
 
   $tools->set_filters("catalog_product");
 

@@ -11,7 +11,7 @@ use experimental qw( signatures );
 my @patterns = qw( trace artist smart great test );
 
 
-my $m = Algorithm::UrataniTakeda->new( patterns => \@patterns );
+my $m = Algorithm::UrataniTakeda->new( \@patterns );
 
 subtest 'search all' => sub {
 

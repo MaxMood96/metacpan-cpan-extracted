@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk ();
 
-our $VERSION = '0.38';
+our $VERSION = '0.40';
 
 # register() and the policy are C - xs/csp.xs and include/punk/punk_csp.h.
 

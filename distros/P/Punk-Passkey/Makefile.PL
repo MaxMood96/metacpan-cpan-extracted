@@ -4,18 +4,6 @@ use warnings;
 use ExtUtils::MakeMaker;
 use ExtUtils::Depends;
 
-# Punk::Passkey is an XS dist: the CBOR/COSE decoding, the key and
-# signature conversions and the two ceremonies run in C over the house
-# ABIs - jws_abi.h (Crypt::JWS) for signature verification and the
-# primitives, frj_abi.h (File::Raw::JSON) for clientDataJSON. Perl
-# remains the keyword/registration glue and the POD.
-#
-# The floor is 5.010, not the 5.008003 a fresh Module::Starter writes:
-# nothing in this tree has ever been built against 5.8, the ABIs it
-# consumes do not support it, and a floor that is WRONG is worse than
-# one that is merely high - it promises a smoker a build that cannot
-# work and reports the failure as this dist's bug.
-
 my $INC = '-Iinclude';
 
 my $pkg;
@@ -33,8 +21,6 @@ if (!$pkg) {
             push @found, $dep;
         }
         elsif (-d $sibling{$dep}) {
-            # absolute, because a relative -I loses when MakeMaker
-            # prepends the outer INC to a disttest build in distdir
             require Cwd;
             $INC .= ' -I' . Cwd::abs_path($sibling{$dep});
         }
@@ -50,11 +36,6 @@ $INC = join ' ', grep { defined && length } $INC, delete $dep{INC};
 delete $dep{LDFROM};
 delete $dep{LIBS};
 
-# EU::Depends' PM map replaces MakeMaker's auto-detected PM, so lib/ is
-# re-added here - and every FILE under it, not only .pm: the
-# punk_passkey Sqitch project ships as a plan, a conf and nine SQL
-# scripts under lib/Punk/Plugin/Passkey/sqitch, and a schema that is
-# not installed is a schema the application cannot deploy.
 require File::Find;
 File::Find::find(sub {
     return unless -f $_;
@@ -62,9 +43,6 @@ File::Find::find(sub {
     $dep{PM}{$File::Find::name} = "\$(INST_LIB)/$rel";
 }, 'lib');
 
-# MakeMaker tracks neither include/*.h nor an INCLUDE:'d xs/*.xs, so
-# without this an edit to either builds nothing and the .so keeps the
-# code that was there before - a green suite testing the old object.
 my $hdeps = join ' ', glob('include/ppk/*.h xs/*.xs');
 
 WriteMakefile(
@@ -87,12 +65,7 @@ WriteMakefile(
     PREREQ_PM => {
         'Crypt::JWS'      => '0.05',
         'File::Raw::JSON' => '0.07',
-        # 0.29: $c->origin, which is where the rpId and the origin
-        # check come from. An older Punk has no canonical origin to
-        # read, and the alternative - the Host header - is the bug the
-        # whole ceremony exists to avoid, so this is a floor and not a
-        # preference.
-        'Punk'            => '0.29',
+        'Punk'            => '0.39',
     },
     META_MERGE => {
         'meta-spec' => { version => 2 },

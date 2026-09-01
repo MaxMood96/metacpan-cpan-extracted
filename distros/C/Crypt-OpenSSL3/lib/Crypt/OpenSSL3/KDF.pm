@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::KDF;
-$Crypt::OpenSSL3::KDF::VERSION = '0.012';
+$Crypt::OpenSSL3::KDF::VERSION = '0.013';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::KDF - Key derivation algorithms
 
 =head1 VERSION
 
-version 0.012
+version 0.013
 
 =head1 SYNOPSIS
 

@@ -3,7 +3,7 @@ use strict;
 use warnings;
 package CPAN::Meta::Converter;
 
-our $VERSION = '2.150014';
+our $VERSION = '2.150015';
 
 #pod =head1 SYNOPSIS
 #pod
@@ -23,7 +23,7 @@ our $VERSION = '2.150014';
 #pod =cut
 
 use CPAN::Meta::Validator;
-use CPAN::Meta::Requirements;
+use CPAN::Meta::Requirements 2.145;
 use Parse::CPAN::Meta 1.4400 ();
 
 # To help ExtUtils::MakeMaker bootstrap CPAN::Meta::Requirements on perls
@@ -391,12 +391,7 @@ sub _clean_version {
   my $v = eval { version->new($element) };
   # XXX check defined $v and not just $v because version objects leak memory
   # in boolean context -- dagolden, 2012-02-03
-  if ( defined $v ) {
-    return _is_qv($v) ? $v->normal : $element;
-  }
-  else {
-    return 0;
-  }
+  return defined $v ? $v->stringify : 0;
 }
 
 sub _bad_version_hook {
@@ -1512,7 +1507,7 @@ CPAN::Meta::Converter - Convert CPAN distribution metadata structures
 
 =head1 VERSION
 
-version 2.150014
+version 2.150015
 
 =head1 SYNOPSIS
 

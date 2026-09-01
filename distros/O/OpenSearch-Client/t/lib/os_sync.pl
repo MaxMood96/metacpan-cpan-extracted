@@ -82,7 +82,7 @@ if ( $ENV{OS} ) {
 }
 
 unless ( $ENV{OS_SKIP_PING} ) {
-    my $version = $es->info->{version}{number};
+    my $version = $es->opensearch_version;
     my $api     = $es->api_version;
     unless (substr( $api, 0, 1 ) eq substr( $version, 0, 1 ) )
     {

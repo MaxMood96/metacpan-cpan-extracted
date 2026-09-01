@@ -6,17 +6,19 @@ use warnings;
 our $NHC_ATCF_ARCHIVE_BASE_URL = q{https://ftp.nhc.noaa.gov/atcf/archive};
 
 sub new {
-    my $pkg  = shift;
-    my $self = bless {}, $pkg;
-    $self->_ingest_storm_table;
+    my ( $pkg, %args ) = @_;
+    my $self = bless { _http => $args{http} }, $pkg;
+    $self->_ingest_storm_table( $args{data} );
     return $self;
 }
 
 sub _ingest_storm_table {
-    my $self = shift;
-    my @storm_table = split /\n/, $self->_data;
+    my ( $self, $text ) = @_;
+    $text = $self->_data if !defined $text;
+    my @storm_table = grep { length } split /\n/, $text;
 
     $self->{storm_table} = \@storm_table;
+    delete @{$self}{qw/_by_name _by_basin _by_nhc_designation _by_kind _by_year _by_year_basin _direct_access/};
 
   RECORD_LOOP:
     foreach my $storm (@storm_table) {
@@ -56,14 +58,15 @@ sub _ingest_storm_table {
 
 sub get_storm_numbers {
     my ( $self, $year, $basin ) = @_;
-    return [ keys %{ $self->{_direct_access}->{$year}->{ uc $basin } } ];
+    my $set = $self->{_direct_access}->{$year}->{ uc $basin } || {};
+    return [ sort keys %$set ];
 }
 
 sub get_latest_table {
     my $self = shift;
     require HTTP::Tiny;
     my $url      = qq{$NHC_ATCF_ARCHIVE_BASE_URL/storm.table};
-    my $http     = HTTP::Tiny->new;
+    my $http     = $self->{_http} || HTTP::Tiny->new;
     my $response = $http->get($url);
     if ( not $response->{success} ) {
         die qq{Unable to retreive updated "storm.history" file.};
@@ -122,7 +125,8 @@ sub get_archive_url {
 
 sub get_by_year_basin {
     my ( $self, $year, $basin ) = @_;
-    return $self->{_by_year_basin}->{$year}->{$basin};
+    my $storms = $self->{_by_year_basin}->{ uc $basin }->{$year} || [];
+    return $self->_return_arrayref($storms);
 }
 
 # internal helper method for dereferencing scalars and returning them
@@ -572,8 +576,8 @@ sub _data {
    UNNAMED, AL, L,  ,  ,  ,  , 05, 1899, HU, O, 1899090300, 1899091518, , , , , , ARCHIVE, , AL051899
    UNNAMED, AL, L,  ,  ,  ,  , 06, 1899, TS, O, 1899100206, 1899100806, , , , , , ARCHIVE, , AL061899
    UNNAMED, AL, L,  ,  ,  ,  , 07, 1899, TS, O, 1899101012, 1899101412, , , , , , ARCHIVE, , AL071899
-   UNNAMED, AL, L,  ,  ,  ,  , 08, 1899, TS, O, 1899101512, 1899101818, , , , , , ARCHIVE, , AL081899   
-   UNNAMED, AL, L,  ,  ,  ,  , 09, 1899, HU, O, 1899102600, 1899110418, , , , , , ARCHIVE, , AL091899   
+   UNNAMED, AL, L,  ,  ,  ,  , 08, 1899, TS, O, 1899101512, 1899101818, , , , , , ARCHIVE, , AL081899
+   UNNAMED, AL, L,  ,  ,  ,  , 09, 1899, HU, O, 1899102600, 1899110418, , , , , , ARCHIVE, , AL091899
    UNNAMED, AL, L,  ,  ,  ,  , 10, 1899, TS, O, 1899110700, 1899111018, , , , , , ARCHIVE, , AL101899
    UNNAMED, AL, L,  ,  ,  ,  , 01, 1900, HU, O, 1900082700, 1900091518, , , , , , ARCHIVE, , AL011900
    UNNAMED, AL, L,  ,  ,  ,  , 02, 1900, HU, O, 1900090700, 1900091906, , , , , , ARCHIVE, , AL021900
@@ -931,7 +935,7 @@ sub _data {
    UNNAMED, AL, L,  ,  ,  ,  , 08, 1942, TS, O, 1942093012, 1942100518, , , , , , ARCHIVE, , AL081942
    UNNAMED, AL, L,  ,  ,  ,  , 09, 1942, TS, O, 1942101006, 1942101300, , , , , , ARCHIVE, , AL091942
    UNNAMED, AL, L,  ,  ,  ,  , 10, 1942, TS, O, 1942101312, 1942101818, , , , , , ARCHIVE, , AL101942
-   UNNAMED, AL, L,  ,  ,  ,  , 11, 1942, HU, O, 1942110500, 1942111118, , , , , , ARCHIVE, , AL111942   
+   UNNAMED, AL, L,  ,  ,  ,  , 11, 1942, HU, O, 1942110500, 1942111118, , , , , , ARCHIVE, , AL111942
    UNNAMED, AL, L,  ,  ,  ,  , 01, 1943, HU, O, 1943072518, 1943073000, , , , , , ARCHIVE, , AL011943
    UNNAMED, AL, L,  ,  ,  ,  , 02, 1943, TS, O, 1943081312, 1943081918, , , , , , ARCHIVE, , AL021943
    UNNAMED, AL, L,  ,  ,  ,  , 03, 1943, HU, O, 1943081906, 1943082712, , , , , , ARCHIVE, , AL031943
@@ -1348,7 +1352,7 @@ sub _data {
      EMILY, EP, E,  ,  ,  ,  , 07, 1965, HU, O, 1965083000, 1965090612, , , , , , ARCHIVE, , EP071965
   FLORENCE, EP, E,  ,  ,  ,  , 08, 1965, TS, O, 1965090800, 1965091512, , , , , , ARCHIVE, , EP081965
     GLENDA, EP, E,  ,  ,  ,  , 09, 1965, TS, O, 1965091312, 1965092212, , , , , , ARCHIVE, , EP091965
-     HAZEL, EP, E,  ,  ,  ,  , 10, 1965, TS, O, 1965092400, 1965092700, , , , , , ARCHIVE, , EP101965 
+     HAZEL, EP, E,  ,  ,  ,  , 10, 1965, TS, O, 1965092400, 1965092700, , , , , , ARCHIVE, , EP101965
       ALMA, AL, L,  ,  ,  ,  , 01, 1966, HU, O, 1966060406, 1966061412, , , , , , ARCHIVE, , AL011966
      BECKY, AL, L,  ,  ,  ,  , 02, 1966, HU, O, 1966070118, 1966070318, , , , , , ARCHIVE, , AL021966
      CELIA, AL, L,  ,  ,  ,  , 03, 1966, HU, O, 1966071312, 1966072206, , , , , , ARCHIVE, , AL031966
@@ -3274,23 +3278,23 @@ of the C<storm.table> if the data seems to be out of date.
 =head1 SYNOPSIS
 
    my $obj = Weather::NHC::TropicalCyclone::StormTable->new;
-   
+
    foreach my $year ( @{ $obj->years } ) {
        print qq{$year\n};
    }
-   
+
    foreach my $basin ( @{ $obj->basins } ) {
        print qq{$basin\n};
    }}
-   
+
    foreach my $name ( @{ $obj->names } ) {
        print qq{$name\n};
    }
-   
+
    foreach my $kind ( @{ $obj->storm_kinds } ) {
        print qq{$kind\n};
    }
-   
+
    foreach my $nhc_designation ( @{ $obj->nhc_designations } ) {
        print qq{$nhc_designation\n};
    }
@@ -3307,7 +3311,7 @@ of the C<storm.table> if the data seems to be out of date.
 
 =over 3
 
-=item  C<new> 
+=item  C<new>
 
 Constructor.
 
@@ -3315,11 +3319,11 @@ Constructor.
 
 Returns a list of all years in the history file.
 
-=item  C<by_year> 
+=item  C<by_year>
 
 Accessor for all storm records for the provided year, all basins.
 
-=item  C<names> 
+=item  C<names>
 
 Returns a list of all storm names in the history file.
 
@@ -3331,7 +3335,7 @@ Accessor for all storm records for the provided name, all basins.
 
 Returns a list of all basis in the history file.
 
-=item  C<by_basin> 
+=item  C<by_basin>
 
 Accessor for all storm records for the provided basin.
 
@@ -3364,7 +3368,7 @@ Given the year and basin, returns the storm numbers for that year.
 For the given year, basin, and storm number; returns the full URL including file
 name for the archived history file; e.g., C<aal112019.dat.gz>.
 
-=item  C<get_best_track_archive_url> 
+=item  C<get_best_track_archive_url>
 
 For the given year, basin, and storm number; returns the full URL including file
 name for the archived best track file; e.g., C<bal112019.dat.gz>.
@@ -3379,7 +3383,7 @@ name for the archived fixes file; e.g., C<fal112019.dat.gz>.
 For the given year, returns the URL for the directory containing all archived files
 and subdirectories.
 
-=item  C<storm_table> 
+=item  C<storm_table>
 
 Returns the entire text of the NHC C<storm.history> file being used by this module.
 
@@ -3400,7 +3404,7 @@ underneath utilizes C<HTTP::Tiny>.
 Takes C<storm.table> in raw text and shoves it into the reference fields that
 support the other methods. Used by C<new> and C<get_latest_table>.
 
-=item  C<_return_arrayref> 
+=item  C<_return_arrayref>
 
 Helper method for converting interal data representation into array references.
 
@@ -3439,23 +3443,23 @@ L<https://www.nrlmry.navy.mil/atcf_web/docs/database/new/abdeck.txt>
 Presented here from L<https://www.nrlmry.navy.mil/atcf_web/docs/database/new/abdeck.txt> for convenience.
 
    ATCF best track, aids, bogus format 8/31/2016
-   
+
    See the notes on missing and deprecated data at the end of this document.
-   
+
    Common section, fields 1-36, followed by user-data section which is not predefined.
-   
-   
+
+
    BASIN, CY, YYYYMMDDHH, TECHNUM/MIN, TECH, TAU, LatN/S, LonE/W, VMAX, MSLP, TY, RAD, WINDCODE, RAD1, RAD2, RAD3, RAD4, POUTER, ROUTER, RMW, GUSTS, EYE, SUBREGION, MAXSEAS, INITIALS, DIR, SPEED, STORMNAME, DEPTH, SEAS, SEASCODE, SEAS1, SEAS2, SEAS3, SEAS4, USERDEFINED, userdata
-   
+
    COMMON FIELDS
-   
+
    BASIN      - basin, e.g. WP, IO, SH, CP, EP, AL, LS
    CY         - annual cyclone number: 1 - 99
    YYYYMMDDHH - Warning Date-Time-Group, yyyymmddhh: 0000010100 through 9999123123.
    TECHNUM/MIN- objective technique sorting number, minutes for best track: 00 - 99
    TECH       - acronym for each objective technique or CARQ or WRNG,
                 BEST for best track, up to 4 chars.
-   TAU        - forecast period: -24 through 240 hours, 0 for best-track, 
+   TAU        - forecast period: -24 through 240 hours, 0 for best-track,
                 negative taus used for CARQ and WRNG records.
    LatN/S     - Latitude for the DTG: 0 - 900 tenths of degrees,
                 N/S is the hemispheric index.
@@ -3464,13 +3468,13 @@ Presented here from L<https://www.nrlmry.navy.mil/atcf_web/docs/database/new/abd
    VMAX       - Maximum sustained wind speed in knots: 0 - 300 kts.
    MSLP       - Minimum sea level pressure, 850 - 1050 mb.
    TY         - Highest level of tc development:
-                DB - disturbance, 
-                TD - tropical depression, 
-                TS - tropical storm, 
-                TY - typhoon, 
-                ST - super typhoon, 
-                TC - tropical cyclone, 
-                HU - hurricane, 
+                DB - disturbance,
+                TD - tropical depression,
+                TS - tropical storm,
+                TY - typhoon,
+                ST - super typhoon,
+                TC - tropical cyclone,
+                HU - hurricane,
                 SD - subtropical depression,
                 SS - subtropical storm,
                 EX - extratropical systems,
@@ -3485,7 +3489,7 @@ Presented here from L<https://www.nrlmry.navy.mil/atcf_web/docs/database/new/abd
    RAD        - Wind intensity for the radii defined in this record: 34, 50 or 64 kt.
    WINDCODE   - Radius code:
                 AAA - full circle
-                NEQ, SEQ, SWQ, NWQ - quadrant 
+                NEQ, SEQ, SWQ, NWQ - quadrant
    RAD1       - If full circle, radius of specified wind intensity, or radius of
                 first quadrant wind intensity as specified by WINDCODE.  0 - 999 n mi
    RAD2       - If full circle this field not used, or radius of 2nd quadrant wind
@@ -3516,15 +3520,15 @@ Presented here from L<https://www.nrlmry.navy.mil/atcf_web/docs/database/new/abd
    STORMNAME  - literal storm name, number, NONAME or INVEST, or TCcyx where:
                 cy = Annual cyclone number 01 - 99
                 x  = Subregion code: W,A,B,S,P,C,E,L,Q.
-   DEPTH      - system depth, 
-   	     D - deep, 
-   	     M - medium, 
-   	     S - shallow, 
+   DEPTH      - system depth,
+   	     D - deep,
+   	     M - medium,
+   	     S - shallow,
    	     X - unknown
    SEAS       - Wave height for radii defined in SEAS1 - SEAS4, 0 - 99 ft.
    SEASCODE   - Radius code:
                 AAA - full circle
-                NEQ, SEQ, SWQ, NWQ - quadrant 
+                NEQ, SEQ, SWQ, NWQ - quadrant
    SEAS1      - first quadrant seas radius as defined by SEASCODE,  0 - 999 n mi.
    SEAS2      - second quadrant seas radius as defined by SEASCODE, 0 - 999 n mi.
    SEAS3      - third quadrant seas radius as defined by SEASCODE,  0 - 999 n mi.
@@ -3539,9 +3543,9 @@ Presented here from L<https://www.nrlmry.navy.mil/atcf_web/docs/database/new/abd
    userdata4  - user data section as indicated by USERDEFINED parameter (up to 100 char).
    USERDEFINE5- 1 to 20 character description of user data to follow.
    userdata5  - user data section as indicated by USERDEFINED parameter (up to 100 char).
-   
+
    ------------------------------------------------------------------------------
-   
+
    userdata   - user data section as indicated by USERDEFINED parameter.
    Examples of USERDEFINED/userdata pairs:
    - An invest spawned from a genesis area:
@@ -3549,25 +3553,25 @@ Presented here from L<https://www.nrlmry.navy.mil/atcf_web/docs/database/new/abd
    - An invest area transitioning to a TC:
        TRANSITIONED, shE92015 to sh152015
    - A TC dissipated to an invest area:
-       DISSIPATED, sh162015 sh982015 
+       DISSIPATED, sh162015 sh982015
    - A genesis area number:
        genesis-num, 001
    ------------------------------------------------------------------------------
-   
+
    Notes:
-   
+
    1) No missing data allowed for first eight common fields.  Missing data for other fields are expected to be blank characters between the comma delimiters.  Although the files are not column dependent please insure that the proper number of blank characters is included in missing data so the columns line up.  This makes the files easier to read and troubleshoot.
-   
+
    2) The USERDEFINED section is for inclusion of items not already in the common fields.  The USERDEFINED parameter is 1 to 20 characters, so there should be sufficient space to include some text describing what comes next.
-   
+
    3) Wind records merged in from preexisting wind files (r-decks) were assigned a TECH of CNTR.  Wind records created during normal use of this combined data format are assigned the TECH corresponding to the center name as defined in $ATCFINC/atcfsite.nam.
-   
+
    4) WINDCODE and SEASCODE other than AAA, NEQ, SEQ, SWQ and NWQ exist in older data but have been deprecated.
-   
+
    5) RAD values of 100 exist in old data (earlier than 2005) but have been deprecated.  Currently only 34, 50 and 64 are valid for RAD.
-   
-   6) The fields are not column dependent, but the files are easier to read and troubleshoot if the columns line up.  The fields are comma and space delimited.  
-   
+
+   6) The fields are not column dependent, but the files are easier to read and troubleshoot if the columns line up.  The fields are comma and space delimited.
+
    The desired field widths and preferred ATCF application ranges are as follows:
    	field    number of chars	range
    	-----    ---------------	-----
@@ -3584,7 +3588,7 @@ Presented here from L<https://www.nrlmry.navy.mil/atcf_web/docs/database/new/abd
    	TY           2 			as defined in tcdevel.dat
    	RAD          3 			34, 50, 64 kt
    	WINDCODE     3 			AAA, NEW, SEQ, SWQ, NWQ
-   	RAD1         4 			MRD < RAD1 <= 999 n mi, 
+   	RAD1         4 			MRD < RAD1 <= 999 n mi,
                                            64 kt RAD1 < 50 kt RAD1 < 34 kt RAD1
                                            0 for no radius in quadrant, blank for unknown
            RAD2         4  	        See RAD1
@@ -3600,7 +3604,7 @@ Presented here from L<https://www.nrlmry.navy.mil/atcf_web/docs/database/new/abd
    	INITIALS     3
    	DIR          3                  0 <= DIR < 360
    	SPEED        3 			0 <= SPEED < 100 kt
-   	STORMNAME   10  
+   	STORMNAME   10
    	DEPTH        1			D, M, S, X
    	SEAS         2			0 < SEAS < 100 ft
    	SEASCODE     3			AAA, NEW, SEQ, SWQ, NWQ
@@ -3608,5 +3612,5 @@ Presented here from L<https://www.nrlmry.navy.mil/atcf_web/docs/database/new/abd
    	SEAS2        4 			See SEAS1
    	SEAS3        4 			See SEAS1
    	SEAS4        4 			See SEAS1
-   	USERDEFINED up to 20            1 to 20 characters of alphanumeric data 
+   	USERDEFINED up to 20            1 to 20 characters of alphanumeric data
    	userdata    up to 200

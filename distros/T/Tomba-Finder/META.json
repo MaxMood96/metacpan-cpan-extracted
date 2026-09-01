@@ -1,0 +1,65 @@
+{
+   "abstract" : "Perl client library for the Tomba.io Email Finder API",
+   "author" : [
+      "Mohamed Ben rebia <b.mohamed@tomba.io>"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "ExtUtils::MakeMaker version 7.70, CPAN::Meta::Converter version 2.150010",
+   "license" : [
+      "apache_2_0"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Tomba-Finder",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "HTTP::Headers" : "0",
+            "HTTP::Request" : "0",
+            "JSON" : "0",
+            "LWP::UserAgent" : "0",
+            "URI" : "0",
+            "URI::Escape" : "0",
+            "parent" : "0",
+            "perl" : "5.026001"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "Test::More" : "0.98"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/tomba-io/perl/issues"
+      },
+      "homepage" : "https://tomba.io",
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/tomba-io/perl.git",
+         "web" : "https://github.com/tomba-io/perl"
+      }
+   },
+   "version" : "v1.1.0",
+   "x_serialization_backend" : "JSON::PP version 4.16"
+}

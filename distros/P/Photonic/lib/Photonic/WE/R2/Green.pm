@@ -1,5 +1,5 @@
 package Photonic::WE::R2::Green;
-$Photonic::WE::R2::Green::VERSION = '0.024';
+$Photonic::WE::R2::Green::VERSION = '0.025';
 
 =encoding UTF-8
 
@@ -9,7 +9,7 @@ Photonic::WE::R2::Green
 
 =head1 VERSION
 
-version 0.024
+version 0.025
 
 =head1 COPYRIGHT NOTICE
 
@@ -135,11 +135,13 @@ Returns the macroscopic dielectric tensor from the wave operator.
 
 use namespace::autoclean;
 use PDL::Lite;
+use PDL::Core;
+use PDL::MatrixOps;
 use PDL::NiceSlice;
 use Photonic::WE::R2::Haydock;
 use Photonic::WE::R2::GreenP;
 use Photonic::Types -all;
-use Photonic::Utils qw(tensor make_haydock make_greenp wave_operator triangle_coords);
+use Photonic::Utils qw(tensor make_haydock make_greenp triangle_coords);
 
 use List::Util qw(all any);
 use Moo;
@@ -199,22 +201,26 @@ sub _build_greenTensor {
     my $epsB=$self->epsB;
     $self->_u(my $u=1/(1-$epsB/$epsA));
     $self->_converged(all { $_->converged } @{$self->greenP});
-    my $greenTensor = tensor(pdl([map $_->Gpp, @{$self->greenP}]), $self->geometry->unitDyadsLU, my $nd=$self->geometry->ndims, 2);
+    my $greenTensor = tensor(
+	pdl([map $_->Gpp, @{$self->greenP}]),
+	$self->geometry->unitDyadsLU,
+	my $nd=$self->geometry->ndims, 2
+	);
     #That's all unless you want the antisymmetric part
     return $greenTensor if $self->symmetric;
-    my $greenPc = pdl map $_->Gpp, my @cGP=@{$self->cGreenP}; #Green's projections along complex directions.
-    $self->_converged(any { $_->converged } $self, @cGP);
-    my $asy=$greenTensor->zeroes; #xy,xy, $ndx$nd
+    #Green's projections along complex directions.
+    my $greenPc = pdl([map $_->Gpp, my @cGP=@{$self->cGreenP}]);
+    $self->_converged(all { $_->converged } $self, @cGP);
+    my $asy=$greenTensor->zeroes; #xy,xy, $nd x $nd
     my $cpairs=$self->geometry->cUnitPairs->mv(1,-1);
-    my $indexes = triangle_coords($nd);
-    $indexes = $indexes->mv(-1,0)->whereND( ($indexes(0) <= $nd-2)->((0)) )->mv(0,-1); # first index only up to $nd-2, mv because whereND takes dims off bottom
-    $asy->indexND($indexes) .= #$asy is xy,xy. First index is column
+    my $indices = triangle_coords($nd);
+    $asy->indexND($indices) .= #$asy is xy,xy. First index is column
       $greenPc-
       ($cpairs->conj->(*1) # column, row
        *$cpairs->(:,*1)
        *$greenTensor)->sumover->sumover
       ;
-    $asy *= PDL->i();
+    $asy *= i();
     $asy -= $asy->transpose;
     $greenTensor+$asy;
 }
@@ -242,7 +248,7 @@ sub _build_cGreenP {
 
 sub _build_waveOperator {
     my $self=shift;
-    wave_operator($self->greenTensor, $self->geometry->ndims);
+    $self->greenTensor->inv;
 }
 
 sub _build_epsilonTensor {
@@ -253,7 +259,7 @@ sub _build_epsilonTensor {
     my $k=$self->metric->wavevector;
     my $k2=$k->inner($k);
     my $kk=$k->outer($k);
-    my $id=PDL::MatrixOps::identity($k);
+    my $id=identity($k);
     $wave+$k2/$q2*$id - $kk/$q2;
 };
 

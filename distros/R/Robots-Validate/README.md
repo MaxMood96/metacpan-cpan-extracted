@@ -2,10 +2,6 @@
 
 Robots::Validate - Validate that IP addresses are associated with known robots
 
-# VERSION
-
-version v0.2.9
-
 # SYNOPSIS
 
 ```perl
@@ -15,105 +11,129 @@ my $rv = Robots::Validate->new;
 
 ...
 
-if ( $rs->validate( $ip, \%opts ) ) { ...  }
+if ( my $res = $rs->validate( $ip, $user_agent ) ) {
+   ...
+}
 ```
 
 # DESCRIPTION
 
-# ATTRIBUTES
+This module allows one to validate a robot user-agent string against the IP addresses.
 
-## `resolver`
+# RECENT CHANGES
 
-This is the [Net::DNS::Resolver](https://metacpan.org/pod/Net%3A%3ADNS%3A%3AResolver) used for DNS lookups.
+Changes for version v0.4.0 (2026-09-01)
 
-## `robots`
+- Incompatible Changes
+    - This is a complete rewrite, and the interface is not compatible.
+    - Bumped minimum Perl version to v5.24;
+- Enhancements
+    - This uses the Aho-Corasick algorithm to match multiple user-agent strings efficiently.
+    - The robot rules are in a configuration file, allowing the user to easily update their own rules.
+    - The robot rules have been expanded and updated.
+    - Support for caching the results has been added, GH#3.
+    - Added the validation\_mode attribute to control how multiple user-agent matches are handled.
+- Security
+    - Add a max\_forward\_lookups attribute to limit the number of reverse DNS lookups. (CVE-2026-82309)
+- Tests
+    - Updated the tests to use Test2.
+- Documentation
+    - Updated the author email address.
+    - Updated the copyright year.
+    - Added a security policy.
+    - Added AI\_POLICY.md.
+- Toolchain
+    - Use SigStore instead of Module::Signature to sign releases.
 
-This is an array reference of rules with information about
-robots. Each item is a hash reference with the following keys:
+See the `Changes` file for more details.
 
-- `name`
+# REQUIREMENTS
 
-    The name of the robot.
+This module lists the following modules as runtime dependencies:
 
-- `agent`
+- [Algorithm::AhoCorasick::XS](https://metacpan.org/pod/Algorithm%3A%3AAhoCorasick%3A%3AXS)
+- [File::ShareDir](https://metacpan.org/pod/File%3A%3AShareDir)
+- [File::Slurper](https://metacpan.org/pod/File%3A%3ASlurper)
+- [List::Util](https://metacpan.org/pod/List%3A%3AUtil)
+- [Moo](https://metacpan.org/pod/Moo) version 1 or later
+- [Net::DNS::Resolver](https://metacpan.org/pod/Net%3A%3ADNS%3A%3AResolver)
+- [Net::IP](https://metacpan.org/pod/Net%3A%3AIP)
+- [Net::Patricia](https://metacpan.org/pod/Net%3A%3APatricia)
+- [PerlX::Maybe](https://metacpan.org/pod/PerlX%3A%3AMaybe)
+- [Ref::Util](https://metacpan.org/pod/Ref%3A%3AUtil)
+- [Sub::Util](https://metacpan.org/pod/Sub%3A%3AUtil) version 1.40 or later
+- [TOML::XS](https://metacpan.org/pod/TOML%3A%3AXS)
+- [Try::Tiny](https://metacpan.org/pod/Try%3A%3ATiny)
+- [Types::Common](https://metacpan.org/pod/Types%3A%3ACommon)
+- [constant](https://metacpan.org/pod/constant)
+- [experimental](https://metacpan.org/pod/experimental)
+- [namespace::autoclean](https://metacpan.org/pod/namespace%3A%3Aautoclean)
+- [perl](https://metacpan.org/pod/perl) version v5.24.0 or later
 
-    A regular expression for matching against user agent names.
+See the `cpanfile` file for the full list of prerequisites.
 
-- `domain`
+[CHI](https://metacpan.org/pod/CHI) is required to use the caching features.
 
-    A regular expression for matching against the hostname.
+# INSTALLATION
 
-## `die_on_error`
+The latest version of this module (along with any dependencies) can be installed from [CPAN](https://www.cpan.org) with the `cpan` tool that is included with Perl:
 
-When true, ["validate"](#validate) will die on a ["resolver"](#resolver) failure.
-
-By default it is false.
-
-# METHODS
-
-## `validate`
-
-```perl
-my $result = $rv->validate( $ip, \%opts );
+```
+cpan Robots::Validate
 ```
 
-This method attempts to validate that an IP address belongs to a known
-robot by first looking up the hostname that corresponds to the IP address,
-and then validating that the hostname resolves to that IP address.
+You can also extract the distribution archive and install this module (along with any dependencies):
 
-If this succeeds, it then checks if the hostname is associated with a
-known web robot.
-
-If that succeeds, it returns a copy of the matched rule from ["robots"](#robots).
-
-You can specify the following `%opts`:
-
-- `agent`
-
-    This is the user-agent string. If it does not match, then the DNS lookups
-    will not be performed.
-
-    It is optional.
-
-Alternatively, you can pass in a Plack environment:
-
-```perl
-my $result = $rv->validate($env);
+```
+cpan .
 ```
 
-# KNOWN ISSUES
+You can also install this module manually using the following commands:
 
-## Undocumented Rules
+```
+perl Makefile.PL
+make
+make test
+make install
+```
 
-Many of these rules are not documented, but have been guessed from web
-traffic.
+If you are working with the source repository, then it may not have a `Makefile.PL` file.  But you can use the [Dist::Zilla](https://dzil.org/) tool in anger to build and install this module:
 
-## Limitations
+```
+dzil build
+dzil test
+dzil install --install-command="cpan ."
+```
 
-The current module can only be used for systems that consistently
-support reverse DNS lookups. This means that it cannot be used to
-validate some robots from
-[Facebook](https://developers.facebook.com/docs/sharing/webmasters/crawler)
-or Twitter.
+For more information, see [How to install CPAN modules](https://www.cpan.org/modules/INSTALL.html).
 
-# SUPPORT FOR OLDER PERL VERSIONS
+# SECURITY CONSIDERATIONS
 
-This module requires Perl v5.14 or later.
+When using the ["cache"](#cache), ensure that it is configured to expire the
+data by setting ["expires\_in" in CHI](https://metacpan.org/pod/CHI#expires_in) and digest the keys by setting
+["max\_key\_length" in CHI](https://metacpan.org/pod/CHI#max_key_length) to 0.  This is to keep the cache from growing
+too large, and to reduce the likelihood of cache backend
+vulnerabilities being exploited through user-agent strings.
 
-Future releases may only support Perl versions released in the last ten years.
+When setting the `cache_failure` option, be aware that cached failures may need a shorter expiration time.
 
-# SEE ALSO
+When specifying a `domain` for verification rules, ensure that there
+is an initial dot in the suffix, or that the regular expression
+matches the entire domain name.  Otherwise imposter domains with the
+same suffix will be validated.
 
-- [Verifying Bingbot](https://www.bing.com/webmaster/help/how-to-verify-bingbot-3905dc26)
-- [Verifying Googlebot](https://support.google.com/webmasters/answer/80553)
-- [How to check that a robot belongs to Yandex](https://yandex.com/support/webmaster/robot-workings/check-yandex-robots.html)
+When the `network` list contains cloud addresses, it is important to
+regularly update the addresses from the documented information, as an
+imposter can use abandoned cloud IP addresses.
 
-# SOURCE
+# SUPPORT
 
-The development version is on github at [https://github.com/robrwo/Robots-Validate](https://github.com/robrwo/Robots-Validate)
-and may be cloned from [git://github.com/robrwo/Robots-Validate.git](git://github.com/robrwo/Robots-Validate.git)
+Only the latest release of this module will be supported.
 
-# BUGS
+This module requires Perl v5.24 or later.
+Future releases may only support Perl versions released in the last ten (10) years.
+
+## Reporting Bugs and Submitting Feature Requests
 
 Please report any bugs or feature requests on the bugtracker website
 [https://github.com/robrwo/Robots-Validate/issues](https://github.com/robrwo/Robots-Validate/issues)
@@ -122,16 +142,32 @@ When submitting a bug or request, please include a test-file or a
 patch to an existing test-file that illustrates the bug or desired
 feature.
 
+If the bug you are reporting has security implications which make it inappropriate to send to a public issue tracker,
+then see `SECURITY.md` for instructions how to report security vulnerabilities.
+
+# SOURCE
+
+The development version is on github at [https://github.com/robrwo/Robots-Validate](https://github.com/robrwo/Robots-Validate)
+and may be cloned from [https://github.com/robrwo/Robots-Validate.git](https://github.com/robrwo/Robots-Validate.git)
+
 # AUTHOR
 
-Robert Rothenberg <rrwo@cpan.org>
+Robert Rothenberg <perl@rhizomnic.com>
+
+Some of the development of this module was sponsored by Science Photo Library [https://www.sciencephoto.com](https://www.sciencephoto.com).
 
 # COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018-2024 by Robert Rothenberg.
+This software is Copyright (c) 2018-2026 by Robert Rothenberg.
 
 This is free software, licensed under:
 
 ```
 The Artistic License 2.0 (GPL Compatible)
 ```
+
+# SEE ALSO
+
+The file `robots.toml` included with this distribution contains links to documented rules.
+
+The TOML specification can be found at [https://toml.io](https://toml.io).

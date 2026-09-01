@@ -1,0 +1,36 @@
+:root { --ink: #1a1a1a; --quiet: #666; --line: #ddd; --ok: #0a7d34;
+        --no: #b00020; --bg: #fff; }
+* { box-sizing: border-box }
+body { margin: 0 auto; max-width: 60rem; padding: 1.5rem;
+       font: 16px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+       color: var(--ink); background: var(--bg) }
+h1 { font-size: 1.4rem; margin: 0 }
+h1 a { color: inherit; text-decoration: none }
+h2 { font-size: 1.1rem; margin: 2rem 0 .5rem }
+h3 { font-size: 1rem; margin: 0 0 .25rem }
+header { border-bottom: 1px solid var(--line); padding-bottom: 1rem }
+.lede { color: var(--quiet); margin: .4rem 0 .8rem }
+nav { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap }
+form.inline { display: inline-flex; gap: .35rem; align-items: center }
+button { padding: .3rem .7rem; cursor: pointer }
+code { background: #f4f4f4; padding: .05rem .3rem; border-radius: 3px;
+       font-size: .9em }
+.quiet { color: var(--quiet) }
+.notice { padding: .6rem .8rem; border-left: 3px solid var(--ok);
+          background: #f6fbf7 }
+.notice.bad { border-color: var(--no); background: #fdf6f7 }
+table.matrix { border-collapse: collapse; width: 100%; margin: .5rem 0 }
+table.matrix th, table.matrix td { border: 1px solid var(--line);
+                                   padding: .4rem .6rem; text-align: left }
+table.matrix th { background: #fafafa; font-weight: 600 }
+td.yes { color: var(--ok) }
+td.no  { color: var(--no) }
+.status { font-variant-numeric: tabular-nums; font-weight: 600 }
+.tag { background: #eef4ff; color: #24406e; padding: .05rem .4rem;
+       border-radius: 3px; font-size: .75em }
+section.doc { border: 1px solid var(--line); border-radius: 4px;
+              padding: .8rem 1rem; margin: .6rem 0 }
+.actions { display: flex; gap: .8rem; flex-wrap: wrap; margin-top: .5rem }
+ol.try li { margin: .35rem 0 }
+footer { margin-top: 2rem; border-top: 1px solid var(--line);
+         padding-top: .8rem; color: var(--quiet) }

@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk::Passkey ();   # one dist, one bootstrap: the plugin lives in its bundle
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 1;
 
@@ -118,6 +118,12 @@ C</login/passkey> and C</punk-passkey.js>.
 The L<Punk::Model> holding credentials, default C<Passkey>. The
 schema is the Sqitch project described in L<Punk::Passkey>; pass
 C<< sqitch => 1 >> to register it with L<Punk::Plugin::Sqitch>.
+
+An application that declares C<< <AppClass>::Model::Passkey >>, or
+registers a model under this name, gets that one. An application that
+declares neither gets L<Punk::Model::Passkey>, which is registered for
+it - so the plugin line and the deployed table are enough, with no model
+class to transcribe from the DDL.
 
 =item user_verification, resident_key
 

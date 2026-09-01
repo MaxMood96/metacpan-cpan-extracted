@@ -46,7 +46,9 @@ History
 Hosaka
 Ishigaki
 Ivanov
+James
 Karen
+Keenan
 Ken
 Kenichi
 Kennedy
@@ -121,6 +123,7 @@ gregoa
 grinnz
 haarg
 ishigaki
+jkeenan
 json
 kentfredric
 kwilliams

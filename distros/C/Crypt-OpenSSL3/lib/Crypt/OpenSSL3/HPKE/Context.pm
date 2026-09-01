@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::HPKE::Context;
-$Crypt::OpenSSL3::HPKE::Context::VERSION = '0.012';
+$Crypt::OpenSSL3::HPKE::Context::VERSION = '0.013';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::HPKE::Context - Hybrid Public Key Encryption (RFC 9180) context
 
 =head1 VERSION
 
-version 0.012
+version 0.013
 
 =head1 SYNOPSIS
 

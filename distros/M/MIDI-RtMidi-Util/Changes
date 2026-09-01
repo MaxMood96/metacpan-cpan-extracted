@@ -1,0 +1,16 @@
+Revision history for MIDI-RtMidi-Util
+
+0.0201 2026-08-31 21:22:15
+    - Improve documentation again.
+
+0.0200 2026-08-31 19:37:21
+    Add the `input_ports()` and `output_ports()` functions.
+
+0.0102 2026-08-31 17:15:05
+    - Don't `exit;` in the `halt()` routine.
+
+0.0101 2026-08-31 16:57:21
+    - Improve documentation.
+
+0.0100 2026-08-31 16:51:23
+    - Mint with Dist::Zilla.

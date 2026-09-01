@@ -1,0 +1,22 @@
+<h2>One key, once</h2>
+
+<p class="try">This is the only time this key is shown. Nothing stored it -
+the row holds a SHA-256 digest of it, and a digest does not come back.</p>
+
+<pre class="key"><code data-reveal>{% key %}</code></pre>
+
+<table>
+  <tr><th>id</th><td><code>{% row.id %}</code></td></tr>
+  <tr><th>label</th><td>{% row.label %}</td></tr>
+  <tr><th>kind</th><td><code>{% row.kind %}</code></td></tr>
+  <tr><th>prefix</th><td><code>{% row.prefix %}</code></td></tr>
+  <tr><th>scopes</th><td><code>{% row.scopes | default('-') %}</code></td></tr>
+</table>
+
+<p class="quiet">The last six characters are a CRC32 checksum in base62. They
+are not a security property - anyone can compute them - and they earn their
+place twice anyway: a truncated or mistyped key is refused before the
+database is touched, and a secret scanner can recognise the format and revoke
+a leaked key before anyone uses it.</p>
+
+<p><a href="{% url.keys %}">Back to your keys</a></p>

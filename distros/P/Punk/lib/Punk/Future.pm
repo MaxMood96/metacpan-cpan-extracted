@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk ();
 
-our $VERSION = '0.38';
+our $VERSION = '0.40';
 
 1;
 
@@ -84,6 +84,13 @@ C<< $cb->($future) >> when it settles, any outcome.
 C<< $cb->(@values) >> for the matching outcome. All three fire at once on an
 already-settled future and return the future.
 
+=head2 on_cancel($code_or_future)
+
+Given a coderef, C<< $cb->($future) >> when this future is cancelled; given
+another future, cancel that one with it. Registering on a future already
+cancelled runs the target at once; on one that settled done or failed it is
+dropped, because that future will never cancel. Returns the future.
+
 =head1 CHAINING
 
 Each returns a new future the callback's result settles; a callback that
@@ -104,12 +111,15 @@ C<< $cb->($future) >> once it settles either way; adopt the future it returns.
 
 =head1 AWAITING
 
-=head2 get / await
+=head2 get / result / await
 
 C<get> blocks until ready and returns the values (or rethrows the failure);
-C<await> blocks and returns the future. On a live loop they pump it; off-loop a
-pending future with nothing to settle it is an error (as an off-loop L<Future>
-is).
+C<result> is the same method under L<Future>'s name for it; C<await> blocks and
+returns the future. On a live loop they pump it; off-loop a pending future with
+nothing to settle it is an error (as an off-loop L<Future> is).
+
+In list context you get every value; in scalar context, the B<first>, as
+L<Future> gives you.
 
 =head1 TIMERS
 
@@ -143,6 +153,29 @@ Done when all have settled, whatever the outcome (the futures are the value).
 =head2 wait_any(@futures)
 
 Done as soon as any has settled.
+
+=head1 ASYNC/AWAIT
+
+This class implements the C<Future::AsyncAwait::Awaitable> API, so one of
+these can be awaited directly. L<Punk::AsyncAwait> is the one line that turns
+the keywords on in an app, controller or model:
+
+    use Punk::AsyncAwait;
+
+    async sub list {
+        my ($c) = @_;
+        my $page = await $c->model('Book')->search({});
+        return $c->render('book/list', { books => $page->{rows} });
+    }
+
+Two things worth knowing. The future an C<async sub> returns is built by
+cloning the one it suspended on, and the clone carries that future's loop -
+so a handler that suspends on a Hyperman worker resumes on the same loop.
+And C<< $c->await($f) >>, which blocks and pumps, is a different thing from
+the C<await> keyword, which suspends; both are legal in one scope.
+
+The C<AWAIT_*> methods are the protocol. Call the documented names above
+rather than those.
 
 =head1 SEE ALSO
 

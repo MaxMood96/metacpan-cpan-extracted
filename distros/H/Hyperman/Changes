@@ -1,5 +1,10 @@
 Revision history for Hyperman
 
+0.40	2026-09-01
+        - Hyperman::Future implements the Future::AsyncAwait::Awaitable API,
+          so await works inside an async sub.
+        - Hyperman::Future->on_cancel, taking a code reference or a future.
+
 0.39    2026-08-30
         - A queue-group claim waits on a slot for a second of real time, not
           for ten thousand yields.

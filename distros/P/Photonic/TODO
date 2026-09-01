@@ -1,5 +1,68 @@
 # -*- mode: org; -*-
 
+* TODO [2026-07-26 Sun] firstState
+  Haydock modules have a firstState field that default to a
+  macroscopic field, but may be initialized  to an arbitrary
+  field. However, they expect the field in reciprocal space, and in
+  some cases, a spinor. Converting from a field in real space may
+  generate errors, so the conversion from real space field to spinor
+  field in reciprocal space should be handled by the modules
+  themselves. A public method to transform between these
+  representations is desirable, or a different optional field to
+  specify the first state either in its final form or as a field in
+  real space.
+
+* TODO [2026-07-22 Wed] Check documentation
+  The documentation is not quite consistent. It has to be checked and
+  fixed systematically
+
+* TODO [2026-07-22 Wed] MooX::StricConstructor
+  I can't use strict constructors in some projected objects, as currently the
+  corresponding tensor calculations initialize arrays of constructors using
+  additional parameters, which seems unsafe. I have to construct them
+  safely and add the constriction. The suspects are routines in
+  Ph::Util such as make_haydock, _haydock_extra, make_greenp, and incarnate_as.
+* DONE [2026-05-08 Fri] pod-coverage
+  Test all attributes are pod covered
+  My current xt/pod-coverage.t doesn't test lazy attributes. I don't
+  understand why. Currently, there are many undocumented. I have to
+  document them and I would like the tests to help with them.
+* DONE [2025-08-02 Sat] firstState
+  Check firstState in unretarded spinor calculations
+  I use \delta_{G0}/sqrt2 for both the positive and negative parts. My
+  guess is that the correct value is to change the sign of the G=0
+  contribution, and that it won't affect any result. But for initial fields
+  with many G's, it might make a difference. I have to make the
+  corresponding changes to the tests also.
+
+  Finally I conjugated the counterpropagating field in spinor
+  calculations.
+
+* DONE [2025-04-30 Wed] Field normalization
+  - The normalization of the fields is done so that in the usual case
+    the field is normalized to the macroscopic field. However, it is
+    not clear if it will work when a firstState is given.
+  - It should be possible to unnormalize it, so that it corresponds to
+    a given external current or external polarization.
+  - That was the purpose of the epsL field in LE::NR2::Field. I can
+    add ad-hoc methods to the others, but It will be better to think
+    it over and do it correctly.
+  - If a firstState is given, there should be no need and no use for
+    polarization in ...::Field
+
+    I made rawfield methods to return the unnormalized field,
+    interpreting the first state as an external polarization.
+* TODO [2025-02-20 Thu] KeepStates
+  - It seems version 0.24 keeps states, without regards to keepStates,
+    as the states are now kept in a state pdl instead of a perl
+    array.
+* TODO [2025-02-20 Thu] Ph::Role::Geometry
+  - I don't know why the normalized vector 0 is initialized in BUILD
+    instead of in _build_GNorm
+* TODO [2025-02-20 Thu] StrictConstructor
+  - At someplace MooseX::StricConstructor dissapeared from the
+    package. I guess it can be useful to add MooX::StrictConstructor
+    to the package.
 * TODO [2024-12-21 Sat] Geometry
   - It would be nice to be able to set the origin of the unit cell in geometry
   - It would be nice to have functions to map from pixel to cartesian

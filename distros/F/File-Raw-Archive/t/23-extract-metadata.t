@@ -31,14 +31,25 @@ File::Raw::Archive->extract_all($tar, $dest);
 # (which the archive doesn't carry on these entries).
 sub file_mode { (stat($_[0]))[2] & 07777 }
 
-is(file_mode("$dest/plain.txt"),     0644, 'plain.txt mode preserved');
-is(file_mode("$dest/priv.txt"),      0600, 'priv.txt mode preserved');
-is(file_mode("$dest/exec.sh"),       0755, 'exec.sh mode preserved');
-is(file_mode("$dest/sub/a.txt"),     0640, 'sub/a.txt mode preserved');
+# Windows has no POSIX mode: the CRT reports 0666 or 0444 depending on
+# the read-only attribute, whatever the archive asked for. Everything
+# else in this file - mtime, content, directory creation - still holds.
+my $modes_kept = $^O ne 'MSWin32';
+
+SKIP: {
+    skip 'no POSIX file modes on this platform', 4 unless $modes_kept;
+    is(file_mode("$dest/plain.txt"),     0644, 'plain.txt mode preserved');
+    is(file_mode("$dest/priv.txt"),      0600, 'priv.txt mode preserved');
+    is(file_mode("$dest/exec.sh"),       0755, 'exec.sh mode preserved');
+    is(file_mode("$dest/sub/a.txt"),     0640, 'sub/a.txt mode preserved');
+}
 
 # Directory mode: created at 0755 by extract_all from the entry mode.
 ok(-d "$dest/sub", 'sub/ is a directory');
-ok(file_mode("$dest/sub") & 0700, 'sub/ has owner-traversal bits');
+SKIP: {
+    skip 'no POSIX file modes on this platform', 1 unless $modes_kept;
+    ok(file_mode("$dest/sub") & 0700, 'sub/ has owner-traversal bits');
+}
 
 # mtime preservation (one-second tolerance for filesystem rounding).
 sub mtime_of { (stat($_[0]))[9] }
@@ -60,6 +71,10 @@ is(slurp_file("$dest/sub/a.txt"), 'C',          'sub/a.txt content');
 # extract_one should also preserve mode.
 my $single_dest = "$dir/single.sh";
 File::Raw::Archive->extract($tar, 'exec.sh', $single_dest);
-is(file_mode($single_dest), 0755, 'extract single preserves mode');
+ok(-e $single_dest, 'extract single wrote the file');
+SKIP: {
+    skip 'no POSIX file modes on this platform', 1 unless $modes_kept;
+    is(file_mode($single_dest), 0755, 'extract single preserves mode');
+}
 
 done_testing;

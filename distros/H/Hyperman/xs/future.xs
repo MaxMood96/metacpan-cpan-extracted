@@ -3,6 +3,11 @@ MODULE = Hyperman		PACKAGE = Hyperman::Future
 # Native array-slot Future, fully XS: creation, resolution,
 # callbacks, chaining, combinators, and CPAN Future interop. Continuations
 # are C closures (hm_future.h) trampolined through the fire queue.
+#
+# The AWAIT_* aliases are the Future::AsyncAwait::Awaitable protocol, which
+# is how `await $f` reaches a future of this class inside an async sub. They
+# are aliases rather than wrappers so the protocol costs nothing beyond the
+# XSUB it already resolves to.
 
 SV *
 new(class)
@@ -22,7 +27,10 @@ new(class)
 SV *
 done(self, ...)
     SV *self
+    ALIAS:
+        AWAIT_DONE = 1
     CODE:
+        PERL_UNUSED_VAR(ix);
         if (hmf_state(aTHX_ self) == HMF_PENDING)
             hmf_settle(aTHX_ self, HMF_DONE, &ST(1), items - 1);
         RETVAL = SvREFCNT_inc(self);
@@ -32,7 +40,10 @@ done(self, ...)
 SV *
 fail(self, ...)
     SV *self
+    ALIAS:
+        AWAIT_FAIL = 1
     CODE:
+        PERL_UNUSED_VAR(ix);
         if (hmf_state(aTHX_ self) == HMF_PENDING) {
             if (items > 1) {
                 hmf_settle(aTHX_ self, HMF_FAILED, &ST(1), items - 1);
@@ -48,10 +59,13 @@ fail(self, ...)
 SV *
 done_future(class, ...)
     SV *class
+    ALIAS:
+        AWAIT_NEW_DONE = 1
     CODE:
     {
         const char *name = SvROK(class) ? HvNAME(SvSTASH(SvRV(class)))
                                         : SvPV_nolen(class);
+        PERL_UNUSED_VAR(ix);
         RETVAL = hmf_new(aTHX_ name);
         hmf_settle(aTHX_ RETVAL, HMF_DONE, &ST(1), items - 1);
     }
@@ -61,10 +75,13 @@ done_future(class, ...)
 SV *
 fail_future(class, ...)
     SV *class
+    ALIAS:
+        AWAIT_NEW_FAIL = 1
     CODE:
     {
         const char *name = SvROK(class) ? HvNAME(SvSTASH(SvRV(class)))
                                         : SvPV_nolen(class);
+        PERL_UNUSED_VAR(ix);
         RETVAL = hmf_new(aTHX_ name);
         if (items > 1) {
             hmf_settle(aTHX_ RETVAL, HMF_FAILED, &ST(1), items - 1);
@@ -88,7 +105,10 @@ cancel(self)
 int
 is_ready(self)
     SV *self
+    ALIAS:
+        AWAIT_IS_READY = 1
     CODE:
+        PERL_UNUSED_VAR(ix);
         RETVAL = hmf_state(aTHX_ self) != HMF_PENDING;
     OUTPUT:
         RETVAL
@@ -112,8 +132,21 @@ is_failed(self)
 int
 is_cancelled(self)
     SV *self
+    ALIAS:
+        AWAIT_IS_CANCELLED = 1
     CODE:
+        PERL_UNUSED_VAR(ix);
         RETVAL = hmf_state(aTHX_ self) == HMF_CANCELLED;
+    OUTPUT:
+        RETVAL
+
+# A new pending future of the same class. The instance is not modified, and
+# no per-instance state is copied.
+SV *
+AWAIT_CLONE(self)
+    SV *self
+    CODE:
+        RETVAL = hmf_new(aTHX_ hmf_class_of(aTHX_ self));
     OUTPUT:
         RETVAL
 
@@ -121,9 +154,40 @@ SV *
 on_ready(self, cb)
     SV *self
     SV *cb
+    ALIAS:
+        AWAIT_ON_READY = 1
     CODE:
+        PERL_UNUSED_VAR(ix);
         hmf_on_ready(aTHX_ self, cb);
         RETVAL = SvREFCNT_inc(self);
+    OUTPUT:
+        RETVAL
+
+# Run $thing when this future is cancelled: a code reference is called with
+# the future, anything else is cancelled. Registering on a future that has
+# already been cancelled runs it at once; on one that completed normally it
+# is dropped, since that future will never cancel.
+SV *
+on_cancel(self, thing)
+    SV *self
+    SV *thing
+    ALIAS:
+        AWAIT_ON_CANCEL    = 1
+        AWAIT_CHAIN_CANCEL = 2
+    CODE:
+    {
+        IV st = hmf_state(aTHX_ self);
+        PERL_UNUSED_VAR(ix);
+        if (st == HMF_CANCELLED) {
+            hmf_cancel_target(aTHX_ thing, self);
+        } else if (st == HMF_PENDING) {
+            SV *cb = hm_closure(aTHX_ hm_xs_oncancel_cb, NULL, thing,
+                                NULL, NULL, 0, 0);
+            hmf_on_ready(aTHX_ self, cb);
+            SvREFCNT_dec(cb);
+        }
+        RETVAL = SvREFCNT_inc(self);
+    }
     OUTPUT:
         RETVAL
 
@@ -157,13 +221,23 @@ void
 get(self)
     SV *self
     ALIAS:
-        result = 1
+        result     = 1
+        AWAIT_WAIT = 2
+        AWAIT_GET  = 3
     PPCODE:
     {
         IV st;
-        PERL_UNUSED_VAR(ix);
-        hmf_await(aTHX_ self);
-        st = hmf_state(aTHX_ self);
+        /* AWAIT_GET is defined only on a future that is already ready, so it
+         * reads the result where every other spelling waits for one.
+         * AWAIT_WAIT is the spelling that does wait - it is what a toplevel
+         * await resolves to. */
+        if (ix == 3) {
+            st = hmf_state(aTHX_ self);
+            if (st == HMF_PENDING) croak("Hyperman::Future is not ready");
+        } else {
+            hmf_await(aTHX_ self);
+            st = hmf_state(aTHX_ self);
+        }
         if (st == HMF_FAILED) {
             AV *fav = hmf_values_av(aTHX_ self);
             SV **e = fav ? av_fetch(fav, 0, 0) : NULL;

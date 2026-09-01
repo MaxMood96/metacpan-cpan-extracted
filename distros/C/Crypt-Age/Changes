@@ -1,5 +1,330 @@
 Revision history for Crypt-Age
 
+0.003     2026-09-01 00:11:25Z
+  - Crypt::Age::Header->parse and ->parse_from_fh now reject a header that
+    carries no recipient stanza at all -- a version line followed directly by
+    the "--- <mac>" footer. The age header grammar is "header = v1-line
+    1*stanza end", one or more, so such a header is structurally invalid, but
+    it used to parse: it returned a header object with an empty stanza list,
+    advanced the caller's offset past it, and its MAC even verified, being a
+    well-formed MAC over a header the grammar forbids. The file then failed a
+    call later in unwrap_file_key with "No matching identity found", which
+    names the caller's keys as the cause of a file that is addressed to
+    nobody at all. It is now refused at parse time with "age header must
+    carry at least one recipient stanza: the file key is wrapped once per
+    stanza, so a header with none can never be unwrapped by anyone, decrypt a
+    file encrypted to at least one recipient", and nothing about the caller's
+    arguments is quoted. decrypt, decrypt_file and decrypt_filehandle see the
+    new message in place of "No matching identity found" for such a file;
+    every other file reports exactly what it reported before, including a
+    truncated header, which keeps "Invalid age file, no valid header MAC
+    line" because its cause is that the input ran out, not that the grammar
+    was broken. This closes the read side of the clause the previous entry
+    closed for the write side, and it is an interop difference as well as a
+    tidiness one: measured on such a file, rage 0.12.1 rejects it at parse
+    time as "Unknown age format" while age 1.2.1 parses it and reports "no
+    identity matched any of the recipients". This implementation was the most
+    permissive of the three and now refuses where rage does. No wire bytes
+    move: no valid age file has ever had a stanza-less header, and none of
+    the 143 upstream test vectors carries one. The POD of parse and
+    parse_from_fh states the requirement and quotes the message.
+  - The four streaming wrappers now document the same failure surface. Each of
+    encrypt_file, encrypt_filehandle, decrypt_file and decrypt_filehandle
+    reaches the same guards, but their "Dies if" clauses had drifted to four
+    different lengths: encrypt_file carried no enumeration at all, only "Dies
+    on error (file not found, permission denied, etc)"; decrypt_file and
+    decrypt_filehandle never named the identities ArrayRef shape and emptiness
+    requirements, though encrypt_filehandle had named the recipients
+    counterpart all along; and decrypt_file did not name the
+    missing-argument guard its own croaks make just as real. All four now
+    enumerate what they die on and point at encrypt or decrypt for the two
+    quoted messages rather than carrying a third and fourth copy of them,
+    which is what kept them out of step in the first place. Every clause was
+    checked against the live croak before being written. No behaviour changes;
+    no guard was added, removed or moved.
+  - Crypt::Age::Header->create now refuses an empty recipients ArrayRef
+    instead of returning a header with no stanzas. Passing [] satisfied the
+    shape check, wrapped the file key for nobody and produced a header of a
+    version line and a MAC over it. The age header grammar is "header =
+    v1-line 1*stanza end" -- one or more stanzas -- so that was not a valid
+    header, and the file it started could never be decrypted by anyone, the
+    caller included: the file key is generated per file and kept nowhere
+    else, so it went with the header. Nothing said so at the time. Measured
+    on a file built from such a header, rage 0.12.1 refuses it as "Unknown
+    age format" and age 1.2.1 parses it and reports "no identity matched any
+    of the recipients" -- both correct, both arriving after the plaintext is
+    the only copy and then gone. It now croaks "recipients must not be empty:
+    this method wraps the file key once per entry, so a header with no
+    stanzas can never be unwrapped, pass at least one recipient", after the
+    shape check and before the file key is touched. Only a caller using
+    Header->create directly is affected; encrypt, encrypt_file and
+    encrypt_filehandle have always rejected an empty list one layer up.
+    Those two guards in Crypt::Age move onto the same message form in this
+    release, so the empty list reads one way whichever layer catches it:
+    "at least one recipient required" becomes the message above with "this
+    method encrypts to every entry, so with none the result can never be
+    decrypted" as its reason, and "at least one identity required" becomes
+    "identities must not be empty: this method decrypts with whichever entry
+    matches, so with none there is nothing that could match, pass at least
+    one identity". Callers matching on either old text see the new one; both
+    checks accept and reject exactly what they did before, and both still
+    fire before any file key is generated or any header is parsed, so an
+    empty list still costs nothing but the exception. The identities side
+    closes no defect of its own -- Header->unwrap_file_key already died on an
+    empty list, with "No matching identity found", and still does. The POD of
+    create, encrypt, decrypt and encrypt_filehandle states the requirement
+    and quotes the messages.
+  - Crypt::Age::Keys->decode_secret_key and ->decode_public_key no longer
+    quote the human-readable part they decoded when it is not the expected
+    one. Both croaked "Invalid secret key HRP: expected 'age-secret-key-',
+    got '...'" and its public-key equivalent, where the value after "got" is
+    whatever bech32_decode returned as the HRP -- everything before the last
+    "1" of the string the caller passed, so a prefix of the caller's own
+    material, written into an exception raised inside this module and from
+    there into any log that catches it. They now report "Invalid secret key
+    HRP: expected the literal age-secret-key- prefix, pass an age identity
+    rather than a recipient or some other Bech32 string" and "Invalid public
+    key HRP: expected the literal age prefix, pass an age recipient rather
+    than an identity or some other Bech32 string": the expected HRP is a
+    constant of the format and is named, the one that arrived is not. The
+    reach is narrow and is worth stating plainly rather than dressing up.
+    Getting to either croak takes a Bech32 string whose checksum verifies
+    over the wrong HRP. Measured on real keys, every mistyping dies earlier
+    and quotes nothing -- a truncation as "Invalid bech32: no separator",
+    "Invalid bech32: empty data" or "Invalid bech32 checksum" depending on
+    where it cuts, trailing junk as "Invalid bech32 checksum" -- and the
+    everyday way to arrive, passing a public key where an identity belongs or
+    the reverse, puts only the other type's constant prefix in that position,
+    which is not key material. What made it a disclosure is a string
+    constructed with the opening characters of a real key as its HRP, which
+    is a deliberate input and not an accident. Callers matching on the old
+    "expected '...', got '...'" wording of either message see the new one
+    instead; both methods accept and reject exactly the same strings as
+    before. The POD of both states the new message and this reach.
+  - Crypt::Age's own recipients and identities checks now report the same
+    message shape as their counterparts in Crypt::Age::Header, so one caller
+    mistake reads one way whichever layer catches it. "recipients must be an
+    array ref" becomes "recipients must be an ArrayRef: this method encrypts
+    to every entry, pass [$recipient] rather than $recipient", and "identities
+    must be an array ref" becomes "identities must be an ArrayRef: this method
+    decrypts with whichever entry matches, pass [$identity] rather than
+    $identity". These are the messages callers actually get: encrypt,
+    encrypt_file, encrypt_filehandle, decrypt, decrypt_file and
+    decrypt_filehandle all check the shape before handing the list to
+    Header->create or ->unwrap_file_key, so Header's wording is unreachable
+    through the public API, and a caller who hit one form and searched the
+    documentation for the other found nothing. The clause after the colon
+    states what this layer does with the list rather than what Header does
+    with it, and as before nothing about the argument is interpolated -- a
+    bare string in the identities parameter is a secret key. Only the text
+    moves: both checks accept and reject exactly what they accepted and
+    rejected before. The separate emptiness checks beside them move in the
+    same release, in the entry below. The POD of encrypt and decrypt now
+    quotes both messages.
+  - Crypt::Age::Header->unwrap_file_key and ->create now require their list
+    argument to really be an ArrayRef, and croak "identities must be an
+    ArrayRef: this method tries each entry in turn, pass [$identity] rather
+    than $identity" and "recipients must be an ArrayRef: this method wraps the
+    file key once per entry, pass [$recipient] rather than $recipient" for
+    every other shape. Neither checked before, so a caller passing a single
+    identity or recipient bare -- one identity does not look like a list --
+    reached a raw dereference. On unwrap_file_key that was a disclosure of
+    secret key material, not merely a bad message: perl's "Can't use string
+    (\"...\") as an ARRAY ref while \"strict refs\" in use" quotes the first 32
+    characters of the offending string, so an identity was written into an
+    exception raised inside this module, on its way into any log, bug report
+    or terminal scrollback that caught it, where the caller can no longer
+    redact it. A recipient is a public key, so create was not a leak, but it
+    is the same defect one call away and the swap of recipient and identity
+    puts a secret key in that parameter too. undef and other refs came back as
+    "Can't use an undefined value as an ARRAY reference" or "Not an ARRAY
+    reference", both blaming a line in Header.pm for a mistake made one frame
+    up. The new messages quote no part of the argument. The string, file and
+    filehandle API was never affected -- Crypt::Age's own recipients and
+    identities checks already stand in front of both calls -- so this reaches
+    only callers using Crypt::Age::Header directly. The POD of both methods
+    states the requirement.
+  - Crypt::Age::Header->parse now requires the scalar behind its first
+    argument to be defined, and croaks "data must refer to a defined scalar:
+    this method reads the age file out of it, assign the bytes before passing
+    \$data". A ScalarRef to an undefined scalar satisfies the two shape checks
+    above -- it really is a ScalarRef -- and used to raise ten "Use of
+    uninitialized value" warnings from inside Header.pm, from the byte-string
+    scan, from seven reads of an in-memory handle opened on nothing, and from
+    the version line readline returned as undef, before croaking "Invalid age
+    version". All ten carried Header.pm line numbers for a mistake made one
+    frame up and none of them told the caller anything actionable. Callers
+    matching on the old "Invalid age version" message for this case see the
+    new one instead; that is the point, since a ref to nothing is a mistake in
+    the call, not a statement about data that arrived.
+  - Crypt::Age::Header->parse_from_fh no longer warns twice out of Header.pm
+    when the handle is already at end of input. readline returns undef there,
+    and chomp and string eq on it warned before the correct croak. An absent
+    version line is now carried into the same check as an empty one, so the
+    message is unchanged. This is what an empty ciphertext reaches through
+    Crypt::Age::decrypt, and what an empty $data reaches through parse, so
+    both are warning-free now as well; only the warnings are gone, the errors
+    are the same.
+  - Crypt::Age::Header->parse now requires its second argument to really be a
+    ScalarRef as well, and croaks "offset must be a ScalarRef: this method
+    writes the new offset back through it, pass \$offset rather than $offset"
+    for every other shape. Nothing checked it before, so a plain string, undef
+    or another kind of ref reached a raw dereference and came back as perl's
+    own "Can't use string (\"...\") as a SCALAR ref while \"strict refs\" in
+    use", "Can't use an undefined value as a SCALAR reference" or "Not a
+    SCALAR reference" -- the first of those quoting the caller's own string
+    into the message, and all three blaming a line inside Header.pm for a
+    mistake made one frame up. The message quotes no part of the argument,
+    which for a caller who passed the two arguments the other way round is the
+    ciphertext. Both argument shapes are now checked before anything looks at
+    the data, so a call malformed in its second argument is never reported
+    first as a complaint about the first one's contents. The POD of parse now
+    states the requirement.
+  - Crypt::Age::Header->parse now requires its first argument to really be a
+    ScalarRef and croaks "data must be a ScalarRef: this method opens it, and a
+    plain string is a filename, pass \$data rather than $data" for every other
+    shape. The argument used to go straight to open, where a plain string is a
+    FILENAME: a caller who wrote parse($data, \$offset) without the backslash
+    opened and parsed the file that string named -- returning a header built
+    from that file's bytes and advancing the caller's offset -- instead of
+    getting a type error, and where the string named nothing readable the
+    misuse was reported as "Invalid age input: cannot read". undef no longer
+    warns "Use of uninitialized value" out of Header.pm about a mistake made
+    one frame up, and another kind of ref no longer arrives as "cannot read"
+    either, which named neither cause nor fix. The message quotes no part of
+    the argument, which on this path is either ciphertext or a filesystem path.
+    The POD of parse now states the requirement.
+  - Crypt::Age::Header->parse now rejects a ScalarRef whose scalar holds a code
+    point above 0xFF with a message naming the cause and the fix --
+    "data must be a byte string: it holds a code point above 0xFF, read it with
+    :raw rather than decoding it" -- instead of "Invalid age input: cannot
+    read", which named neither, and perl's "code points over 0xFF" warning no
+    longer fires. Unlike the same check in encrypt, decrypt, encrypt_payload
+    and decrypt_payload, this one only reads the caller's scalar and never
+    downgrades it, since it is not a copy; note that on the success path perl's
+    own in-memory open still downgrades it in place, as it always did. The POD
+    of parse now states the byte-string requirement.
+  - Crypt::Age::Primitives::encrypt_payload and decrypt_payload now reject a
+    character string the way encrypt and decrypt already do, with a message
+    naming the cause and the fix -- "plaintext must be a byte string: it holds a
+    code point above 0xFF, encode it before passing it in", and the ciphertext
+    counterpart advising :raw rather than decoding -- instead of passing perl's
+    EINVAL through from the in-memory open as "Cannot open input string: Invalid
+    argument". Perl's own "code points over 0xFF" warning no longer fires
+    either, because the check runs before the open. The POD of both methods now
+    states the byte-string requirement.
+  - encrypt and decrypt now reject a character string with a message that names
+    the cause and the fix, instead of passing perl's EINVAL through from the
+    in-memory open: "plaintext must be a byte string: it holds a code point
+    above 0xFF, encode it before passing it in", and the ciphertext counterpart
+    advising :raw rather than encoding, since wide ciphertext means binary that
+    was decoded by mistake. Perl's own "code points over 0xFF" warning no longer
+    fires either, because the check runs before the open. The POD now states the
+    byte-string requirement for all six methods -- including its honest limit: a
+    character string whose code points all fit in a byte is indistinguishable
+    from bytes and is encrypted as Latin-1.
+  - The LIMITATIONS section now documents both suffixes of the recipient
+    rejection, ", got undef" and ", got an AGE-SECRET-KEY-1 identity", instead of
+    only the base message.
+  - Crypt::Age::Keys::bech32_decode no longer echoes the character it rejected.
+    It now reports "Invalid bech32 character at offset N", a 0-based offset into
+    the string that was passed in, so substr($encoded, $N, 1) lands on the
+    character without quoting it. No byte of a real key was ever at risk --
+    every character of an encoded age key is inside the Bech32 charset, so none
+    can reach that branch -- but the method is public and takes any string, so a
+    passphrase handed to it by mistake had one of its bytes put in an exception.
+    Callers matching on the old message text must update.
+  - encrypt and decrypt now croak instead of die when an in-memory open fails,
+    so the error reports the caller's position rather than Crypt/Age.pm. This is
+    reachable: perl refuses to open a string holding code points above 0xFF,
+    which is what a caller gets for passing decoded characters where the API
+    wants bytes.
+  - An undef entry in the recipients array no longer emits two "Use of
+    uninitialized value" warnings ahead of the error explaining it; it is
+    rejected before any string operation touches it and reported as ", got
+    undef" in the same message shape as the identity hint. An undef entry in
+    identities is skipped without warning, which is what already happened to
+    any identity that does not match -- no outcome changes there, only the noise.
+  - SECURITY: two error paths no longer echo what the caller passed in. Header
+    parsing died with "Invalid age version: $version_line", where $version_line
+    is the first line of the supplied ciphertext -- and since the read is
+    newline-delimited, an input without a newline put its entire content in the
+    exception. Hand decrypt a plaintext by mistake and the whole thing lands in
+    whatever logs that exception. It now names only the version line it expected.
+    Likewise the recipient dispatch died with "Unsupported recipient format:
+    $recipient": swap the recipients and identities arguments -- both are just
+    strings -- and the full secret key was echoed. It now reports the 0-based
+    index of the offending entry, plus a hint when the string looks like an
+    AGE-SECRET-KEY-1 identity. Both messages are now built from literals and an
+    integer; no byte of the input reaches them. Note that age 1.2.1 and rage
+    0.12.1 both echo the key here -- for a CLI it was already in argv, whereas a
+    library exception ends up in the caller's log, so this deviation is deliberate.
+  - Crypt::Age::Header::create now accepts an all-uppercase AGE1... recipient.
+    The dispatch tested /^age1/ case-sensitively while its identity counterpart
+    used /i and decode_public_key accepted either case, so a key this
+    distribution itself called valid was refused by encrypt. BIP-173 makes the
+    all-uppercase form the same encoding of the same string and rage 0.12.1
+    accepts it. A mixed-case recipient still dies -- now in bech32_decode's
+    mixed-case guard rather than the prefix test. Verified with the CSPRNG
+    pinned: both spellings of one key produce byte-identical ciphertext, and the
+    recipient string never reaches the file, so nothing about the format changes.
+  - The documented example keys are now an actual keypair. README.md and both
+    the SYNOPSIS and KEY FORMAT sections of Crypt::Age presented a public and a
+    secret key together, but the public key did not belong to the secret key --
+    copying both out of the documentation produced "No matching identity found".
+  - Test coverage for error paths that had none: both HRP mismatches in
+    Crypt::Age::Keys, the recipient rejection, and the version-line rejection.
+    The two leak fixes above are pinned by searching the message for a fragment
+    of the secret rather than by matching its text, so a future edit that puts a
+    different part of the input back in still fails the test.
+  - t/04-interop.t now runs its whole block once per CLI it finds instead of
+    resolving `age || rage` and exercising only the first. On a machine with
+    both installed it reports 120 assertions, 60 tagged [age] and 60 tagged
+    [rage], and names each binary and version up front; with one it reports 60,
+    and with neither it still skips. Verified against age 1.2.1 and rage 0.12.1.
+    A comment describing the 0-byte-plaintext case had the two implementations
+    backwards -- age writes an empty -o file, rage writes none -- and is
+    corrected; the code already handled both.
+  - The documented secret-key example was not a valid key. Both README.md and
+    the KEY FORMAT section of Crypt::Age carried a bech32 string whose checksum
+    does not verify, so anyone pasting it got "Invalid bech32 checksum" rather
+    than a working identity.
+  - Crypt::Age now documents what it does not implement -- scrypt (passphrase),
+    SSH and the post-quantum/tagged recipient types, and ASCII armor -- and
+    which error each produces, instead of leaving "compatible with age" to be
+    read as covering the whole format.
+  - The streaming decrypt methods now document that a failure does not undo what
+    was already written: decrypt_file and decrypt_filehandle release each chunk
+    as it authenticates, so plaintext is already in the caller's output when
+    they die on a truncated or corrupt payload. Each released chunk is
+    individually authentic; the message is not. Callers making a security
+    decision were given no way to know this from the POD before.
+  - Several POD claims that were false against the code are corrected: the
+    SYNOPSIS of Crypt::Age::Primitives called derive_payload_key without the
+    nonce it requires and died; encrypt_payload_fh claimed to return the
+    concatenated ciphertext when it returns nothing and writes to the handle;
+    the ephemeral_public attribute claimed to be set on every stanza when the
+    parse path leaves it undef; and the filehandle methods claimed to die on
+    "file not found", which they cannot, since they open no files.
+  - paranoid_read, bech32_encode and bech32_decode are documented.
+  - Crypt::Age::Keys::bech32_decode now rejects a string that mixes upper- and
+    lowercase, dying with "Invalid bech32: mixed case" before it even looks for
+    the separator. BIP-173 requires this of decoders and c2sp.org/age repeats it
+    for the key encoding; the checksum is computed over the lowercase form
+    regardless, so a mixed-case key previously verified and decoded. age 1.2.1
+    and rage 0.12.1 both reject such a string, so this closes a gap rather than
+    tightening past them. All-uppercase and all-lowercase forms both still
+    decode, and to the same bytes.
+  - Crypt::Age::Stanza::to_bytes_for_mac and encode_body_base64 are removed.
+    Neither was called anywhere in the distribution, and both were traps for a
+    future caller: to_bytes_for_mac's name asserts a role in the header MAC that
+    it has in neither direction -- Header::create re-serializes through
+    to_string, Header::parse_from_fh MACs the literal bytes it read -- while
+    encode_body_base64 returned the body unwrapped, which only coincides with
+    the wire format because an X25519 body encodes to 43 characters and so never
+    reaches to_string's 64-column wrap. The free function encode_base64_no_padding,
+    which both delegated to and which to_string uses, is unchanged.
+
 0.002     2026-08-19 22:50:05Z
   - The distribution now carries the upstream age test kit: 143 vectors from
     C2SP/CCTV, run by t/07-testkit.t. 68 of them exercise this implementation

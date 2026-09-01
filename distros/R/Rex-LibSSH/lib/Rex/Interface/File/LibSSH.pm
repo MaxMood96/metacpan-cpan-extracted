@@ -1,7 +1,7 @@
 # ABSTRACT: Rex remote file handle via Net::LibSSH exec channels
 
 package Rex::Interface::File::LibSSH;
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 use strict;
 use warnings;
 
@@ -84,8 +84,15 @@ sub close {
     }
 }
 
+# Shell-quote a single path component.
+#
+# Same hardening as Fs::LibSSH::_q: single-quote wrap with '\''-escaping
+# defends against spaces, $, `, \, newlines and the empty string;
+# NUL (\0) is rejected because it cannot be represented in argv.
 sub _q {
     my ($path) = @_;
+    die "LibSSH File _q: path contains NUL byte\n"
+        if defined $path && index( $path, "\0" ) >= 0;
     $path =~ s/'/'"'"'/g;
     return "'$path'";
 }
@@ -104,7 +111,7 @@ Rex::Interface::File::LibSSH - Rex remote file handle via Net::LibSSH exec chann
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 DESCRIPTION
 
@@ -117,6 +124,16 @@ over the SSH connection and committed when C<close()> is called.
 
 Read mode (C<E<lt>>) slurps the entire file via C<cat> and buffers it
 locally; C<read()> and C<seek()> operate on the local buffer.
+
+=head1 LIMITATIONS
+
+Read-mode C<open> holds the whole file in memory on both ends at
+C<open()> time. C<read()> and C<seek()> then operate on that local
+buffer rather than the remote file, so seek past the buffered end
+returns no data. This is fine for config files but not appropriate for
+large files. A future implementation could stream through
+L<Net::LibSSH::Channel::read> with an explicit length —
+C<read(undef)> reads zero bytes, pass C<-1> or no argument to slurp.
 
 =head1 SEE ALSO
 

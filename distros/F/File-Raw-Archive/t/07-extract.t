@@ -55,4 +55,18 @@ eval { File::Raw::Archive->extract_all($bad, $bdest); 1 } or $err = $@;
 ok($err, 'extract_all refuses ".." path');
 like($err, qr/unsafe path/, 'error mentions unsafe path');
 
+# Windows accepts '\\' as a separator and anchors "C:..." to a drive, so
+# an entry spelled either way walks out of the destination there. Refused
+# on every platform: the archive is the same archive wherever it lands.
+for my $evil ('..\\escape.txt', 'sub\\..\\..\\escape.txt',
+              'C:\\escape.txt', 'C:escape.txt', '\\escape.txt') {
+    my $t = "$dir/evil.tar";
+    my $ew = File::Raw::Archive->create($t);
+    $ew->add(name => $evil, content => 'oops');
+    $ew->close;
+    my $e;
+    eval { File::Raw::Archive->extract_all($t, "$dir/evil-dest"); 1 } or $e = $@;
+    like($e, qr/unsafe path/, "extract_all refuses '$evil'");
+}
+
 done_testing;

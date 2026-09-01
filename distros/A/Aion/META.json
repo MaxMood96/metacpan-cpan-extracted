@@ -89,7 +89,7 @@
    "provides" : {
       "Aion" : {
          "file" : "lib/Aion.pm",
-         "version" : "2.2"
+         "version" : "2.3"
       },
       "Aion::Meta::Feature" : {
          "file" : "lib/Aion/Meta/Feature.pm"
@@ -134,7 +134,7 @@
          "web" : "https://github.com/darviarush/perl-aion"
       }
    },
-   "version" : "2.2",
+   "version" : "2.3",
    "x_authority" : "cpan:DART",
    "x_contributors" : [
       "Iaroslav O. Kosmina <darviarush@mail.ru>",

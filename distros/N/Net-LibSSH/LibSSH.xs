@@ -14,14 +14,59 @@
    Internal structs (named so Newxz has a type to size)
    ==================================================== */
 
-typedef struct { ssh_session  session;                 } NLSS_Session;
-typedef struct { ssh_channel  channel; SV *session_sv; } NLSS_Channel;
-typedef struct { sftp_session sftp;    SV *session_sv; } NLSS_SFTP;
+/* Where the ssh_session is in its one-way life. libssh 0.10.6 cannot
+   reconnect a session it has disconnected -- ssh_connect() sits out the whole
+   timeout -- but measured on the same libssh, disconnect() on a session that
+   was never connected leaves it fully connectable. Only the CONNECTED ->
+   SPENT transition is therefore terminal, which is why this is three states
+   and not a flag. Newxz gives FRESH for free.
+   libssh has nothing to answer this with: ssh_get_status() reports SSH_CLOSED
+   for both a spent session and a never-connected one that saw a disconnect(),
+   and ssh_is_connected() is already 0 by the time connect() would ask. */
+typedef enum {
+    NLSS_SESSION_FRESH = 0,
+    NLSS_SESSION_CONNECTED,
+    NLSS_SESSION_SPENT
+} NLSS_SessionState;
+
+/* generation / session_generation: ssh_disconnect() frees every ssh_channel
+   the session owns from inside libssh, so a channel or sftp session that
+   outlives a disconnect() holds a non-NULL pointer into freed memory. The
+   session counts its disconnects; each child copies the count it was born
+   under and compares. See nlss_session_stale(). */
+typedef struct {
+    ssh_session        session;
+    unsigned int       generation;
+    NLSS_SessionState  state;
+    /* The one message this binding raises itself; everything else in error()
+       comes from libssh. Set when connect() refuses a spent session, where
+       ssh_connect() is never called and ssh_get_error() would still hold what
+       stood there before the disconnect (measured: nothing). A string
+       literal, so there is nothing to free, and nothing clears it either --
+       a spent session stays spent, and that is the reason every later call
+       on it fails too. */
+    const char        *own_error;
+} NLSS_Session;
+
+typedef struct {
+    ssh_channel  channel;
+    SV          *session_sv;
+    unsigned int session_generation;
+} NLSS_Channel;
+
+typedef struct {
+    sftp_session sftp;
+    SV          *session_sv;
+    unsigned int session_generation;
+} NLSS_SFTP;
 
 /* Pointer typedefs with the xsubpp __ → :: naming convention.
    Using pointer typedefs (not struct typedefs) means XS signatures
-   need no *, and ${type} in typemap templates resolves cleanly to
-   e.g. Net__LibSSH — making &${type}_magic valid C. */
+   need no *. The typemap does not derive its vtable names from these:
+   xsubpp maps :: → __ inside ${type} only from 3.60 on, so a generic
+   T_MAGICEXT entry writing &${type}_magic expands to &Net::LibSSH_magic
+   — not valid C — on the older xsubpp this distribution still supports.
+   Every typemap entry therefore spells its vtable out literally. */
 typedef NLSS_Session *Net__LibSSH;
 typedef NLSS_Channel *Net__LibSSH__Channel;
 typedef NLSS_SFTP    *Net__LibSSH__SFTP;
@@ -36,6 +81,9 @@ static int
 nlss_session_free(pTHX_ SV *sv, MAGIC *mg)
 {
     NLSS_Session *self = (NLSS_Session *)(void *)mg->mg_ptr;
+    /* No generation bump here: every channel and sftp session holds a
+       reference on this very SV, so this runs only once the last of them is
+       gone. There is nothing left to invalidate. */
     if (self->session) {
         ssh_disconnect(self->session);
         ssh_free(self->session);
@@ -45,11 +93,38 @@ nlss_session_free(pTHX_ SV *sv, MAGIC *mg)
 }
 static const MGVTBL Net__LibSSH_magic = { .svt_free = nlss_session_free };
 
+/* Has libssh already freed the C object this child holds?
+   The child reaches its session through session_sv -- the blessed,
+   magic-bearing SV it took a reference on in channel()/sftp(). Since 0.003
+   that is the referent, SvRV(ST(0)), not the reference scalar, so the magic
+   sits on session_sv itself and mg_findext takes it directly; a further
+   SvRV() here would walk off the object.
+   Missing magic can only mean the session SV is not the one we stored, so it
+   counts as stale: refusing is the safe answer for both the method guard and
+   the free path. */
+static int
+nlss_session_stale(pTHX_ SV *session_sv, unsigned int generation)
+{
+    if (!session_sv || !SvMAGICAL(session_sv))
+        return 1;
+    MAGIC *mg = mg_findext(session_sv, PERL_MAGIC_ext, &Net__LibSSH_magic);
+    if (!mg)
+        return 1;
+    return ((NLSS_Session *)(void *)mg->mg_ptr)->generation != generation;
+}
+
 static int
 nlss_channel_free(pTHX_ SV *sv, MAGIC *mg)
 {
     NLSS_Channel *self = (NLSS_Channel *)(void *)mg->mg_ptr;
-    if (self->channel) {
+    /* A stale channel was freed inside ssh_disconnect() already; sending eof
+       on it is the crash the caller never asked for. Skip the C teardown
+       only -- the session reference and the struct still have to go, or the
+       crash is merely traded for a leak. The session struct is still there to
+       ask: this child's reference on session_sv is released below, after the
+       question, so nlss_session_free cannot have run yet. */
+    if (self->channel
+        && !nlss_session_stale(aTHX_ self->session_sv, self->session_generation)) {
         ssh_channel_send_eof(self->channel);
         ssh_channel_close(self->channel);
         ssh_channel_free(self->channel);
@@ -64,8 +139,18 @@ static int
 nlss_sftp_free(pTHX_ SV *sv, MAGIC *mg)
 {
     NLSS_SFTP *self = (NLSS_SFTP *)(void *)mg->mg_ptr;
-    if (self->sftp)
+    if (self->sftp) {
+        /* Unlike a channel, an sftp_session is not freed by ssh_disconnect()
+           -- only the channel inside it is. Skipping sftp_free() outright
+           would trade the crash for a leak (measured: ~1.6 kB per
+           disconnected-and-dropped sftp session), so cut the dangling channel
+           loose first and let sftp_free() release everything else. libssh
+           declares struct sftp_session_struct in its public sftp.h, and its
+           ssh_channel_send_eof/close/free are all NULL-tolerant. */
+        if (nlss_session_stale(aTHX_ self->session_sv, self->session_generation))
+            self->sftp->channel = NULL;
         sftp_free(self->sftp);
+    }
     SvREFCNT_dec(self->session_sv);
     Safefree(self);
     return 0;
@@ -81,6 +166,28 @@ nlss_croak_error(pTHX_ ssh_session session, const char *prefix)
 {
     const char *msg = ssh_get_error(session);
     Perl_croak(aTHX_ "%s: %s", prefix, msg ? msg : "(unknown error)");
+}
+
+static void
+nlss_channel_check_open(pTHX_ NLSS_Channel *self, const char *prefix)
+{
+    /* Two distinct states, two distinct messages: the caller closed this
+       channel itself, or the session was disconnected out from under it.
+       Collapsing them would leave a caller unable to tell its own teardown
+       from libssh's. */
+    if (!self->channel)
+        Perl_croak(aTHX_ "%s: channel is closed", prefix);
+    if (nlss_session_stale(aTHX_ self->session_sv, self->session_generation))
+        Perl_croak(aTHX_ "%s: session was disconnected", prefix);
+}
+
+static void
+nlss_sftp_check_open(pTHX_ NLSS_SFTP *self, const char *prefix)
+{
+    /* There is no SFTP close(), so self->sftp is set for the object's whole
+       lifetime; disconnect() is the only thing that stops it being usable. */
+    if (nlss_session_stale(aTHX_ self->session_sv, self->session_generation))
+        Perl_croak(aTHX_ "%s: session was disconnected", prefix);
 }
 
 static SV *
@@ -152,7 +259,20 @@ int
 connect(self)
     Net::LibSSH self
   CODE:
-    RETVAL = (ssh_connect(self->session) == SSH_OK) ? 1 : 0;
+    if (self->state == NLSS_SESSION_SPENT) {
+        /* Refuse without calling libssh: ssh_connect() on a disconnected
+           session waits out the full timeout and then reports "Timeout
+           connecting to <host>", which names the wrong problem. Still 0 and
+           still no croak -- connect()'s contract is 1 or 0 with the message
+           on error(), and Rex::LibSSH relies on it. */
+        self->own_error = "session was disconnected and cannot be reconnected";
+        RETVAL = 0;
+    } else if (ssh_connect(self->session) == SSH_OK) {
+        self->state = NLSS_SESSION_CONNECTED;
+        RETVAL = 1;
+    } else {
+        RETVAL = 0;
+    }
   OUTPUT:
     RETVAL
 
@@ -160,13 +280,23 @@ void
 disconnect(self)
     Net::LibSSH self
   CODE:
+    /* Only a session that actually got connected is spent by this: measured
+       on libssh 0.10.6, disconnect() on a never-connected session leaves it
+       connectable, and marking it would refuse a call that works. */
+    if (self->state == NLSS_SESSION_CONNECTED)
+        self->state = NLSS_SESSION_SPENT;
+    /* Bump before disconnecting: ssh_disconnect() frees every channel the
+       session owns, so every channel and sftp session opened on it has to be
+       stale by the time that memory goes away. */
+    self->generation++;
     ssh_disconnect(self->session);
 
 SV *
 error(self)
     Net::LibSSH self
   CODE:
-    const char *msg = ssh_get_error(self->session);
+    const char *msg = self->own_error ? self->own_error
+                                      : ssh_get_error(self->session);
     RETVAL = (msg && *msg) ? newSVpv(msg, 0) : undef;
   OUTPUT:
     RETVAL
@@ -221,8 +351,9 @@ channel(self)
         XSRETURN_UNDEF;
     }
     Newxz(RETVAL, 1, NLSS_Channel);
-    RETVAL->channel    = ch;
-    RETVAL->session_sv = SvREFCNT_inc(ST(0));
+    RETVAL->channel            = ch;
+    RETVAL->session_sv         = SvREFCNT_inc(SvRV(ST(0)));
+    RETVAL->session_generation = self->generation;
   OUTPUT:
     RETVAL
 
@@ -238,8 +369,9 @@ sftp(self)
         XSRETURN_UNDEF;
     }
     Newxz(RETVAL, 1, NLSS_SFTP);
-    RETVAL->sftp       = sftp;
-    RETVAL->session_sv = SvREFCNT_inc(ST(0));
+    RETVAL->sftp               = sftp;
+    RETVAL->session_sv         = SvREFCNT_inc(SvRV(ST(0)));
+    RETVAL->session_generation = self->generation;
   OUTPUT:
     RETVAL
 
@@ -251,6 +383,7 @@ exec(self, cmd)
     Net::LibSSH::Channel  self
     const char           *cmd
   CODE:
+    nlss_channel_check_open(aTHX_ self, "Net::LibSSH::Channel::exec");
     RETVAL = (ssh_channel_request_exec(self->channel, cmd) == SSH_OK) ? 1 : 0;
   OUTPUT:
     RETVAL
@@ -259,6 +392,7 @@ SV *
 read(self, ...)
     Net::LibSSH::Channel self
   CODE:
+    nlss_channel_check_open(aTHX_ self, "Net::LibSSH::Channel::read");
     int is_stderr = 0;
     int len       = -1;
     if (items >= 2) len       = SvIV(ST(1));
@@ -286,6 +420,7 @@ write(self, data)
     Net::LibSSH::Channel  self
     SV                   *data
   CODE:
+    nlss_channel_check_open(aTHX_ self, "Net::LibSSH::Channel::write");
     STRLEN      len;
     const char *ptr = SvPV(data, len);
     RETVAL = ssh_channel_write(self->channel, ptr, (uint32_t) len);
@@ -296,12 +431,14 @@ void
 send_eof(self)
     Net::LibSSH::Channel self
   CODE:
+    nlss_channel_check_open(aTHX_ self, "Net::LibSSH::Channel::send_eof");
     ssh_channel_send_eof(self->channel);
 
 int
 eof(self)
     Net::LibSSH::Channel self
   CODE:
+    nlss_channel_check_open(aTHX_ self, "Net::LibSSH::Channel::eof");
     RETVAL = ssh_channel_is_eof(self->channel);
   OUTPUT:
     RETVAL
@@ -310,6 +447,7 @@ int
 exit_status(self)
     Net::LibSSH::Channel self
   CODE:
+    nlss_channel_check_open(aTHX_ self, "Net::LibSSH::Channel::exit_status");
     RETVAL = ssh_channel_get_exit_status(self->channel);
   OUTPUT:
     RETVAL
@@ -319,11 +457,17 @@ close(self)
     Net::LibSSH::Channel self
   CODE:
     /* Free the C channel now; svt_free will later release
-       session_sv and Safefree the struct when the SV is GC'd. */
+       session_sv and Safefree the struct when the SV is GC'd.
+       Deliberately unguarded, so it stays idempotent for svt_free -- but a
+       channel invalidated by disconnect() is only dropped, never freed twice.
+       No croak either: `$ssh->disconnect; $ch->close` is teardown, and
+       teardown that has already happened is not an error. */
     if (self->channel) {
-        ssh_channel_send_eof(self->channel);
-        ssh_channel_close(self->channel);
-        ssh_channel_free(self->channel);
+        if (!nlss_session_stale(aTHX_ self->session_sv, self->session_generation)) {
+            ssh_channel_send_eof(self->channel);
+            ssh_channel_close(self->channel);
+            ssh_channel_free(self->channel);
+        }
         self->channel = NULL;
     }
 
@@ -335,6 +479,7 @@ stat(self, path)
     Net::LibSSH::SFTP  self
     const char        *path
   CODE:
+    nlss_sftp_check_open(aTHX_ self, "Net::LibSSH::SFTP::stat");
     sftp_attributes attr = sftp_stat(self->sftp, path);
     if (!attr)
         XSRETURN_UNDEF;

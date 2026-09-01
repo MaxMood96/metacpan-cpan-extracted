@@ -1,0 +1,36 @@
+/* Enough to read, and no more - the demo is the wiring, not the paint. */
+:root { color-scheme: light dark; }
+body {
+  font: 16px/1.6 system-ui, -apple-system, Segoe UI, sans-serif;
+  max-width: 46rem; margin: 0 auto; padding: 2rem 1rem;
+}
+header h1 { font-size: 1.3rem; margin: 0; }
+header h1 a { color: inherit; text-decoration: none; }
+.lede { color: #666; margin: .2rem 0 1.5rem; }
+main { border-top: 1px solid #8883; padding-top: 1.5rem; }
+h2 { font-size: 1.15rem; }
+h3 { font-size: 1rem; margin-top: 2rem; }
+code { font-size: .9em; background: #8881; padding: .1em .3em; border-radius: 3px; }
+pre { background: #8881; padding: .8rem 1rem; border-radius: 6px; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+button {
+  font: inherit; padding: .45em 1em; border: 1px solid #8886;
+  border-radius: 6px; background: #8881; cursor: pointer;
+}
+button:hover { background: #8882; }
+button.link {
+  border: 0; background: none; padding: 0; color: #06c;
+  text-decoration: underline;
+}
+input, select { font: inherit; padding: .45em .6em; border: 1px solid #8886;
+                border-radius: 6px; }
+label { display: block; margin: .5rem 0; }
+.row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+table { border-collapse: collapse; width: 100%; font-size: .9em; }
+th { text-align: left; font-weight: 600; color: #777; }
+th, td { padding: .4rem .6rem .4rem 0; border-bottom: 1px solid #8882; }
+.key { font-size: 1em; word-break: break-all; }
+.try { background: #8881; padding: .8rem 1rem; border-radius: 6px; }
+.quiet { color: #777; font-size: .9em; }
+.bad { color: #b00; }
+footer { margin-top: 3rem; color: #777; }

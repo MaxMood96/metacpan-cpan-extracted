@@ -1,5 +1,68 @@
 Change Log
 ^^^^^^^^^^
+
+Version 0.36 - 2026-08-31
+
+- Modernized the distribution metadata and added GitHub Actions CI across
+  representative Linux Perl versions plus current macOS and Windows Perl.
+- CI installs runtime/test dependencies explicitly and runs prove directly; dist.ini
+  remains author/release metadata and is not used or invoked by CI.
+- Added a dedicated coverage job that enforces 100% statement and subroutine
+  coverage using deterministic offline tests. Devel::Cover still reports branch
+  and condition coverage, but those historical-parser metrics are informational
+  rather than release gates.
+- Replaced the legacy recursive t/unit suite with the deterministic top-level
+  t/ suite for CI; the old nested tests depended on live NHC access and on
+  generated placeholder accessors from pre-0.36 internals.
+- Marked the superseded t/unit tree for pruning in dist.ini as a safety net for
+  author checkouts upgraded in place; CI does not use dist.ini.
+- Retained the historical generated Storm accessors latitudelongitude,
+  latitude_numberic, kmzFile34kt, kmzFile50kt, and kmzFile64kt as deprecated
+  compatibility accessors while documenting the current NHC field locations.
+- Reorganized HTTP access, CurrentStorms.json validation, and storm resource
+  classification into small internal modules so networking, parsing, and
+  product dispatch can be tested independently. Existing public fetch_* methods
+  remain compatibility wrappers.
+- Added Dispatch::Fu for the multi-input resource/type classification boundary;
+  this creates a single declarative dispatch point instead of repeating resource
+  conditionals throughout Storm.pm.
+- Standardized object construction on Util::H2O::More and removed the direct
+  Util::H2O dependency from this distribution.
+- Added load_json() and load_file() for offline/replay/archive processing, named
+  fetch() options, injectable HTTP::Tiny-compatible transports, validate(), and
+  validation_warnings(). The historical positional fetch($timeout, $file) form
+  remains supported.
+- Reviewed NHC's Tropical Cyclone Status JSON reference and current product
+  examples, and compared parsing assumptions against the StormSurgeLive
+  storm-archive corpus, including the complete 2026 season-to-date archive and
+  historical snapshots beginning in 2022.
+- Updated the lightweight CurrentStorms.json contract for observed NHC behavior:
+  Central Pacific CP1-CP5 bin numbers are accepted, current camelCase
+  latitudeNumeric/longitudeNumeric fields are recognized, peakSurgeKML is
+  recognized, nullable product objects remain valid, and previously unknown
+  additive storm fields are preserved and reported as warnings rather than
+  rejected. No JSON::Validator/JSON-Schema dependency was added.
+- Added an optional xt/archive-compatibility.t maintainer test for checking every
+  archived CurrentStorms.json under a local StormSurgeLive/storm-archive checkout
+  without making that large archive part of the CPAN distribution.
+- Added peakSurgeKML download support and Central Pacific basin identification.
+- Removed direct dependencies on JSON::XS, HTTP::Status, Validate::Tiny,
+  HTML::TreeBuilder, Date::Calc, and unused Getopt::Long; core JSON::PP and
+  Time::Local now cover the required functionality.
+- Fixed StormTable::get_latest_table() so downloaded storm.table content is
+  actually ingested, corrected get_by_year_basin() indexing, and made missing
+  get_storm_numbers() queries return an empty list reference.
+- Fixed forecast-advisory month rollover to advance the year when a forecast
+  crosses December into January.
+- Rewrote and corrected POD throughout the distribution, including the RSS method
+  names, offline/archive use, NHC compatibility behavior, current storm fields,
+  GIS products, ATCF conversion, and the resource-catalog boundary intended to
+  support future filtered bulk downloads.
+
+Version 0.35
+
+Improved specificity of required modules for Util::H2O::More.
+
 Version 0.34
 
 Gave Weather::NHC::TropicalCyclone::fetch an 3rd optional

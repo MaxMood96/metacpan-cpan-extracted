@@ -17,7 +17,7 @@ my %WriteMakefileArgs = (
   "MIN_PERL_VERSION" => "5.008001",
   "NAME" => "CPAN::Meta",
   "PREREQ_PM" => {
-    "CPAN::Meta::Requirements" => "2.121",
+    "CPAN::Meta::Requirements" => "2.145",
     "CPAN::Meta::YAML" => "0.011",
     "Carp" => 0,
     "Encode" => 0,
@@ -45,7 +45,7 @@ my %WriteMakefileArgs = (
     "utf8" => 0,
     "vars" => 0
   },
-  "VERSION" => "2.150014",
+  "VERSION" => "2.150015",
   "test" => {
     "TESTS" => "t/*.t t/parse-cpan-meta/*.t"
   }
@@ -53,7 +53,7 @@ my %WriteMakefileArgs = (
 
 
 my %FallbackPrereqs = (
-  "CPAN::Meta::Requirements" => "2.121",
+  "CPAN::Meta::Requirements" => "2.145",
   "CPAN::Meta::YAML" => "0.011",
   "Carp" => 0,
   "Data::Dumper" => 0,

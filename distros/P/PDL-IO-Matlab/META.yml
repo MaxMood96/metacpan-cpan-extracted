@@ -27,5 +27,5 @@ resources:
   IRC: irc://irc.perl.org/#pdl
   bugtracker: https://github.com/jlapeyre/PDL-IO-Matlab/issues
   repository: git://github.com/jlapeyre/PDL-IO-Matlab.git
-version: '0.007'
+version: '0.008'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

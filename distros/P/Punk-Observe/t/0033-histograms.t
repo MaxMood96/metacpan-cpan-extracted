@@ -104,7 +104,13 @@ sub by_name {
     is($v->{'http.server.duration_bucket{le=+Inf}'}, 10,
        '  and +Inf carries everything');
 
-    is($v->{'http.server.duration_sum'},   4.2, 'the sum survives');
+    # The sum arrives as a protobuf double, so the NV holds the float64
+    # nearest 4.2. Where the NV is wider than a double - long double or
+    # quadmath - that is not the NV nearest 4.2, and comparing against the
+    # literal fails on tail digits the wire never carried. Format to the 15
+    # digits a float64 is unambiguous at.
+    is(sprintf('%.15g', $v->{'http.server.duration_sum'}), '4.2',
+       'the sum survives');
     is($v->{'http.server.duration_count'}, 10,  'and the count');
 }
 

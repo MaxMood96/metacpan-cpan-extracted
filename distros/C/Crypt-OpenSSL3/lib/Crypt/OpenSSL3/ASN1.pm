@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::ASN1;
-$Crypt::OpenSSL3::ASN1::VERSION = '0.012';
+$Crypt::OpenSSL3::ASN1::VERSION = '0.013';
 use strict;
 use warnings;
 
@@ -19,7 +19,7 @@ Crypt::OpenSSL3::ASN1 - ASN1 constants
 
 =head1 VERSION
 
-version 0.012
+version 0.013
 
 =over 41
 

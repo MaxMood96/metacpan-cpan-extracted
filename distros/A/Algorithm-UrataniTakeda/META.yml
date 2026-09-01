@@ -13,11 +13,10 @@ build_requires:
   Test::More: '0'
   experimental: '0'
   strict: '0'
-  warnings: '0'
 configure_requires:
   ExtUtils::MakeMaker: '0'
 dynamic_config: 0
-generated_by: 'Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150010'
+generated_by: 'Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150014'
 keywords:
   - Aho-Corasick
   - Boyer-Moore
@@ -42,17 +41,18 @@ name: Algorithm-UrataniTakeda
 provides:
   Algorithm::UrataniTakeda:
     file: lib/Algorithm/UrataniTakeda.pm
-    version: v0.1.5
+    version: v0.1.6
 requires:
   Carp: '0'
   List::Util: '0'
-  Object::Pad: '0'
+  Object::Pad: '0.59'
   integer: '0'
   perl: v5.26.0
+  warnings: '0'
 resources:
   bugtracker: https://github.com/robrwo/perl-Algorithm-UrataniTakeda/issues
   repository: git://github.com/robrwo/perl-Algorithm-UrataniTakeda.git
-version: v0.1.5
+version: v0.1.6
 x_authority: cpan:RRWO
 x_generated_by_perl: v5.42.1
 x_serialization_backend: 'YAML::Tiny version 1.76'

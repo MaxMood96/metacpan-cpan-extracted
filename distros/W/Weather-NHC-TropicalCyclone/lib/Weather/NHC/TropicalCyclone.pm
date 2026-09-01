@@ -2,109 +2,101 @@ package Weather::NHC::TropicalCyclone;
 
 use strict;
 use warnings;
-use HTTP::Tiny ();
-use HTTP::Status qw/:constants/;
-use JSON::XS ();
-use Util::H2O qw/h2o/;
+use JSON::PP qw/decode_json/;
+use Util::H2O::More qw/h2o/;
+use Weather::NHC::TropicalCyclone::HTTP ();
 use Weather::NHC::TropicalCyclone::Storm ();
+use Weather::NHC::TropicalCyclone::Validation ();
 
-our $VERSION                     = q{0.34};
+our $VERSION                     = q{0.36};
 our $DEFAULT_URL                 = q{https://www.nhc.noaa.gov/CurrentStorms.json};
 our $DEFAULT_RSS_ATLANTIC        = q{https://www.nhc.noaa.gov/index-at.xml};
 our $DEFAULT_RSS_EAST_PACIFIC    = q{https://www.nhc.noaa.gov/index-ep.xml};
 our $DEFAULT_RSS_CENTRAL_PACIFIC = q{https://www.nhc.noaa.gov/index-cp.xml};
 our $DEFAULT_TIMEOUT             = 10;
 
-# container class for requesting JSON and providing
-# iterator access and meta operations for the storms
-# contained in the JSON returned by NHC
-
 sub new {
-    my $pkg  = shift;
-    my $self = {
-        _obj    => undef,
-        _storms => {},
-    };
-    return bless $self, $pkg;
+    my ( $class, %args ) = @_;
+
+    my $http = Weather::NHC::TropicalCyclone::HTTP->new(
+        ( exists $args{http} ? ( client => $args{http} ) : () ),
+    );
+
+    return bless {
+        _obj                 => undef,
+        _storms              => {},
+        _http                => $http,
+        _validation_warnings => [],
+    }, $class;
 }
 
 sub fetch {
-    my ( $self, $timeout, $file ) = @_;
-    my $http = HTTP::Tiny->new();
+    my ( $self, @args ) = @_;
+    my %opts = $self->_fetch_options(@args);
 
-    local $SIG{ALRM} = sub { die "Request has timed out.\n" };
+    my $url     = $opts{url} // $DEFAULT_URL;
+    my $timeout = exists $opts{timeout} ? $opts{timeout} : $DEFAULT_TIMEOUT;
 
-    alarm( $timeout // $DEFAULT_TIMEOUT );
+    my $response = $self->_get_with_timeout( $url, $timeout );
+    my $content  = $response->{content};
 
-    # get content via $DEFAULT_URL unless --file option is passed
-    local $@;
-    my $response = eval { $http->get($DEFAULT_URL) };
-    if ( $@ or not $response or $response->{status} ne HTTP_OK ) {
-        die qq{request error\n};
+    my $file = $opts{save_to} // $opts{file};
+    _write_file( $file, $content ) if defined $file;
+
+    return $self->load_json($content);
+}
+
+sub load_json {
+    my ( $self, $json ) = @_;
+    die qq{JSON input is required\n} if !defined $json;
+
+    my $data = eval { decode_json($json) };
+    die qq{JSON decode error: $@} if $@ || !defined $data;
+
+    return $self->_load_data($data);
+}
+
+sub load_file {
+    my ( $self, $file ) = @_;
+    die qq{JSON file is required\n} if !defined $file;
+    open my $fh, q{<}, $file or die qq{Can't open '$file': $!\n};
+    local $/;
+    my $json = <$fh>;
+    close $fh or die qq{Can't close '$file': $!\n};
+    return $self->load_json($json);
+}
+
+sub validate {
+    my ( $self, $input ) = @_;
+    my $data = $input;
+
+    if ( !ref $input ) {
+        $data = eval { decode_json($input) };
+        return { errors => [ qq{JSON decode error: $@} ], warnings => [] } if $@ || !defined $data;
     }
 
-    alarm 0;
+    return Weather::NHC::TropicalCyclone::Validation->validate($data);
+}
 
-    my $content = $response->{content};
-
-    # if $file is provided, contents directly from the GET are
-    # written
-    if ($file) {
-      open my $fh, q{>}, $file || die qq{Can't open '$file': $!\n};
-      print $fh $content;
-      close $fh;
-    }
-
-    my $ref = eval { JSON::XS::decode_json $content };
-
-    if ( $@ or not $ref ) {
-        die qq{JSON decode error\n};
-    }
-
-    # add accessors based on elements in returned hash ref
-    $ref = h2o -recurse, $ref;
-
-    $self->{_obj} = $ref;
-
-    # reset and update storms cache
-    $self->_update_storm_cache;
-
-    return $self;
+sub validation_warnings {
+    my $self = shift;
+    return [ @{ $self->{_validation_warnings} } ];
 }
 
 sub active_storms {
     my $self = shift;
-    return [ values %{ $self->{_storms} } ];
+    return [ map { $self->{_storms}->{$_} } sort keys %{ $self->{_storms} } ];
 }
 
-# there is no checking, if the storm is not in the cache,
-# an undefined value is returned
 sub get_storm_by_id {
     my ( $self, $id ) = @_;
+    return undef if !defined $id;
     return $self->{_storms}->{$id};
 }
 
-# returns storm Ids
 sub get_storm_ids {
     my $self = shift;
-    return [ keys %{ $self->{_storms} } ];
-}
-
-sub _update_storm_cache {
-    my $self = shift;
-
-    # purge cache
-    $self->{_storms} = {};
-
-  REBUILD_STORMS_CACHE:
-    for my $storm ( @{ $self->{_obj}->{activeStorms} } ) {
-        my $s        = Weather::NHC::TropicalCyclone::Storm->new($storm);
-        my $storm_id = $s->id;
-
-        # key storm by id (e.g., al182020, etc)
-        $self->{_storms}->{$storm_id} = $s;
-    }
-
+    return [ sort keys %{ $self->{_storms} } ];
 }
 
 sub fetch_rss_atlantic {
@@ -122,24 +114,87 @@ sub fetch_rss_central_pacific {
     return $self->_fetch_rss( $DEFAULT_RSS_CENTRAL_PACIFIC, $local_file );
 }
 
+sub _load_data {
+    my ( $self, $data ) = @_;
+    my $report = Weather::NHC::TropicalCyclone::Validation->validate($data);
+
+    if ( @{ $report->{errors} } ) {
+        die q{NHC CurrentStorms.json validation failed: }
+          . join( q{; }, @{ $report->{errors} } ) . qq{\n};
+    }
+
+    $self->{_validation_warnings} = [ @{ $report->{warnings} } ];
+
+    # Keep the decoded structure recognizable as HASH/ARRAY data while adding
+    # convenient accessors to hashes. Storm objects are created separately.
+    $self->{_obj} = h2o -recurse, $data;
+    $self->_update_storm_cache;
+    return $self;
+}
+
+sub _update_storm_cache {
+    my $self = shift;
+    $self->{_storms} = {};
+
+    for my $storm ( @{ $self->{_obj}->{activeStorms} } ) {
+        my $object = Weather::NHC::TropicalCyclone::Storm->new(
+            $storm,
+            http => $self->{_http},
+        );
+        $self->{_storms}->{ $object->id } = $object;
+    }
+
+    return $self->{_storms};
+}
+
 sub _fetch_rss {
     my ( $self, $rss_url, $local_file ) = @_;
+    my $response = $self->{_http}->get($rss_url);
+    my $content  = $response->{content};
+    _write_file( $local_file, $content ) if defined $local_file;
+    return $content;
+}
 
-    my $http = HTTP::Tiny->new;
+sub _get_with_timeout {
+    my ( $self, $url, $timeout ) = @_;
 
-    my $response = $http->get($rss_url);
+    return $self->{_http}->get($url) if !$timeout;
 
-    if ( not $response->{success} ) {
-        my $status = $response->{status} // q{Unknown};
-        die qq{Fetching of $rss_url failed. HTTP status: $status\n};
+    local $SIG{ALRM} = sub { die qq{Request has timed out.\n} };
+    my $response;
+    my $ok = eval {
+        alarm($timeout);
+        $response = $self->{_http}->get($url);
+        alarm(0);
+        1;
+    };
+    my $error = $@;
+    alarm(0);
+    die $error if !$ok;
+    return $response;
+}
+
+sub _fetch_options {
+    my ( $self, @args ) = @_;
+    return () if !@args;
+
+    if ( @args % 2 == 0 && defined $args[0] && $args[0] =~ /^(?:timeout|save_to|file|url)$/ ) {
+        return @args;
     }
 
-    if ($local_file) {
-        open my $fh, q{>}, $local_file or die qq{Error writing RSS file, $local_file: $!\n};
-        print $fh $response->{content};
-    }
+    # Backward-compatible positional form: fetch($timeout, $file)
+    return (
+        timeout => $args[0],
+        ( @args > 1 ? ( save_to => $args[1] ) : () ),
+    );
+}
 
-    return $response->{content};
+sub _write_file {
+    my ( $file, $content ) = @_;
+    open my $fh, q{>}, $file or die qq{Can't open '$file': $!\n};
+    print {$fh} $content;
+    close $fh or die qq{Can't close '$file': $!\n};
+    return $file;
 }
 
 1;
@@ -148,132 +203,180 @@ __END__
 
 =head1 NAME
 
-Weather::NHC::TropicalCyclone - Provides a convenient interface to NHC's Tropical Cyclone JSON format.
+Weather::NHC::TropicalCyclone - client and object interface for NHC tropical cyclone status data
 
 =head1 SYNOPSIS
 
-   use strict;
-   use warnings;
-   use Weather::NHC::TropicalCyclone ();
-   
-   my $nhc = Weather::NHC::TropicalCyclone->new;
-   $nhc->fetch;
-   
-   my $storms_ref = $nhc->active_storms;
-   foreach my $storm (@$storms_ref) {
-     print $storm->name . qq{\n};
-     my ($text, $advNum, $local_file) = $storm->fetch_publicAdvisory($storm->id.q{.fst});
-     print qq{$local_file saved for Advisory $advNum\n};
-     print $text;
-   } 
+Fetch the current NHC status feed:
 
-=head1 METHODS
+    use Weather::NHC::TropicalCyclone ();
 
-=over 3
+    my $nhc = Weather::NHC::TropicalCyclone->new;
+    $nhc->fetch;
 
-=item C<new>
+    for my $storm ( @{ $nhc->active_storms } ) {
+        printf "%s (%s) - %s\n",
+          $storm->name,
+          $storm->id,
+          $storm->kind;
+    }
 
-Constructor - doesn't do much, but provide a convenient instance for the other
-provided methods described below.
+Load an archived C<CurrentStorms.json> without making a network request:
 
-=item C<fetch(optional: timeout, optional: $file)>
+    my $nhc = Weather::NHC::TropicalCyclone->new;
+    $nhc->load_file('CurrentStorms.json');
 
-Makes an HTTP request to $Weather::NHC::TropicalCyclone::DEFAULT_URL to get
-the JSON provided by the NHC describing the current set of active storms.
+Or load JSON already held in memory:
 
-If the JSON is malformed or otherwise can't be parsed, C<fetch> will throw
-an exception.
+    $nhc->load_json($json_text);
 
-Fetch will time out after C<$Weather::NHC::TropicalCyclone::DEFAULT_TIMEOUT> by
-throwing an exception. In order to disable the alarm, call C<fetch> with a
-parameter of 0:
+=head1 DESCRIPTION
 
-    $nhc->fetch(0); 
+C<Weather::NHC::TropicalCyclone> reads the National Hurricane Center's
+C<CurrentStorms.json> status file and exposes each active storm as a
+L<Weather::NHC::TropicalCyclone::Storm> object.
 
-There is a 2nd optional argument for specifying a file path which, if provided,
-will be used to save the contents of the fetched upstream file, C<CurrentStorms.json>.
-However, for now a timeout has to be specified the first argument position. This
-will change in the future.
+Version 0.36 separates network access, lightweight feed validation, and storm
+resource dispatch so those concerns can be tested independently.  Existing
+C<fetch>, storm lookup, RSS, and storm C<fetch_*> methods remain available.
 
-    $nhc->fetch(120, q{/path/to/CurrentStorms.json});
+The parser is deliberately tolerant of additive changes to the NHC feed. Fields
+that this distribution does not yet know about are preserved and reported via
+L</validation_warnings>; they do not cause parsing to fail.
 
-=item C<active_storms>
+=head1 LOADING NHC DATA
 
-Provides an array reference of C<Weather::NHC::TropicalCyclone::Storm> instances,
-one for each active storm. If there are no storms, the array reference returned is
-empty (not undef).
+=head2 fetch
 
-Most of the useful functionality related to this JSON data is available through
-the methods provided by the C<Weather::NHC::TropicalCyclone::Storm> instances
-returned by this method.
+    $nhc->fetch;
 
-=item C<get_storm_ids>
+Fetches C<$DEFAULT_URL>.  The historical positional arguments remain supported:
 
-There are no parameters for this method.
+    $nhc->fetch(120, '/tmp/CurrentStorms.json');
 
-Returns a list of storm ids (e.g., ep082019) that are listed in the  storm cache.
+The preferred form uses named options:
 
-=item C<get_storm_by_id>
+    $nhc->fetch(
+        timeout => 120,
+        save_to => '/tmp/CurrentStorms.json',
+    );
 
-This methods requires a single parameter, and it should be of the form of a storm
-id, e.g., 'al202020', 'cp062006', etc. If the storm exists in the cache, it returns
-an instance of C<Weather::NHC::TropicalCyclone::Storm>. If there is no matching
-storm id, then it returns undef.
+Supported options are:
 
-Provides a constant time look up of storms stored in the internal storm cache that
-is updated whenever C<fetch> is called.
+=over 4
 
-=back
+=item * C<timeout>
 
-=head2 Auxillary RSS Fetch Methods
+Request timeout in seconds. The default is C<$DEFAULT_TIMEOUT>. A false value
+disables the alarm-based timeout retained for backward compatibility.
 
-The following methods are provided to fetch the raw text of some of the RSS feeds
-available at L<https://www.nhc.noaa.gov/aboutrss.shtml>.
+=item * C<save_to>
 
-   my $nhc         = Weather::NHC::TropicalStorm->new;
-   my $at_rss_text = $nhc->fetch_rss_atlantic; 
-   my $ep_rss_text = $nhc->fetch_rss_east_pacific; 
-   my $cp_rss_text = $nhc->fetch_rss_central_pacific;
+Save the exact fetched JSON text to this path before parsing it. C<file> is an
+alias.
 
-Note: This module doesn't provide facilities for converting this RSS into a Perl
-data structure. For this, use a module like L<XML::RSS>.
+=item * C<url>
 
-All methods provide return the text of the RSS. If an optional parameter is passed
-to the call that specifies a local file, the contents retrieved is saved to this
-file.
-
-=over 3
-
-=item C<fetch_rss_atlantic_basin>
-
-Fetches RSS available at L<https://www.nhc.noaa.gov/index-at.xml>. Internally,
-this URL is defined with the package variable, C<$DEFAULT_RSS_ATLANTIC>.
-
-=item C<fetch_rss_east_pacific_basin>
-
-Fetches RSS available at L<https://www.nhc.noaa.gov/index-ep.xml>. Internally,
-this URL is defined with the package variable, C<$DEFAULT_RSS_EAST_PACIFIC>.
-
-=item C<fetch_rss_central_pacific_basin>
-
-Fetches RSS available at L<https://www.nhc.noaa.gov/index-cp.xml>. Internally,
-this URL is defined with the package variable, C<$DEFAULT_RSS_CENTRAL_PACIFIC>.
+Override C<$DEFAULT_URL>, useful for mirrors and replay services.
 
 =back
 
-=head2 Internal Methods
+=head2 load_json
 
-=over 3
+    $nhc->load_json($json_text);
 
-=item C<_update_storm_cache>
+Parses and validates NHC JSON already in memory.  This is useful for archived
+storms, replay systems, and deterministic tests.
 
-This methods is used by C<fetch> to update the internal cache when a new JSON
-file is processed. The internal cache facilitates constant time look up of storms
-using the C<get_storm_by_id>. This internal cache is also the source of the storm
-ids returned by C<get_storm_ids>.
+=head2 load_file
 
-=back
+    $nhc->load_file('/archive/CurrentStorms.json');
 
-=head1 COPYRIGHT and LICENSE
+Reads and processes a saved NHC status file.
+
+=head2 validate
+
+    my $report = $nhc->validate($json_or_hashref);
+
+Returns a hash reference with C<errors> and C<warnings> array references.  The
+validation is intentionally lightweight rather than a full JSON-Schema
+implementation.
+
+=head2 validation_warnings
+
+Returns warnings generated by the most recent successful load.  Currently this
+is primarily used to report previously unknown NHC storm fields that were
+preserved without interpretation.
+
+=head1 ACTIVE STORMS
+
+=head2 active_storms
+
+Returns an array reference of L<Weather::NHC::TropicalCyclone::Storm> objects.
+The array is empty when NHC reports no active storms.
+
+=head2 get_storm_ids
+
+Returns an array reference containing the active ATCF/NHC storm identifiers,
+for example C<al042026> or C<cp012026>.
+
+=head2 get_storm_by_id
+
+    my $storm = $nhc->get_storm_by_id('al042026');
+
+Returns the cached storm object or C<undef> when that id is not active.
+
+=head1 RSS FEEDS
+
+=head2 fetch_rss_atlantic
+
+Fetches the Atlantic basin RSS feed.
+
+=head2 fetch_rss_east_pacific
+
+Fetches the Eastern Pacific basin RSS feed.
+
+=head2 fetch_rss_central_pacific
+
+Fetches the Central Pacific basin RSS feed.
+
+All three RSS methods fetch the corresponding raw NHC RSS XML.  Each accepts an optional filename to
+which the response will also be written.
+
+=head1 TESTING AND CUSTOM HTTP CLIENTS
+
+A C<HTTP::Tiny>-compatible object can be injected into the constructor:
+
+    my $nhc = Weather::NHC::TropicalCyclone->new(
+        http => $mock_http,
+    );
+
+The object must provide C<get> and C<mirror>. This is primarily useful for tests,
+replay systems, and applications that need custom transport behavior.
+
+=head1 NHC DATA COMPATIBILITY
+
+NHC documents C<CurrentStorms.json> as a root object containing one
+C<activeStorms> array, with unavailable products represented by JSON C<null>.
+The 0.36 parser also reflects observed NHC data through the 2026 season,
+including Central Pacific C<CP1>-C<CP5> bin numbers, camelCase
+C<latitudeNumeric>/C<longitudeNumeric>, and the C<peakSurgeKML> field.
+
+The distribution contains representative offline fixtures. Maintainers can also
+run C<xt/archive-compatibility.t> against a checkout of the
+C<StormSurgeLive/storm-archive> repository to exercise the parser against the
+full historical corpus.
+
+=head1 SEE ALSO
+
+L<Weather::NHC::TropicalCyclone::Storm>,
+L<Weather::NHC::TropicalCyclone::ForecastAdvisory>,
+L<Weather::NHC::TropicalCyclone::StormTable>,
+L<https://www.nhc.noaa.gov/productexamples/>,
+L<https://www.nhc.noaa.gov/gis/>.
+
+=head1 LICENSE
 
 This module is distributed under the same terms as Perl itself.
+
+=cut

@@ -70,7 +70,14 @@ sub pts {
         '{"status":"ok","checks":{"cache":{"ok":true,"ms":0.04}}}');
     is($p->{'punk.health.ok{state=ready,target=shop}'}, 1, 'a ready target is ready');
     is($p->{'punk.health.ok{check=cache,target=shop}'}, 1, '  its check passed');
-    is($p->{'punk.health.ms{check=cache,target=shop}'}, 0.04, '  and took 0.04ms');
+    # A check's own ms is carried through from the body as the float64 it was
+    # parsed as, never re-rounded - rounding a service's own number would
+    # invent precision it did not claim. So on a perl whose NV is wider than a
+    # double this keeps the tail of the float64, and the comparison is against
+    # the 15 digits a float64 is unambiguous at. The poll's own round trip
+    # below goes through sprintf, so that one does compare against a literal.
+    is(sprintf('%.15g', $p->{'punk.health.ms{check=cache,target=shop}'}),
+       '0.04', '  and took 0.04ms');
     is($state, 'ok', '  and the poll is ok');
 }
 

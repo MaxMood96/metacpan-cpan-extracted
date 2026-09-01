@@ -21,7 +21,7 @@
 # limitations under the License.
 
 package OpenSearch::Client::Role::Client;
-$OpenSearch::Client::Role::Client::VERSION = '3.007010';
+$OpenSearch::Client::Role::Client::VERSION = '3.007011';
 use Moo::Role;
 use namespace::clean;
 
@@ -29,6 +29,7 @@ requires 'parse_request';
 
 has 'transport' => ( is => 'ro', required => 1 );
 has 'logger'    => ( is => 'ro', required => 1 );
+has 'opensearch_version' => ( is => 'lazy' );
 
 #===================================
 sub perform_request {
@@ -36,6 +37,16 @@ sub perform_request {
     my $self    = shift;
     my $request = $self->parse_request(@_);
     return $self->transport->perform_request($request);
+}
+
+#===================================
+sub _build_opensearch_version {
+#===================================
+    my $self = shift;
+    my $info = $self->nodes->info( metric => 'settings');
+    my $nodekey = ( keys %{ $info->{nodes} } )[0];
+    my $version = $info->{nodes}->{$nodekey}->{version};
+    return $version;
 }
 
 1;
@@ -52,7 +63,7 @@ OpenSearch::Client::Role::Client - Provides common functionality for Client impl
 
 =head1 VERSION
 
-version 3.007010
+version 3.007011
 
 =head1 DESCRIPTION
 
@@ -67,6 +78,16 @@ This method takes whatever arguments it is passed and passes them directly to
 a C<parse_request()> method (which should be provided by Client implementations).
 The C<parse_request()> method should return a request suitable for passing
 to L<OpenSearch::Client::Transport/perform_request()>.
+
+=head2 opensearch_version
+
+A lazy populated property with the version of the current OpenSearch cluster.
+
+    my $version = $os->opensearch_version;
+
+It is populated when first accessed by:
+
+    my $version = $os->info->{version}->{number};
 
 =head1 MANUAL
 

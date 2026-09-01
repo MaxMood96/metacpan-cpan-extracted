@@ -10,7 +10,7 @@ SV *
 new(class)
         SV *class
     CODE:
-        RETVAL = pf_bless(aTHX_ pf_new(aTHX), SvPV_nolen(class));
+        RETVAL = pf_bless(aTHX_ pf_new(aTHX), pf_class_of(aTHX_ class));
     OUTPUT:
         RETVAL
 
@@ -19,14 +19,18 @@ SV *
 done(self, ...)
         SV *self
     ALIAS:
-        fail = 1
+        fail       = 1
+        AWAIT_DONE = 2
+        AWAIT_FAIL = 3
     CODE:
     {
         punk_future *pf = pf_of(aTHX_ self);
         AV *vals = newAV();
         int i;
         for (i = 1; i < items; i++) av_push(vals, newSVsv(ST(i)));
-        pf_settle(aTHX_ pf, self, ix ? PF_FAILED : PF_DONE, vals);
+        /* the low bit of ix is the outcome, so the AWAIT_ spellings pair off
+         * with the ones they alias */
+        pf_settle(aTHX_ pf, self, (ix & 1) ? PF_FAILED : PF_DONE, vals);
         RETVAL = newSVsv(self);
     }
     OUTPUT:
@@ -36,16 +40,22 @@ IV
 is_ready(self)
         SV *self
     ALIAS:
-        is_done      = 1
-        is_failed    = 2
-        is_cancelled = 3
+        is_done            = 1
+        is_failed          = 2
+        is_cancelled       = 3
+        AWAIT_IS_READY     = 4
+        AWAIT_IS_CANCELLED = 5
     CODE:
     {
         int st = pf_of(aTHX_ self)->state;
-        RETVAL = ix == 0 ? (st != PF_PENDING)
-               : ix == 1 ? (st == PF_DONE)
-               : ix == 2 ? (st == PF_FAILED)
-               :           (st == PF_CANCELLED);
+        /* a switch, not a ternary chain: the chain's last arm was a
+         * fallthrough that would quietly answer for any ix added later */
+        switch (ix) {
+            case 1:          RETVAL = (st == PF_DONE);      break;
+            case 2:          RETVAL = (st == PF_FAILED);    break;
+            case 3: case 5:  RETVAL = (st == PF_CANCELLED); break;
+            default:         RETVAL = (st != PF_PENDING);   break;  /* 0, 4 */
+        }
     }
     OUTPUT:
         RETVAL
@@ -61,27 +71,70 @@ state(self)
 # on_ready($cb) fires $cb->($future) on settle; on_done/on_fail fire
 # $cb->(@values) for the matching outcome. Fire at once if already settled.
 SV *
-on_ready(self, cb)
+on_ready(self, thing)
         SV *self
-        SV *cb
+        SV *thing
     ALIAS:
-        on_done = 1
-        on_fail = 2
+        on_done        = 1
+        on_fail        = 2
+        on_cancel      = 3
+        AWAIT_ON_READY = 4
     CODE:
-        pf_react(aTHX_ pf_of(aTHX_ self), self, (int)ix, cb);
+    {
+        /* ix stops being the reaction kind here. It was PFR_* by coincidence
+         * of declaration order, which is not something an alias list should
+         * have to know: an alias landing on the wrong number would register a
+         * reaction that never fires, and a never-fired reaction is a hang with
+         * nothing to report. */
+        static const int kind[] = {
+            PFR_ON_READY,   /* 0 on_ready       */
+            PFR_ON_DONE,    /* 1 on_done        */
+            PFR_ON_FAIL,    /* 2 on_fail        */
+            PFR_ON_CANCEL,  /* 3 on_cancel      */
+            PFR_ON_READY    /* 4 AWAIT_ON_READY */
+        };
+        pf_react(aTHX_ pf_of(aTHX_ self), self, kind[ix], thing);
         RETVAL = newSVsv(self);
+    }
     OUTPUT:
         RETVAL
 
+# The protocol's two cancel registrations. They are a separate body from
+# on_cancel rather than two more aliases because they must return NOTHING:
+# these are called by Future::AsyncAwait on the future it is about to hand
+# back, and replacing the invocant on the argument stack with a fresh copy of
+# it - which is what returning `$self` does here - corrupts that future.
+# The protocol defines no return value for either, so there is none.
+void
+AWAIT_ON_CANCEL(self, thing)
+        SV *self
+        SV *thing
+    ALIAS:
+        AWAIT_CHAIN_CANCEL = 1
+    CODE:
+        PERL_UNUSED_VAR(ix);
+        pf_react(aTHX_ pf_of(aTHX_ self), self, PFR_ON_CANCEL, thing);
+
 # get / result: block until ready, then return the values (or die the failure).
+# AWAIT_WAIT is the same thing - it is what a toplevel await resolves to.
+# AWAIT_GET is defined only on a future that is already ready, so it reads
+# where the others wait; the two croaks stay distinguishable on purpose.
 void
 get(self)
         SV *self
+    ALIAS:
+        result     = 1
+        AWAIT_WAIT = 2
+        AWAIT_GET  = 3
     PPCODE:
     {
         punk_future *pf = pf_of(aTHX_ self);
         SSize_t i, n;
-        if (pf->state == PF_PENDING) pf_await(aTHX_ self);   /* pump / sleep */
+        if (ix == 3) {
+            if (pf->state == PF_PENDING)
+                croak("Punk::Future: AWAIT_GET on a future that is not ready");
+        }
+        else if (pf->state == PF_PENDING) pf_await(aTHX_ self);  /* pump/sleep */
         if (pf->state == PF_CANCELLED)
             croak("Punk::Future: get on a cancelled future");
         if (pf->state == PF_FAILED) {
@@ -89,8 +142,19 @@ get(self)
             croak_sv(f && *f ? *f : sv_2mortal(newSVpvs("Punk::Future failed")));
         }
         n = pf->vals ? av_len(pf->vals) + 1 : 0;
-        EXTEND(SP, n);
-        for (i = 0; i < n; i++) PUSHs(sv_2mortal(newSVsv(*av_fetch(pf->vals, i, 0))));
+        /* Scalar context hands back the FIRST value, as Future.pm does. An
+         * XSUB otherwise returns whatever was pushed last, which made a
+         * multi-value future yield its tail - and punk_coerce and
+         * _finish_future both call this in scalar context. */
+        if (GIMME_V != G_ARRAY) {
+            SV **f = n ? av_fetch(pf->vals, 0, 0) : NULL;
+            XPUSHs(f && *f ? sv_2mortal(newSVsv(*f)) : &PL_sv_undef);
+        }
+        else {
+            EXTEND(SP, n);
+            for (i = 0; i < n; i++)
+                PUSHs(sv_2mortal(newSVsv(*av_fetch(pf->vals, i, 0))));
+        }
     }
 
 # the first failure value of a failed future, else undef
@@ -150,20 +214,38 @@ followed_by(self, cb)
     OUTPUT:
         RETVAL
 
+# A new pending future of the same class, carrying the source's loop. This is
+# how an async sub gets the future it returns - see pf_clone for why the loop
+# travels with it.
+SV *
+AWAIT_CLONE(self)
+        SV *self
+    CODE:
+        RETVAL = pf_clone(aTHX_ self);
+    OUTPUT:
+        RETVAL
+
 # done_future(@v) / fail_future(@v): an already-settled future.
 SV *
 done_future(class, ...)
         SV *class
     ALIAS:
-        fail_future = 1
+        fail_future    = 1
+        AWAIT_NEW_DONE = 2
+        AWAIT_NEW_FAIL = 3
     CODE:
     {
         punk_future *pf = pf_new(aTHX);
         AV *vals = newAV();
         int i;
-        RETVAL = pf_bless(aTHX_ pf, SvPV_nolen(class));
+        RETVAL = pf_bless(aTHX_ pf, pf_class_of(aTHX_ class));
         for (i = 1; i < items; i++) av_push(vals, newSVsv(ST(i)));
-        pf_settle(aTHX_ pf, RETVAL, ix ? PF_FAILED : PF_DONE, vals);
+        /* The protocol never calls AWAIT_NEW_FAIL with no message, but a
+         * failure with no failure value is not a failure. Only the AWAIT_
+         * spelling gets the default; fail_future's own behaviour is left
+         * exactly as it was. */
+        if (ix == 3 && items < 2) av_push(vals, newSVpvs("Failed\n"));
+        pf_settle(aTHX_ pf, RETVAL, (ix & 1) ? PF_FAILED : PF_DONE, vals);
     }
     OUTPUT:
         RETVAL
@@ -184,7 +266,7 @@ needs_all(class, ...)
                  : (ix == 5) ? PFC_NEEDS_ANY : (int)ix;
         int n = items - 1, i;
         SV **inputs, *G;
-        G = pf_bless(aTHX_ pf_new(aTHX), SvPV_nolen(class));
+        G = pf_bless(aTHX_ pf_new(aTHX), pf_class_of(aTHX_ class));
         Newx(inputs, n > 0 ? n : 1, SV *);
         for (i = 0; i < n; i++) inputs[i] = ST(i + 1);
         pf_combine(aTHX_ G, mode, inputs, n);

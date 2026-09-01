@@ -31,6 +31,102 @@ eval {$pleroma->resolve('user')}; local ($::_g0 = $@, $::_e0 = 'user is\'nt eon!
 # * AION_PLEROMA_INI – файл аннотаций. По умолчанию `etc/annotation/eon.ann`.
 # * AION_PLEROMA_AUTOWARE – подгружать модули автоматически, даже если они не прописаны в конфигурации. По умолчанию `1`.
 # 
+# # EONS FROM CONFIG
+# 
+# В `etc/*.yml` можно добавить ключ `aion.eon` с описанием дополнительных эонов. Это позволяет собирать эоны декларативно: задавать аргументы конструктора (именованные или упорядоченные), вызывать методы после создания и передавать ссылки на другие эоны через `@`.
+# 
+# Опишем классы эонов.
+# 
+# Файл lib/Ex/Eon/Astronomer.pm:
+#@> lib/Ex/Eon/Astronomer.pm
+#>> package Ex::Eon::Astronomer;
+#>> use strict; use warnings;
+#>> 
+#>> sub new { my ($class, $name, $telescope) = @_; bless { name => $name, telescope => $telescope, seen => [] }, $class }
+#>> sub name      { $_[0]{name} }
+#>> sub telescope { $_[0]{telescope} }
+#>> sub seen      { $_[0]{seen} }
+#>> sub observe   { my ($self, $body) = @_; push @{ $self->{seen} }, $body; $body }
+#>> 
+#>> 1;
+#@< EOF
+# 
+# Файл lib/Ex/Eon/Planet.pm:
+#@> lib/Ex/Eon/Planet.pm
+#>> package Ex::Eon::Planet;
+#>> use common::sense;
+#>> use Aion;
+#>> 
+#>> has name       => (is => 'ro');
+#>> has moons      => (is => 'ro', default => 0);
+#>> has discoverer => (is => 'ro');
+#>> 
+#>> 1;
+#@< EOF
+# 
+# Теперь конфигурация эонов. У эона-учёного `Ex::Eon::Galileo` аргументы заданы упорядоченно (`arguments` — массив), после создания вызывается метод `observe` со ссылкой на другой эон (`@Ex::Eon::Saturn`). У планет `arguments` — хеш, а аргумент `discoverer` ссылается (`@`) на эон учёного.
+# 
+# Файл etc/aion/eon.yml:
+#@> etc/aion/eon.yml
+#>> aion:
+#>>   eon:
+#>>     Ex::Eon::Galileo:
+#>>       class: 'Ex::Eon::Astronomer'
+#>>       arguments: [ 'Galileo Galilei', 'refracting telescope' ]
+#>>       calls:
+#>>         - [observe, '@Ex::Eon::Saturn']
+#>>     Ex::Eon::Jupiter:
+#>>       class: 'Ex::Eon::Planet'
+#>>       arguments:
+#>>         name: 'Jupiter'
+#>>         moons: 95
+#>>         discoverer: '@Ex::Eon::Galileo'
+#>>     Ex::Eon::Saturn:
+#>>       class: 'Ex::Eon::Planet'
+#>>       arguments:
+#>>         name: 'Saturn'
+#>>         moons: 146
+#@< EOF
+# 
+# Загрузим конфигурацию из `etc/aion/eon.yml`, создадим контейнер и запросим эоны.
+# 
+::done_testing; }; subtest 'EONS FROM CONFIG' => sub { 
+use Aion::Pleroma;
+use Aion::Env::Etc ();
+
+my $etc = Aion::Env::Etc::parse('etc/aion/eon.yml');
+my $pleroma = Aion::Pleroma->new(pleroma => $etc->{aion}{eon});
+
+my $galileo = $pleroma->resolve('Ex::Eon::Galileo');
+local ($::_g0 = do {$galileo->name}, $::_e0 = "Galileo Galilei"); ::ok $::_g0 eq $::_e0, '$galileo->name  # => Galileo Galilei' or ::diag ::_string_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+local ($::_g0 = do {$galileo->telescope}, $::_e0 = "refracting telescope"); ::ok $::_g0 eq $::_e0, '$galileo->telescope  # => refracting telescope' or ::diag ::_string_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+local ($::_g0 = do {ref($galileo->seen->[0])}, $::_e0 = "Ex::Eon::Planet"); ::ok $::_g0 eq $::_e0, 'ref($galileo->seen->[0])  # => Ex::Eon::Planet' or ::diag ::_string_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+local ($::_g0 = do {$galileo->seen->[0]->name}, $::_e0 = "Saturn"); ::ok $::_g0 eq $::_e0, '$galileo->seen->[0]->name # => Saturn' or ::diag ::_string_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+
+my $jupiter = $pleroma->resolve('Ex::Eon::Jupiter');
+local ($::_g0 = do {$jupiter->name}, $::_e0 = "Jupiter"); ::ok $::_g0 eq $::_e0, '$jupiter->name    # => Jupiter' or ::diag ::_string_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+local ($::_g0 = do {$jupiter->moons}, $::_e0 = "95"); ::ok $::_g0 eq $::_e0, '$jupiter->moons   # => 95' or ::diag ::_string_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+local ($::_g0 = do {$jupiter->discoverer->name}, $::_e0 = "Galileo Galilei"); ::ok $::_g0 eq $::_e0, '$jupiter->discoverer->name # => Galileo Galilei' or ::diag ::_string_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+local ($::_g0 = do {ref($jupiter->discoverer)}, $::_e0 = "Ex::Eon::Astronomer"); ::ok $::_g0 eq $::_e0, 'ref($jupiter->discoverer)  # => Ex::Eon::Astronomer' or ::diag ::_string_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+
+# 
+# ## Eon description keys
+# 
+# Каждый эон в `aion.eon` описывается строкой или хешем.
+# 
+# Строка задаёт конструктор `'класс#метод'` (или просто `'класс'`), метод по умолчанию — `new`. Так создаются самые простые эоны без аргументов.
+# 
+# Хеш может содержать ключи:
+# 
+# * `class` – класс (пакет) эона. Если не указан и ключ эона похож на имя класса (`/^[\w:]+$/`), используется сам ключ.
+# * `method` – метод класса-конструктора. По умолчанию `new`.
+# * `arguments` – аргументы конструктора:
+#   * хеш – именованные аргументы (`new => %hash`);
+#   * массив – упорядоченные аргументы (`new => @array`).
+# * `calls` – список вызовов методов после создания эона. Каждый вызов — имя метода (без аргументов) или массив `[имя_метода, аргументы...]`.
+# 
+# Значение аргумента (или элемента вызова), начинающееся с `@`, воспринимается как ссылка на другой эон: `@ключ` заменяется порождённым эоном из контейнера.
+# 
 # # FEATURES
 # 
 # ## ini

@@ -7,7 +7,7 @@ use warnings;
 our $VERSION;
 
 BEGIN {
-    $VERSION = '0.38';
+    $VERSION = '0.40';
     require XSLoader;
     XSLoader::load('Punk', $VERSION);
 }

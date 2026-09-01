@@ -44,8 +44,8 @@ my %WriteMakefileArgs = (
             },
 
         },
-                   provides => { 'Text::Table::Read::RelationOn::Tiny' => {file => $PM_File,
-                                                                           version => $Version
+        provides => { 'Text::Table::Read::RelationOn::Tiny' => {file => $PM_File,
+                                                                version => $Version
                                                                },
                     },
         no_index => {package => 'Text::Table::Read::RelationOn::Tiny::_Relation_Matrix'}

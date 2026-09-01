@@ -18,9 +18,9 @@ use_ok('AmberDB::Index::Facet')  or BAIL_OUT('Cannot load AmberDB::Index::Facet'
 use_ok('AmberDB::Tools')         or BAIL_OUT('Cannot load AmberDB::Tools');
 
 subtest 'Index Methods Existence' => sub {
-    plan tests => 11;
+    plan tests => 12;
     can_ok( 'AmberDB::Index',        'field_to_list' );
-    can_ok( 'AmberDB::Index',        'is_rdbm_block' );
+    can_ok( 'AmberDB::Index',        'rdbm_target' );
     can_ok( 'AmberDB::Index',        'repeat_fields' );
     can_ok( 'AmberDB::Index::Facet', 'facet_rules' );
     can_ok( 'AmberDB::Index::Facet', 'facet_add' );
@@ -29,13 +29,14 @@ subtest 'Index Methods Existence' => sub {
     can_ok( 'AmberDB::Index',        'match_add' );
     can_ok( 'AmberDB::Index',        'search_add' );
     can_ok( 'AmberDB::Index',        'records_add' );
-    can_ok( 'AmberDB::Index',        'set_seourl' );
+    can_ok( 'AmberDB::Index',        'set_slug' );
+    can_ok( 'AmberDB::Index',        'get_slug' );
 };
 
 subtest 'AmberDB Inheritance of Index Methods' => sub {
-    plan tests => 11;
+    plan tests => 12;
     can_ok( 'AmberDB', 'field_to_list' );
-    can_ok( 'AmberDB', 'is_rdbm_block' );
+    can_ok( 'AmberDB', 'rdbm_target' );
     can_ok( 'AmberDB', 'repeat_fields' );
     can_ok( 'AmberDB', 'facet_rules' );
     can_ok( 'AmberDB', 'facet_add' );
@@ -44,7 +45,8 @@ subtest 'AmberDB Inheritance of Index Methods' => sub {
     can_ok( 'AmberDB', 'match_add' );
     can_ok( 'AmberDB', 'search_add' );
     can_ok( 'AmberDB', 'records_add' );
-    can_ok( 'AmberDB', 'set_seourl' );
+    can_ok( 'AmberDB', 'set_slug' );
+    can_ok( 'AmberDB', 'get_slug' );
 };
 
 subtest 'Facet Rules Evaluation' => sub {
@@ -338,6 +340,33 @@ SCHEMA
     is_deeply( \@after_ids, [1, 3], 'remaining IDs = [1, 3]' );
 };
 
+subtest 'rdbm_target schema parsing' => sub {
+    plan tests => 6;
+    my $adb = AmberDB->new();
+
+    my $table_info = {
+        blocks => [
+            { name => 'id' },
+            { name => 'title' },
+            { name => 'category_id', rdbm => { table => 'categories', display => 2 } },
+            { name => 'tag_id',      rdbm => 'tags:1' },
+            { name => 'author_id',   rdbm => 'authors;3' },
+        ]
+    };
+
+    my ( $t2, $b2 ) = $adb->rdbm_target( $table_info, 2 );
+    is( $t2, 'categories', 'Block 2 hash format target table' );
+    is( $b2, 2,            'Block 2 hash format target block' );
+
+    my ( $t3, $b3 ) = $adb->rdbm_target( $table_info, 3 );
+    is( $t3, 'tags', 'Block 3 string format (tags:1) target table' );
+    is( $b3, 1,      'Block 3 string format (tags:1) target block' );
+
+    my ( $is_rdbm ) = $adb->rdbm_target( $table_info, 4 );
+    is( $is_rdbm, 'authors', 'Block 4 evaluates truthy in ($is_rdbm) list context' );
+
+    my ( $non_rdbm ) = $adb->rdbm_target( $table_info, 1 );
+    ok( !$non_rdbm, 'Block 1 non-RDBM returns falsy' );
+};
+
 done_testing();
-
-

@@ -3,9 +3,10 @@
 
 requires "Carp" => "0";
 requires "List::Util" => "0";
-requires "Object::Pad" => "0";
+requires "Object::Pad" => "0.59";
 requires "integer" => "0";
 requires "perl" => "v5.26.0";
+requires "warnings" => "0";
 
 on 'build' => sub {
   recommends "ExtUtils::MakeMaker" => "7.22";
@@ -23,7 +24,6 @@ on 'test' => sub {
   requires "Test::More" => "0";
   requires "experimental" => "0";
   requires "strict" => "0";
-  requires "warnings" => "0";
 };
 
 on 'test' => sub {
@@ -70,5 +70,4 @@ on 'develop' => sub {
   requires "Test::TrailingSpace" => "0.0203";
   requires "Test::Version" => "1";
   requires "strict" => "0";
-  requires "warnings" => "0";
 };

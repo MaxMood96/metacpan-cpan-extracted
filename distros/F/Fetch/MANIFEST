@@ -67,6 +67,8 @@ t/22-idle-loop.t
 t/23-observer.t
 t/24-h2-trailers.t
 t/25-tunnel-starttls.t
+t/26-awaitable.t
+t/27-awaitable-conformance.t
 t/manifest.t
 t/pod-coverage.t
 t/pod.t

@@ -8,8 +8,8 @@ use Test::More;
 use PPKTest qw(fixture b64u_decode b64u_encode auth_data);
 
 BEGIN {
-    plan skip_all => 'Punk 0.29+ is needed to mount the plugin'
-        unless eval { require Punk; Punk->VERSION('0.29'); 1 };
+    plan skip_all => 'Punk 0.31+ is needed to mount the plugin'
+        unless eval { require Punk; Punk->VERSION('0.31'); 1 };
     plan skip_all => 'Punk::Test is needed to drive the routes'
         unless eval { require Punk::Test; require Punk::Model; 1 };
 }

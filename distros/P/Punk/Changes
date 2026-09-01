@@ -1,5 +1,22 @@
 Revision history for Punk
 
+0.40    2026-09-01
+        - Punk::AsyncAwait: async and await in apps, controllers and models.
+        - Punk::Future implements the Future::AsyncAwait::Awaitable API, and
+          the future an async sub returns carries the loop it suspended on.
+        - Punk::Future->on_cancel, taking a code reference or a future.
+        - Punk::Future->result, the Future name for get.
+        - FIX: get in scalar context returned the last value, not the first.
+          A handler returning a multi-value future got its tail.
+        - FIX: a future method given an object of another class that is also
+          a blessed IV read the wrong struct instead of croaking.
+        - use Punk::Controller sets @ISA, strict and warnings; use parent
+          'Punk::Controller' is unchanged.
+
+0.39    2026-08-31
+        - Fix t/1113-idempotency-flight.t compares the recorded pid as a value,
+        which perl 5.16 spells as a string
+
 0.38    2026-08-31
         - t/1040-stream.t drops its client on a stream with no end, so no
           socket buffer can hold the whole body first

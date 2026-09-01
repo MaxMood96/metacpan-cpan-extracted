@@ -164,6 +164,12 @@ my %WriteMakefileArgs = (
             runtime => {
                 recommends => {
                     'Future'          => '0',     # non-blocking handlers
+                    'Future::AsyncAwait'
+                                      => '0.66',  # Punk::AsyncAwait: the
+                                                  # async/await keywords. Needs
+                                                  # perl 5.16, so it stays a
+                                                  # recommends and nothing in
+                                                  # Punk loads that module.
                     'DBI'             => '0',     # Punk::Model::DBI backend
                     'Eshu'            => '0',     # syntax-highlighted snippets
                                                   # on the dev error page

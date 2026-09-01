@@ -1,5 +1,5 @@
 package Photonic::WE::S::GreenP;
-$Photonic::WE::S::GreenP::VERSION = '0.024';
+$Photonic::WE::S::GreenP::VERSION = '0.025';
 
 =encoding UTF-8
 
@@ -9,7 +9,7 @@ Photonic::WE::S::GreenP
 
 =head1 VERSION
 
-version 0.024
+version 0.025
 
 =head1 COPYRIGHT NOTICE
 
@@ -47,7 +47,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA  02110-1301 USA
    my $green=Photonic::WE::S::GreenP->new(haydock=>$h, nh=>$nh);
    my $greenProjection=$green->Gpp;
    my $WaveProjection=$green->waveOperator;
-   my $EpsTensor=$green->epsilon;
+   my $EpsProjection=$green->epsilon;
 
 =head1 DESCRIPTION
 
@@ -102,12 +102,11 @@ NOTE: Only works for polarizations along principal directions.
 
 use namespace::autoclean;
 use PDL::Lite;
-use Photonic::WE::S::Haydock;
 use Photonic::Types -all;
 use Photonic::Utils qw(lentzCF);
 use List::Util qw(min);
 use Moo;
-use MooX::StrictConstructor;
+#use MooX::StrictConstructor;
 
 has 'nh' =>(is=>'ro', isa=>Num, required=>1,
 	    documentation=>'Desired no. of Haydock coefficients');

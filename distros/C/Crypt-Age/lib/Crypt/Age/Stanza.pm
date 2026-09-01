@@ -1,6 +1,6 @@
 package Crypt::Age::Stanza;
 # ABSTRACT: Base class for age recipient stanzas
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 use Moo;
 use Carp qw(croak);
 use MIME::Base64 qw(encode_base64 decode_base64);
@@ -24,11 +24,6 @@ has body => (
     default => '',
 );
 
-
-sub encode_body_base64 {
-    my ($self) = @_;
-    return encode_base64_no_padding($self->body);
-}
 
 sub encode_base64_no_padding {
     my ($data) = @_;
@@ -90,12 +85,6 @@ sub to_string {
 }
 
 
-sub to_bytes_for_mac {
-    my ($self) = @_;
-    # For MAC computation, stanzas are serialized as in the header
-    return $self->to_string . "\n";
-}
-
 
 
 
@@ -113,7 +102,7 @@ Crypt::Age::Stanza - Base class for age recipient stanzas
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -160,6 +149,8 @@ The stanza format in an age file is:
 
 Subclasses like L<Crypt::Age::Stanza::X25519> implement the actual wrapping and
 unwrapping logic for specific recipient types.
+
+This is an internal module used by L<Crypt::Age>.
 
 =head2 type
 

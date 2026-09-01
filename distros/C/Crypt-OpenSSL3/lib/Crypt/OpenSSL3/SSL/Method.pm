@@ -1,5 +1,5 @@
 package Crypt::OpenSSL3::SSL::Method;
-$Crypt::OpenSSL3::SSL::Method::VERSION = '0.012';
+$Crypt::OpenSSL3::SSL::Method::VERSION = '0.013';
 use strict;
 use warnings;
 
@@ -21,7 +21,7 @@ Crypt::OpenSSL3::SSL::Method - Connection funcs for SSL connections
 
 =head1 VERSION
 
-version 0.012
+version 0.013
 
 =head1 DESCRIPTION
 

@@ -1,5 +1,15 @@
 Revision history for File-Raw-Archive
 
+0.04    2026-08-31
+        - Builds on Windows: sys/wait.h and the fork(2) parallel extractor
+          are POSIX-only, and mkdir/lstat/symlink/fchmod are spelled
+          differently or absent there.
+        - NO_XSLOCKS, so Strawberry's PERL_IMPLICIT_SYS cannot rewrite this
+          dist's allocator against its own C cores.
+        - Archives and extracted files are opened in binary mode.
+        - An entry named with backslashes or a drive letter is refused as an
+          unsafe path.
+
 0.03    2026-08-24
         - Fix the module failing to load on perls older than 5.22 with
           "Undefined symbol: OpHAS_SIBLING".

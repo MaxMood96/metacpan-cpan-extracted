@@ -1,6 +1,6 @@
 package Crypt::Age::Primitives;
 # ABSTRACT: Low-level cryptographic primitives for age encryption
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 use Moo;
 use Carp qw(croak);
 use Crypt::PK::X25519;
@@ -144,6 +144,15 @@ sub compute_header_mac {
 sub encrypt_payload {
     my ($class, $payload_key, $plaintext) = @_;
 
+    # Perl's own test for the in-memory open below, hoisted so the failure
+    # names its cause instead of arriving as EINVAL from the open. Why
+    # utf8::downgrade rather than utf8::is_utf8 or a /[^\x00-\xff]/ scan, and
+    # why mutating this copy is safe, is written out over the same check in
+    # Crypt::Age::encrypt.
+    utf8::downgrade($plaintext, 1)
+        or croak 'plaintext must be a byte string: it holds a code point '
+            .'above 0xFF, encode it before passing it in';
+
     open my $ifh, '<:raw', \$plaintext or croak "Cannot open input string: $!";
 
     my $output = '';
@@ -184,6 +193,13 @@ sub encrypt_payload_fh {
 
 sub decrypt_payload {
     my ($class, $payload_key, $ciphertext) = @_;
+
+    # Same test, same reasons as in encrypt_payload above; the advice differs
+    # because an age payload is binary, so a wide character in it means the
+    # caller decoded bytes that were never text.
+    utf8::downgrade($ciphertext, 1)
+        or croak 'ciphertext must be a byte string: it holds a code point '
+            .'above 0xFF, read it with :raw rather than decoding it';
 
     open my $ifh, '<:raw', \$ciphertext or croak "Cannot open input string: $!";
 
@@ -314,6 +330,7 @@ sub paranoid_read {
 }
 
 
+
 1;
 
 __END__
@@ -328,7 +345,7 @@ Crypt::Age::Primitives - Low-level cryptographic primitives for age encryption
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -347,7 +364,8 @@ version 0.002
     my $unwrapped = Crypt::Age::Primitives->unwrap_file_key($wrap_key, $wrapped);
 
     # Payload encryption
-    my $payload_key = Crypt::Age::Primitives->derive_payload_key($file_key);
+    my $nonce = Crypt::Age::Primitives->generate_payload_nonce();
+    my $payload_key = Crypt::Age::Primitives->derive_payload_key($file_key, $nonce);
     my $encrypted = Crypt::Age::Primitives->encrypt_payload($payload_key, $plaintext);
     my $decrypted = Crypt::Age::Primitives->decrypt_payload($payload_key, $encrypted);
 
@@ -478,16 +496,23 @@ The plaintext is split into 64 KiB chunks. Each chunk is encrypted with a unique
 nonce derived from a counter and a final-chunk flag. Returns the concatenated
 encrypted chunks.
 
+C<$plaintext> must be a B<byte string>. One holding a code point above C<0xFF>
+is rejected before anything else happens, with C<"plaintext must be a byte
+string: it holds a code point above 0xFF, encode it before passing it in">; see
+L<Crypt::Age/encrypt> for what this check does and does not catch.
+
 =head2 encrypt_payload_fh
 
-    my $ciphertext = Crypt::Age::Primitives->encrypt_payload_fh($payload_key, $ifh, $ofh);
+    Crypt::Age::Primitives->encrypt_payload_fh($payload_key, $ifh, $ofh);
 
-Encrypts the payload using ChaCha20-Poly1305 in chunked mode, using filehandles
-for both input and output.
+Encrypts the payload using ChaCha20-Poly1305 in chunked mode, reading the
+plaintext from C<$ifh> and writing the ciphertext to C<$ofh> one chunk at a
+time. Returns nothing -- unlike L</encrypt_payload>, the encrypted bytes are
+never assembled in memory, only written to C<$ofh> as each chunk is produced.
 
-The plaintext is split into 64 KiB chunks. Each chunk is encrypted with a unique
-nonce derived from a counter and a final-chunk flag. Returns the concatenated
-encrypted chunks.
+Input is read via L</paranoid_read> in 64 KiB chunks; a chunk is final when
+that read leaves the input handle at C<eof>. Each chunk is encrypted with a
+nonce derived from a counter and that final-chunk flag.
 
 =head2 decrypt_payload
 
@@ -505,6 +530,11 @@ partial plaintext is written to an internal buffer that is discarded when the
 call dies, so a caller only ever sees plaintext from a payload that was
 decrypted to its final chunk. Callers that need the streaming behaviour, and
 can handle the partial release that comes with it, want the filehandle form.
+
+C<$ciphertext> must be a B<byte string>. One holding a code point above C<0xFF>
+is rejected before anything else happens, with C<"ciphertext must be a byte
+string: it holds a code point above 0xFF, read it with :raw rather than decoding
+it">; see L<Crypt::Age/decrypt>.
 
 =head2 decrypt_payload_fh
 
@@ -527,6 +557,25 @@ released chunk is individually authenticated, but the message as a whole is not
 caller must therefore discard whatever reached C<$ofh> when this method dies,
 and must not treat it as an authenticated message merely because the individual
 bytes were authentic.
+
+=head2 paranoid_read
+
+    my $bytes = Crypt::Age::Primitives->paranoid_read($fh, $length);
+
+Reads up to C<$length> bytes from C<$fh>, retrying a zero-byte C<read> that is
+not C<eof> -- as a pipe or socket can produce -- instead of treating it as the
+end of the data. Internal; used throughout this module and by
+L<Crypt::Age>'s streaming paths wherever a caller must not mistake a stalled
+read for a short file.
+
+A read that hits C<eof> before C<$length> bytes have accumulated is not an
+error: this is how the chunked STREAM readers and L<Crypt::Age>'s payload nonce
+read learn that the input ends there, so the return value can be shorter than
+C<$length>. It is the caller's job to decide whether that short length is
+expected (as C<encrypt_payload_fh>'s last chunk) or a truncated file (as
+C<decrypt_payload_fh> and L<Crypt::Age>'s 16-byte nonce read treat it). This
+method dies only when three consecutive reads return zero bytes without
+reaching C<eof>.
 
 =head1 SEE ALSO
 

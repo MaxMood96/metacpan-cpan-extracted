@@ -1,11 +1,11 @@
-[![Actions Status](https://github.com/darviarush/perl-aion/actions/workflows/test.yml/badge.svg)](https://github.com/darviarush/perl-aion/actions) [![GitHub Issues](https://img.shields.io/github/issues/darviarush/perl-aion?logo=perl)](https://github.com/darviarush/perl-aion/issues) [![MetaCPAN Release](https://badge.fury.io/pl/Aion.svg)](https://metacpan.org/release/Aion) [![Coverage](https://raw.githubusercontent.com/darviarush/perl-aion/master/doc/badges/total.svg)](https://fast2-matrix.cpantesters.org/?dist=Aion+2.2)
+[![Actions Status](https://github.com/darviarush/perl-aion/actions/workflows/test.yml/badge.svg)](https://github.com/darviarush/perl-aion/actions) [![GitHub Issues](https://img.shields.io/github/issues/darviarush/perl-aion?logo=perl)](https://github.com/darviarush/perl-aion/issues) [![MetaCPAN Release](https://badge.fury.io/pl/Aion.svg)](https://metacpan.org/release/Aion) [![Coverage](https://raw.githubusercontent.com/darviarush/perl-aion/master/doc/badges/total.svg)](https://fast2-matrix.cpantesters.org/?dist=Aion+2.3)
 # NAME
 
 Aion - постмодернистская объектная система для Perl 5, такая как «Mouse», «Moose», «Moo», «Mo» и «M», но с улучшениями
 
 # VERSION
 
-2.2
+2.3
 
 # SYNOPSIS
 
@@ -330,6 +330,48 @@ package Omega3 { use Aion;
 }
 
 Omega3->new->x  # -> 12
+```
+
+## Роль наследует роль
+
+Роль может наследовать другую роль через `with`. Так можно уточнять интерфейс: типы требующихся фичей (`req`) и методов (`:Isa`) либо остаются такими же, либо понижаются — становятся более узкими подтипами. Понижение проверяется оператором меньше (`<`): `Num < (Num | Object)`, так как `Num` — подтип объединения `Num | Object`.
+
+Роль `Role::Animal` требует свойство `legs` широкого типа `Num | Object` и метод `sound` с сигнатурой `(Me => Str)`.
+
+```perl
+package Role::Animal { use Aion -role;
+
+	req legs => (isa => Num | Object);
+	sub sound : Isa(Me => Str);
+}
+```
+
+Роль `Role::Bird` наследует `Role::Animal`, но понижает тип `legs` до `Num`, а сигнатуру метода `sound` оставляет прежней.
+
+```perl
+package Role::Bird { use Aion -role;
+
+	with qw/Role::Animal/;
+	req legs => (isa => Num);
+	sub sound : Isa(Me => Str);
+}
+```
+
+Класс `Ex::Sparrow` использует роль `Role::Bird` и реализует все её требования.
+
+```perl
+package Ex::Sparrow { use Aion;
+	with qw/Role::Bird/;
+
+	has legs => (is => 'ro', isa => Num, default => 2);
+	sub sound : Isa(Me => Str) { 'chirp' }
+
+	Num < (Num | Object)  # -> 1
+}
+
+my $sparrow = Ex::Sparrow->new;
+$sparrow->legs  # => 2
+$sparrow->sound # => chirp
 ```
 
 # ASPECTS
