@@ -1,5 +1,10 @@
 Revision history for Punk-Observe
 
+0.07	2026-09-02
+	- Fixes: the retention cron reads the lease it was granted on perls below 5.32, where SvTRUE(POPs) popped once per mention
+	- Fixes: a log axis asks whether it is safe the same way
+	- Adds: t/0005-multieval.t, which reads the sources for the same trap
+
 0.06	2026-09-01
 	- Fixes: the histogram sum and health check ms tests compare a float64 by value, failed on a long double or quadmath perl
 

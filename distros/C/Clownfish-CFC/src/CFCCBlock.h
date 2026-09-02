@@ -55,9 +55,6 @@ CFCCBlock_new(const char *contents);
 CFCCBlock*
 CFCCBlock_init(CFCCBlock *self, const char *contents);
 
-void
-CFCCBlock_destroy(CFCCBlock *self);
-
 /** Accessor.
  */
 const char*

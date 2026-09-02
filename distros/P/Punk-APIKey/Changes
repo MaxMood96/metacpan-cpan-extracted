@@ -1,4 +1,8 @@
 Revision history for Punk-APIKey
 
+0.02    2026-09-02
+	- Fixes: the per-key rate limiter reads the verdict it was given, where SvIV(POPs) popped once per mention
+	- Adds: t/60-multieval.t
+
 0.01    2026-08-31
 	First version

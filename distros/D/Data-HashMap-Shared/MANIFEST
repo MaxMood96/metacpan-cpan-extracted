@@ -116,5 +116,10 @@ t/24-upgrade.t
 t/25-frozen.t
 t/26-recover.t
 t/27-review-fixes.t
+t/28-crash-counters.t
+xt/tombstone_free_ordering.t
+xt/value_update_tear.t
+t/29-cursor-map-destroyed.t
+t/30-keyword-context.t
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

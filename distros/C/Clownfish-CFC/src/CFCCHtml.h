@@ -43,9 +43,6 @@ CFCCHtml*
 CFCCHtml_init(CFCCHtml *self, struct CFCHierarchy *hierarchy,
               const char *header, const char *footer);
 
-void
-CFCCHtml_destroy(CFCCHtml *self);
-
 /** Write the HTML documentation.
  */
 void

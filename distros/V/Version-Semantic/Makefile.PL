@@ -33,6 +33,10 @@ my %att = (
       $main_module => {
         file    => $main_module_file,
         version => $main_module_version
+      },
+      'Version::Core' => {
+        file    => $main_module_file,
+        version => $main_module_version
       }
     },
     resources => {

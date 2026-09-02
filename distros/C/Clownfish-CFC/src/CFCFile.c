@@ -44,10 +44,13 @@ struct CFCFile {
     char *guard_close;
 };
 
+static void
+CFCFile_destroy(CFCBase *base);
+
 static const CFCMeta CFCFILE_META = {
     "Clownfish::CFC::Model::File",
     sizeof(CFCFile),
-    (CFCBase_destroy_t)CFCFile_destroy
+    CFCFile_destroy
 };
 
 CFCFile*
@@ -91,8 +94,10 @@ CFCFile_init(CFCFile *self, CFCParcel *parcel, CFCFileSpec *spec) {
     return self;
 }
 
-void
-CFCFile_destroy(CFCFile *self) {
+static void
+CFCFile_destroy(CFCBase *base) {
+    CFCFile *self = (CFCFile *) base;
+
     CFCBase_decref((CFCBase*)self->parcel);
     for (size_t i = 0; self->blocks[i] != NULL; i++) {
         CFCBase_decref(self->blocks[i]);
@@ -106,7 +111,7 @@ CFCFile_destroy(CFCFile *self) {
     FREEMEM(self->guard_start);
     FREEMEM(self->guard_close);
     CFCBase_decref((CFCBase*)self->spec);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 void

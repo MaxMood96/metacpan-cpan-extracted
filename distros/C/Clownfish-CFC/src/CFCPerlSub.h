@@ -64,7 +64,7 @@ CFCPerlSub_init(CFCPerlSub *self, struct CFCParamList *param_list,
                 int use_labeled_params);
 
 void
-CFCPerlSub_destroy(CFCPerlSub *self);
+CFCPerlSub_destroy(CFCBase *base);
 
 /** Generate C declarations for the variables holding the arguments, from
  * `first` onwards.

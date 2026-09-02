@@ -3,7 +3,7 @@ Locale::Codes::LangFam_Codes;
 
 # This file was automatically generated.  Any changes to this file will
 # be lost the next time 'harvest_data' is run.
-#    Generated on: Mon Jun  1 10:25:55 EDT 2026
+#    Generated on: Tue Sep  1 11:19:08 EDT 2026
 
 use strict;
 require 5.006;
@@ -11,7 +11,7 @@ use warnings;
 use utf8;
 
 our($VERSION);
-$VERSION='3.90';
+$VERSION='3.91';
 
 $Locale::Codes::Data{'langfam'}{'id'} = '0116';
 

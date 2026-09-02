@@ -1,0 +1,9 @@
+Makefile.PL
+MANIFEST
+README.md
+bin/envdoctor
+lib/App/Envdoctor.pm
+lib/App/Envdoctor/Scanner.pm
+t/scanner.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

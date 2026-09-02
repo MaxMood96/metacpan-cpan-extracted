@@ -2,7 +2,7 @@
    "X_No_Archive" : "Yes",
    "abstract" : "Locate, Download, or Build and Install Xmake",
    "author" : [
-      "Sanko Robinson <sanko@cpan.org>"
+      "Sanko Robinson"
    ],
    "description" : "Xmake is a cross-platform build utility based on Lua. With it comes a powerful package management system.",
    "dynamic_config" : 0,
@@ -104,14 +104,19 @@
    "provides" : {
       "Alien::Xmake" : {
          "file" : "lib/Alien/Xmake.pm",
-         "version" : "0.08"
+         "version" : "v0.9.0"
       },
       "Alien::Xrepo" : {
          "file" : "lib/Alien/Xrepo.pm",
-         "version" : "0.08"
+         "version" : "v0.9.0"
       },
-      "Alien::Xrepo::PackageInfo" : {
-         "file" : "lib/Alien/Xrepo.pm"
+      "Alien::Xrepo::Base" : {
+         "file" : "lib/Alien/Xrepo/Base.pm",
+         "version" : "v0.0.9"
+      },
+      "Alien::Xrepo::Base::Builder" : {
+         "file" : "lib/Alien/Xrepo/Base.pm",
+         "version" : "v0.0.9"
       }
    },
    "release_status" : "stable",
@@ -129,7 +134,7 @@
          "web" : "https://github.com/sanko/Alien-Xmake"
       }
    },
-   "version" : "0.08",
+   "version" : "v0.9.0",
    "x_authority" : "cpan:SANKO",
    "x_ignore" : [
       ".tidyallrc",

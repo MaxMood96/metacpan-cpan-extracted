@@ -43,9 +43,6 @@ CFCC*
 CFCC_init(CFCC *self, struct CFCHierarchy *hierarchy, const char *header,
           const char *footer);
 
-void
-CFCC_destroy(CFCC *self);
-
 /** Write the "cfish_hostdefs.h" header file.
  */
 void

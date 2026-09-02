@@ -17,11 +17,18 @@ is( decode_payload($token), 'hello coverage', 'round-trips back to the original 
 
 # Failure branch: a token whose bytes carry the gzip magic header (\x1f\x8b) but
 # a corrupt body defeats IO::Uncompress::Gunzip's Transparent passthrough, so the
-# inflate fails and takes the `or die` failure side of decode_payload. (Arbitrary
-# non-gzip bytes would be copied through transparently and would NOT die.)
+# inflate fails and takes decode_payload's own internal failure side. (Arbitrary
+# non-gzip bytes would be copied through transparently and would NOT fail here.)
+# DD-627: this now returns undef instead of propagating the gunzip die, matching
+# encode_payload's own undef-for-invalid-input contract.
 my $corrupt = encode_base64( "\x1f\x8b\x08\x00corrupted-gzip-body-not-inflatable", '' );
-eval { decode_payload($corrupt) };
-like( $@, qr/gunzip failed/, 'decode_payload dies on a corrupt gzip token' );
+my $result = eval { decode_payload($corrupt) };
+is( $@, '', 'decode_payload does not propagate an exception on a corrupt gzip token' );
+is( $result, undef, 'decode_payload returns undef on a corrupt gzip token' );
+
+# Round-trip is unaffected by the failure-path change (AC-2).
+my $token2 = encode_payload('another round trip');
+is( decode_payload($token2), 'another round trip', 'valid-token round-trip is unchanged' );
 
 done_testing;
 
@@ -37,16 +44,18 @@ t/59-codec-failure-coverage.t - failure-path coverage for the payload codec
 
 This test is the executable coverage contract for the failure side of
 C<Developer::Dashboard::Codec::decode_payload>. It confirms that a token whose
-base64 body is not valid gzip data makes the inflate step fail and die, so the
-C<or die> branch is exercised rather than left uncovered.
+base64 body is not valid gzip data makes the inflate step fail internally and
+C<decode_payload> returns C<undef> rather than propagating an exception (DD-627).
 
 =head1 WHY IT EXISTS
 
 The coverage gate requires C<lib/> to reach 100% on branch and condition
-metrics, not only statement and subroutine. The codec's decode path has a
-defensive C<gunzip ... or die> whose failure side is only reached with a
+metrics, not only statement and subroutine. The codec's decode path has an
+internal C<eval { gunzip ... }> whose failure side is only reached with a
 corrupt token; this test drives that path deterministically so the branch stays
-covered and cannot silently regress.
+covered and cannot silently regress. It also guards against DD-627's specific
+regression: a caller (e.g. a malformed C<?token=> URL) must get a clean
+C<undef> back, never an uncaught exception.
 
 =head1 WHEN TO USE
 

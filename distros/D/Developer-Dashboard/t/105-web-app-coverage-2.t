@@ -900,6 +900,32 @@ is( $m->_skill_route_spec( '', 'route-skill', 't' ), undef, 'skill route spec em
     ok( scalar( $m->_static_file_roots('js') ), 'static roots dedup repeated roots' );
 }
 
+# _static_file_roots caches the resolved list per type (DD-622)
+{
+    no warnings 'redefine';
+    my $probe_root = File::Spec->catdir( $home, 'probe' );
+    local *Developer::Dashboard::PathRegistry::runtime_roots    = sub { return ($probe_root); };
+    local *Developer::Dashboard::PathRegistry::dashboards_roots = sub { return (); };
+
+    my @first = $m->_static_file_roots('cachetest');
+    my $cached_ref = $m->{_static_file_roots_cache}{cachetest}{roots};
+    ok( $cached_ref, 'DD-622: the first call populates the per-type cache entry' );
+    my @second = $m->_static_file_roots('cachetest');
+    is( $m->{_static_file_roots_cache}{cachetest}{roots}, $cached_ref,
+        'DD-622: a repeat call for the same type reuses the same cached array reference without rebuilding it' );
+    is_deeply( \@second, \@first, 'DD-622: the cached call returns the same root list as the first' );
+
+    my $probe_root2 = File::Spec->catdir( $home, 'probe2' );
+    local *Developer::Dashboard::PathRegistry::runtime_roots = sub { return ($probe_root2); };
+    my @third = $m->_static_file_roots('cachetest');
+    isnt( $m->{_static_file_roots_cache}{cachetest}{roots}, $cached_ref,
+        'DD-622: changing the underlying runtime_roots invalidates the cache and forces a rebuild (new array reference)' );
+    isnt( "@third", "@first", 'DD-622: the recomputed root list reflects the changed runtime_roots' );
+
+    my @other_type = $m->_static_file_roots('othertype');
+    isnt( "@other_type", "@third", "DD-622: a different type gets its own cached list rather than sharing the first type's" );
+}
+
 # _bundled_public_asset_path guards + dist_dir/inc variants
 {
     is( eval { Developer::Dashboard::Web::App::_bundled_public_asset_path( '', 'x' ); 1 } ? 'ok' : 'die', 'die', 'bundled asset requires a type' );

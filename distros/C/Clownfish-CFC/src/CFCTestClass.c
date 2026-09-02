@@ -44,22 +44,21 @@ S_has_symbol(CFCSymbol **symbols, const char *name);
 
 const CFCTestBatch CFCTEST_BATCH_CLASS = {
     "Clownfish::CFC::Model::Class",
-    97,
+    93,
     S_run_tests
 };
 
 static char*
 S_try_create(CFCParcel *parcel, const char *name, const char *nickname) {
-    CFCClass *klass = NULL;
-    char     *error;
+    char *error;
 
     CFCUTIL_TRY {
-        klass = CFCClass_create(parcel, NULL, name, nickname, NULL, NULL, NULL,
-                                false, false, false);
+        CFCClass *klass = CFCClass_create(parcel, NULL, name, nickname, NULL,
+                                          NULL, NULL, false, false, false);
+        CFCBase_decref((CFCBase*)klass);
     }
     CFCUTIL_CATCH(error);
 
-    CFCBase_decref((CFCBase*)klass);
     return error;
 }
 
@@ -105,8 +104,8 @@ S_run_tests(CFCTest *test) {
     CFCClass_add_inert_var(foo, widget);
 
     {
-        CFCClass *should_be_foo = CFCClass_fetch_singleton("Foo");
-        OK(test, should_be_foo == foo, "fetch_singleton");
+        CFCClass *should_be_foo = CFCParcel_class(neato, "Foo");
+        OK(test, should_be_foo == foo, "Fetch class from parcel");
     }
 
     {
@@ -156,7 +155,7 @@ S_run_tests(CFCTest *test) {
     }
 
     CFCParser_set_parcel(parser, neato);
-    CFCParser_set_class_name(parser, "Foo");
+    CFCParser_set_class(parser, foo);
     CFCMethod *do_stuff
         = CFCTest_parse_method(test, parser, "void Do_Stuff(Foo *self);");
     CFCClass_add_method(foo, do_stuff);
@@ -166,7 +165,7 @@ S_run_tests(CFCTest *test) {
                           false, true, false);
 
     {
-        CFCParser_set_class_name(parser, "InertFoo");
+        CFCParser_set_class(parser, inert_foo);
         CFCMethod *inert_do_stuff
             = CFCTest_parse_method(test, parser,
                                    "void Do_Stuff(InertFoo *self);");
@@ -311,15 +310,6 @@ S_run_tests(CFCTest *test) {
     }
 
     {
-        CFCClass **ladder = CFCClass_tree_to_ladder(foo);
-        OK(test, ladder[0] == foo, "ladder[0]");
-        OK(test, ladder[1] == foo_jr, "ladder[1]");
-        OK(test, ladder[2] == final_foo, "ladder[2]");
-        OK(test, ladder[3] == NULL, "ladder[3]");
-        FREEMEM(ladder);
-    }
-
-    {
         CFCClass *final_class
             = CFCTest_parse_class(test, parser, "final class Iamfinal { }");
         OK(test, CFCClass_final(final_class), "class modifer: final");
@@ -458,7 +448,6 @@ S_run_tests(CFCTest *test) {
     CFCBase_decref((CFCBase*)inert_foo);
     CFCBase_decref((CFCBase*)do_stuff);
 
-    CFCClass_clear_registry();
     CFCParcel_reap_singletons();
 }
 

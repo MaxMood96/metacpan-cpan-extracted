@@ -124,6 +124,18 @@ PARAMETERS
     SLµRM does not specify a particular rate, but a default value of 115.2k
     will apply if left unspecified.
 
+ host
+
+ port
+
+       host => STR,
+       port => NUM or STR
+
+    Since version 0.11.
+
+    An alternative to the dev argument, giving instead a destination IP
+    address to send UDP packets in UDP-wrapped MSLµRM format.
+
  fh
 
        fh => IO
@@ -132,7 +144,7 @@ PARAMETERS
     reading and writing. It will be assumed to be set up correctly; no
     further setup will be performed.
 
-    Either dev or fh are required.
+    Either dev, host or fh are required.
 
  retransmit_delay
 

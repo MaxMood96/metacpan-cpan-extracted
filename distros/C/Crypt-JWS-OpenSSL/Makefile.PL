@@ -31,13 +31,15 @@ my %WriteMakefileArgs = (
     "Moo" => "2.004003",
     "Moo::Role" => 0,
     "Try::Tiny" => 0,
-    "namespace::clean" => 0
+    "namespace::clean" => 0,
+    "version" => "0.78",
+    "warnings" => 0
   },
   "TEST_REQUIRES" => {
     "Test::Deep" => 0,
     "Test::More" => 0
   },
-  "VERSION" => "0.003",
+  "VERSION" => "0.004",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -59,7 +61,9 @@ my %FallbackPrereqs = (
   "Test::Deep" => 0,
   "Test::More" => 0,
   "Try::Tiny" => 0,
-  "namespace::clean" => 0
+  "namespace::clean" => 0,
+  "version" => "0.78",
+  "warnings" => 0
 );
 
 unless ( eval { ExtUtils::MakeMaker->VERSION('6.63_03') } ) {

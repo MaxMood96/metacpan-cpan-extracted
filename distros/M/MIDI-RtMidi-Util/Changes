@@ -1,10 +1,16 @@
 Revision history for MIDI-RtMidi-Util
 
+0.0301 2026-09-01 13:36:39
+    - Improve documentation.
+
+0.0300 2026-09-01 13:06:56
+    - Rename the `halt()` function to `stop_device()`.
+
 0.0201 2026-08-31 21:22:15
     - Improve documentation again.
 
 0.0200 2026-08-31 19:37:21
-    Add the `input_ports()` and `output_ports()` functions.
+    - Add the `input_ports()` and `output_ports()` functions.
 
 0.0102 2026-08-31 17:15:05
     - Don't `exit;` in the `halt()` routine.

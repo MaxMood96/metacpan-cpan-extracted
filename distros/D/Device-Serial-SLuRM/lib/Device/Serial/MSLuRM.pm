@@ -7,7 +7,7 @@ use v5.26;
 use warnings;
 use Object::Pad 0.807 ':experimental(inherit_field)';
 
-package Device::Serial::MSLuRM 0.10;
+package Device::Serial::MSLuRM 0.11;
 class Device::Serial::MSLuRM;
 
 inherit Device::Serial::SLuRM

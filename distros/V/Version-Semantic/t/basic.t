@@ -5,18 +5,22 @@ use Test2::V1
 
 plan 16;
 
-like dies { CLASS->new( major => 0, 'minor' ) }, qr/\AOdd number of elements in hash assignment at/,
+like dies { CLASS->new( major => 0, 'minor' ) }, qr/\AOdd number of arguments passed to "${ \CLASS }" constructor/,
   'Odd number of arguments';
 
 ## no critic ( ProhibitComplexRegexes )
-like dies { CLASS->new( undef, 0 ) }, qr/\AUse of uninitialized value within \@_ in list assignment at/,
-  'Attribute name cannot be undefined';
+like dies { CLASS->new( undef, 0 ) }, qr/\AParameter with undefined name passed to "${ \CLASS }" constructor/,
+  'Parameter name cannot be undefined';
 
-like dies { CLASS->new( trial => 'TRIAL1' ) }, qr/\AUnknown attribute name/, 'Unknown attribute name';
+like dies { CLASS->new( major => 1, minor => 2, patch => 3, trial => 'TRIAL1' ) },
+  qr/\AUnrecognised parameters for "${ \CLASS }" constructor: trial/,
+  'Unknown parameter name';
 
-like dies { CLASS->new( major => '01' ) }, qr/\AAttribute .* has invalid value/, 'Invalid attribute value';
+like dies { CLASS->new( major => '01', minor => 2, patch => 3 ) }, qr/\AParameter 'major' has invalid value '01'/,
+  'Invalid parameter value';
 
-like dies { CLASS->new( major => 0 ) }, qr/Required attribute .* not set/, 'Missing required attribute';
+like dies { CLASS->new( major => 1 ) }, qr/\ARequired parameter 'minor' is missing for "Version::Core" constructor/,
+  'Missing required parameter';
 
 like dies { CLASS->parse( undef, { fatal => 1 } ) }, qr/is not a semantic version/,
   'The undef value is an invalid semantic version';
@@ -113,7 +117,7 @@ subtest 'Valid semantic versions' => sub {
     1.0.0-0A.is.legal
     1.0.8-20260216170758-TRIAL
   );
-  ok lives { CLASS->parse( $_ ) }, "$_" for @versions
+  ok lives { CLASS->parse( $_, { fatal => 1 } ) }, "$_" for @versions
 };
 
 subtest 'Test named capture group accessors' => sub {

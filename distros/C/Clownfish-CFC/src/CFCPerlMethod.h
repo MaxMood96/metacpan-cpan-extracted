@@ -45,9 +45,6 @@ CFCPerlMethod*
 CFCPerlMethod_init(CFCPerlMethod *self, struct CFCClass *klass,
                    struct CFCMethod *method);
 
-void
-CFCPerlMethod_destroy(CFCPerlMethod *self);
-
 /**
  * Create the Perl name of the method.
  */

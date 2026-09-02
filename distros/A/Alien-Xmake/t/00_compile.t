@@ -1,6 +1,7 @@
 use v5.40;
 use blib;
-use Test2::V0 -no_srand => 1;
+use Test2::V0 '!subtest', -no_srand => 1;
+use Test2::Util::Importer 'Test2::Tools::Subtest' => ( subtest_streamed => { -as => 'subtest' } );
 use Alien::Xmake;
 use File::Temp qw[tempdir];
 #

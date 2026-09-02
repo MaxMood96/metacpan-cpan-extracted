@@ -146,6 +146,28 @@ SKIP: {
     skip 'Future::AsyncAwait required for the async sub tests', 9
         unless eval { require Future::AsyncAwait; 1 };
 
+    # Which version, in the output, because a smoker report does not say.
+    # Future::AsyncAwait is not a prerequisite of this distribution - the
+    # tests use it if it is there - so it never appears in a report's
+    # PREREQUISITES table, and a failure that depends on its version has
+    # nothing in the report to pin it to.
+    diag("Future::AsyncAwait $Future::AsyncAwait::VERSION");
+
+    # Cancellation is the one behaviour here that the async sub machinery
+    # drives rather than this class: F::AA calls
+    # $outer->AWAIT_CHAIN_CANCEL($inner) when it suspends, and that call is
+    # what a later $outer->cancel rides into $inner. This class implements
+    # both that method and the older AWAIT_ON_CANCEL spelling, and t/39
+    # proves the whole Awaitable API against F::AA's own conformance suite -
+    # but if F::AA never makes the call, nothing this class does can make
+    # the inner future cancel.
+    #
+    # F::AA renamed AWAIT_ON_CANCEL to AWAIT_CHAIN_CANCEL in 0.45 and its
+    # 0.56 Changes says "Actually use AWAIT_ON_CANCEL properly (RT137723)",
+    # so below 0.56 the call is not something to rely on. A 5.22.1 smoker
+    # FAILed exactly this one assertion out of 539 while t/39 passed.
+    my $chains = eval { Future::AsyncAwait->VERSION('0.56'); 1 } ? 1 : 0;
+
     # async sub is syntax, so the whole block has to be compiled late.
     my $ok = eval <<'ASYNC';
         use Future::AsyncAwait future_class => 'Hyperman::Future';
@@ -172,11 +194,16 @@ SKIP: {
         }
 
         {   # cancelling the outer future cancels what it is awaiting
-            my $inner = Hyperman::Future->new;
-            async sub t_cancel { await $inner; return 1 }
-            my $outer = t_cancel();
-            $outer->cancel;
-            ok($inner->is_cancelled, 'cancelling the caller cancels the awaited future');
+            SKIP: {
+                skip 'Future::AsyncAwait 0.56+ chains cancellation into the '
+                   . 'awaited future', 1 unless $chains;
+                my $inner = Hyperman::Future->new;
+                async sub t_cancel { await $inner; return 1 }
+                my $outer = t_cancel();
+                $outer->cancel;
+                ok($inner->is_cancelled,
+                    'cancelling the caller cancels the awaited future');
+            }
         }
 
         {   # the shape a PAGI application produces: two sequential sends,

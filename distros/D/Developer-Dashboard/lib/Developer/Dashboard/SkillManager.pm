@@ -3,7 +3,7 @@ package Developer::Dashboard::SkillManager;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Cwd qw(realpath);
 use File::Copy qw(copy);
@@ -19,6 +19,7 @@ use JSON::XS qw(decode_json encode_json);
 use Symbol qw(gensym);
 use Developer::Dashboard::Platform qw(command_in_path passwd_home_directory);
 use Developer::Dashboard::PathRegistry;
+use Developer::Dashboard::StreamDrain qw(_drain_ready_handle);
 
 # new()
 # Creates a SkillManager instance to handle skill installation, updates, uninstalls.
@@ -1240,16 +1241,24 @@ sub _progress_detail_line {
 # _run_streaming_command(%args)
 # Runs one external dependency command while streaming a rolling output
 # snapshot into the active progress task and collecting the full transcript.
-# Input: command array reference plus optional cwd and banner line.
+# Input: command array reference plus optional cwd, banner line, and
+# timeout_ms (milliseconds; omitted or zero means unbounded, preserving prior
+# behavior for callers that do not opt in).
 # Output: hash reference with stdout, stderr, and exit fields.
 sub _run_streaming_command {
     my ( $self, %args ) = @_;
+
+    # DD-597: waitpid below reads $? into this sub's own return value, but
+    # without this guard the raw $? from that reap stays set in the caller's
+    # process after this sub returns.
+    local $?;
     my $command = $args{command} || die "Missing command for streaming execution\n";
     die "Streaming command must be an array reference\n" if ref($command) ne 'ARRAY' || !@{$command};
     my $cwd = $args{cwd};
     my $banner = $args{banner};
     my $env = $args{env};
     die "Streaming command env must be a hash reference\n" if defined $env && ref($env) ne 'HASH';
+    my $timeout_ms = $args{timeout_ms} || 0;
     $self->_progress_detail_line($banner) if defined $banner && $banner ne '';
 
     my $stdout_handle;
@@ -1286,29 +1295,71 @@ sub _run_streaming_command {
     my $selector = IO::Select->new();
     $selector->add($stdout_handle) if $stdout_handle;    # uncoverable branch false
     $selector->add($stderr_handle) if $stderr_handle;    # uncoverable branch false
-    while ( my @ready = $selector->can_read ) {
-        for my $handle (@ready) {
-            my $chunk = '';
-            my $read = sysread( $handle, $chunk, 8192 );
-            if ( !defined $read || $read == 0 ) {    # uncoverable condition left
-                $selector->remove($handle);
-                close $handle;
-                next;
-            }
-            my $slot = $target_for{ fileno($handle) };
-            ${$slot} .= $chunk if $slot;    # uncoverable branch false
-            for my $line ( split /\n/, $chunk ) {
-                $self->_progress_detail_line($line);
+
+    my $timed_out = 0;
+    my $read_loop = sub {
+        while ( my @ready = $selector->can_read ) {
+            for my $handle (@ready) {
+                my $chunk_ref = $self->_drain_ready_handle( $selector, $handle ) or next;
+                my $chunk = ${$chunk_ref};
+                my $slot  = $target_for{ fileno($handle) };
+                ${$slot} .= $chunk if $slot;    # uncoverable branch false
+                for my $line ( split /\n/, $chunk ) {
+                    $self->_progress_detail_line($line);
+                }
             }
         }
+        waitpid $pid, 0;
+    };
+
+    if ($timeout_ms) {
+        local $SIG{ALRM} = sub { die "__STREAMING_COMMAND_TIMEOUT__\n" };
+        alarm( int( ( $timeout_ms + 999 ) / 1000 ) );
+        my $ok = eval { $read_loop->(); 1 };
+        alarm(0);
+        if ( !$ok ) {
+            die $@ if $@ !~ /__STREAMING_COMMAND_TIMEOUT__/;    # uncoverable branch true
+            $self->_terminate_streaming_command($pid);
+            $timed_out = 1;
+        }
+    }
+    else {
+        $read_loop->();
     }
 
-    waitpid $pid, 0;
     return {
-        stdout => $stdout,
-        stderr => $stderr,
-        exit   => $? >> 8,
+        stdout    => $stdout,
+        stderr    => $stderr,
+        exit      => $timed_out ? -1 : $? >> 8,
+        timed_out => $timed_out,
     };
+}
+
+# _terminate_streaming_command($pid)
+# Terminates a timed-out _run_streaming_command child with a bounded
+# TERM-then-KILL sequence, matching this project's established
+# CollectorRunner::_terminate_command_process discipline.
+# Input: direct command child pid integer.
+# Output: true value after bounded TERM/KILL cleanup or a no-op skip.
+sub _terminate_streaming_command {
+    my ( $self, $pid ) = @_;
+    return 1 if !defined $pid || $pid !~ /^\d+$/ || $pid < 1;
+
+    kill 'TERM', $pid;
+    my $reaped = 0;
+    for ( 1 .. 20 ) {
+        my $waited = waitpid( $pid, 1 );
+        if ( $waited == $pid || $waited == -1 ) {
+            $reaped = 1;
+            last;
+        }
+        select( undef, undef, undef, 0.01 );    # uncoverable branch true
+    }
+    if ( !$reaped ) {
+        kill 'KILL', $pid;
+        waitpid( $pid, 0 );
+    }
+    return 1;
 }
 
 # _skill_install_root($skill_path)
@@ -1436,6 +1487,12 @@ sub _is_windows {
 # Output: boolean true when the package is already installed.
 sub _apt_package_is_installed {
     my ( $self, $package ) = @_;
+    # A QUERY MUST NOT DECIDE ITS CALLER'S EXIT STATUS (DD-592, same shape as
+    # DD-585/589/590/591). Neither this sub nor Capture::Tiny explicitly reads
+    # $?, but system() mutates the GLOBAL $? as an unavoidable side effect
+    # regardless of what the capture block returns - confirmed with a
+    # standalone repro before this fix.
+    local $?;
     my ( $stdout, undef, $exit ) = capture {
         system( 'dpkg-query', '-W', '--showformat=${Status}', '--', $package );
     };
@@ -1449,6 +1506,7 @@ sub _apt_package_is_installed {
 # Output: boolean true when the package is already installed.
 sub _apk_package_is_installed {
     my ( $self, $package ) = @_;
+    local $?;    # DD-592: see _apt_package_is_installed for why this is needed
     my ( undef, undef, $exit ) = capture {
         system( 'apk', 'info', '-e', $package );
     };
@@ -1461,6 +1519,7 @@ sub _apk_package_is_installed {
 # Output: boolean true when the package is already installed.
 sub _dnf_package_is_installed {
     my ( $self, $package ) = @_;
+    local $?;    # DD-592: see _apt_package_is_installed for why this is needed
     my ( undef, undef, $exit ) = capture {
         system( 'rpm', '-q', '--quiet', $package );
     };
@@ -1606,11 +1665,15 @@ sub _install_skill_package_json {
     close $workspace_fh;
 
     my $run = $self->_run_streaming_command(
-        command => [ 'npx', '--yes', 'npm', 'install', @specs ],
-        cwd     => $workspace,
-        banner  => "Installing Node dependencies for " . basename($skill_path) . " from $package_json: " . join( ' ', @specs ),
+        command    => [ 'npx', '--yes', 'npm', 'install', @specs ],
+        cwd        => $workspace,
+        banner     => "Installing Node dependencies for " . basename($skill_path) . " from $package_json: " . join( ' ', @specs ),
+        timeout_ms => $self->_skill_install_timeout_ms,
     );
-    my ( $npm_stdout, $npm_stderr, $npm_exit ) = @{$run}{qw(stdout stderr exit)};
+    my ( $npm_stdout, $npm_stderr, $npm_exit, $npm_timed_out ) = @{$run}{qw(stdout stderr exit timed_out)};
+    return {
+        error => "Timed out installing skill Node dependencies for $skill_path after " . $self->_skill_install_timeout_ms . "ms",
+    } if $npm_timed_out;
     return {
         error => "Failed to install skill Node dependencies for $skill_path: $npm_stderr",
     } if $npm_exit != 0;
@@ -1646,11 +1709,15 @@ sub _install_skill_requirements_txt {
     return { success => 1, skipped => 1 } if !-f $requirements;
 
     my $run = $self->_run_streaming_command(
-        command => [ $self->_python_dependency_command, '-m', 'pip', 'install', '--user', '--requirement', $requirements ],
-        cwd     => $skill_path,
-        banner  => "Installing Python dependencies for " . basename($skill_path) . " from $requirements",
+        command    => [ $self->_python_dependency_command, '-m', 'pip', 'install', '--user', '--requirement', $requirements ],
+        cwd        => $skill_path,
+        banner     => "Installing Python dependencies for " . basename($skill_path) . " from $requirements",
+        timeout_ms => $self->_skill_install_timeout_ms,
     );
-    my ( $stdout, $stderr, $exit ) = @{$run}{qw(stdout stderr exit)};
+    my ( $stdout, $stderr, $exit, $timed_out ) = @{$run}{qw(stdout stderr exit timed_out)};
+    return {
+        error => "Timed out installing skill Python dependencies for $skill_path after " . $self->_skill_install_timeout_ms . "ms",
+    } if $timed_out;
     return {
         error => "Failed to install skill Python dependencies for $skill_path: $stderr",
     } if $exit != 0;
@@ -1668,6 +1735,21 @@ sub _install_skill_requirements_txt {
 # Output: executable path or command name string.
 sub _python_dependency_command {
     return command_in_path('python') || command_in_path('python3') || 'python';
+}
+
+# _skill_install_timeout_ms()
+# Returns the bound applied to skill package.json/requirements.txt dependency
+# installs, matching the env-override-with-default pattern this codebase
+# already uses for other numeric tunables (e.g.
+# RuntimeManager::_collector_restart_limit). Installs legitimately take
+# longer than a typical action command, so the default is generous compared
+# to ActionRunner's 30s convention.
+# Input: none.
+# Output: positive integer milliseconds.
+sub _skill_install_timeout_ms {
+    my $value = $ENV{DEVELOPER_DASHBOARD_SKILL_INSTALL_TIMEOUT_MS};
+    return $value if defined $value && $value =~ /^\d+$/ && $value > 0;
+    return 300_000;
 }
 
 # _package_json_dependency_specs($package_json)
@@ -1692,6 +1774,17 @@ sub _package_json_dependency_specs {
         my $entries = $decoded->{$section};
         next if ref($entries) ne 'HASH';
         for my $name ( sort keys %{$entries} ) {
+            # DD-606: a dependency NAME starting with '-' is never a real npm
+            # package name, but it IS a shape npm's own CLI parser accepts as
+            # a flag when it appears as a bare argv element - list-form exec
+            # avoids shell injection, but does nothing to stop npm itself from
+            # reinterpreting an argv element that looks like "--registry" as
+            # a flag rather than a package spec. Reject loudly here, before
+            # any such name can reach the npm install argv, rather than
+            # silently skip it and leave the operator guessing why an install
+            # came up short.
+            die "Refusing to install dependency '$name' from $package_json: dependency names starting with '-' are never real npm package names and would be misread as an npm CLI flag\n"
+              if $name =~ /\A-/;
             my $version = $entries->{$name};
             push @specs, defined $version && $version ne '' ? "$name\@$version" : $name;
         }

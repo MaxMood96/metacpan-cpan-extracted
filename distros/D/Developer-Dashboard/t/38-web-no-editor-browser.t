@@ -8,6 +8,9 @@ use File::Temp qw(tempdir);
 use IO::Socket::INET;
 use POSIX qw(:sys_wait_h);
 use Test::More;
+
+use lib 't/lib';
+use Local::BrowserProbe qw(browser_can_fetch_loopback);
 use Time::HiRes qw(sleep);
 
 my $repo_root     = abs_path('.');
@@ -18,6 +21,13 @@ my $timeout_bin   = _find_command('timeout');
 
 plan skip_all => 'Web browser chrome smoke requires Chromium on PATH'
   if !$chromium_bin;
+
+# The same pre-flight probe t/33 uses (DD-534). This file was left behind when
+# the probe was written for t/33 alone, and failed the very next full-suite run
+# with 'exited 255, No plan found' - which is why the probe now lives in a shared
+# module rather than in whichever test file happened to need it first.
+my ( $probe_ok, $probe_reason ) = browser_can_fetch_loopback( browser => $chromium_bin );
+plan skip_all => $probe_reason if !$probe_ok;
 
 my $home_root      = tempdir( 'dd-no-editor-browser-home-XXXXXX', CLEANUP => 1, TMPDIR => 1 );
 my $project_root   = tempdir( 'dd-no-editor-browser-project-XXXXXX', CLEANUP => 1, TMPDIR => 1 );

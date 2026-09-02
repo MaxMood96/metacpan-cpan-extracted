@@ -1,5 +1,12 @@
 Revision history for Hyperman
 
+0.41	2026-09-01
+        - t/38-awaitable.t asserts await cancellation only on
+          Future::AsyncAwait 0.56+, which is where it chains the cancel into
+          the awaited future.
+        - t/38-awaitable.t reports the Future::AsyncAwait version it ran
+          against.
+
 0.40	2026-09-01
         - Hyperman::Future implements the Future::AsyncAwait::Awaitable API,
           so await works inside an async sub.

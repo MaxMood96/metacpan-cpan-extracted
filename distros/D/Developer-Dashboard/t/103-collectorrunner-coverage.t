@@ -545,15 +545,18 @@ is( $runner->_descriptor_is_inherited_pipe(999999999), 0, '_descriptor_is_inheri
     local *Developer::Dashboard::CollectorRunner::is_windows = sub { return 1 };
     {
         local *Developer::Dashboard::CollectorRunner::command_in_path = sub { return '/win/perl' };
+        local *Developer::Dashboard::ProcessSupervision::command_in_path = \&Developer::Dashboard::CollectorRunner::command_in_path;
         is( $runner->_current_perl_command, '/win/perl', '_current_perl_command prefers perl on Windows when present' );
     }
     {
         my %answers = ( 'perl' => undef, 'perl.exe' => '/win/perl.exe' );
         local *Developer::Dashboard::CollectorRunner::command_in_path = sub { return $answers{ $_[0] } };
+        local *Developer::Dashboard::ProcessSupervision::command_in_path = \&Developer::Dashboard::CollectorRunner::command_in_path;
         is( $runner->_current_perl_command, '/win/perl.exe', '_current_perl_command falls back to perl.exe on Windows' );
     }
     {
         local *Developer::Dashboard::CollectorRunner::command_in_path = sub { return undef };
+        local *Developer::Dashboard::ProcessSupervision::command_in_path = \&Developer::Dashboard::CollectorRunner::command_in_path;
         local $^X = 'x';
         is( $runner->_current_perl_command, 'x', '_current_perl_command falls through to $^X when no Windows perl is resolvable' );
     }
@@ -561,6 +564,7 @@ is( $runner->_descriptor_is_inherited_pipe(999999999), 0, '_descriptor_is_inheri
 {
     no warnings 'redefine';
     local *Developer::Dashboard::CollectorRunner::command_in_path = sub { return '/usr/bin/perl' };
+    local *Developer::Dashboard::ProcessSupervision::command_in_path = \&Developer::Dashboard::CollectorRunner::command_in_path;
     is( $runner->_current_perl_command, $^X, '_current_perl_command returns a runnable $^X on Linux' );
     {
         local $^X = '';
@@ -612,6 +616,7 @@ is( Developer::Dashboard::CollectorRunner::_powershell_single_quote(undef), q{''
     no warnings 'redefine';
     local *Developer::Dashboard::CollectorRunner::is_windows      = sub { return 1 };
     local *Developer::Dashboard::CollectorRunner::command_in_path = sub { return undef };
+    local *Developer::Dashboard::ProcessSupervision::command_in_path = \&Developer::Dashboard::CollectorRunner::command_in_path;
     {
         local $ENV{SystemRoot} = '/tmp/win-system-root';
         is( $runner->_powershell_command, '', '_powershell_command falls back through SystemRoot and returns empty when no binary exists' );
@@ -832,6 +837,19 @@ is( Developer::Dashboard::CollectorRunner::_cron_match( '*/2', 4 ), 1, '_cron_ma
 is( Developer::Dashboard::CollectorRunner::_cron_match( '10-20', 5 ),  0, '_cron_match rejects a value below a range' );
 is( Developer::Dashboard::CollectorRunner::_cron_match( '10-20', 25 ), 0, '_cron_match rejects a value above a range' );
 is( Developer::Dashboard::CollectorRunner::_cron_match( '10-20', 15 ), 1, '_cron_match accepts a value inside a range' );
+
+# DD-631: crontab(5) allows weekday 0-7 where BOTH 0 and 7 mean Sunday, but
+# localtime's wday is always 0..6 - a literal '7' token must alias to Sunday(0)
+# before the field reaches the generic _cron_match (which must NOT treat 7 as
+# an alias for other fields - hour/mday/mon have no such convention).
+is( Developer::Dashboard::CollectorRunner::_cron_wday_normalize( '7' ),     '0',   '_cron_wday_normalize aliases a bare weekday 7 to Sunday(0)' );
+is( Developer::Dashboard::CollectorRunner::_cron_wday_normalize( '1,7' ),   '1,0', '_cron_wday_normalize aliases weekday 7 inside a comma list' );
+is( Developer::Dashboard::CollectorRunner::_cron_wday_normalize( '8' ),     '8',   '_cron_wday_normalize leaves an already-invalid weekday untouched' );
+is( Developer::Dashboard::CollectorRunner::_cron_wday_normalize( '*' ),     '*',   '_cron_wday_normalize leaves a wildcard weekday untouched' );
+is( Developer::Dashboard::CollectorRunner::_cron_wday_normalize( '*/7' ),   '*/7', '_cron_wday_normalize leaves a step weekday spec untouched' );
+is( Developer::Dashboard::CollectorRunner::_cron_wday_normalize( undef ), undef,   '_cron_wday_normalize passes an undef spec through unchanged' );
+is( $runner->_cron_due( '* * * * 7', 'cron.wday7' ), $runner->_cron_due( '* * * * 0', 'cron.wday0' ),
+    '_cron_due treats weekday 7 identically to weekday 0 for the current day' );
 
 # ===========================================================================
 # _run_command / _run_code: chdir failures, timeout, error propagation, env.
@@ -1634,6 +1652,53 @@ ok( !defined $runner->stop_loop('stop.missing'), 'stop_loop returns undef with n
     if ( !$child ) { $runner->_shutdown_loop( 'shutdown.crashed', 'crashed', {} ); CORE::exit(9); }
     waitpid( $child, 0 );
     is( $? >> 8, 0, '_shutdown_loop honors an explicit status and terminates the worker set' );
+}
+
+# ---------------------------------------------------------------------------
+# DD-585: a QUERY MUST NOT DECIDE ITS CALLER'S EXIT STATUS.
+#
+# _read_process_title falls back to `system 'ps' -p $pid` when /proc/$pid/cmdline
+# is unreadable, which is the normal case for a process that vanished between
+# readdir and the read. ps then exits 1 and leaves $? at 256, and the function
+# returns without restoring it.
+#
+# That poisoned $? decided whether a whole test file passed. t/153's END block
+# walks every entry in /proc; END blocks run last-in-first-out, so it ran before
+# Test::Builder's, which then read $?, printed "Looks like your test exited with
+# 256 just after 15" and failed the file with exit 255 - while all 15 of its
+# subtests had passed. CI run 32011417394 on 07babd9 died exactly that way, and
+# it is load-sensitive rather than random: a busy runner churns processes, so the
+# vanish-window is hit far more often than on a quiet box.
+#
+# Proven three ways before this assertion was written: an END with a failing
+# system exits 255, the same call with `local $?` exits 0, and no END exits 0.
+{
+    local $? = 0;
+    my $missing_pid = 999_999;
+    $missing_pid++ while kill( 0, $missing_pid ) && $missing_pid < 4_000_000;
+    my $title = $runner->_read_process_title($missing_pid);
+    is( $?, 0,
+        'reading the title of a vanished process leaves $? alone, so a caller in an END block does not inherit a false exit status' );
+    is( $title, undef, 'and it reports no title for a process that is not there' );
+
+    # THE SIBLING, because the same shape is the same defect. _read_process_state
+    # has an identical ps fallback and leaked identically; fixing only the function
+    # that happened to be noticed is how the next caller inherits it.
+    local $? = 0;
+    my $state = $runner->_read_process_state($missing_pid);
+    is( $?, 0, 'and reading the STATE of a vanished process leaves $? alone too' );
+    is( $state, undef, 'reporting no state for a process that is not there' );
+}
+
+# DD-597: same bug class as the ps-fallback readers above - _run_command's own
+# system() call mutates the global $?, and without a guard that stays set in
+# the caller's process after this sub returns. A real (unmocked) command runs
+# here specifically to prove the guard, not just this sub's own return value.
+{
+    $? = 12 << 8;    ## no critic (Variables::RequireLocalizedPunctuationVars)
+    $runner->_run_command( source => 'true', cwd => $home, timeout_ms => 2000 );
+    is( $? >> 8, 12,
+        '_run_command does not leak its own subprocess status into the caller global $?' );
 }
 
 done_testing;

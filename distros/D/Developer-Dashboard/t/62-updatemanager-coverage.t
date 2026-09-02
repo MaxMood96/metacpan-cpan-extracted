@@ -133,6 +133,13 @@ like(
     'the result record carries the script output',
 );
 
+# DD-597: run()'s system() call for each update script mutates the caller's
+# global $? as a side effect; without a guard at the sub's entry that stays
+# set in the caller's process after this sub returns.
+$? = 12 << 8;    ## no critic (Variables::RequireLocalizedPunctuationVars)
+capture { $updater->run };
+is( $? >> 8, 12, 'run() does not leak an update script\'s subprocess status into the caller global $?' );
+
 # --- _restart_collectors with nothing to restart: the early-return no-op.
 # run() only reaches _restart_collectors with whatever collectors were running
 # when the update started, so the empty-list case is pinned by direct call

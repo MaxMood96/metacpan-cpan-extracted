@@ -16,7 +16,8 @@
 use strict;
 use warnings;
 
-use Test::More tests => 25;
+use Test::More tests => 33;
+use Scalar::Util qw( refaddr reftype );
 use Clownfish::Test;
 
 package TestObj;
@@ -61,6 +62,15 @@ use base qw( Clownfish::Test::TestHost );
 package SubclassFinalTestObj;
 use base qw( Clownfish::Vector );
 
+package CtorDtorTestObj;
+use base qw( Clownfish::Test::TestHost );
+{
+    our $num_do_init_calls;
+    our $num_do_destroy_calls;
+    sub do_init    { $num_do_init_calls    += 1; }
+    sub do_destroy { $num_do_destroy_calls += 1; }
+}
+
 package main;
 use Storable qw( freeze thaw );
 use Clownfish::Test;
@@ -71,8 +81,10 @@ ok( defined $TestObj::version,
 );
 
 my $object = TestObj->new;
-isa_ok( $object, "Clownfish::Obj",
-    "Clownfish objects can be subclassed" );
+isa_ok( $object, "Clownfish::Obj", "Subclassed Clownfish object" );
+is( reftype($object), "HASH",
+    "Subclassed objects without ivars are hashrefs" );
+is( $$object, refaddr($object), "Overloaded scalar deref works" );
 
 SKIP: {
     skip( "Exception thrown within STORABLE hook leaks", 1 )
@@ -128,6 +140,8 @@ is( Clownfish::Test::refcount($object),
 $object = SonOfTestObj->new;
 like( $object->to_string, qr/STRING:.*?SonOfTestObj/,
     "overridden XS bindings can be called via SUPER" );
+is( $$object, refaddr($object),
+    "Overloaded scalar deref works with Perl subclasses" );
 
 SKIP: {
     skip( "Exception thrown within callback leaks", 2 )
@@ -159,4 +173,50 @@ is( $overridden_alias_test->invoke_aliased_from_c, 'Perl',
 eval { SubclassFinalTestObj->new; };
 like( $@, qr/Can't subclass final class Clownfish::Vector/,
       "Final class can't be subclassed" );
+
+SKIP: {
+    skip( "Circular references leak", 1 )
+        if $ENV{CLOWNFISH_VALGRIND};
+
+    # Create a circular reference on purpose. These objects shouldn't be
+    # destroyed during Perl's global destruction because it could cause
+    # memory corruption.
+    my $ref1 = Clownfish::Test::RefObj->new;
+    my $ref2 = Clownfish::Test::RefObj->new;
+    $ref1->set_ref($ref2);
+    $ref2->set_ref($ref1);
+    pass ( "Created circular reference" );
+}
+
+SKIP: {
+    skip( "Global destruction check doesn't work reliably", 1 )
+        if $ENV{CLOWNFISH_VALGRIND};
+
+    {
+        package LeakyObj;
+        use base qw( Clownfish::Obj );
+
+        sub DESTROY {
+            # The assignment increases the object's refcount.
+            my $self = shift;
+            $self->SUPER::DESTROY;
+        }
+    }
+
+    # Will unfortunately be destroyed during global destruction, not in the
+    # END phase as one would expect.
+    # See https://rt.perl.org/Ticket/Display.html?id=32714
+    our $leaky = LeakyObj->new;
+    pass( "Created LeakyObj" );
+}
+
+$CtorDtorTestObj::num_do_init_calls    = 0;
+$CtorDtorTestObj::num_do_destroy_calls = 0;
+{
+    my $ctor_dtor_test = CtorDtorTestObj->new;
+    is( reftype($ctor_dtor_test), "HASH",
+        "ctor_dtor_test uses wrapper objects" );
+}
+is ( $CtorDtorTestObj::num_do_init_calls,    1, "do_init was called" );
+is ( $CtorDtorTestObj::num_do_destroy_calls, 1, "do_destroy was called" );
 

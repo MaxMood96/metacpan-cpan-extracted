@@ -1,5 +1,5 @@
 package Crypt::JWS::OpenSSL::Util::PEM;
-$Crypt::JWS::OpenSSL::Util::PEM::VERSION = '0.003';
+$Crypt::JWS::OpenSSL::Util::PEM::VERSION = '0.004';
 use Moo;
 with qw(
     Crypt::JWS::OpenSSL::Role::Encoder
@@ -19,6 +19,8 @@ my $ECC_NID_MAP = {
     'ES512' => 716,
 };
 
+has '_version_supports_pkcs8_x509' => ( is => 'lazy' );
+
 sub generate_rsa_key_pair {
     my( $self, $bits) = @_;
     $bits ||= 2048;
@@ -31,8 +33,16 @@ sub generate_rsa_key_pair {
     }
     
     my $rsa = Crypt::OpenSSL::RSA->generate_key($bits);
-    my $private_pem = $rsa->get_private_key_pkcs8_string();
-    my $public_pem = $rsa->get_public_key_x509_string();
+    
+    my ( $private_pem, $public_pem );
+    
+    if ( $self->_version_supports_pkcs8_x509 ) {
+        $private_pem = $rsa->get_private_key_pkcs8_string();
+        $public_pem = $rsa->get_public_key_x509_string();
+    } else {
+        $private_pem = $rsa->get_private_key_string();
+        $public_pem = $rsa->get_public_key_string();
+    }
     
     return ( wantarray ) ? ( $private_pem, $public_pem ) : [ $private_pem, $public_pem ];
 }
@@ -71,6 +81,12 @@ sub generate_ecc_key_pair {
     return ( wantarray ) ? ( $private_pem, $public_pem ) : [ $private_pem, $public_pem ];
 }
 
+sub _build__version_supports_pkcs8_x509 {
+    my $self = shift;
+    my $checkversion = $self->numify_version($Crypt::OpenSSL::RSA::VERSION);
+    return ( $checkversion >= 0.38 ) ? 1 : 0;   
+}
+
 1;
 
 __END__
@@ -85,7 +101,7 @@ Crypt::JWS::OpenSSL::Util::PEM - Utility to generate pem encoded keys.
 
 =head1 VERSION
 
-version 0.003
+version 0.004
 
 =head1 SYNOPSIS
 

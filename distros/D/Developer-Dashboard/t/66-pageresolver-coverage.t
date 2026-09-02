@@ -109,6 +109,27 @@ my $resolver = Developer::Dashboard::PageResolver->new(
     like( $@, qr/Missing page id/, 'load_named_page dies on an empty-string id' );
 }
 
+# --- DD-603: a saved page that exists but cannot be READ must surface its
+#     real error, not silently fall through to provider lookup and report a
+#     misleading generic "not found". ---
+{
+    my $unreadable_file = $pages->save_page( { id => 'unreadable-saved-page', title => 'X' } );
+    chmod 0000, $unreadable_file or die "Unable to chmod $unreadable_file: $!";
+    my $err = eval { $resolver->load_named_page('unreadable-saved-page'); 1 } ? '' : $@;
+    like( $err, qr/Invalid page path/, 'DD-603: a real read failure surfaces its own diagnostic (PageStore\'s sysopen failure), not a fabricated one' );
+    unlike( $err, qr/not found/, 'DD-603: a real read failure is never reported as "not found"' );
+    chmod 0600, $unreadable_file or die "Unable to restore $unreadable_file: $!";
+}
+
+# --- DD-603: a genuinely missing saved page must still fall through to
+#     provider lookup exactly as before (no regression from the fix above).
+# ---
+{
+    my $err = eval { $resolver->load_named_page('genuinely-missing-saved-page'); 1 } ? '' : $@;
+    like( $err, qr/Page 'genuinely-missing-saved-page' not found/,
+        'DD-603: a genuinely missing saved page still falls through to provider lookup and reports not-found' );
+}
+
 # --- An unknown provider id must die, after the grep has scanned every
 #     provider (including the non-hash and id-less entries). ---
 {

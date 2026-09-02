@@ -4,8 +4,8 @@
 use v5.40;
 use feature 'class';
 no warnings 'experimental::class';
-
-class Alien::Xmake::Builder {
+class    #
+    Alien::Xmake::Builder {
     use CPAN::Meta;
     use ExtUtils::Install qw[pm_to_blib install];
     use ExtUtils::InstallPaths;
@@ -14,14 +14,25 @@ class Alien::Xmake::Builder {
     use HTTP::Tiny;
     use Path::Tiny        qw[path cwd];
     use ExtUtils::Helpers qw[make_executable split_like_shell detildefy];
-    use Data::Dumper;
 
     # Configuration
-    field $target_version : param : reader //= 'v3.0.6';
+    field $target_version : param : reader //= '';    # empty means "latest release" (resolved from the GitHub API)
     field $force  : param  //= 0;
     field $meta   : reader //= CPAN::Meta->load_file('META.json');
     field $action : param  //= 'build';
     field $target_config = 'lib/Alien/Xmake/ConfigData.pm';
+
+    # GitHub release discovery
+    field $owner         = 'xmake-io';
+    field $repo          = 'xmake';
+    field $http : reader = do {
+        my %headers = ( 'X-GitHub-Api-Version' => '2026-03-10', accept => 'application/vnd.github+json' );
+        my $token   = $ENV{GITHUB_TOKEN} // $ENV{GH_TOKEN};
+        $headers{Authorization} = "Bearer $token" if $token && length $token;
+        HTTP::Tiny->new( default_headers => \%headers, verify_SSL => 1 );
+    };
+    field $gh_release;          # decoded latest/pinned release hashref (lazy)
+    field $resolved_version;    # target version tag (lazy, from the API when needed)
 
     # Params to Build script
     field $install_base  : param    //= '';
@@ -156,6 +167,49 @@ use %s;
         system(@args) == 0;
     }
 
+    # Query the GitHub releases API for the target release (latest unless a
+    # --target_version was pinned). Returns the decoded release hashref, caching
+    # it so a single build performs only one API call.
+    method _github_release () {
+        return $gh_release if defined $gh_release;
+        my $tag = $self->target_version;
+        my $url = $tag ? "https://api.github.com/repos/$owner/$repo/releases/tags/$tag" : "https://api.github.com/repos/$owner/$repo/releases/latest";
+        say 'Resolving Xmake release info from the GitHub API...';
+        my $res = $self->http->get($url);
+        my %rl  = map { $_ => $res->{headers}{$_} // '' } qw[x-ratelimit-remaining x-ratelimit-limit x-ratelimit-reset retry-after];
+        if ( $res->{status} == 403 || $res->{status} == 429 ) {
+            if ( $rl{'x-ratelimit-remaining'} eq '0' ) {
+                my $when = $rl{'x-ratelimit-reset'} =~ /^\d+$/ ? '; resets at ' . scalar gmtime( $rl{'x-ratelimit-reset'} + 0 ) : '';
+                die 'GitHub API rate limit exceeded (limit=' .
+                    $rl{'x-ratelimit-limit'} .
+                    $when . ').' .
+                    " Recommend setting GITHUB_TOKEN (5,000 req/hr) to raise the 60 req/hr unauth limit\n";
+            }
+            my $retry = $rl{'retry-after'}       =~ /^\d+$/ ? '; retry after ' . $rl{'retry-after'} . 's'                              : '';
+            my $reset = $rl{'x-ratelimit-reset'} =~ /^\d+$/ ? '; remaining resets at ' . scalar gmtime( $rl{'x-ratelimit-reset'} + 0 ) : '';
+            die 'GitHub API rate limited (status ' . $res->{status} . $retry . $reset . "). Set GITHUB_TOKEN to raise the limit\n";
+        }
+        die 'GitHub releases API failed (' . $res->{status} . ' ' . $res->{reason} . " ) for $url\n" unless $res->{success};
+        $gh_release = decode_json( $res->{content} );
+        return $gh_release;
+    }
+
+    # The version tag we build against: '' -> latest release from the API.
+    method _desired_version () {
+        return $resolved_version if defined $resolved_version;
+        $resolved_version = $self->_github_release->{tag_name};
+        return $resolved_version;
+    }
+
+    # Locate a release asset by name pattern. Returns the asset hashref.
+    method _find_asset ($re) {
+        my $assets = $self->_github_release->{assets} // [];
+        for my $a (@$assets) {
+            return $a if ( $a->{name} // '' ) =~ $re;
+        }
+        return undef;
+    }
+
     method _resolve_xmake ( ) {
 
         # Check for system install
@@ -163,11 +217,11 @@ use %s;
             my $sys_path = $self->_find_system_xmake();
             if ($sys_path) {
                 my $ver = $self->_get_xmake_version($sys_path);
-                if ( $self->_version_cmp( $ver, $target_version ) >= 0 ) {
+                if ( $self->_version_cmp( $ver, $self->_desired_version ) >= 0 ) {
                     say "Found suitable system Xmake: $sys_path ($ver)";
                     return { install_type => 'system', version => $ver, bin => "$sys_path" };
                 }
-                say "System Xmake found ($ver) but is older than required ($target_version).";
+                say "System Xmake found ($ver) but is older than required (" . $self->_desired_version . ').';
             }
         }
 
@@ -182,7 +236,7 @@ use %s;
         }
         if ( -x $blib_bin ) {
             my $ver = $self->_get_xmake_version($blib_bin);
-            if ( $self->_version_cmp( $ver, $target_version ) >= 0 ) {
+            if ( $self->_version_cmp( $ver, $self->_desired_version ) >= 0 ) {
                 say "Alien-Xmake build up-to-date ($ver).";
                 return $self->_generate_share_config( $blib_bin, $ver );
             }
@@ -193,7 +247,7 @@ use %s;
         if ($existing) {
             my $ex_ver = $existing->{version};
             my $ex_dir = path( $existing->{install_dir} )->absolute;
-            if ( $self->_version_cmp( $ex_ver, $target_version ) >= 0 ) {
+            if ( $self->_version_cmp( $ex_ver, $self->_desired_version ) >= 0 ) {
                 say "Found valid private Xmake ($ex_ver) in $ex_dir";
                 if ( $ex_dir->stringify ne $install_dir->stringify ) {
                     say 'Copying existing installation to build directory...';
@@ -259,6 +313,7 @@ use %s;
     method _find_system_xmake ( ) {
         my $sep = ( $^O eq 'MSWin32' ) ? ';' : ':';
         for my $dir ( split /$sep/, $ENV{PATH} ) {
+            next unless length $dir;
             my $p    = path($dir);
             my $exts = ( $^O eq 'MSWin32' ) ? [qw(.exe .cmd .bat)] : [''];
             for my $ext (@$exts) {
@@ -288,15 +343,17 @@ use %s;
     method _write_config_data ($data) {
         my $dest = path('blib')->child($target_config);
         $dest->parent->mkpath;
-        my $dumper = Data::Dumper->new( [$data], ['conf'] );
-        $dumper->Indent(1)->Terse(1)->Sortkeys(1);
-        my $content = sprintf <<~'PERL', $dumper->Dump;
+        my $json = encode_json($data);
+        $json =~ s/\\/\\\\/g;
+        $json =~ s/'/\\'/g;
+        my $content = sprintf <<~'PERL', $json;
         package Alien::Xmake::ConfigData {
             use v5.40;
+            use JSON::PP qw[decode_json];
             use File::Spec;
             use File::Basename qw[dirname];
 
-            my $config = %s;
+            my $config = decode_json('%s');
 
             sub config ($s, $key //= ()) { defined $key ? $config->{$key} : $config }
             sub config_names { sort keys %%$config }
@@ -320,25 +377,30 @@ use %s;
         $temppath->mkpath;
         my $arch_env   = $ENV{PROCESSOR_ARCHITECTURE} // '';
         my $arch64_env = $ENV{PROCESSOR_ARCHITEW6432} // '';
+        my $target     = $self->_desired_version;
         my $filename;
 
         # Check for ARM64
         if ( $arch_env eq 'ARM64' || $arch64_env eq 'ARM64' ) {
 
-            # ARM64 releases currently use the 'bundle' naming convention
-            $filename = "xmake-bundle-$target_version.arm64.exe";
+            # ARM64 releases use the 'bundle' naming convention
+            $filename = "xmake-bundle-$target.arm64.exe";
         }
 
         # Check for x64 (AMD64/IA64)
         elsif ( $arch_env eq 'AMD64' || $arch_env eq 'IA64' || $arch64_env eq 'AMD64' || $arch64_env eq 'IA64' ) {
-            $filename = "xmake-$target_version.win64.exe";
+            $filename = "xmake-$target.win64.exe";
         }
 
         # Fallback to x86
         else {
-            $filename = "xmake-$target_version.win32.exe";
+            $filename = "xmake-$target.win32.exe";
         }
-        my $url     = "https://github.com/xmake-io/xmake/releases/download/$target_version/$filename";
+
+        # Preferred: the exact asset URL reported by the GitHub API. Fall back to
+        # the canonical hardcoded URL if the release metadata is unavailable.
+        my $asset   = $self->_find_asset(qr/\Q$filename\E\z/i);
+        my $url     = $asset ? $asset->{browser_download_url} : "https://github.com/$owner/$repo/releases/download/$target/$filename";
         my $outfile = $temppath->child('xmake-installer.exe');
         if ( !$self->_download_file( $url, $outfile ) ) {
             die "Download failed for $url";
@@ -384,28 +446,18 @@ use %s;
                 $self->_raise_dep_error();
             }
         }
-        my $version  = $target_version;
+        my $version  = $self->_desired_version;
         my $filename = "xmake-$version.gz.run";
-        my $gh_url   = "https://github.com/xmake-io/xmake/releases/download/$version/$filename";
-        my $cdn_url  = "https://fastly.jsdelivr.net/gh/xmake-mirror/xmake-releases\@$version/$filename";
-        my @urls;
-        my $fasthost = $self->_get_fast_host();
-        if ( $fasthost eq 'gitee.com' ) {
-            @urls = ( $cdn_url, $gh_url );
+
+        # Preferred: the exact asset URL reported by the GitHub API. Fall back to
+        # the canonical hardcoded URL if the release metadata is unavailable.
+        my $asset   = $self->_find_asset(qr/\Q$filename\E\z/i);
+        my $gh_url  = $asset ? $asset->{browser_download_url} : "https://github.com/$owner/$repo/releases/download/$version/$filename";
+        my $outfile = $build_dir->child('xmake.run');
+        say "Attempting download from $gh_url...";
+        if ( !$self->_download_file( $gh_url, $outfile ) ) {
+            die "Download failed for $gh_url";
         }
-        else {
-            @urls = ( $gh_url, $cdn_url );
-        }
-        my $outfile    = $build_dir->child('xmake.run');
-        my $downloaded = 0;
-        for my $url (@urls) {
-            say "Attempting download from $url...";
-            if ( $self->_download_file( $url, $outfile ) ) {
-                $downloaded = 1;
-                last;
-            }
-        }
-        die 'All download attempts failed.' unless $downloaded;
         say 'Extracting source bundle...';
         $self->_run_cmd( 'sh', $outfile, '--noexec', '--quiet', '--target', $build_dir ) or die 'Failed to extract .run file';
         my $cwd = cwd();
@@ -440,34 +492,6 @@ use %s;
             system( $make_cmd, 'install', "prefix=$installdir" ) == 0 or die 'Make install failed';
         }
         chdir $cwd;
-    }
-
-    method _get_host_speed ($host) {
-        my $cmd;
-        if ( $^O eq 'darwin' ) {
-            $cmd = "ping -c 1 -t 1 $host 2>/dev/null";
-        }
-        else {
-            $cmd = "ping -c 1 -W 1 $host 2>/dev/null";
-        }
-        my $output = `$cmd`;
-        if ( $output =~ /time=(\d+)/ ) {
-            return $1;
-        }
-        return 65535;
-    }
-
-    method _get_fast_host ( ) {
-        if ( $ENV{GITHUB_ACTIONS} ) {
-            return 'github.com';
-        }
-        say 'Testing connection speed to github.com vs gitee.com...';
-        my $speed_gitee  = $self->_get_host_speed('gitee.com');
-        my $speed_github = $self->_get_host_speed('github.com');
-        if ( $speed_gitee <= $speed_github ) {
-            return 'gitee.com';
-        }
-        return 'github.com';
     }
 
     method _download_file ( $url, $dest ) {
@@ -624,7 +648,6 @@ use %s;
        Alien::Xmake will detect and use the system installation.
 
     2. Install build tools manually:
-       * git
        * build-essential (make, gcc/clang, etc)
        * libreadline-dev / readline-devel
 

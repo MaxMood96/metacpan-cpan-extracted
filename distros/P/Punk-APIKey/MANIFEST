@@ -31,6 +31,7 @@ t/20-sqlite.t
 t/30-sqitch.t
 t/40-cli.t
 t/50-doctor.t
+t/60-multieval.t
 t/lib/TFake.pm
 t/lib/TFake/KeyBackend.pm
 t/lib/TFake/Model/ApiKey.pm

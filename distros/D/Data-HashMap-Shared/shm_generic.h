@@ -198,8 +198,15 @@ static inline void shm_inline_pack(uint32_t *off, uint32_t *len_field,
         memcpy(&rest, str + 4, slen - 4);
         lf |= rest;
     }
-    *off = o;
-    *len_field = lf;
+    /* Publish through the inline-empty state (SHM_INLINE_FLAG with length 0).
+     * shm_str_free is a no-op on an inline field, so a writer killed between
+     * these stores can never leave (off,len) describing a block the free list
+     * would misclassify -- or, here, leave inline data bytes being read as an
+     * arena offset.  The stores must be atomic: a plain interim store is dead
+     * (overwritten with no intervening read) and would be optimised away. */
+    __atomic_store_n(len_field, SHM_INLINE_FLAG, __ATOMIC_RELEASE);
+    __atomic_store_n(off, o, __ATOMIC_RELEASE);
+    __atomic_store_n(len_field, lf, __ATOMIC_RELEASE);
 }
 
 static inline uint32_t shm_inline_len(uint32_t len_field) {
@@ -453,6 +460,7 @@ static inline int shm_pid_alive(uint32_t pid) {
 
 /* Forward declaration -- defined later in the LRU helpers section. */
 static void shm_lru_rebuild_if_corrupt(ShmHandle *h);
+static void shm_recount_counters(ShmHandle *h);
 
 /* Force-recover a stale write lock left by a dead process.
  * CAS to OUR pid to hold the lock while fixing seqlock, then release.
@@ -472,6 +480,7 @@ static inline void shm_recover_stale_lock(ShmHandle *h, uint32_t observed_wlock)
     if (seq & 1)
         __atomic_store_n(&hdr->seq, seq + 1, __ATOMIC_RELEASE);
     shm_lru_rebuild_if_corrupt(h);
+    shm_recount_counters(h);
     __atomic_add_fetch(&hdr->stat_recoveries, 1, __ATOMIC_RELAXED);
     /* Release the lock */
     __atomic_store_n(&hdr->wlock, 0, __ATOMIC_RELEASE);
@@ -911,8 +920,10 @@ static inline int shm_str_store(ShmHeader *hdr, char *arena,
     uint32_t aoff = shm_arena_alloc(hdr, arena, slen);
     if (aoff == 0 && slen > 0) return 0;
     memcpy(arena + aoff, str, slen);
-    *off = aoff;
-    *len_field = SHM_PACK_LEN(slen, utf8);
+    /* Interim inline-empty state -- see shm_inline_pack. */
+    __atomic_store_n(len_field, SHM_INLINE_FLAG, __ATOMIC_RELEASE);
+    __atomic_store_n(off, aoff, __ATOMIC_RELEASE);
+    __atomic_store_n(len_field, SHM_PACK_LEN(slen, utf8), __ATOMIC_RELEASE);
     return 1;
 }
 
@@ -1022,6 +1033,22 @@ static inline void shm_lru_promote(ShmHandle *h, uint32_t idx) {
  * re-establishes locality on the next few promotes).  Loses ordering, not
  * correctness.  Variant-agnostic -- uses only the byte-array `states` and
  * the typeless lru_prev/lru_next arrays. */
+/* Recount size/tombstones from states[].  A writer killed between publishing
+ * states[idx] and bumping the counters leaves hdr->size behind the true live
+ * count, which makes resize() truncate its save loop and silently drop live
+ * entries.  The LRU rebuild below reconciles too, but only when LRU is on. */
+static void shm_recount_counters(ShmHandle *h) {
+    ShmHeader *hdr = h->hdr;
+    uint32_t cap = hdr->table_cap, live = 0, tomb = 0;
+    for (uint32_t i = 0; i < cap; i++) {
+        uint8_t st = h->states[i];
+        if (st == SHM_TOMBSTONE) tomb++;
+        else if (SHM_IS_LIVE(st)) live++;
+    }
+    hdr->size = live;
+    hdr->tombstones = tomb;
+}
+
 static void shm_lru_rebuild_if_corrupt(ShmHandle *h) {
     if (!h->lru_prev) return;  /* LRU disabled */
     ShmHeader *hdr = h->hdr;
@@ -2176,15 +2203,18 @@ static void SHM_FN(tombstone_at)(ShmHandle *h, uint32_t idx) {
 #if !defined(SHM_KEY_IS_INT) || defined(SHM_VAL_IS_STR)
     SHM_NODE_TYPE *nodes = (SHM_NODE_TYPE *)h->nodes;
 #endif
+    /* Retire the slot BEFORE releasing its arena blocks: a writer killed
+     * between the two would otherwise leave a LIVE node pointing at a block
+     * the free list has already clobbered with its next pointer. */
+    h->states[idx] = SHM_TOMBSTONE;
+    hdr->size--;
+    hdr->tombstones++;
 #ifndef SHM_KEY_IS_INT
     shm_str_free(hdr, h->arena, nodes[idx].key_off, nodes[idx].key_len);
 #endif
 #ifdef SHM_VAL_IS_STR
     shm_str_free(hdr, h->arena, nodes[idx].val_off, nodes[idx].val_len);
 #endif
-    h->states[idx] = SHM_TOMBSTONE;
-    hdr->size--;
-    hdr->tombstones++;
 }
 
 /* Standard "remove a live entry": detach from LRU, clear TTL, tombstone.
@@ -4242,8 +4272,8 @@ static SHM_VAL_INT_TYPE SHM_FN(incr_by)(ShmHandle *h,
 #endif
     __atomic_store_n(&nodes[insert_pos].value, delta, __ATOMIC_RELAXED);
     h->states[insert_pos] = SHM_MAKE_TAG(hash);
-    hdr->size++;
     if (was_tombstone) hdr->tombstones--;
+    hdr->size++;
 
     if (h->lru_prev) shm_lru_push_front(h, insert_pos);
     if (h->expires_at && hdr->default_ttl > 0)
@@ -4385,8 +4415,8 @@ static SHM_VAL_INT_TYPE SHM_FN(set_minmax)(ShmHandle *h,
 #endif
     __atomic_store_n(&nodes[insert_pos].value, desired, __ATOMIC_RELAXED);
     h->states[insert_pos] = SHM_MAKE_TAG(hash);
-    hdr->size++;
     if (was_tombstone) hdr->tombstones--;
+    hdr->size++;
 
     if (h->lru_prev) shm_lru_push_front(h, insert_pos);
     if (h->expires_at && hdr->default_ttl > 0)
@@ -5074,6 +5104,7 @@ static int SHM_FN(reserve)(ShmHandle *h, uint32_t target) {
     if (target > hdr->max_table_cap) return 0;
     /* compute min capacity for target entries at <75% load */
     uint32_t needed = shm_next_pow2(target + target / 3 + 1);
+    if (needed == 0) return 0;  /* no power of two can hold target at <75% load */
     if (needed < SHM_INITIAL_CAP) needed = SHM_INITIAL_CAP;
     if (needed <= hdr->table_cap) return 1;  /* already big enough */
     if (needed > hdr->max_table_cap) return 0;  /* exceeds max */

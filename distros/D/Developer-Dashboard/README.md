@@ -5,7 +5,7 @@
 Developer::Dashboard - a local home for development work
 
 # VERSION
-4.26
+4.29
 
 # INTRODUCTION
 
@@ -2287,7 +2287,7 @@ security verification guidance, then keep the focused web and SSL regressions
 green:
 
     rg -n "LWP::Simple|HTTP::Tiny|JSON::PP|capture_merged" bin lib t
-    rg -n "companies house|ewf|xmlgw|chips|tuxedo|chs|grover|cidev|pbs|password=|dsn=" bin lib README doc t
+    rg -n "companies house|\\bewf|xmlgw|chips|tuxedo|\\bchs|grover|cidev|pbs|password=|dsn=" bin lib README doc t
     rg -n "X-Content-Type-Options|nosniff|Content-Security-Policy|X-Frame-Options|Referrer-Policy|SameSite=Strict|HttpOnly" lib doc SECURITY
     rg -n "Transient token URLs are disabled|_transient_url_tokens_allowed|verify_user|login_response|_session_cookie" lib/Developer/Dashboard/Web lib/Developer/Dashboard/Auth.pm
     rg -n "DBI->connect|\\$dbh->prepare\\(\\$sql\\)|table_info|column_info" bin/dashboard lib t
@@ -3030,6 +3030,30 @@ with exit codes returned from the capture block rather than read separately.
 It uses `LWP::UserAgent` for real outbound HTTP in active runtime paths such
 as the Java source lookup or mirror path behind `dashboard of` and
 `dashboard open-file`.
+
+# EMBEDDING IN PERL CODE
+
+Perl code that wants the same runtime the `dashboard`/`d2` command line
+resolves - a configured path alias, or the output of any other subcommand -
+does not need to build a path registry, file registry, and config loader by
+hand. `use Developer::Dashboard` exports `d2()`, a memoized runtime handle
+scoped to the current working directory:
+
+    use Developer::Dashboard;
+
+    my $foo = d2->paths->{foo};                    # in-process, no subprocess
+    my $out = d2->doctor;                           # shells to `dashboard doctor`
+    my $res = d2->run( 'tira.ticket.show', '--ref', 'DD-726' );
+                                                      # dotted subcommands
+
+`d2->paths` resolves in-process, the same table `dashboard paths`
+prints. Any other bareword method name shells to that `dashboard`
+subcommand; `d2->run(...)` is the explicit form for a dotted subcommand
+that cannot be spelled as a plain Perl method name. Output is decoded from
+JSON into a real Perl structure automatically when it looks like JSON,
+otherwise returned as plain text; a failing subcommand raises an exception
+with its error output attached rather than returning silently as if it had
+succeeded.
 
 # SEE ALSO
 

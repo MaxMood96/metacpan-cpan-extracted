@@ -201,6 +201,34 @@ SKIP: {
     skip 'Future::AsyncAwait required for the async sub tests', 8
         unless eval { require Future::AsyncAwait; 1 };
 
+    # Which version, in the output: Future::AsyncAwait is an optional
+    # dependency, so a smoker report's PREREQUISITES may not pin it.
+    diag("Future::AsyncAwait $Future::AsyncAwait::VERSION");
+
+    # Cancellation across an await is the one thing here that Future::
+    # AsyncAwait drives rather than this class, and BEFORE PERL 5.24 IT DOES
+    # NOT DRIVE IT.
+    #
+    # Measured, not inferred, with a logging Awaitable class that records
+    # every call it receives (same F::AA 0.71 throughout):
+    #
+    #   perl 5.24+  inner.ON_READY, inner.CLONE->outer,
+    #               outer.CHAIN_CANCEL(inner)   -> cancel reaches inner
+    #   perl 5.22   inner.ON_READY, inner.CLONE->outer,
+    #               outer.ON_CANCEL(CODE)       -> the code runs on cancel
+    #                                              and does not touch inner
+    #
+    # So on an older perl F::AA never says which future to chain, and no
+    # implementation of this protocol can pass the assertion - a pure-Perl
+    # class fails it identically. F::AA's own Changes says as much for a
+    # neighbouring feature: "does not work on perls before 5.24 for reasons
+    # unknown (RT130683)".
+    #
+    # Punk 0.41 FAILed exactly this one assertion on a 5.18.0 smoker that
+    # had F::AA 0.66, which is why the gate is the PERL version and not the
+    # F::AA version.
+    my $chains = $] >= 5.024;
+
     # async sub is syntax, so the whole block has to be compiled late.
     my $ok = eval <<'ASYNC';
         use Future::AsyncAwait future_class => 'Punk::Future';
@@ -227,11 +255,16 @@ SKIP: {
         }
 
         {   # cancelling the outer future cancels what it is awaiting
-            my $inner = Punk::Future->new;
-            async sub t_cancel { await $inner; return 1 }
-            my $outer = t_cancel();
-            $outer->cancel;
-            ok($inner->is_cancelled, 'cancelling the caller cancels the awaited future');
+            SKIP: {
+                skip 'Future::AsyncAwait chains cancellation into the '
+                   . 'awaited future only on perl 5.24+', 1 unless $chains;
+                my $inner = Punk::Future->new;
+                async sub t_cancel { await $inner; return 1 }
+                my $outer = t_cancel();
+                $outer->cancel;
+                ok($inner->is_cancelled,
+                    'cancelling the caller cancels the awaited future');
+            }
         }
 
         {   # two sequential awaits, each resolving immediately

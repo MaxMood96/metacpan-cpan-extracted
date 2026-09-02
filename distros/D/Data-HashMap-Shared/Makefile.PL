@@ -9,6 +9,10 @@ if ($Config{ivsize} < 8) {
     print "NA: Data::HashMap::Shared requires 64-bit integers (ivsize >= 8)\n";
     exit 0;
 }
+if ($Config{byteorder} !~ /^1234/) {
+    print "NA: Data::HashMap::Shared requires a little-endian architecture\n";
+    exit 0;
+}
 
 use Devel::PPPort;
 Devel::PPPort::WriteFile();

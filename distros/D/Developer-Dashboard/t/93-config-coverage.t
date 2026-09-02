@@ -301,6 +301,89 @@ sub dies_like {
     clear_config();
     is( $config->web_workers, 1, 'web_workers defaults a missing worker count' );
 
+    # DD-624: watchdog_restart_limit / watchdog_restart_window_seconds / watchdog_stall_grace_seconds.
+    # Each getter has three independent guard clauses (missing/non-numeric/below-one);
+    # exercise all three separately per getter, matching web_workers' own test style above.
+    set_config( { watchdog => {} } );
+    is( $config->watchdog_restart_limit,          undef, 'watchdog_restart_limit is undef for a missing value' );
+    is( $config->watchdog_restart_window_seconds, undef, 'watchdog_restart_window_seconds is undef for a missing value' );
+    is( $config->watchdog_stall_grace_seconds,    undef, 'watchdog_stall_grace_seconds is undef for a missing value' );
+
+    set_config( { watchdog => { restart_limit => 'abc', restart_window_seconds => 'xyz', stall_grace_seconds => 'qrs' } } );
+    is( $config->watchdog_restart_limit,          undef, 'watchdog_restart_limit is undef for a non-numeric value' );
+    is( $config->watchdog_restart_window_seconds, undef, 'watchdog_restart_window_seconds is undef for a non-numeric value' );
+    is( $config->watchdog_stall_grace_seconds,    undef, 'watchdog_stall_grace_seconds is undef for a non-numeric value' );
+
+    set_config( { watchdog => { restart_limit => '0', restart_window_seconds => '0', stall_grace_seconds => '0' } } );
+    is( $config->watchdog_restart_limit,          undef, 'watchdog_restart_limit is undef for a zero value' );
+    is( $config->watchdog_restart_window_seconds, undef, 'watchdog_restart_window_seconds is undef for a zero value' );
+    is( $config->watchdog_stall_grace_seconds,    undef, 'watchdog_stall_grace_seconds is undef for a zero value' );
+
+    set_config( { watchdog => { restart_limit => '6', restart_window_seconds => '900', stall_grace_seconds => '25' } } );
+    is( $config->watchdog_restart_limit,          6,   'watchdog_restart_limit reads a configured value' );
+    is( $config->watchdog_restart_window_seconds, 900, 'watchdog_restart_window_seconds reads a configured value' );
+    is( $config->watchdog_stall_grace_seconds,    25,  'watchdog_stall_grace_seconds reads a configured value' );
+
+    clear_config();
+    is( $config->watchdog_restart_limit,          undef, 'watchdog_restart_limit is undef when unset' );
+    is( $config->watchdog_restart_window_seconds, undef, 'watchdog_restart_window_seconds is undef when unset' );
+    is( $config->watchdog_stall_grace_seconds,    undef, 'watchdog_stall_grace_seconds is undef when unset' );
+    # DD-623: ssl_validity_days validation.
+    #
+    # One set_config per clause, deliberately. A single block exercising every
+    # bad value at once leaves Devel::Cover's CONDITION metric with gaps that
+    # the statement and branch metrics do not show - the failure DD-624 paid a
+    # gate cycle for. Each guard gets its own observation.
+    set_config( { web => { ssl_validity_days => 'abc' } } );
+    is( $config->ssl_validity_days, 365, 'ssl_validity_days defaults a non-numeric validity' );
+    set_config( { web => { ssl_validity_days => '' } } );
+    is( $config->ssl_validity_days, 365, 'ssl_validity_days defaults an empty validity' );
+    set_config( { web => { ssl_validity_days => '0' } } );
+    is( $config->ssl_validity_days, 365, 'ssl_validity_days defaults a zero validity' );
+    set_config( { web => { ssl_validity_days => '-1' } } );
+    is( $config->ssl_validity_days, 365, 'ssl_validity_days defaults a negative validity' );
+    set_config( { web => { ssl_validity_days => '3.5' } } );
+    is( $config->ssl_validity_days, 365, 'ssl_validity_days defaults a fractional validity' );
+    set_config( { web => { ssl_validity_days => '730' } } );
+    is( $config->ssl_validity_days, 730, 'ssl_validity_days keeps a positive validity' );
+
+    # The WIRING, not the ends. t/17 proves generate_self_signed_cert honours a
+    # validity_days argument by reading the certificate's real notAfter, and the
+    # assertions above prove the accessor reads the config key. Neither touches
+    # the join between them - web_settings is what carries the value from one to
+    # the other, and if its key were renamed both files would still pass while
+    # AC-1 ("config.json {web}{ssl_validity_days} makes generate_self_signed_cert
+    # issue a cert with that notAfter") became false. Two green tests whose
+    # conjunction is untested is the same shape as an assertion that cannot fail.
+    is( $config->web_settings->{ssl_validity_days},
+        730, 'web_settings carries the configured validity through to the caller that generates the cert' );
+    set_config( { web => {} } );
+    is( $config->web_settings->{ssl_validity_days},
+        365, 'web_settings carries the 365 default when no validity is configured' );
+
+    # AC-5: a value beyond the 398-day public-CA limit is HONOURED, not clamped.
+    # The browser rule applies to publicly-trusted certificates and explicitly
+    # not to locally-operated ones, so clamping here would enforce a rule that
+    # does not govern a self-signed localhost cert - silently, and against a
+    # deliberate operator choice. Asserting the value comes back intact is what
+    # makes a clamping implementation fail this file.
+    set_config( { web => { ssl_validity_days => '3650' } } );
+    is( $config->ssl_validity_days, 3650, 'ssl_validity_days does NOT clamp a value above 398' );
+
+    clear_config();
+    is( $config->ssl_validity_days, 365, 'ssl_validity_days defaults a missing validity' );
+
+    # DD-651: ssl_warn_days guards, following the same one-clause-per-observation
+    # shape as ssl_validity_days above and for the same reason (DD-624).
+    set_config( { web => { ssl_warn_days => 'abc' } } );
+    is( $config->ssl_warn_days, 30, 'ssl_warn_days defaults a non-numeric value' );
+    set_config( { web => { ssl_warn_days => '0' } } );
+    is( $config->ssl_warn_days, 30, 'ssl_warn_days defaults a zero value' );
+    set_config( { web => { ssl_warn_days => '5' } } );
+    is( $config->ssl_warn_days, 5, 'ssl_warn_days keeps a positive value' );
+    clear_config();
+    is( $config->ssl_warn_days, 30, 'ssl_warn_days defaults a missing value' );
+
     # 603: docker_config presence/absence.
     set_config( { docker => { compose => 'x' } } );
     is_deeply( $config->docker_config, { compose => 'x' }, 'docker_config returns configured docker settings' );

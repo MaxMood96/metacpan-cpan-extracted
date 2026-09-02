@@ -3,7 +3,7 @@ package Developer::Dashboard::PageRuntime;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Capture::Tiny qw(capture);
 use Developer::Dashboard::DataHelper qw(j je);
@@ -287,6 +287,11 @@ sub _system_context {
 # Output: hash reference with stdout, stderr, returns, and merged stash.
 sub _run_single_block {
     my ( $self, %args ) = @_;
+
+    # DD-597: the executed sandpit code may itself run system()/backticks,
+    # which mutates the caller's global $? as a side effect; without this
+    # guard that stays set in the caller's process after this sub returns.
+    local $?;
     my $code            = $args{code} // '';
     my $state           = $args{state} || {};
     my $runtime         = $args{runtime_context} || {};
@@ -424,6 +429,13 @@ sub stream_code_block {
 # Output: hash reference with exit_code and process status word.
 sub stream_saved_ajax_file {
     my ( $self, %args ) = @_;
+    # A QUERY MUST NOT DECIDE ITS CALLER'S EXIT STATUS (DD-593, same shape as
+    # DD-585/589/590/591/592). The direct waitpid($pid,0) fallback below reads
+    # $? into $status when the worker exits cleanly, but without this guard
+    # the raw $? from that reap stays set in the caller's process after this
+    # sub returns. `local` restores the caller's $? on return regardless of
+    # what runs inside.
+    local $?;
     my $path          = $args{path} || die 'Missing saved ajax file path';
     my $params        = $args{params} || {};
     my $stdout_writer = $args{stdout_writer} || \&_noop_writer;
@@ -591,6 +603,12 @@ sub _drain_saved_ajax_post_exit_handles {
 # Output: list of boolean child-exited flag and optional wait status word.
 sub _saved_ajax_child_exited {
     my ( $self, $pid ) = @_;
+    # A QUERY MUST NOT DECIDE ITS CALLER'S EXIT STATUS (DD-593, same shape as
+    # DD-585/589/590/591/592). waitpid(WNOHANG) below reads $? into the
+    # returned status word, but without this guard the raw $? from that reap
+    # stays set in the caller's process after this sub returns. `local`
+    # restores the caller's $? on return regardless of what runs inside.
+    local $?;
     return ( 1, 0 ) if !defined $pid || $pid !~ /^\d+$/ || $pid < 1;
     my $waited = waitpid( $pid, WNOHANG );
     return $waited == $pid ? ( 1, $? ) : ( 0, undef );
@@ -1049,16 +1067,30 @@ our \$stash = {};
 our \$runtime = {};
 our \@errors = ();
 
+# __add_error(\@messages)
+# Records one or more non-empty CODE-block error messages into this sandpit
+# package's error list, for __errors to drain afterward.
+# Input: candidate error message strings, empty/undef ones are dropped.
+# Output: none.
 sub __add_error {
     push \@errors, grep { defined \$_ && \$_ ne '' } \@_;
 }
 
+# __errors()
+# Drains and returns every error recorded since the last drain.
+# Input: none.
+# Output: list of recorded error message strings; clears the internal list.
 sub __errors {
     my \@copy = \@errors;
     \@errors = ();
     return \@copy;
 }
 
+# stash(\$input)
+# CODE-block-visible accessor: merges a hash into this sandpit's page stash,
+# or reads back one key's stashed value.
+# Input: a hash reference to merge in, or a scalar key to look up.
+# Output: the input hash reference on a merge; the stashed value on a lookup.
 sub stash {
     my (\$input) = \@_;
     die "no input" if !defined \$input;
@@ -1069,27 +1101,52 @@ sub stash {
     return \$stash->{\$input};
 }
 
+# hide(\$input)
+# CODE-block-visible: stashes a hash like stash() does, then returns the
+# sentinel token that tells the page renderer to omit this value from output.
+# Input: a hash reference to stash, or undef.
+# Output: the "__DD_HIDE__" sentinel string.
 sub hide {
     my (\$input) = \@_;
     stash(\$input) if ref(\$input) eq 'HASH';
     return "__DD_HIDE__";
 }
 
+# void(\$input)
+# CODE-block-visible: stashes a value like stash() does, but returns nothing
+# (unlike hide(), which returns a sentinel) - for updates with no display need.
+# Input: a value to stash, or undef.
+# Output: none.
 sub void {
     my (\$input) = \@_;
     stash(\$input) if defined \$input;
     return;
 }
 
+# stop(\$message)
+# CODE-block-visible: aborts the current CODE block's evaluation early via the
+# internal "__DD_STOP__" die sentinel, carrying an optional message.
+# Input: optional message string.
+# Output: never returns; always dies.
 sub stop {
     my (\$message) = \@_;
     die "__DD_STOP__\\n" . (defined \$message ? \$message : '');
 }
 
+# params()
+# CODE-block-visible accessor for the current request's params hash.
+# Input: none.
+# Output: hash reference of request params (empty hash if none set).
 sub params {
     return \$runtime->{params} || {};
 }
 
+# __initial_context(\$class, \$next_stash, \$next_runtime)
+# Resets this sandpit package's stash/runtime/errors state to the values
+# supplied for the CODE block about to run.
+# Input: class name (unused), stash hash reference, runtime context hash
+# reference - both default to an empty hash when undef.
+# Output: 1.
 sub __initial_context {
     my (\$class, \$next_stash, \$next_runtime) = \@_;
     \$stash = \$next_stash || {};
@@ -1098,6 +1155,12 @@ sub __initial_context {
     return 1;
 }
 
+# __run_code(\$class, \$code)
+# Evaluates one CODE block's source inside this sandpit package, recording
+# any thrown error rather than letting it propagate.
+# Input: class name (unused), Perl source string to evaluate.
+# Output: the block's own return list; empty on an evaluation error, which is
+# instead recorded via __add_error.
 sub __run_code {
     my (\$class, \$code) = \@_;
     my \@result = eval "{\$code}";

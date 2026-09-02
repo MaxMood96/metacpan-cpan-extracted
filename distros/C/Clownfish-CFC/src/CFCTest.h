@@ -63,9 +63,6 @@ CFCTest_new(const char *formatter_name);
 CFCTest*
 CFCTest_init(CFCTest *self, const char *formatter_name);
 
-void
-CFCTest_destroy(CFCTest *self);
-
 /** Run all test batches.
  *
  * @return true if all tests were successful.

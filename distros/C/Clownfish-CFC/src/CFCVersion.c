@@ -33,10 +33,13 @@ struct CFCVersion {
     char *vstring;
 };
 
+static void
+CFCVersion_destroy(CFCBase *base);
+
 static const CFCMeta CFCVERSION_META = {
     "Clownfish::CFC::Model::Version",
     sizeof(CFCVersion),
-    (CFCBase_destroy_t)CFCVersion_destroy
+    CFCVersion_destroy
 };
 
 int
@@ -94,11 +97,13 @@ CFCVersion_init(CFCVersion *self, const char *vstring) {
     return self;
 }
 
-void
-CFCVersion_destroy(CFCVersion *self) {
+static void
+CFCVersion_destroy(CFCBase *base) {
+    CFCVersion *self = (CFCVersion *) base;
+
     FREEMEM(self->numbers);
     FREEMEM(self->vstring);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 int

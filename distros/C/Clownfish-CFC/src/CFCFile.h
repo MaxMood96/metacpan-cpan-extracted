@@ -43,9 +43,6 @@ CFCFile*
 CFCFile_init(CFCFile *self, struct CFCParcel *parcel,
              struct CFCFileSpec *spec);
 
-void
-CFCFile_destroy(CFCFile *self);
-
 /** Add an element to the blocks array.  The block must be either a
  * Clownfish::CFC::Model::Class, a Clownfish::CFC::Model::Parcel, or a
  * Clownfish::CFC::Model::CBlock.

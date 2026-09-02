@@ -76,9 +76,6 @@ CFCRuby_init(CFCRuby *self, struct CFCParcel *parcel,
              struct CFCHierarchy *hierarchy, const char *lib_dir,
              const char *boot_class, const char *header, const char *footer);
 
-void
-CFCRuby_destroy(CFCRuby *self);
-
 /** Write out "boot" files to the Hierarchy's "dest_dir" which contain code
  * for bootstrapping Clownfish classes.
  */

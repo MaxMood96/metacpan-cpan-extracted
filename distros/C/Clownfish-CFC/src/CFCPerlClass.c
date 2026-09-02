@@ -57,10 +57,13 @@ static CFCPerlClass **registry = NULL;
 static size_t registry_size = 0;
 static size_t registry_cap  = 0;
 
+static void
+CFCPerlClass_destroy(CFCBase *base);
+
 static const CFCMeta CFCPERLCLASS_META = {
     "Clownfish::CFC::Binding::Perl::Class",
     sizeof(CFCPerlClass),
-    (CFCBase_destroy_t)CFCPerlClass_destroy
+    CFCPerlClass_destroy
 };
 
 CFCPerlClass*
@@ -74,23 +77,28 @@ CFCPerlClass_init(CFCPerlClass *self, CFCParcel *parcel,
                   const char *class_name) {
     CFCUTIL_NULL_CHECK(class_name);
 
-    // Client may be NULL, since fetch_singleton() does not always succeed.
-    CFCClass *client = CFCClass_fetch_singleton(class_name);
-    if (client == NULL) {
-        if (parcel == NULL) {
-            CFCUtil_die("Missing parcel for class %s", class_name);
+    CFCClass *client;
+    if (!parcel) {
+        // Search all source parcels.
+        CFCParcel **parcels = CFCParcel_all_parcels();
+        for (size_t i = 0; parcels[i]; i++) {
+            CFCParcel *candidate = parcels[i];
+            if (CFCParcel_included(candidate)) { continue; }
+            client = CFCParcel_class(candidate, class_name);
+            if (client) {
+                parcel = candidate;
+                break;
+            }
+        }
+
+        if (!parcel) {
+            CFCUtil_die("Class '%s' not found and no parcel specified.",
+                        class_name);
         }
     }
     else {
-        CFCParcel *client_parcel = CFCClass_get_parcel(client);
-
-        if (parcel == NULL) {
-            parcel = client_parcel;
-        }
-        else if (client_parcel != parcel) {
-            CFCUtil_die("Wrong parcel %s for class %s",
-                        CFCParcel_get_name(parcel), class_name);
-        }
+        // Client may be NULL, since class() does not always succeed.
+        client = CFCParcel_class(parcel, class_name);
     }
 
     self->parcel = (CFCParcel*)CFCBase_incref((CFCBase*)parcel);
@@ -107,8 +115,10 @@ CFCPerlClass_init(CFCPerlClass *self, CFCParcel *parcel,
     return self;
 }
 
-void
-CFCPerlClass_destroy(CFCPerlClass *self) {
+static void
+CFCPerlClass_destroy(CFCBase *base) {
+    CFCPerlClass *self = (CFCPerlClass *) base;
+
     CFCBase_decref((CFCBase*)self->parcel);
     CFCBase_decref((CFCBase*)self->client);
     CFCBase_decref((CFCBase*)self->pod_spec);
@@ -121,7 +131,7 @@ CFCPerlClass_destroy(CFCPerlClass *self) {
     FREEMEM(self->cons_aliases);
     FREEMEM(self->cons_inits);
     CFCUtil_free_string_array(self->class_aliases);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 static int
@@ -269,7 +279,9 @@ CFCPerlClass_method_bindings(CFCClass *klass) {
          * directly calls the implementing function, rather than invokes the
          * method on the object using vtable method dispatch.  Doing things
          * this way allows SUPER:: invocations from Perl-space to work
-         * properly.
+         * properly. (The callback to the Perl method is stored in the
+         * vtable as well. Using dynamic dispatch for SUPER:: invocations
+         * would result in calling the Perl method over and over.)
          */
         CFCPerlMethod *meth_binding = CFCPerlMethod_new(klass, method);
         size_t size = (num_bound + 2) * sizeof(CFCPerlMethod*);

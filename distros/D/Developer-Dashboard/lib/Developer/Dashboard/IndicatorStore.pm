@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use utf8;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Capture::Tiny qw(capture);
 use Cwd qw(cwd);
@@ -355,6 +355,15 @@ sub is_stale {
 # Output: array reference of updated indicator records.
 sub refresh_core_indicators {
     my ( $self, %args ) = @_;
+    # A QUERY MUST NOT DECIDE ITS CALLER'S EXIT STATUS (DD-589, same shape as
+    # DD-585's fix in CollectorRunner.pm). The git rev-parse/diff calls below
+    # read $? into their own return values, but without this guard the raw,
+    # unshifted $? from whichever ran last stays set in the caller's process
+    # after this sub returns - and this sub is called from share/private-cli/ps1
+    # and _dashboard-core, so that pollution is live in the 'dashboard ps1'
+    # process, not merely theoretical. `local` restores the caller's $? on
+    # return regardless of how many system() calls run inside.
+    local $?;
     my $prompt_only = $args{prompt_only} ? 1 : 0;
     my $cwd   = $args{cwd} || $self->{paths}->current_project_root || $self->{paths}->home;    # uncoverable condition false
     my $items = [];
@@ -386,25 +395,38 @@ sub refresh_core_indicators {
     if ($project) {
         my $old = cwd();
         chdir $project or die "Unable to chdir to $project: $!";
-        my ( $stdout, $stderr, $inside_exit ) = capture {
-            system( 'git', 'rev-parse', '--is-inside-work-tree' );
-            return $? >> 8;
-        };
-        my $inside_work_tree = $inside_exit == 0 && $stdout =~ /^\s*true\s*$/m ? 1 : 0;
-        if ($inside_work_tree) {
-            my ( undef, undef, $dirty_exit ) = capture {
-                system( 'git', 'diff', '--quiet', '--ignore-submodules', 'HEAD', '--' );
+        # DD-607: the git status probe runs inside an eval so a die anywhere
+        # in it (including one raised by capture() itself) still restores cwd
+        # before propagating, instead of leaving the process stuck in
+        # $project. Mirrors the eval-wrapped risky-work pattern already used
+        # around chdir/restore pairs in CollectorRunner.pm's _run_command and
+        # _run_code.
+        my $status_result = eval {
+            my ( $stdout, $stderr, $inside_exit ) = capture {
+                system( 'git', 'rev-parse', '--is-inside-work-tree' );
                 return $? >> 8;
             };
-            # git diff --quiet exits 0 for a clean tree and 1 for a modified
-            # one; any other exit (for example 128) is a real git failure, not a
-            # dirty work tree, so surface it as an explicit error status.
-            $git_status =
-                $dirty_exit == 0 ? 'clean'
-              : $dirty_exit == 1 ? 'dirty'
-              :                    'error';
-        }
+            my $inside_work_tree = $inside_exit == 0 && $stdout =~ /^\s*true\s*$/m ? 1 : 0;
+            my $status = 'none';
+            if ($inside_work_tree) {
+                my ( undef, undef, $dirty_exit ) = capture {
+                    system( 'git', 'diff', '--quiet', '--ignore-submodules', 'HEAD', '--' );
+                    return $? >> 8;
+                };
+                # git diff --quiet exits 0 for a clean tree and 1 for a modified
+                # one; any other exit (for example 128) is a real git failure, not a
+                # dirty work tree, so surface it as an explicit error status.
+                $status =
+                    $dirty_exit == 0 ? 'clean'
+                  : $dirty_exit == 1 ? 'dirty'
+                  :                    'error';
+            }
+            return $status;
+        };
+        my $status_error = $@;
         chdir $old or die "Unable to restore cwd to $old: $!";
+        die $status_error if $status_error;
+        $git_status = $status_result;
     }
     push @$items, $self->_set_indicator_if_changed(
         'git',

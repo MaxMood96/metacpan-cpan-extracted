@@ -8,6 +8,7 @@ MANIFEST			This list of files
 README
 t/api.t
 t/basic.t
+t/core.t
 t/critic.t
 t/increment.t
 t/load.t

@@ -1,5 +1,8 @@
 Revision history for Curl-Impersonate
 
+0.02  2026-09-02
+        - new decode option: decompress the response body
+
 0.01  2026-08-25
     - initial release: an HTTP client that reproduces a chosen browser's TLS and
       HTTP/2 fingerprint, over libcurl-impersonate via Alien::curlimpersonate

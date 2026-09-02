@@ -3,7 +3,7 @@ package Developer::Dashboard::Web::Server;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Capture::Tiny qw(capture);
 use Errno qw(EINTR);
@@ -42,8 +42,9 @@ sub new {
 
     if ($ssl) {
         generate_self_signed_cert(
-            host  => $host,
-            hosts => $ssl_subject_alt_names,
+            host          => $host,
+            hosts         => $ssl_subject_alt_names,
+            validity_days => $args{ssl_validity_days},
         );
     }
 
@@ -809,6 +810,12 @@ sub generate_self_signed_cert {
     unlink $cert_file if -f $cert_file;
     unlink $key_file  if -f $key_file;
 
+    # Validation lives in Config::ssl_validity_days, which is the single place a
+    # user-supplied value is checked; this is only the default for a caller that
+    # supplies nothing. Deliberately not re-validating here - a second copy of
+    # the same guard is how two implementations drift apart (DD-615).
+    my $validity_days = $args{validity_days} // 365;
+
     my ( $config_fh, $config_file ) = tempfile( 'dd-openssl-XXXXXX', SUFFIX => '.cnf', DIR => $cert_dir );
     my $config_text_head = <<'OPENSSL_CONFIG';
 [ req ]
@@ -850,7 +857,7 @@ OPENSSL_CONFIG
     close $config_fh or die "Unable to close OpenSSL config $config_file: $!";
 
     my @cmd = (
-        'openssl', 'req', '-new', '-x509', '-days', '365',
+        'openssl', 'req', '-new', '-x509', '-days', $validity_days,
         '-nodes',
         '-config', $config_file,
         '-out', $cert_file,

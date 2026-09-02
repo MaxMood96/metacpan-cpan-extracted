@@ -62,6 +62,7 @@ WriteMakefile(
         'Digest::MD5'           => '2.25',
         'Crypt::URandom'        => '0.55',
         'Digest::SHA'           => '5.96',
+        'String::Compare::ConstantTime' => '0.321',
         'Archive::Tar'          => '3.10',
         'Archive::Zip'          => '1.61',
         'MIME::Base64'          => 0,

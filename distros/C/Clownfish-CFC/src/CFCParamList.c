@@ -38,10 +38,13 @@ struct CFCParamList {
 static void
 S_generate_c_strings(CFCParamList *self);
 
+static void
+CFCParamList_destroy(CFCBase *base);
+
 static const CFCMeta CFCPARAMLIST_META = {
     "Clownfish::CFC::Model::ParamList",
     sizeof(CFCParamList),
-    (CFCBase_destroy_t)CFCParamList_destroy
+    CFCParamList_destroy
 };
 
 CFCParamList*
@@ -89,8 +92,10 @@ CFCParamList_add_param(CFCParamList *self, CFCVariable *variable,
     self->values[self->num_vars] = NULL;
 }
 
-void
-CFCParamList_destroy(CFCParamList *self) {
+static void
+CFCParamList_destroy(CFCBase *base) {
+    CFCParamList *self = (CFCParamList *) base;
+
     for (int i = 0; i < self->num_vars; i++) {
         CFCBase_decref((CFCBase*)self->variables[i]);
         FREEMEM(self->values[i]);
@@ -99,7 +104,7 @@ CFCParamList_destroy(CFCParamList *self) {
     FREEMEM(self->values);
     FREEMEM(self->c_string);
     FREEMEM(self->name_list);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 static void

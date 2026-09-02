@@ -14,7 +14,7 @@ static size_t sscanf_d_sp(const char *s, int *ip)
   return eaten;
 }
 
-static void printf_v02X(uint8_t b[], uint8_t len)
+static void printf_v02X(const uint8_t b[], uint8_t len)
 {
   while(len)
     printf("%02X", b[0]), b++, len--;
@@ -40,14 +40,14 @@ static size_t inplace_hex2bytes(char *s)
 size_t  output_len = 0;
 uint8_t output_buffer[256];
 
-void on_slurm_notify(uint8_t b[], uint8_t len)
+void on_slurm_notify(const uint8_t b[], uint8_t len)
 {
   printf("notify ");
   printf_v02X(b, len);
   printf("\n");
 }
 
-void on_slurm_request(uint8_t seqno, uint8_t b[], uint8_t len)
+void on_slurm_request(uint8_t seqno, const uint8_t b[], uint8_t len)
 {
   printf("request %d ", seqno);
   printf_v02X(b, len);

@@ -1,5 +1,5 @@
 package Crypt::JWS::OpenSSL::Util::JWK;
-$Crypt::JWS::OpenSSL::Util::JWK::VERSION = '0.003';
+$Crypt::JWS::OpenSSL::Util::JWK::VERSION = '0.004';
 use Moo;
 with qw(
     Crypt::JWS::OpenSSL::Role::Encoder
@@ -26,6 +26,8 @@ my $ECC_ALGO_MAP = {
     'ES384' => [ 48, qr!\x04\x30(.{48})!s, 'P-384' ],
     'ES512' => [ 66, qr!\x04\x42(.{66})!s, 'P-521' ],
 };
+
+has '_version_supports_pkcs8_x509' => ( is => 'lazy' );
 
 sub pem_to_jwk {
     my($self, $params) = parse_params(@_);
@@ -222,7 +224,12 @@ sub _rsa_jwk_to_pem {
         $d = Crypt::OpenSSL::Bignum->new_from_bin($self->decode_jwk_element($jwk->{'d'}));
     } else {
         my $rsa = Crypt::OpenSSL::RSA->new_key_from_parameters( $n, $e, $d, $p, $q );
-        return $rsa->get_public_key_x509_string();
+        
+        if ( $self->_version_supports_pkcs8_x509 ) {
+            return $rsa->get_public_key_x509_string();
+        } else {
+            return $rsa->get_public_key_string();
+        }
     }
     
     if (exists($jwk->{'p'}) && defined($jwk->{'p'}) && exists($jwk->{'q'}) && defined($jwk->{'q'})) {
@@ -231,7 +238,12 @@ sub _rsa_jwk_to_pem {
     }
     
     my $rsa = Crypt::OpenSSL::RSA->new_key_from_parameters( $n, $e, $d, $p, $q );
-    return $rsa->get_private_key_pkcs8_string();
+    
+    if ( $self->_version_supports_pkcs8_x509 ) {
+        return $rsa->get_private_key_pkcs8_string();
+    } else {
+        return $rsa->get_private_key_string();
+    }
 }
 
 sub _ecc_jwk_to_pem {
@@ -300,6 +312,12 @@ sub _ecc_jwk_to_public_pem {
     
 }
 
+sub _build__version_supports_pkcs8_x509 {
+    my $self = shift;
+    my $checkversion = $self->numify_version($Crypt::OpenSSL::RSA::VERSION);
+    return ( $checkversion >= 0.38 ) ? 1 : 0;   
+}
+
 1;
 
 __END__
@@ -314,7 +332,7 @@ Crypt::JWS::OpenSSL::Util::JWK - Utility to convert pem encoded keys to and from
 
 =head1 VERSION
 
-version 0.003
+version 0.004
 
 =head1 SYNOPSIS
 

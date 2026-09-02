@@ -180,6 +180,14 @@ chmod 0755, File::Spec->catfile( $stubbin, 'docker' );
 
     my $executed = $docker->run( args => ['config'] );
     is( $executed->{exit_code}, 0, 'run executes docker stub and captures exit code' );
+
+    # DD-597: run()'s system() call mutates the caller's global $? as a side
+    # effect; without a guard at the sub's entry that stays set in the
+    # caller's process after this sub returns.
+    $? = 12 << 8;    ## no critic (Variables::RequireLocalizedPunctuationVars)
+    $docker->run( args => ['config'] );
+    is( $? >> 8, 12, 'run does not leak its own subprocess status into the caller global $?' );
+
     chdir $old or die $!;
 }
 
@@ -233,6 +241,66 @@ chmod 0755, File::Spec->catfile( $stubbin, 'docker' );
     make_path($blocked_marker);    # occupy the marker path itself with a directory
     eval { $docker->disable_service( project_root => $repo, service => 'dirmarksvc' ); 1 };
     like( $@, qr/Unable to write/, 'disable_service dies when the marker path is blocked by a directory' );
+}
+
+# DD-633: a service name carrying a parent-directory run must never escape the
+# docker toggle root. Both sinks are asserted against the FILESYSTEM, not only
+# against the return value - a fix that raises after creating or unlinking the
+# file would still satisfy a test that only checked for an exception.
+{
+    my $toggle_root = $docker->_service_toggle_root( project_root => $repo );
+
+    # Write sink: disable_service make_path's and writes.
+    my $escaped_dir = File::Spec->catdir( $home, 'DD633ESCAPED' );
+    my $escaped     = File::Spec->catfile( $escaped_dir, 'disabled.yml' );
+    my $escape_name = File::Spec->abs2rel( $escaped_dir, $toggle_root );
+    eval { $docker->disable_service( project_root => $repo, service => $escape_name ); 1 };
+    ok( $@, 'disable_service refuses a service name that escapes the toggle root' );
+    ok( !-e $escaped,     'disable_service wrote no marker outside the toggle root' );
+    ok( !-d $escaped_dir, 'disable_service created no directory outside the toggle root' );
+
+    # Delete sink: enable_service unlinks whatever the path resolves to.
+    my $victim_dir  = File::Spec->catdir( $home, 'DD633VICTIM' );
+    my $victim      = File::Spec->catfile( $victim_dir, 'disabled.yml' );
+    mkfile( $victim, "important\n" );
+    my $victim_name = File::Spec->abs2rel( $victim_dir, $toggle_root );
+    eval { $docker->enable_service( project_root => $repo, service => $victim_name ); 1 };
+    ok( $@,       'enable_service refuses a service name that escapes the toggle root' );
+    ok( -e $victim, 'enable_service deleted no file outside the toggle root' );
+
+    # The happy path must be untouched: a fix that refuses everything is not a fix.
+    my $fine = $docker->disable_service( project_root => $repo, service => 'containedsvc' );
+    ok( -f $fine->{marker}, 'an ordinary service name still writes its marker' );
+    like( $fine->{marker}, qr/\Q$toggle_root\E/, 'an ordinary service name still resolves under the toggle root' );
+}
+
+# DD-633, containment branch coverage. The two outcomes the escape and happy-path
+# cases above never reach: a parent-directory run that POPS a segment instead of
+# escaping, and a name that resolves to no segments at all. Both are real inputs,
+# not contrivances for the coverage figure - "a/../b" is what a caller writes by
+# accident, and "." is what an empty variable expands to.
+{
+    my $toggle_root = $docker->_service_toggle_root( project_root => $repo );
+
+    # '..' with something to pop stays inside the root and must be allowed.
+    my $popped = $docker->disable_service( project_root => $repo, service => 'alpha/../beta' );
+    ok( -f $popped->{marker}, 'a parent-directory run that stays inside the root is allowed' );
+    is(
+        $popped->{marker},
+        File::Spec->catfile( $toggle_root, 'beta', 'disabled.yml' ),
+        'and it resolves to the popped path, not the literal one'
+    );
+
+    # A name that resolves to nothing at all is refused rather than silently
+    # writing the marker into the toggle root itself.
+    for my $empty ( '.', './.', '/' ) {
+        eval { $docker->disable_service( project_root => $repo, service => $empty ); 1 };
+        ok( $@, "a service name of '$empty' resolves to nothing and is refused" );
+        ok(
+            !-f File::Spec->catfile( $toggle_root, 'disabled.yml' ),
+            "and '$empty' wrote no marker into the toggle root itself"
+        );
+    }
 }
 
 # list_services with every filter variant.

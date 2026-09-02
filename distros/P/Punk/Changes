@@ -1,5 +1,22 @@
 Revision history for Punk
 
+0.42    2026-09-02
+        - t/1002-awaitable.t and t/1050-asyncawait.t assert cancellation
+          across an await only on perl 5.24+, which is where
+          Future::AsyncAwait chains the awaited future rather than
+          registering a code block that reaches nothing.
+        - Both report the Future::AsyncAwait version they ran against.
+
+0.41    2026-09-01
+        - FIX: creating a future read an environment variable every time, so
+          a future-returning request cost 40% more on a host with a few
+          hundred of them than on one with a few dozen. The switch is read
+          once now.
+        - A handler that returns a Punk::Future is chained in C: one
+          continuation rather than three, and none of the ->can and ->isa
+          probes the general path needs. A future of any other class takes
+          that path unchanged.
+
 0.40    2026-09-01
         - Punk::AsyncAwait: async and await in apps, controllers and models.
         - Punk::Future implements the Future::AsyncAwait::Awaitable API, and

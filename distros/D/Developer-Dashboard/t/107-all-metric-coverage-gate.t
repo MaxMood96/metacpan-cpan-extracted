@@ -281,6 +281,144 @@ for my $workflow_name (qw(test.yml release-cpan.yml release-github.yml)) {
     );
 }
 
+# Feature: fail the gate on a STALE uncoverable annotation.
+#
+# An `# uncoverable` comment asserts an outcome is unreachable, and Devel::Cover
+# honours it by excluding that outcome from the total. When the outcome IS
+# reached, the claim is false and the report says so: the row carries `***` in
+# its `err` column, and the excused position reads a non-zero count behind a
+# minus (`-1` rather than `-0`).
+#
+# That marker already arrives here. script/coverage-gate captures the report's
+# stdout AND stderr and passes both to this checker, which until now judged the
+# Total row alone - so a false annotation reached the gate, was echoed into the
+# gate's own log, and the gate exited 0.
+#
+# Scenario: a report carrying a stale annotation is rejected.
+# Given a report whose totals are all 100.0 but which contains a detail row
+# marked `***`, when the coverage gate checks it, then it exits nonzero and
+# names the file and line, because a reachable exercised outcome is being
+# excluded from a figure that reads 100.0 because of the exclusion.
+{
+    my ( $exit, $stdout, $stderr ) = run_gate(<<'REPORT');
+File              stmt   bran   cond    sub  total
+Total            100.0  100.0  100.0  100.0  100.0
+
+lib/Developer/Dashboard/Example.pm
+
+line  err      %   true  false   branch
+----- --- ------ ------ ------   ------
+8           - 50     -0      1   if ($x)
+16    ***   -100     -1      1   if ($x)
+REPORT
+
+    isnt( $exit, 0, 'coverage gate rejects a report carrying a stale uncoverable annotation' );
+    like( $stderr, qr/uncoverable/i, 'coverage gate says the finding is about an uncoverable annotation' );
+    like( $stderr, qr/Example\.pm/,  'coverage gate names the file carrying the stale annotation' );
+    like( $stderr, qr/\b16\b/,       'coverage gate names the line carrying the stale annotation' );
+    unlike( $stderr, qr/\b8\b:/,     'coverage gate does not report the honest annotation on line 8' );
+}
+
+# Scenario: the honest annotation beside it is NOT reported.
+# Given a report whose only annotated row is unmarked - the excused position
+# reads `-0`, so the outcome never fired - when checked, then the gate passes.
+# This is the other direction of the same discrimination: a detector that never
+# stays silent is as useless as one that never fires.
+{
+    my ( $exit, undef, $stderr ) = run_gate(<<'REPORT');
+File              stmt   bran   cond    sub  total
+Total            100.0  100.0  100.0  100.0  100.0
+
+lib/Developer/Dashboard/Example.pm
+
+line  err      %   true  false   branch
+----- --- ------ ------ ------   ------
+8           - 50     -0      1   if ($x)
+REPORT
+
+    is( $exit, 0, 'coverage gate passes a report whose annotations are all honest' );
+    unlike( $stderr, qr/uncoverable/i, 'coverage gate stays silent about honest annotations' );
+}
+
+# Scenario: EVERY detail-section layout is examined, not just one.
+#
+# The report is not one table. Sections whose headers end in `code`, in `branch`
+# and in `condition` each have their own column offsets, so a reader that takes
+# one section's offsets and applies them to the rest silently skips the others -
+# which is where branch and condition annotations live, and they are the large
+# majority. Measured while writing this: such a reader found 3 annotated entries
+# where the correct count was far larger.
+#
+# Given a stale row in a `condition` section rather than a `branch` one, when
+# checked, then it is still found.
+{
+    my ( $exit, undef, $stderr ) = run_gate(<<'REPORT');
+File              stmt   bran   cond    sub  total
+Total            100.0  100.0  100.0  100.0  100.0
+
+lib/Developer/Dashboard/Other.pm
+
+line  err      %  l !l   expr   condition
+----- --- ------ -- -- ------   ---------
+42    ***   -100 -3  7      0   $a || $b
+REPORT
+
+    isnt( $exit, 0, 'coverage gate finds a stale annotation in a condition section too' );
+    like( $stderr, qr/Other\.pm/, 'coverage gate names the file from the condition section' );
+}
+
+# Scenario: a report with no detail sections at all cannot be read as clean.
+#
+# A scan for a marker is exactly the check that passes because its subject was
+# empty. If the report carries only the summary table, this checker has examined
+# no annotations and must say so rather than returning the clean status it would
+# return for a report it did examine.
+{
+    my ( $exit, $stdout, $stderr ) = run_gate(<<'REPORT');
+File              stmt   bran   cond    sub  total
+Total            100.0  100.0  100.0  100.0  100.0
+REPORT
+
+    is( $exit, 0, 'a summary-only report still passes the four-metric check' );
+    like(
+        $stdout,
+        qr/examined no annotation detail rows/,
+        'coverage gate says it examined no annotation detail, rather than staying silent about it'
+    );
+    is( $stderr, '', 'saying so does not break the contract that a passing gate emits no error output' );
+}
+
+
+# Scenario: a bare-digit SOURCE line is not a detail row.
+#
+# The report's code column carries the source, and Perl source contains lines
+# that are just `1` - the truthy value a module ends on, or an operand on its
+# own line. `\A(\d+)\s/` matches those, because \s matches the trailing newline,
+# so they were counted as detail rows: 8 of them inflated a real report's
+# examined total from 38,647 to 38,655. The examined count is what separates a
+# clean scan from one that discriminated nothing, so an inflated one is not a
+# cosmetic error.
+{
+    my ( $exit, $stdout ) = run_gate(<<'REPORT');
+File              stmt   bran   cond    sub  total
+Total            100.0  100.0  100.0  100.0  100.0
+
+lib/Developer/Dashboard/Example.pm
+
+line  err      %   true  false   branch
+----- --- ------ ------ ------   ------
+8           - 50     -0      1   if ($x)
+1
+REPORT
+
+    is( $exit, 0, 'a bare-digit source line does not upset the gate' );
+    like(
+        $stdout,
+        qr/\b1 detail rows? examined\b/,
+        'a line consisting only of digits is source, not a detail row, and is not counted as one'
+    );
+}
+
 done_testing;
 
 __END__

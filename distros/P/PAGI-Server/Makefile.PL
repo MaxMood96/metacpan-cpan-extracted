@@ -7,7 +7,7 @@ use 5.018;
 use ExtUtils::MakeMaker;
 
 my %WriteMakefileArgs = (
-  "ABSTRACT" => "Reference IO::Async server for the PAGI specification",
+  "ABSTRACT" => "Reference server for the PAGI specification",
   "AUTHOR" => "John Napiorkowski <jjnapiork\@cpan.org>",
   "CONFIGURE_REQUIRES" => {
     "ExtUtils::MakeMaker" => 0
@@ -36,7 +36,7 @@ my %WriteMakefileArgs = (
     "Time::HiRes" => "1.9764",
     "URI" => "1.60"
   },
-  "VERSION" => "0.002011",
+  "VERSION" => "0.002012",
   "test" => {
     "TESTS" => "t/*.t t/http2/*.t t/integration/*.t t/server/*.t t/utf8/*.t t/websocket/*.t"
   }

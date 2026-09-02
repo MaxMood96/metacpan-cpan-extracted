@@ -47,9 +47,6 @@ CFCPerlConstructor*
 CFCPerlConstructor_init(CFCPerlConstructor *self, struct CFCClass *klass,
                         const char *alias, const char *initializer);
 
-void
-CFCPerlConstructor_destroy(CFCPerlConstructor *self);
-
 /** Generate C code for the XSUB.
  */
 char*

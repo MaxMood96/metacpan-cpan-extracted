@@ -1,5 +1,18 @@
 Revision history for Data-HashMap-Shared
 
+0.18      2026-09-01
+          - Fix three crash windows that could corrupt a map when a writer was
+            killed mid-operation: a removed entry's key, the entry count that
+            resize() trusts, and a string's offset/length pair.
+          - A cursor whose map was explicitly destroyed now croaks instead of
+            reading freed memory.
+          - List-returning keywords no longer force list context, so one used in
+            scalar context stops adding values to the enclosing call.
+          - reserve() rejects an out-of-range target instead of truncating it or
+            reporting success.
+          - Correct the crash-safety, iteration and upgrade notes; report NA
+            instead of failing to build on a big-endian architecture.
+
 0.17      2026-08-12
           - Enforce the freeze in every mutator, not only at open.
           - Bound the arena offset when reading a string, so a corrupt record

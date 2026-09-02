@@ -18,7 +18,7 @@ use warnings;
 
 package Clownfish::CFC::Perl::Build;
 use base qw( Module::Build );
-our $VERSION = '0.007000';
+our $VERSION = '0.008000';
 $VERSION = eval $VERSION;
 
 use File::Spec::Functions qw( catdir catfile curdir updir abs2rel rel2abs );
@@ -412,6 +412,9 @@ sub _compile_custom_xs {
         push @$c_files, catfile( $autogen_src_dir, "${prefix}perl.c" );
     }
     my $extra_cflags = $self->clownfish_params('cflags');
+    if ( $ENV{CFISH_EXTRA_CFLAGS} ) {
+        $extra_cflags = "$extra_cflags $ENV{CFISH_EXTRA_CFLAGS}";
+    }
     for my $c_file (@$c_files) {
         my $o_file   = $c_file;
         my $ccs_file = $c_file;

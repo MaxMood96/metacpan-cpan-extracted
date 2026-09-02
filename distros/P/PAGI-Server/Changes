@@ -1,5 +1,26 @@
 # Revision history for PAGI-Server
 
+0.002012 - 2026-09-01
+
+  Conformance
+  - Implements PAGI 0.002008 (Www sub-spec 0.5). HTTP, WebSocket and SSE
+    scopes now report spec_version 0.5; the lifespan sub-spec is unchanged
+    at 0.3.
+  - A response body is either inline http.response.body events or a single
+    file/fh event, never both. Sending file or fh after inline body bytes
+    now fails that send's Future. The failed send delivers no bytes and
+    leaves the response sequence state untouched, so an application may
+    still recover by finishing inline.
+
+  What may break
+  - An application that prepended inline bytes to a file/fh body -- a
+    generated header row ahead of a delegated export, say -- will see that
+    send fail. Send the whole body inline instead, or put the leading bytes
+    in the file. This is the rule that keeps a compressing intermediary from
+    emitting a response whose declared encoding does not describe its bytes.
+  - Tests asserting spec_version eq '0.4' on an http, websocket or sse scope
+    need updating to '0.5'.
+
 0.002011 - 2026-08-29
 
   Bug fixes

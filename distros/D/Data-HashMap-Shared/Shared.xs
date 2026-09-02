@@ -131,6 +131,8 @@ static void shm_free_cleanup(pTHX_ void *ptr) {
         croak("Expected a %s object", classname); \
     ShmCursor* c = INT2PTR(ShmCursor*, SvIV(SvRV(sv))); \
     if (!c) croak("Attempted to use a destroyed %s cursor", classname); \
+    if (c->owner && !SvIV(c->owner)) \
+        croak("Attempted to use a %s cursor whose map was destroyed", classname); \
     ShmCursor *c0 = c; PERL_UNUSED_VAR(c0); \
     sv_2mortal(SvREFCNT_inc(SvRV(sv)))   /* pin the invocant across the method (reentrant-DESTROY UAF guard) */
 
@@ -142,6 +144,14 @@ static void shm_free_cleanup(pTHX_ void *ptr) {
         croak("%s cursor was replaced during the call", classname); \
     c = INT2PTR(ShmCursor*, SvIV(SvRV(sv))); \
     if (c != c0) croak("%s cursor replaced or destroyed during the call", classname)
+
+/* An explicit $map->DESTROY frees the handle while a live cursor still points
+ * at it, zeroing the owner's IV.  Detach first so neither shm_cursor_destroy
+ * (which decrements handle->iterating) nor flush_deferred touches freed memory. */
+#define CURSOR_DETACH_IF_MAP_GONE(c, owner, h) \
+    SV *owner = (c)->owner; \
+    ShmHandle *h = ((owner) && SvIV(owner)) ? (c)->current : NULL; \
+    if (!(h)) { (c)->current = NULL; (c)->handle = NULL; }
 
 /* ---- Generic keyword build functions ---- */
 
@@ -203,7 +213,10 @@ static int build_kw_1arg_list(pTHX_ OP **out, XSParseKeywordPiece *args[], size_
     OP *map_op = args[0]->op;
     OP *cvref = newCVREF(0, newGVOP(OP_GV, 0, gv_fetchpv(func, GV_ADD, SVt_PVCV)));
     OP *arglist = op_append_elem(OP_LIST, map_op, cvref);
-    *out = op_convert_list(OP_ENTERSUB, OPf_STACKED | OPf_WANT_LIST, arglist);
+    /* Plain OPf_STACKED: pre-setting OPf_WANT makes Perl_scalar() skip the op,
+     * so the call stayed in list context even in scalar context and spilled its
+     * extra return values into the enclosing list. */
+    *out = op_convert_list(OP_ENTERSUB, OPf_STACKED, arglist);
     return KEYWORD_PLUGIN_EXPR;
 }
 

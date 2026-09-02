@@ -7,7 +7,7 @@ use parent 'Punk::Plugin';
 use Punk::APIKey ();
 use Punk::Auth::Password ();
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 1;
 

@@ -39,10 +39,13 @@ struct CFCVariable {
     int   inert;
 };
 
+static void
+CFCVariable_destroy(CFCBase *base);
+
 static const CFCMeta CFCVARIABLE_META = {
     "Clownfish::CFC::Model::Variable",
     sizeof(CFCVariable),
-    (CFCBase_destroy_t)CFCVariable_destroy
+    CFCVariable_destroy
 };
 
 static void
@@ -85,13 +88,15 @@ CFCVariable_resolve_type(CFCVariable *self) {
     CFCType_resolve(self->type);
 }
 
-void
-CFCVariable_destroy(CFCVariable *self) {
+static void
+CFCVariable_destroy(CFCBase *base) {
+    CFCVariable *self = (CFCVariable *) base;
+
     CFCBase_decref((CFCBase*)self->type);
     FREEMEM(self->local_c);
     FREEMEM(self->global_c);
     FREEMEM(self->local_dec);
-    CFCSymbol_destroy((CFCSymbol*)self);
+    CFCSymbol_destroy(base);
 }
 
 int

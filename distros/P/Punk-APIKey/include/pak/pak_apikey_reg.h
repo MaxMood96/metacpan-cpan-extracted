@@ -398,6 +398,7 @@ static SV *pak_after_check(pTHX_ SV *c, HV *cfg, SV *row)
     if (limit && SvOK(limit) && SvIV(limit) > 0 && id && SvOK(id)) {
         SV *k = sv_2mortal(newSVpvs("apikey:"));
         SV *argv[3];
+        SV *rsv, *osv;
         dSP;
         int count;
         IV ok = 1, reset = 0;
@@ -414,8 +415,19 @@ static SV *pak_after_check(pTHX_ SV *c, HV *cfg, SV *row)
         PUTBACK;
         count = call_method("rate_hit", G_LIST);
         SPAGAIN;
-        if (count >= 3) { reset = SvIV(POPs); (void)POPs; ok = SvIV(POPs); }
-        else if (count > 0) { while (count-- > 1) (void)POPs; ok = SvIV(POPs); }
+        /* POP FIRST, CONVERT AFTER. SvIV mentions its argument more than once
+         * until 5.37.1, so SvIV(POPs) pops once per mention and reads the
+         * verdict from whatever sits below it: the limiter's own answer comes
+         * back as whatever the stack happened to hold, which refuses a request
+         * inside its limit or admits one past it. */
+        if (count >= 3) {
+            rsv = POPs; (void)POPs; osv = POPs;
+            reset = SvIV(rsv); ok = SvIV(osv);
+        }
+        else if (count > 0) {
+            while (count-- > 1) (void)POPs;
+            osv = POPs; ok = SvIV(osv);
+        }
         PUTBACK; FREETMPS; LEAVE;
 
         if (!ok) {

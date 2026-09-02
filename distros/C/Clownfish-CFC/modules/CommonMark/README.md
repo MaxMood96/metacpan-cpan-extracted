@@ -1,8 +1,8 @@
 cmark
 =====
 
-[![Build Status]](https://travis-ci.org/jgm/cmark)
-[![Windows Build Status]](https://ci.appveyor.com/project/jgm/cmark)
+[![CI
+tests](https://github.com/commonmark/cmark/workflows/CI%20tests/badge.svg)](https://github.com/commonmark/cmark/actions)
 
 `cmark` is the C reference implementation of [CommonMark], a
 rationalized version of Markdown syntax with a [spec][the spec].
@@ -41,7 +41,7 @@ Advantages of this library:
   thousands-deep nested bracketed text or block quotes).
 
 - **Flexible.** CommonMark input is parsed to an AST which can be
-  manipulated programatically prior to rendering.
+  manipulated programmatically prior to rendering.
 
 - **Multiple renderers.**  Output in HTML, groff man, LaTeX, CommonMark,
   and a custom XML format is supported. And it is easy to write new
@@ -53,18 +53,22 @@ It is easy to use `libcmark` in python, lua, ruby, and other dynamic
 languages: see the `wrappers/` subdirectory for some simple examples.
 
 There are also libraries that wrap `libcmark` for
-[go](https://github.com/rhinoman/go-commonmark),
-[Haskell](http://hackage.haskell.org/package/cmark),
-[ruby](https://github.com/gjtorikian/commonmarker),
-[Perl](https://metacpan.org/release/CommonMark), and
-[R](http://cran.r-project.org/package=commonmark).
+[Go](https://github.com/rhinoman/go-commonmark),
+[Haskell](https://hackage.haskell.org/package/cmark),
+[Ruby](https://github.com/gjtorikian/commonmarker),
+[Lua](https://github.com/jgm/cmark-lua),
+[Perl](https://metacpan.org/release/CommonMark),
+[Python](https://pypi.org/project/umarkdown/),
+[R](https://cran.r-project.org/package=commonmark),
+[Scala](https://github.com/sparsetech/cmark-scala) and
+[PHP](https://www.php.net/manual/en/book.cmark.php).
 
 Installing
 ----------
 
 Building the C program (`cmark`) and shared library (`libcmark`)
 requires [cmake].  If you modify `scanners.re`, then you will also
-need [re2c], which is used to generate `scanners.c` from
+need [re2c] \(>= 0.14.2\), which is used to generate `scanners.c` from
 `scanners.re`.  We have included a pre-generated `scanners.c` in
 the repository to reduce build dependencies.
 
@@ -80,32 +84,32 @@ For a more portable method, you can use [cmake] manually. [cmake] knows
 how to create build environments for many build systems.  For example,
 on FreeBSD:
 
-    mkdir build
-    cd build
-    cmake ..  # optionally: -DCMAKE_INSTALL_PREFIX=path
-    make      # executable will be created as build/src/cmark
-    make test
-    make install
+    cmake -S . -B build  # optionally: -DCMAKE_INSTALL_PREFIX=path
+    cmake --build build  # executable will be created as build/src/cmark
+    ctest --test-dir build
+    cmake --install build
 
 Or, to create Xcode project files on OSX:
 
-    mkdir build
-    cd build
-    cmake -G Xcode ..
-    open cmark.xcodeproj
+    cmake -S . -B build -G Xcode
+    open build/cmark.xcodeproj
 
 The GNU Makefile also provides a few other targets for developers.
 To run a benchmark:
 
     make bench
 
+For more detailed benchmarks:
+
+    make newbench
+
 To run a test for memory leaks using `valgrind`:
 
     make leakcheck
 
-To reformat source code using `astyle`:
+To reformat source code using `clang-format`:
 
-    make astyle
+    make format
 
 To run a "fuzz test" against ten long randomly generated inputs:
 
@@ -114,6 +118,10 @@ To run a "fuzz test" against ten long randomly generated inputs:
 To do a more systematic fuzz test with [american fuzzy lop]:
 
     AFL_PATH=/path/to/afl_directory make afl
+
+Fuzzing with [libFuzzer] is also supported. The fuzzer can be run with:
+
+    make libFuzzer
 
 To make a release tarball and zip archive:
 
@@ -124,7 +132,7 @@ Installing (Windows)
 
 To compile with MSVC and NMAKE:
 
-    nmake
+    nmake /f Makefile.nmake
 
 You can cross-compile a Windows binary and dll on linux if you have the
 `mingw32` compiler:
@@ -142,14 +150,14 @@ be found in the man pages in the `man` subdirectory.
 Security
 --------
 
-By default, the library will pass through raw HTML and potentially
+By default, the library will scrub raw HTML and potentially
 dangerous links (`javascript:`, `vbscript:`, `data:`, `file:`).
 
-It is recommended that users either disable this potentially unsafe
-feature by using the option `CMARK_OPT_SAFE` (or `--safe` with the
-command-line program), or run the output through an HTML sanitizer
-to protect against
-[XSS attacks](http://en.wikipedia.org/wiki/Cross-site_scripting).
+To allow these, use the option `CMARK_OPT_UNSAFE` (or
+`--unsafe`) with the command line program. If doing so, we
+recommend you use a HTML sanitizer specific to your needs to
+protect against [XSS
+attacks](http://en.wikipedia.org/wiki/Cross-site_scripting).
 
 Contributing
 ------------
@@ -157,7 +165,7 @@ Contributing
 There is a [forum for discussing
 CommonMark](http://talk.commonmark.org); you should use it instead of
 github issues for questions and possibly open-ended discussions.
-Use the [github issue tracker](http://github.com/jgm/CommonMark/issues)
+Use the [github issue tracker](http://github.com/commonmark/CommonMark/issues)
 only for simple, clear, actionable issues.
 
 Authors
@@ -177,7 +185,6 @@ most of the C library's API and its test harness.
 [CommonMark]: http://commonmark.org
 [cmake]: http://www.cmake.org/download/
 [re2c]: http://re2c.org
-[commonmark.js]: https://github.com/jgm/commonmark.js
-[Build Status]: https://img.shields.io/travis/jgm/cmark/master.svg?style=flat
-[Windows Build Status]: https://ci.appveyor.com/api/projects/status/32r7s2skrgm9ubva?svg=true
+[commonmark.js]: https://github.com/commonmark/commonmark.js
 [american fuzzy lop]: http://lcamtuf.coredump.cx/afl/
+[libFuzzer]: http://llvm.org/docs/LibFuzzer.html

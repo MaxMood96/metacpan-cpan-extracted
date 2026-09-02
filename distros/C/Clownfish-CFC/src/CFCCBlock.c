@@ -24,10 +24,13 @@ struct CFCCBlock {
     char *contents;
 };
 
+static void
+CFCCBlock_destroy(CFCBase *base);
+
 static const CFCMeta CFCCBLOCK_META = {
     "Clownfish::CFC::Model::CBlock",
     sizeof(CFCCBlock),
-    (CFCBase_destroy_t)CFCCBlock_destroy
+    CFCCBlock_destroy
 };
 
 CFCCBlock*
@@ -46,10 +49,12 @@ CFCCBlock_init(CFCCBlock *self, const char *contents) {
     return self;
 }
 
-void
-CFCCBlock_destroy(CFCCBlock *self) {
+static void
+CFCCBlock_destroy(CFCBase *base) {
+    CFCCBlock *self = (CFCCBlock *) base;
+
     FREEMEM(self->contents);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 const char*

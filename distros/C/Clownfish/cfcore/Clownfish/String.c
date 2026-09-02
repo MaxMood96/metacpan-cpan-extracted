@@ -765,7 +765,7 @@ StrIter_Next_IMP(StringIterator *self) {
     const uint8_t *const ptr = (const uint8_t*)string->ptr;
     int32_t retval = ptr[byte_offset++];
 
-    if (retval >= 0x80) {
+    if (retval >= 0x80 && retval < 0xF8) {
         /*
          * The 'mask' bit is tricky. In each iteration, 'retval' is
          * left-shifted by 6 and 'mask' by 5 bits. So relative to the first

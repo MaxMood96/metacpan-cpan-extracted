@@ -21,6 +21,7 @@
 #include "CFCHierarchy.h"
 #include "CFCClass.h"
 #include "CFCType.h"
+#include "CFCParcel.h"
 
 #ifndef true
     #define true 1
@@ -40,8 +41,9 @@ CFCPerlTypeMap_from_perl(CFCType *type, const char *xs_var,
     char *result = NULL;
 
     if (CFCType_is_object(type)) {
-        const char *struct_sym   = CFCType_get_specifier(type);
-        const char *class_var    = CFCType_get_class_var(type);
+        CFCClass *klass = CFCType_get_class(type);
+        const char *struct_sym   = CFCClass_full_struct_sym(klass);
+        const char *class_var    = CFCClass_full_class_var(klass);
         const char *nullable_str = CFCType_nullable(type) ? "_nullable" : "";
         const char *allocation;
         if (strcmp(struct_sym, "cfish_String") == 0
@@ -153,10 +155,7 @@ CFCPerlTypeMap_to_perl(CFCType *type, const char *cf_var) {
             result = CFCUtil_sprintf("newSViv(%s)", cf_var);
         }
         else if (strcmp(specifier, "uint64_t") == 0) {
-            char pattern[] =
-                "sizeof(UV) == 8 ? "
-                "newSVuv((UV)%s) : newSVnv((NV)CFISH_U64_TO_DOUBLE(%s))";
-            result = CFCUtil_sprintf(pattern, cf_var, cf_var);
+            result = CFCUtil_sprintf("newSVuv(%s)", cf_var);
         }
         else if (strcmp(specifier, "uint32_t") == 0) {
             result = CFCUtil_sprintf("newSVuv(%s)", cf_var);
@@ -181,7 +180,7 @@ CFCPerlTypeMap_to_perl(CFCType *type, const char *cf_var) {
             result = CFCUtil_sprintf("newSViv(%s)", cf_var);
         }
         else if (strcmp(specifier, "bool") == 0) {
-            result = CFCUtil_sprintf("newSViv(%s)", cf_var);
+            result = CFCUtil_sprintf("newSViv(!!%s)", cf_var);
         }
         else {
             FREEMEM(result);
@@ -245,42 +244,48 @@ static const char typemap_output[] =
     "\n"
     "CFISH_BIG_UNSIGNED_INT\n"
     "    if (sizeof(UV) == 8) { sv_setuv($arg, (UV)$var); }\n"
-    "    else {\n"
-    "        sv_setnv($arg, (NV)CFISH_U64_TO_DOUBLE($var));\n"
-    "    }\n"
+    "    else                 { sv_setnv($arg, (NV)$var); }\n"
     "\n";
 
 void
 CFCPerlTypeMap_write_xs_typemap(CFCHierarchy *hierarchy) {
-    CFCClass **classes = CFCHierarchy_ordered_classes(hierarchy);
+    (void)hierarchy;
+    CFCParcel **parcels = CFCParcel_all_parcels();
     char *start  = CFCUtil_strdup("");
     char *input  = CFCUtil_strdup("");
     char *output = CFCUtil_strdup("");
-    for (int i = 0; classes[i] != NULL; i++) {
-        CFCClass *klass = classes[i];
-        const char *full_struct_sym = CFCClass_full_struct_sym(klass);
-        const char *class_var       = CFCClass_full_class_var(klass);
 
-        start = CFCUtil_cat(start, full_struct_sym, "*\t", class_var, "_\n",
-                            NULL);
-        const char *allocation;
-        if (strcmp(full_struct_sym, "cfish_String") == 0) {
-            // Share buffers rather than copy between Perl scalars and
-            // Clownfish string types.
-            allocation = "CFISH_ALLOCA_OBJ(CFISH_STRING)";
-        }
-        else {
-            allocation = "NULL";
-        }
-        input = CFCUtil_cat(input, class_var, "_\n"
-                            "    $var = (", full_struct_sym,
-                            "*)XSBind_perl_to_cfish_noinc(aTHX_ $arg, ",
-                            class_var, ", ", allocation, ");\n\n", NULL);
+    for (size_t i = 0; parcels[i]; i++) {
+        CFCClass **classes = CFCParcel_get_classes(parcels[i]);
 
-        output = CFCUtil_cat(output, class_var, "_\n"
-                             "    $arg = (SV*)CFISH_Obj_To_Host((cfish_Obj*)$var, NULL);\n"
-                             "    CFISH_DECREF($var);\n"
-                             "\n", NULL);
+        for (int j = 0; classes[j] != NULL; j++) {
+            CFCClass *klass = classes[j];
+            if (CFCClass_inert(klass)) { continue; }
+
+            const char *full_struct_sym = CFCClass_full_struct_sym(klass);
+            const char *class_var       = CFCClass_full_class_var(klass);
+
+            start = CFCUtil_cat(start, full_struct_sym, "*\t", class_var, "_\n",
+                                NULL);
+            const char *allocation;
+            if (strcmp(full_struct_sym, "cfish_String") == 0) {
+                // Share buffers rather than copy between Perl scalars and
+                // Clownfish string types.
+                allocation = "CFISH_ALLOCA_OBJ(CFISH_STRING)";
+            }
+            else {
+                allocation = "NULL";
+            }
+            input = CFCUtil_cat(input, class_var, "_\n"
+                                "    $var = (", full_struct_sym,
+                                "*)XSBind_perl_to_cfish_noinc(aTHX_ $arg, ",
+                                class_var, ", ", allocation, ");\n\n", NULL);
+
+            output = CFCUtil_cat(output, class_var, "_\n"
+                                 "    $arg = (SV*)CFISH_Obj_To_Host((cfish_Obj*)$var, NULL);\n"
+                                 "    CFISH_DECREF($var);\n"
+                                 "\n", NULL);
+        }
     }
 
     char *content = CFCUtil_strdup("");
@@ -293,6 +298,5 @@ CFCPerlTypeMap_write_xs_typemap(CFCHierarchy *hierarchy) {
     FREEMEM(output);
     FREEMEM(input);
     FREEMEM(start);
-    FREEMEM(classes);
 }
 

@@ -38,10 +38,13 @@ struct CFCPerlConstructor {
     CFCFunction *init_func;
 };
 
+static void
+CFCPerlConstructor_destroy(CFCBase *base);
+
 static const CFCMeta CFCPERLCONSTRUCTOR_META = {
     "Clownfish::CFC::Binding::Perl::Constructor",
     sizeof(CFCPerlConstructor),
-    (CFCBase_destroy_t)CFCPerlConstructor_destroy
+    CFCPerlConstructor_destroy
 };
 
 CFCPerlConstructor*
@@ -81,10 +84,12 @@ CFCPerlConstructor_init(CFCPerlConstructor *self, CFCClass *klass,
     return self;
 }
 
-void
-CFCPerlConstructor_destroy(CFCPerlConstructor *self) {
+static void
+CFCPerlConstructor_destroy(CFCBase *base) {
+    CFCPerlConstructor *self = (CFCPerlConstructor *) base;
+
     CFCBase_decref((CFCBase*)self->init_func);
-    CFCPerlSub_destroy((CFCPerlSub*)self);
+    CFCPerlSub_destroy(base);
 }
 
 char*

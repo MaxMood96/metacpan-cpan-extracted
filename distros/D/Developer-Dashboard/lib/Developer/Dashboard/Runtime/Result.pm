@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use utf8;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Encode qw(encode);
 use File::Basename qw(basename dirname);
@@ -245,6 +245,14 @@ sub _max_inline_bytes {
 sub _open_channel_file {
     my ( $fh, $path ) = tempfile( 'dashboard-result-XXXXXX', TMPDIR => 1, UNLINK => 1 );
     binmode $fh, ':raw';
+
+    # DD-621: File::Temp's create mode is 0600 by default on POSIX, but this
+    # session's DD-599..602 TOCTOU findings showed that trusting an implicit
+    # default rather than an explicit mode is exactly the pattern that goes
+    # wrong when a platform or File::Temp version behaves differently than
+    # assumed. The RESULT channel can carry hook stdout/stderr, so an
+    # unexpectedly permissive mode would be a real exposure.
+    chmod 0600, $fh or die "Unable to chmod RESULT tempfile $path to 0600: $!";    # uncoverable branch true
 
     my $flags = fcntl( $fh, F_GETFD, 0 );
     die "Unable to inspect RESULT file descriptor flags: $!" if !defined $flags;    # uncoverable branch true

@@ -69,13 +69,15 @@ CFCPerlSub_init(CFCPerlSub *self, CFCParamList *param_list,
 }
 
 void
-CFCPerlSub_destroy(CFCPerlSub *self) {
+CFCPerlSub_destroy(CFCBase *base) {
+    CFCPerlSub *self = (CFCPerlSub *) base;
+
     CFCBase_decref((CFCBase*)self->param_list);
     FREEMEM(self->class_name);
     FREEMEM(self->alias);
     FREEMEM(self->perl_name);
     FREEMEM(self->c_name);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 char*

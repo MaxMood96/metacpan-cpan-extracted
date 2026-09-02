@@ -45,9 +45,6 @@ CFCVersion_new(const char *vstring);
 CFCVersion*
 CFCVersion_init(CFCVersion *self, const char *vstring);
 
-void
-CFCVersion_destroy(CFCVersion *self);
-
 int
 CFCVersion_compare_to(CFCVersion *self, CFCVersion *other);
 

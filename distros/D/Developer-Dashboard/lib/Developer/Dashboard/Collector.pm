@@ -3,7 +3,7 @@ package Developer::Dashboard::Collector;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Fcntl qw(:flock);
 use File::Spec;
@@ -89,6 +89,15 @@ sub write_result {
     my $status_callback = delete $result{status_callback};
     die 'Collector status callback must be a code reference'
       if defined $status_callback && ref($status_callback) ne 'CODE';
+    # DD-609: last_success/last_success_at/last_failure_at below are derived
+    # from $result{exit_code} with truthy ternaries, so an undef (or
+    # non-numeric) exit_code is falsy and would be silently recorded as a
+    # SUCCESS for a run of unknown outcome. CollectorRunner.pm's own caller
+    # always passes a defined integer, but this is the only guard write_result
+    # itself has, so any future direct caller gets the contract enforced here.
+    die "Collector '$name' write_result requires a defined integer exit_code, got "
+      . ( defined $result{exit_code} ? "'$result{exit_code}'" : 'undef' ) . "\n"
+      if !defined $result{exit_code} || $result{exit_code} !~ /\A-?\d+\z/;
 
     $self->_atomic_write_text( $paths->{stdout}, defined $result{stdout} ? $result{stdout} : '' );
     $self->_atomic_write_text( $paths->{stderr}, defined $result{stderr} ? $result{stderr} : '' );
@@ -320,8 +329,11 @@ sub append_log_entry {
 
 # rotate_log($name, $rotation, %args)
 # Applies configured retention rules to one collector log file.
-# Input: collector name string, rotation hash reference, and optional now_epoch.
-# Output: hash reference describing the applied rotation, or undef when nothing changed.
+# Input: collector name string, rotation hash reference, and optional
+# now_epoch and dry_run booleans - dry_run computes and reports the rotation
+# without writing it (DD-613, for Housekeeper's preview mode).
+# Output: hash reference describing the applied (or, under dry_run, the
+# would-be) rotation, or undef when nothing changed.
 sub rotate_log {
     my ( $self, $name, $rotation, %args ) = @_;
     die 'Missing collector name' if !defined $name || $name eq '';
@@ -343,7 +355,7 @@ sub rotate_log {
             );
             return if $rotated eq $original;
 
-            $self->_atomic_write_text( $paths->{log}, $rotated );
+            $self->_atomic_write_text( $paths->{log}, $rotated ) if !$args{dry_run};
             return {
                 kind         => 'collector-log-rotation',
                 name         => $name,
@@ -351,6 +363,7 @@ sub rotate_log {
                 strategy     => join( ',', map { $_ . '=' . $normalized->{$_} } sort keys %{$normalized} ),
                 before_bytes => length $original,
                 after_bytes  => length $rotated,
+                ( $args{dry_run} ? ( dry_run => 1 ) : () ),
             };
         }
     );
@@ -736,13 +749,7 @@ sub _pending_path {
 sub _atomic_write_text {
     my ( $self, $file, $text ) = @_;
     my $tmp = $self->_pending_path($file);
-    open my $fh, '>:raw', $tmp or die "Unable to write $tmp: $!";
-    print {$fh} $text or die "Unable to write $tmp: $!";
-    close $fh or die "Unable to close $tmp: $!";
-    $self->{paths}->secure_file_permissions($tmp);
-    rename $tmp, $file or die "Unable to rename $tmp to $file: $!";
-    $self->{paths}->secure_file_permissions($file);
-    return $file;
+    return $self->{paths}->atomic_write_secure( $tmp, $file, $text );
 }
 
 # _read_status_file($file)

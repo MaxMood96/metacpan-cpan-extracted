@@ -38,10 +38,13 @@ struct CFCFileSpec {
     int is_included;
 };
 
+static void
+CFCFileSpec_destroy(CFCBase *base);
+
 static const CFCMeta CFCFILESPEC_META = {
     "Clownfish::CFC::Model::FileSpec",
     sizeof(CFCFileSpec),
-    (CFCBase_destroy_t)CFCFileSpec_destroy
+    CFCFileSpec_destroy
 };
 
 CFCFileSpec*
@@ -67,12 +70,14 @@ CFCFileSpec_init(CFCFileSpec *self, const char *source_dir,
     return self;
 }
 
-void
-CFCFileSpec_destroy(CFCFileSpec *self) {
+static void
+CFCFileSpec_destroy(CFCBase *base) {
+    CFCFileSpec *self = (CFCFileSpec *) base;
+
     FREEMEM(self->source_dir);
     FREEMEM(self->path_part);
     FREEMEM(self->path);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 const char*

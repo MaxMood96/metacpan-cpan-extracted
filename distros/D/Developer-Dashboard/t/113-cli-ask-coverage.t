@@ -4,6 +4,25 @@ use strict;
 use warnings;
 use utf8;
 
+# DD-602: the CORE::GLOBAL::rename override must be installed before
+# Developer::Dashboard::CLI::Ask is compiled so the module's own rename call
+# in _save_transcript resolves through this intercept - matching
+# DD-599/600/601's established pattern. $DD602_OBSERVED_RENAME_MODE records
+# the permission mode of the SOURCE file at the exact moment of a rename
+# whose target matches $DD602_WATCH_TARGET, proving the file was already
+# secured before it became visible at that (predictable) final path.
+our $DD602_WATCH_TARGET;
+our $DD602_OBSERVED_RENAME_MODE;
+
+BEGIN {
+    *CORE::GLOBAL::rename = sub {
+        my ( $from, $to ) = @_;
+        $DD602_OBSERVED_RENAME_MODE = ( stat($from) )[2] & 07777
+          if defined $DD602_WATCH_TARGET && $to eq $DD602_WATCH_TARGET;
+        return CORE::rename( $from, $to );
+    };
+}
+
 use lib 'lib';
 
 use Test::More;
@@ -206,6 +225,28 @@ subtest '_capture_backend failure detail and silent-answer handling' => sub {
     like( $err, qr/\Acopilot backend returned no answer\.\n\z/, 'an undefined stdout counts as a silent backend' );
 
     is( $capture->( 'copilot', ['argv'], sub { return ( "  trimmed  \n", '', 0 ); } ), '  trimmed', 'a successful run returns the trimmed answer' );
+
+    # DD-620: a runaway backend's megabytes of stderr must not turn into an
+    # equally huge exception message.
+    $err = '';
+    my $huge_stderr = ( 'x' x 100_000 ) . "\n";
+    eval { $capture->( 'claude', ['argv'], sub { return ( '', $huge_stderr, 1 ); } ); 1 } or $err = $@;
+    like( $err, qr/\Aclaude backend failed: x{4000} \.\.\. \(truncated, \d+ more bytes omitted\)\n\z/,
+        'oversized stderr is capped with a truncation marker naming the omitted byte count' );
+    ok( length($err) < length($huge_stderr), 'the capped error message is genuinely smaller than the raw stderr' );
+
+    $err = '';
+    my $small_stderr = 'x' x 100 . "\n";
+    eval { $capture->( 'claude', ['argv'], sub { return ( '', $small_stderr, 1 ); } ); 1 } or $err = $@;
+    like( $err, qr/\Aclaude backend failed: x{100}\n\z/, 'stderr under the cap is reported verbatim with no truncation marker' );
+
+    $err = '';
+    # DD-620's cap is 4000 bytes (private $MAX_BACKEND_ERROR_DETAIL_BYTES in
+    # CLI/Ask.pm - not accessible from here, so the boundary is duplicated).
+    my $one_over_stderr = 'x' x 4001;
+    eval { $capture->( 'claude', ['argv'], sub { return ( '', $one_over_stderr, 1 ); } ); 1 } or $err = $@;
+    like( $err, qr/\Aclaude backend failed: x{4000} \.\.\. \(truncated, 1 more byte omitted\)\n\z/,
+        'exactly one omitted byte uses the singular "byte" wording' );
 };
 
 # ------------------------------------------------------------------
@@ -326,19 +367,59 @@ subtest 'transcript load and save edge cases' => sub {
     is( $save->( $saved, { backend => 'claude', messages => [] }, $paths ), $saved, 'a saved transcript returns its path' );
     is( $load->($saved)->{backend}, 'claude', 'the saved transcript reloads' );
 
+    # DD-602: the transcript's PREDICTABLE final path must never become
+    # visible with loose permissions - a bare stat() after _save_transcript
+    # returns can't prove this (a later chmod always leaves the final state
+    # correct even with the bug), so this intercepts the rename that makes
+    # the file visible under its final name and checks the SOURCE file's
+    # permissions at that exact moment: by the time anything could observe
+    # the file at its predictable path, it must already be secured.
+    {
+        my $old_umask = umask(0);
+        my $rename_target = File::Spec->catfile( $paths->state_root, 'rename-observed.json' );
+        local $DD602_WATCH_TARGET = $rename_target;
+        local $DD602_OBSERVED_RENAME_MODE;
+        $save->( $rename_target, { backend => 'claude', messages => [] }, $paths );
+        umask($old_umask);
+        ok( defined $DD602_OBSERVED_RENAME_MODE, 'DD-602: _save_transcript renamed a source file into the predictable final path (rename observed)' );
+        is( sprintf( '%04o', $DD602_OBSERVED_RENAME_MODE // -1 ), '0600',
+            'DD-602: the source file was already 0600 BEFORE the rename that made it visible at its final, predictable path - even under umask(0)' );
+    }
+
+    # DD-602: force the close-stage die. The temp path is fully predictable
+    # ("$file.$$.tmp", no wall-clock component) so it can be symlinked to
+    # /dev/full directly, without needing an override point. /dev/full always
+    # fails a write with ENOSPC; the transcript payload here is far smaller
+    # than Perl's IO buffer, so print() itself returns true (buffered, not
+    # yet flushed to the device) and the error only surfaces at close().
+    SKIP: {
+        skip 'requires a writable /dev/full to force a write failure', 1
+          if !-e '/dev/full' || !-w '/dev/full';
+
+        my $write_target = File::Spec->catfile( $paths->state_root, 'write-blocked.json' );
+        my $pending_path = "$write_target.$$.tmp";
+        skip "unable to symlink /dev/full: $!", 1
+          if !symlink( '/dev/full', $pending_path );
+
+        my $write_fail = eval { $save->( $write_target, { backend => 'claude', messages => [] }, $paths ); 1 } ? '' : $@;
+        like( $write_fail, qr/\AUnable to close \Q$pending_path\E/,
+            '_save_transcript dies when the pending write cannot be flushed to the device at close (via the shared atomic_write_secure helper, DD-610)' );
+        unlink $pending_path;
+    }
+
     my $readonly = File::Spec->catdir( $dir, 'readonly' );
     mkdir $readonly or die "Unable to create $readonly: $!";
     chmod 0500, $readonly or die "Unable to chmod $readonly: $!";
     my $err = '';
     eval { $save->( File::Spec->catfile( $readonly, 'blocked.json' ), { backend => 'claude', messages => [] }, $paths ); 1 } or $err = $@;
-    like( $err, qr/\AUnable to write transcript /, 'an unwritable state directory is a user-facing error' );
+    like( $err, qr/\AUnable to write /, 'an unwritable state directory is a user-facing error' );
     chmod 0700, $readonly or die "Unable to restore $readonly: $!";
 
     my $blocked_target = File::Spec->catdir( $dir, 'target-is-a-directory.json' );
     mkdir $blocked_target or die "Unable to create $blocked_target: $!";
     $err = '';
     eval { $save->( $blocked_target, { backend => 'claude', messages => [] }, $paths ); 1 } or $err = $@;
-    like( $err, qr/\AUnable to install transcript /, 'a rename that cannot land is a user-facing error' );
+    like( $err, qr/\AUnable to rename /, 'a rename that cannot land is a user-facing error (via the shared atomic_write_secure helper, DD-610)' );
     unlink glob( File::Spec->catfile( $dir, 'target-is-a-directory.json.*.tmp' ) );
 };
 

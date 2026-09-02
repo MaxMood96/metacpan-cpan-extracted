@@ -58,7 +58,7 @@ CFCCallable_init(CFCCallable *self, const char *exposure, const char *name,
                  struct CFCDocuComment *docucomment);
 
 void
-CFCCallable_destroy(CFCCallable *self);
+CFCCallable_destroy(CFCBase *base);
 
 /** Find the actual class of all unprefixed object types.
  */
@@ -75,9 +75,6 @@ CFCCallable_get_return_type(CFCCallable *self);
 
 struct CFCParamList*
 CFCCallable_get_param_list(CFCCallable *self);
-
-struct CFCDocuComment*
-CFCCallable_get_docucomment(CFCCallable *self);
 
 const char*
 CFCCallable_get_name(CFCCallable *self);

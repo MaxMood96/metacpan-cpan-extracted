@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: 05-TSIG.t 1980 2024-06-02 10:16:33Z willem $	-*-perl-*-
+# $Id: 05-TSIG.t 2060 2026-08-31 11:29:36Z willem $	-*-perl-*-
 #
 
 use strict;
@@ -22,7 +22,7 @@ foreach my $package (@prerequisite) {
 	exit;
 }
 
-plan tests => 63;
+plan tests => 64;
 
 
 sub mysign {
@@ -44,6 +44,7 @@ my $wire = '0466616b6503616c67000000000186a102580010a5d31d3ce3b7122b4a598c225d9c
 
 my $typecode = unpack 'xn', Net::DNS::RR->new( type => $type )->encode;
 is( $typecode, $code, "$type RR type code = $code" );
+ok( Net::DNS::RR->new( type => $type )->string, 'minimal rr->string' );
 
 my $hash = {keybin => pack( 'H*', '66616b65206b6579' )};
 @{$hash}{@attr} = @data;
@@ -51,7 +52,7 @@ my $hash = {keybin => pack( 'H*', '66616b65206b6579' )};
 
 for my $rr ( Net::DNS::RR->new( name => $name, type => $type, %$hash ) ) {
 	my $string = $rr->string;
-	like( $rr->string, "/$$hash{algorithm}/", 'got expected rr->string' );
+	like( $rr->string, "/$$hash{algorithm}/", 'populated rr->string' );
 
 	foreach (@attr) {
 		is( $rr->$_, $hash->{$_}, "expected result from rr->$_()" );

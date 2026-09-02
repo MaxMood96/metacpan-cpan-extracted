@@ -36,10 +36,13 @@ struct CFCFunction {
     int is_inline;
 };
 
+static void
+CFCFunction_destroy(CFCBase *base);
+
 static const CFCMeta CFCFUNCTION_META = {
     "Clownfish::CFC::Model::Function",
     sizeof(CFCFunction),
-    (CFCBase_destroy_t)CFCFunction_destroy
+    CFCFunction_destroy
 };
 
 CFCFunction*
@@ -84,9 +87,9 @@ CFCFunction_resolve_types(CFCFunction *self) {
     CFCCallable_resolve_types(&self->callable);
 }
 
-void
-CFCFunction_destroy(CFCFunction *self) {
-    CFCCallable_destroy((CFCCallable*)self);
+static void
+CFCFunction_destroy(CFCBase *base) {
+    CFCCallable_destroy(base);
 }
 
 int

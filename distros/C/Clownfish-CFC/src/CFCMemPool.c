@@ -30,10 +30,13 @@ struct CFCMemPool {
     char **arenas;
 };
 
+static void
+CFCMemPool_destroy(CFCBase *base);
+
 static const CFCMeta CFCMEMPOOL_META = {
     "Clownfish::MemPool",
     sizeof(CFCMemPool),
-    (CFCBase_destroy_t)CFCMemPool_destroy
+    CFCMemPool_destroy
 };
 
 CFCMemPool*
@@ -73,12 +76,14 @@ CFCMemPool_allocate(CFCMemPool *self, size_t size) {
     return result;
 }
 
-void
-CFCMemPool_destroy(CFCMemPool *self) {
+static void
+CFCMemPool_destroy(CFCBase *base) {
+    CFCMemPool *self = (CFCMemPool *) base;
+
     for (size_t i = 0; i < self->num_arenas; i++) {
         FREEMEM(self->arenas[i]);
     }
     FREEMEM(self->arenas);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 

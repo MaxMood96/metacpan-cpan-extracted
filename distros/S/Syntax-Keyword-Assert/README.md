@@ -68,6 +68,50 @@ assert($x > 0, expensive_debug_info());
 # expensive_debug_info() is NOT called if $x > 0
 ```
 
+# METHODS
+
+## Importing
+
+```perl
+use Syntax::Keyword::Assert;
+```
+
+Importing the module enables the `assert` keyword in the current lexical scope (see ["Unimporting"](#unimporting) below).
+
+`assert` is enabled per lexical scope via `import_into`, so you can build a "toolkit" module that re-exports it to your users, the same way [Object::Pad](https://metacpan.org/pod/Object%3A%3APad) or [Syntax::Keyword::Try](https://metacpan.org/pod/Syntax%3A%3AKeyword%3A%3ATry) do:
+
+```perl
+package MyToolkit;
+
+use Syntax::Keyword::Assert ();
+
+sub import {
+    my $class  = shift;
+    my $caller = caller;
+
+    Syntax::Keyword::Assert->import_into( $caller );
+    # ... enable other keywords/pragmas here too
+}
+```
+
+Now `use MyToolkit;` gives the caller the `assert` keyword as well, without them having to `use Syntax::Keyword::Assert` directly.
+
+## Unimporting
+
+The `assert` keyword is lexically scoped. You can disable it for the rest of the enclosing scope with:
+
+```perl
+use Syntax::Keyword::Assert;
+
+assert(1);  # ok
+
+no Syntax::Keyword::Assert;
+
+assert(1);  # => Undefined subroutine &main::assert called ...
+```
+
+Once unimported, `assert` is no longer recognised as a keyword; it is parsed as an ordinary function call instead, which dies at runtime unless a subroutine of that name exists.
+
 # SEE ALSO
 
 - [PerlX::Assert](https://metacpan.org/pod/PerlX%3A%3AAssert)

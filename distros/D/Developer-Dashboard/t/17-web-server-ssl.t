@@ -1195,6 +1195,66 @@ OPENSSL_CONFIG
     chdir $started_in or die "Unable to return to $started_in: $!";
 }
 
+
+# DD-623: the certificate's validity period is configurable, and a value beyond
+# the 398-day public-CA limit is HONOURED rather than clamped.
+#
+# The clamp assertion is the one that matters. Browsers reject publicly-trusted
+# certificates valid past 398 days, but that rule covers certificates issued by
+# publicly trusted CAs and explicitly not locally-operated ones, so it does not
+# reach a self-signed localhost certificate. A clamping implementation would
+# still emit a warning and would still pass any test that only checked for the
+# warning - so this asserts the notAfter itself.
+{
+    my $temp_home = tempdir( CLEANUP => 1 );
+    local $ENV{HOME} = $temp_home;
+
+    # Purpose: the certificate's own notAfter, as openssl reports it, in epoch
+    #          seconds - read back from the artifact rather than inferred from
+    #          the argument that was passed in.
+    # Input:   path to a PEM certificate
+    # Output:  epoch seconds, or undef when openssl could not be read
+    my $not_after_epoch = sub {
+        my ($cert) = @_;
+        my ( $out, undef, $exit ) = capture {
+            system( 'openssl', 'x509', '-in', $cert, '-noout', '-enddate' );
+        };
+        return if $exit != 0;
+        return if $out !~ /notAfter=(.+)/;
+        my $when = $1;
+        chomp $when;
+        my ( $sec, undef, undef, undef, undef, undef, undef, undef, undef ) = ();
+        my ( $o2, undef, $e2 ) = capture {
+            system( 'date', '-d', $when, '+%s' );
+        };
+        return if $e2 != 0;
+        chomp $o2;
+        return $o2 + 0;
+    };
+
+    my $cert = Developer::Dashboard::Web::Server::generate_self_signed_cert(
+        validity_days => 730,
+    );
+    ok( $cert && -f $cert, 'cert generated with a configured validity period' );
+    my $epoch = $not_after_epoch->($cert);
+  SKIP: {
+        skip 'openssl/date unavailable for notAfter inspection', 2 if !defined $epoch;
+        my $days = int( ( $epoch - time ) / 86_400 );
+        cmp_ok( abs( $days - 730 ), '<=', 2, "configured 730-day validity is honoured (got ${days}d)" );
+
+        # A fresh HOME, so the 730-day cert above cannot be reused and mask this.
+        my $temp_home2 = tempdir( CLEANUP => 1 );
+        local $ENV{HOME} = $temp_home2;
+        my $long = Developer::Dashboard::Web::Server::generate_self_signed_cert(
+            validity_days => 3650,
+        );
+        my $long_epoch = $not_after_epoch->($long);
+        my $long_days = defined $long_epoch ? int( ( $long_epoch - time ) / 86_400 ) : -1;
+        cmp_ok( abs( $long_days - 3650 ), '<=', 2,
+            "a 3650-day validity is NOT clamped to 398 (got ${long_days}d)" );
+    }
+}
+
 done_testing();
 
 __END__

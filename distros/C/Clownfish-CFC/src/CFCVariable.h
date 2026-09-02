@@ -54,9 +54,6 @@ CFCVariable_init(CFCVariable *self, const char *exposure, const char *name,
 void
 CFCVariable_resolve_type(CFCVariable *self);
 
-void
-CFCVariable_destroy(CFCVariable *self);
-
 int
 CFCVariable_equals(CFCVariable *self, CFCVariable *other);
 

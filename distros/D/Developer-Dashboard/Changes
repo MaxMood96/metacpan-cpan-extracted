@@ -1,3 +1,115 @@
+4.29  2026-08-18
+
+  - DD-585/589/590/591/592/593: six query functions across CollectorRunner.pm,
+    IndicatorStore.pm, RuntimeManager.pm, ActionRunner.pm, SkillManager.pm
+    (three functions) and PageRuntime.pm each shelled out (via system(),
+    Capture::Tiny, or a waitpid reap) and left Perl's global $? holding their
+    own last subprocess's exit status after returning, without ever
+    localizing $? at sub entry. A caller reading bare $? afterward for an
+    unrelated reason - the shape that first surfaced this in DD-585, an END
+    block in a test file - silently inherits the wrong value. Found by a
+    systematic sweep of lib/ once the first instance was fixed, and
+    independently by the autonomous hourly bug-hunt round, which found and
+    fixed DD-590 and DD-593 on its own (both resumed here after the round's
+    own session ended mid-verification, with nothing lost either time - its
+    park mechanism correctly left the tree untouched while a suite was live).
+    Fixed uniformly with `local $?;` at each sub's entry. One subtlety
+    verified rather than assumed: SkillManager's three functions never read
+    $? explicitly, but Capture::Tiny returns system()'s own return value
+    automatically while system() ALSO mutates the global $? as an
+    unavoidable side effect - confirmed with a standalone repro before
+    writing any fix. A fourth possible instance (ActionRunner's own sibling
+    query pattern) was checked and is genuinely absent.
+  - DD-594: dd-round-park.sh's automatic end-of-round park comment defaults
+    to the shared, retired 'DD Bot' identity (DD-527 retired it project-wide)
+    because nothing in the automation chain ever sets DD_TIRA_PARK_AUTHOR.
+    Found by the autonomous round tracing the root cause of a finding that
+    had been recurring on every card it touched.
+  - DD-586: t-dd-round-park.sh's specs-guard timeout (600s) was too tight for
+    a spec that deliberately spawns real long-lived background processes to
+    model a genuinely-alive concurrent round; raised to 1200s.
+  - DD-587: the hourly bug-hunt and 10-minute blocked-resolver systemd
+    timers had been silently disabled for 9 days. Re-enabled and verified
+    both correctly defer to an active interactive session before doing real
+    work.
+  - DD-562: master's coverage gate read 100.0 locally but 99.9 on CI.
+  - DD-567: a perl-interpreter CVE advisory blocked the CI step immediately
+    before tests and coverage, on 5 consecutive pushes.
+  - DD-568: an early CI step failing silently skipped the test and coverage
+    steps that followed it; those steps now run with if: always().
+  - DD-572: the pre-push security grep matched 'brewfile' against the
+    retired-system marker pattern 'ewf', making a required gate return
+    permanent noise.
+  - DD-573: 13 operator-tool specs existed under dd-tg with nothing ever
+    running them, so a broken spec could never fail loudly.
+  - DD-574: the audit gate could fail without ever saying which check failed
+    it, a defect DD-567's own fix left behind.
+  - DD-581: nothing recorded a coverage verdict anywhere the board's own gate
+    indicator could read, so it could never show green even on a clean pass.
+  - DD-582: gate-status reported RUNNING for a log file it had no way to know
+    was actually still being written.
+  - DD-583: the Telegram ack watcher answered a direct question about its own
+    silence with more silence.
+  - DD-584: two dd-tg operator specs had been failing with nobody told.
+
+4.28  2026-08-15
+
+  - The coverage gate's own regression test no longer asserts that this machine's
+    library tree exists everywhere. It runs the gate in an environment stripped of
+    PERL5LIB and expected it to resolve its dependencies anyway, which is true only
+    where those dependencies sit in the one directory the gate repairs. Where they
+    do not, the gate correctly reports a missing module and the test called that a
+    failure. It now skips those two cases with the reason printed, keeps every
+    structural assertion, and still goes red if the repair is removed.
+  - 4.27 was tagged but never published: this test failed in the release workflow,
+    and a job that fails early makes every later step skip, so the tag exists with
+    no release behind it. Nothing in 4.27 is lost - it is all here.
+
+4.27  2026-08-15
+
+  - Browser smoke tests no longer hang a machine whose browser cannot reach its
+    own loopback address. A coverage run sat on one such fetch for one day and
+    twenty hours, holding a web server, a starman master and worker and a whole
+    Chrome tree, while producing no failure, no exit status and no last line - a
+    stalled run looks exactly like a slow one. Every external command those tests
+    run is now bounded, and the bound kills the command's whole process group
+    rather than the single process it can see, because the wedge left seven
+    processes alive and killing the visible one would have reaped one of them.
+  - Those tests now ask, before doing anything else, whether the browser can
+    fetch a page that is definitely being served. If it cannot, they skip and
+    print why - the probe URL, what the browser did, and that the product is not
+    implicated. The probe serves that page over plain HTTP from a nine-line
+    socket server rather than from the product, which is what makes it a
+    diagnosis instead of a second copy of the test: if plain HTTP works and the
+    real fetch then fails, that is a genuine failure and is not skipped.
+  - The workspace command hands the terminal to tmux with exec instead of
+    capturing the attach. It used to funnel a full-screen interactive program
+    through a capture buffer nobody reads until it exits, and leave a perl
+    process parked as its parent for the life of the session - possibly days.
+  - Collectors: a lost pidfile no longer multiplies supervisors. Start, stop and
+    status all treated that file as the authority on what was running, so once it
+    was gone every start forked another loop that nothing could see, stop or
+    count; twenty-seven were alive at once for a collector declared singleton,
+    each firing every fifteen minutes. They now ask the process table, adopt the
+    loop already running, and repair the record.
+  - A collector stopped by a signal now records which signal stopped it and which
+    process received it. A 'stopped' state with no pidfile is otherwise identical
+    whether the loop shut down in an orderly way, was stopped by a watchdog, or
+    was killed by something else on the machine - and that ambiguity sent four
+    separate investigations down the wrong path.
+  - The coverage gate carries its own library path. Launched from cron or a
+    transient systemd unit - environments that read no shell profile - it died
+    naming a dependency that is declared in three manifests and installed. It
+    resolves that tree itself now, and still fails loudly when a dependency is
+    genuinely absent, because it adds a directory only when the directory exists
+    and runs no external command.
+  - The collector start path no longer re-checks a pid it has already guaranteed.
+    When the recorded pid is missing or empty it is replaced by a search of the
+    process table, which returns a real pid or nothing, so the later test for a
+    usable pid could never fail. The guarantee is now stated once where it holds
+    instead of being re-checked where it cannot, which is one fewer piece of code
+    that looks like it protects something.
+
 4.26  2026-08-10
 
   - Packaging: stopped the release tarball carrying two things it never should

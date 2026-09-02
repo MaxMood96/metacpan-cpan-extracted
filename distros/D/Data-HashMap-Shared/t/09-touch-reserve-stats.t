@@ -286,10 +286,13 @@ sub tmpfile { File::Temp::tempnam(File::Spec->tmpdir, 'shm_test') . '.shm' }
 # === flush_expired_partial: bounded scan, ($n, $done) return, convergence ===
 {
     my $path = tmpfile();
-    my $map = Data::HashMap::Shared::II->new($path, 1000, 0, 1);  # ttl=1s
+    # Count them under a long TTL, then expire them: the pre-expiry assertion
+    # must not race the clock on a loaded box.
+    my $map = Data::HashMap::Shared::II->new($path, 1000, 0, 60);
     $map->put($_, $_ * 10) for 1 .. 30;
     is($map->size, 30, 'flush_expired_partial: 30 live entries before expiry');
-    sleep 2;                                   # everything expires (ttl=1s)
+    $map->set_ttl($_, 1) for 1 .. 30;
+    sleep 2;                                   # everything expires
     my ($total, $done, $calls) = (0, 0, 0);
     while (!$done) {
         my ($n, $d) = $map->flush_expired_partial(8);   # 8 slots per call

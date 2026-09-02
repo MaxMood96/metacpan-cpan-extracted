@@ -1,9 +1,10 @@
 package Crypt::JWS::OpenSSL::Role::Encoder;
-$Crypt::JWS::OpenSSL::Role::Encoder::VERSION = '0.003';
+$Crypt::JWS::OpenSSL::Role::Encoder::VERSION = '0.004';
 use Moo::Role;
 use MIME::Base64 ();
 use JSON::MaybeXS 1.002002 ();
 use Carp qw( croak );
+use version 0.78;
 
 has 'JSON' => ( is => 'ro', default => sub { JSON::MaybeXS->new->utf8(1) } );
 
@@ -120,6 +121,13 @@ sub decode_pem {
     return $self->decode_base64($pem);
 }
 
+sub numify_version {
+    my ($self, $vstring) = @_;
+    no warnings;
+    my $ver = version->parse($vstring)->numify;
+    return $ver;
+}
+
 1;
 
 __END__
@@ -164,7 +172,7 @@ L<Crypt::JWS::OpenSSL::Algorithm::HMAC>
 
 =head1 VERSION
 
-version 0.003
+version 0.004
 
 =head1 METHODS
 

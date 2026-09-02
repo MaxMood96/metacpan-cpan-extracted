@@ -1,4 +1,4 @@
-package Syntax::Keyword::Assert 0.19;
+package Syntax::Keyword::Assert 0.20;
 
 use v5.14;
 use warnings;
@@ -96,6 +96,44 @@ This means you can use expensive computations or side effects in the message wit
 
     assert($x > 0, expensive_debug_info());
     # expensive_debug_info() is NOT called if $x > 0
+
+=head1 METHODS
+
+=head2 Importing
+
+    use Syntax::Keyword::Assert;
+
+Importing the module enables the C<assert> keyword in the current lexical scope (see L</Unimporting> below).
+
+C<assert> is enabled per lexical scope via C<import_into>, so you can build a "toolkit" module that re-exports it to your users, the same way L<Object::Pad> or L<Syntax::Keyword::Try> do:
+
+    package MyToolkit;
+
+    use Syntax::Keyword::Assert ();
+
+    sub import {
+        my $class  = shift;
+        my $caller = caller;
+
+        Syntax::Keyword::Assert->import_into( $caller );
+        # ... enable other keywords/pragmas here too
+    }
+
+Now C<use MyToolkit;> gives the caller the C<assert> keyword as well, without them having to C<use Syntax::Keyword::Assert> directly.
+
+=head2 Unimporting
+
+The C<assert> keyword is lexically scoped. You can disable it for the rest of the enclosing scope with:
+
+    use Syntax::Keyword::Assert;
+
+    assert(1);  # ok
+
+    no Syntax::Keyword::Assert;
+
+    assert(1);  # => Undefined subroutine &main::assert called ...
+
+Once unimported, C<assert> is no longer recognised as a keyword; it is parsed as an ordinary function call instead, which dies at runtime unless a subroutine of that name exists.
 
 =head1 SEE ALSO
 

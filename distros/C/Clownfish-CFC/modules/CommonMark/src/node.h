@@ -5,76 +5,86 @@
 extern "C" {
 #endif
 
-#include <stdio.h>
+#include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "cmark.h"
 #include "buffer.h"
-#include "chunk.h"
 
 typedef struct {
-	cmark_list_type   list_type;
-	int               marker_offset;
-	int               padding;
-	int               start;
-	cmark_delim_type  delimiter;
-	unsigned char     bullet_char;
-	bool              tight;
+  int marker_offset;
+  int padding;
+  int start;
+  unsigned char list_type;
+  unsigned char delimiter;
+  unsigned char bullet_char;
+  bool tight;
 } cmark_list;
 
 typedef struct {
-	cmark_chunk       info;
-	cmark_chunk       literal;
-	int               fence_length;
-	/* fence_offset must be 0-3, so we can use int8_t */
-	int8_t            fence_offset;
-	unsigned char     fence_char;
-	bool              fenced;
+  unsigned char *info;
+  uint8_t fence_length;
+  uint8_t fence_offset;
+  unsigned char fence_char;
+  int8_t fenced;
 } cmark_code;
 
 typedef struct {
-	int level;
-	bool setext;
-} cmark_header;
+  int internal_offset;
+  int8_t level;
+  bool setext;
+} cmark_heading;
 
 typedef struct {
-	cmark_chunk url;
-	cmark_chunk title;
+  unsigned char *url;
+  unsigned char *title;
 } cmark_link;
 
-struct cmark_node {
-	struct cmark_node *next;
-	struct cmark_node *prev;
-	struct cmark_node *parent;
-	struct cmark_node *first_child;
-	struct cmark_node *last_child;
+typedef struct {
+  unsigned char *on_enter;
+  unsigned char *on_exit;
+} cmark_custom;
 
-	void *user_data;
-
-	int start_line;
-	int start_column;
-	int end_line;
-	int end_column;
-
-	cmark_node_type type;
-
-	bool open;
-	bool last_line_blank;
-
-	cmark_strbuf string_content;
-
-	union {
-		cmark_chunk       literal;
-		cmark_list        list;
-		cmark_code        code;
-		cmark_header      header;
-		cmark_link        link;
-		int               html_block_type;
-	} as;
+enum cmark_node__internal_flags {
+  CMARK_NODE__OPEN = (1 << 0),
+  CMARK_NODE__LAST_LINE_BLANK = (1 << 1),
+  CMARK_NODE__LAST_LINE_CHECKED = (1 << 2),
+  CMARK_NODE__LIST_LAST_LINE_BLANK = (1 << 3),
 };
 
-CMARK_EXPORT int
-cmark_node_check(cmark_node *node, FILE *out);
+struct cmark_node {
+  cmark_mem *mem;
+
+  struct cmark_node *next;
+  struct cmark_node *prev;
+  struct cmark_node *parent;
+  struct cmark_node *first_child;
+  struct cmark_node *last_child;
+
+  void *user_data;
+
+  unsigned char *data;
+  bufsize_t len;
+
+  int start_line;
+  int start_column;
+  int end_line;
+  int end_column;
+  uint16_t type;
+  uint16_t flags;
+
+  union {
+    cmark_list list;
+    cmark_code code;
+    cmark_heading heading;
+    cmark_link link;
+    cmark_custom custom;
+    int html_block_type;
+  } as;
+};
+
+CMARK_EXPORT int cmark_node_check(cmark_node *node, FILE *out);
 
 #ifdef __cplusplus
 }

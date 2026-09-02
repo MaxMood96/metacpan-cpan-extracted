@@ -1,5 +1,12 @@
 Revision history for Fetch
 
+0.22    2026-09-02
+        - t/26-awaitable.t asserts cancellation across an await only on
+          perl 5.24+, which is where Future::AsyncAwait chains the awaited
+          future rather than registering a code block that reaches nothing.
+        - t/26-awaitable.t reports the Future::AsyncAwait version it ran
+          against.
+
 0.21    2026-09-01
         - Fetch::Future implements the Future::AsyncAwait::Awaitable API,
           so await works on a request inside an async sub.

@@ -54,7 +54,7 @@ static size_t registry_size = 0;
 static size_t registry_cap  = 0;
 
 static void
-S_CFCGoClass_destroy(CFCGoClass *self);
+S_CFCGoClass_destroy(CFCBase *base);
 
 static void
 S_lazy_init_method_bindings(CFCGoClass *self);
@@ -62,7 +62,7 @@ S_lazy_init_method_bindings(CFCGoClass *self);
 static const CFCMeta CFCGOCLASS_META = {
     "Clownfish::CFC::Binding::Go::Class",
     sizeof(CFCGoClass),
-    (CFCBase_destroy_t)S_CFCGoClass_destroy
+    S_CFCGoClass_destroy
 };
 
 CFCGoClass*
@@ -72,14 +72,16 @@ CFCGoClass_new(CFCParcel *parcel, const char *class_name) {
     CFCGoClass *self = (CFCGoClass*)CFCBase_allocate(&CFCGOCLASS_META);
     self->parcel = (CFCParcel*)CFCBase_incref((CFCBase*)parcel);
     self->class_name = CFCUtil_strdup(class_name);
-    // Client may be NULL, since fetch_singleton() does not always succeed.
-    CFCClass *client = CFCClass_fetch_singleton(class_name);
+    // Client may be NULL, since class() does not always succeed.
+    CFCClass *client = CFCParcel_class(parcel, class_name);
     self->client = (CFCClass*)CFCBase_incref((CFCBase*)client);
     return self;
 }
 
 static void
-S_CFCGoClass_destroy(CFCGoClass *self) {
+S_CFCGoClass_destroy(CFCBase *base) {
+    CFCGoClass *self = (CFCGoClass *) base;
+
     CFCBase_decref((CFCBase*)self->parcel);
     CFCBase_decref((CFCBase*)self->client);
     FREEMEM(self->class_name);
@@ -87,7 +89,7 @@ S_CFCGoClass_destroy(CFCGoClass *self) {
         CFCBase_decref((CFCBase*)self->method_bindings[i]);
     }
     FREEMEM(self->method_bindings);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 static int
@@ -133,7 +135,7 @@ CFCGoClass_singleton(const char *class_name) {
 CFCClass*
 CFCGoClass_get_client(CFCGoClass *self) {
     if (!self->client) {
-        CFCClass *client = CFCClass_fetch_singleton(self->class_name);
+        CFCClass *client = CFCParcel_class(self->parcel, self->class_name);
         self->client = (CFCClass*)CFCBase_incref((CFCBase*)client);
     }
     return self->client;
@@ -281,7 +283,7 @@ CFCGoClass_gen_ctors(CFCGoClass *self) {
        ) {
         return CFCUtil_strdup("");
     }
-    CFCParcel    *parcel     = CFCClass_get_parcel(self->client);
+    CFCParcel    *parcel     = self->parcel;
     CFCParamList *param_list = CFCFunction_get_param_list(ctor_func);
     CFCType      *ret_type   = CFCFunction_get_return_type(ctor_func);
     const char   *struct_sym = CFCClass_get_struct_sym(self->client);

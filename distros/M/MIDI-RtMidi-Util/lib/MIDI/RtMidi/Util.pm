@@ -3,7 +3,7 @@ our $AUTHORITY = 'cpan:GENE';
 
 # ABSTRACT: Handy Utilities for Real-time MIDI
 
-our $VERSION = '0.0201';
+our $VERSION = '0.0301';
 
 use v5.36;
 use feature 'try';
@@ -13,7 +13,7 @@ use MIDI::RtMidi::FFI::Device ();
 use Exporter 'import';
 our @EXPORT = qw(
     out_port
-    halt
+    stop_device
     input_ports
     output_ports
 );
@@ -34,13 +34,13 @@ sub out_port ($name) {
 }
 
 
-sub halt ($midi_out) {
+sub stop_device ($midi_out) {
     try {
         $midi_out->stop;
         $midi_out->panic;
     }
     catch ($e) {
-        warn "Can't halt the MIDI out devices: $e\n";
+        warn "Can't stop the MIDI device: $e\n";
     }
 }
 
@@ -76,26 +76,21 @@ MIDI::RtMidi::Util - Handy Utilities for Real-time MIDI
 
 =head1 VERSION
 
-version 0.0201
+version 0.0301
 
 =head1 SYNOPSIS
 
-  use MIDI::RtMidi::Util qw(out_port halt input_ports output_ports);
+  use MIDI::RtMidi::Util qw(out_port stop_device input_ports output_ports);
 
   my $ports = input_ports(); # e.g. ['USB MIDI Interface', ...]
   $ports = output_ports();
 
   my $midi_out = out_port('usb');
+  # Do something cool ...
 
   END {
-    halt($midi_out);
+    stop_device($midi_out);
   }
-
-  # redefine what happens on ^C:
-  $SIG{INT} = sub {
-    print "\nStop sequencer\n";
-    halt($midi_out);
-  };
 
 =head1 DESCRIPTION
 
@@ -111,11 +106,11 @@ Open and return a named L<MIDI::RtMidi::FFI::Device> C<RtMidiOut> device.
 
 This function takes a unique part of an open port name as its argument.
 
-=head2 halt
+=head2 stop_device
 
-  halt();
+  stop_device();
 
-Stop and close an open C<RtMidiOut> device.
+Stop and close an open C<MIDI::RtMidi::FFI::Device> device.
 
 =head2 input_ports
 

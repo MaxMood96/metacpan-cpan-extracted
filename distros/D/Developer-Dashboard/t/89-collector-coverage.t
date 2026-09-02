@@ -110,6 +110,27 @@ sub dies_like {
         'write_result rejects a status callback that is not a code reference',
     );
 
+    # DD-609: last_success/last_success_at/last_failure_at are derived from
+    # $result{exit_code} with truthy ternaries, so an undef or non-numeric
+    # exit_code must be rejected explicitly rather than silently read as a
+    # falsy "success".
+    dies_like(
+        sub { $collector->write_result( $name, stdout => "ok\n" ) },
+        qr/write_result requires a defined integer exit_code.*undef/,
+        'write_result dies when exit_code is omitted entirely',
+    );
+    dies_like(
+        sub { $collector->write_result( $name, exit_code => undef, stdout => "ok\n" ) },
+        qr/write_result requires a defined integer exit_code.*undef/,
+        'write_result dies when exit_code is explicitly undef',
+    );
+    dies_like(
+        sub { $collector->write_result( $name, exit_code => 'abc' ) },
+        qr/write_result requires a defined integer exit_code.*'abc'/,
+        'write_result dies when exit_code is not numeric',
+    );
+    ok( !defined $collector->read_status($name), 'none of the rejected exit_code calls left any status behind' );
+
     # Fresh collector: no previous status at all.
     $collector->write_result( $name, exit_code => 0, stdout => "ok\n" );
     my $first = $collector->read_status($name);
@@ -674,6 +695,20 @@ dies_like( sub { $collector->_format_log_entry( name => '' ) }, qr/Missing colle
     is( $rotated->{before_bytes}, 12, 'a line rotation reports the original size' );
     is( $rotated->{after_bytes}, 6, 'a line rotation reports the rotated size' );
     is( $collector->read_log($name), "l3\nl4\n", 'a line rotation keeps only the trailing lines' );
+}
+
+# DD-613: dry_run computes and reports the rotation without writing it, so
+# Housekeeper's preview mode can report what rotate_log would do.
+{
+    my $name = 'rot-dry-run';
+    seed_collector( $name, 'log' => "l1\nl2\nl3\nl4\n" );
+    my $rotated = $collector->rotate_log( $name, { lines => 2 }, dry_run => 1 );
+    is( $rotated->{kind}, 'collector-log-rotation', 'a dry-run rotation still reports a collector log rotation' );
+    is( $rotated->{strategy}, 'lines=2', 'a dry-run rotation still reports its strategy' );
+    is( $rotated->{before_bytes}, 12, 'a dry-run rotation still reports the original size' );
+    is( $rotated->{after_bytes}, 6, 'a dry-run rotation still reports the would-be rotated size' );
+    ok( $rotated->{dry_run}, 'a dry-run rotation flags itself as dry_run in the summary' );
+    is( $collector->read_log($name), "l1\nl2\nl3\nl4\n", 'a dry-run rotation leaves the log file completely untouched' );
 }
 
 # A time-based rotation with an explicit clock keeps only recent entries.

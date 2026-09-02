@@ -70,9 +70,6 @@ CFCPerl*
 CFCPerl_init(CFCPerl *self, struct CFCHierarchy *hierarchy,
              const char *lib_dir, const char *header, const char *footer);
 
-void
-CFCPerl_destroy(CFCPerl *self);
-
 /** Auto-generate POD for all class bindings where pod specs were created.
  * See whether a .pod file exists and is up-to-date; if not, write it out.
  * 

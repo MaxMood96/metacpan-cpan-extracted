@@ -1,7 +1,7 @@
 This archive contains the distribution PAGI-Server,
-version 0.002011:
+version 0.002012:
 
-  Reference IO::Async server for the PAGI specification
+  Reference server for the PAGI specification
 
 This software is Copyright (c) 2026 by John Napiorkowski.
 

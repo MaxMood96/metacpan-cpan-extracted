@@ -8,7 +8,7 @@ configure_requires:
   Module::Build: '0.4005'
   XS::Parse::Keyword::Builder: '0.36'
 dynamic_config: 0
-generated_by: 'Minilla/v3.1.28, CPAN::Meta::Converter version 2.150010'
+generated_by: 'Minilla/v3.1.27, CPAN::Meta::Converter version 2.150013'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -27,7 +27,7 @@ no_index:
 provides:
   Syntax::Keyword::Assert:
     file: lib/Syntax/Keyword/Assert.pm
-    version: '0.19'
+    version: '0.20'
 requires:
   XS::Parse::Keyword: '0.36'
   perl: '5.016000'
@@ -35,7 +35,9 @@ resources:
   bugtracker: https://github.com/kfly8/Syntax-Keyword-Assert/issues
   homepage: https://github.com/kfly8/Syntax-Keyword-Assert
   repository: https://github.com/kfly8/Syntax-Keyword-Assert.git
-version: '0.19'
+version: '0.20'
 x_authority: cpan:KFLY
+x_contributors:
+  - 'dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'
 x_static_install: 0

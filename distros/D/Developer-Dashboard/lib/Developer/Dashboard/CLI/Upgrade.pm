@@ -3,7 +3,7 @@ package Developer::Dashboard::CLI::Upgrade;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Developer::Dashboard::Platform ();
 use File::Temp qw(tempfile);
@@ -133,6 +133,12 @@ sub _powershell_command {
 # Output: numeric child exit code, or dies when process creation fails.
 sub _run_command {
     my ($argv) = @_;
+
+    # DD-597: system() below mutates the caller's global $? as a side
+    # effect; without this guard that stays set in the caller's process
+    # after this sub returns, regardless of the exit code already captured
+    # in this sub's own return value.
+    local $?;
     system @{$argv};
     die "Unable to start Developer Dashboard installer: $!\n" if $? == -1;
     return 128 + ( $? & 127 ) if $? & 127;

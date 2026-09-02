@@ -4,7 +4,7 @@
       "vividsnow"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013",
+   "generated_by" : "ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150014",
    "license" : [
       "perl_5"
    ],
@@ -57,7 +57,7 @@
    "provides" : {
       "Alien::curlimpersonate" : {
          "file" : "lib/Alien/curlimpersonate.pm",
-         "version" : "0.02"
+         "version" : "0.03"
       }
    },
    "release_status" : "stable",
@@ -71,7 +71,7 @@
          "web" : "https://github.com/vividsnow/perl5-alien-curlimpersonate"
       }
    },
-   "version" : "0.02",
+   "version" : "0.03",
    "x_alienfile" : {
       "generated_by" : "Alien::Build::MM version 2.84",
       "requires" : {

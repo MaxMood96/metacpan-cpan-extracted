@@ -1,0 +1,86 @@
+---
+X_No_Archive: Yes
+abstract: 'Locate, Download, or Build and Install Xmake'
+author:
+  - 'Sanko Robinson'
+build_requires:
+  Capture::Tiny: '0'
+  Exporter: '5.57'
+  ExtUtils::Helpers: '0.028'
+  ExtUtils::Install: '0'
+  ExtUtils::InstallPaths: '0.002'
+  File::Basename: '0'
+  File::Find: '0'
+  File::Path: '0'
+  File::Spec::Functions: '0'
+  File::Temp: '0'
+  Getopt::Long: '2.36'
+  HTTP::Tiny: '0'
+  JSON::PP: '2'
+  Path::Tiny: '0'
+  Test2::V0: '0'
+  perl: v5.40.0
+configure_requires:
+  Archive::Tar: '0'
+  CPAN::Meta: '0'
+  Data::Dumper: '0'
+  Exporter: '5.57'
+  ExtUtils::Helpers: '0.028'
+  ExtUtils::Install: '0'
+  ExtUtils::InstallPaths: '0.002'
+  File::Basename: '0'
+  File::Find: '0'
+  File::Path: '0'
+  File::Spec::Functions: '0'
+  Getopt::Long: '2.36'
+  HTTP::Tiny: '0'
+  JSON::PP: '2'
+  Path::Tiny: '0'
+  perl: v5.40.0
+dynamic_config: 0
+generated_by: 'App::mii v1.0.0, CPAN::Meta::Converter version 2.150013'
+keywords: []
+license: artistic_2
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Alien-Xmake
+no_index:
+  directory:
+    - t
+    - xt
+    - inc
+    - share
+    - eg
+    - examples
+    - author
+    - builder
+provides:
+  Alien::Xmake:
+    file: lib/Alien/Xmake.pm
+    version: v0.9.0
+  Alien::Xrepo:
+    file: lib/Alien/Xrepo.pm
+    version: v0.9.0
+  Alien::Xrepo::Base:
+    file: lib/Alien/Xrepo/Base.pm
+    version: v0.0.9
+  Alien::Xrepo::Base::Builder:
+    file: lib/Alien/Xrepo/Base.pm
+    version: v0.0.9
+requires:
+  perl: v5.40.0
+resources:
+  bugtracker: https://github.com/sanko/Alien-Xmake/issues
+  homepage: https://github.com/sanko/Alien-Xmake
+  license: http://www.perlfoundation.org/artistic_license_2_0
+  repository: https://github.com/sanko/Alien-Xmake.git
+version: v0.9.0
+x_authority: cpan:SANKO
+x_ignore:
+  - .tidyallrc
+  - .gitignore
+  - .clang-format
+  - .github/**
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'
+x_static_install: 0

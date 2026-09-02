@@ -187,6 +187,7 @@ t/0001-contracts.t
 t/0002-pbread.t
 t/0003-otlp-in.t
 t/0004-wal.t
+t/0005-multieval.t
 t/0010-ingest.t
 t/0020-segment.t
 t/0021-series-id.t

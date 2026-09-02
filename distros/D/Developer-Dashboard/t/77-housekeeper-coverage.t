@@ -51,6 +51,63 @@ my $is_root = ( $> == 0 );
 }
 
 # ---------------------------------------------------------------------------
+# run(dry_run=>1): end-to-end across a stale state root, an aged temp file,
+# and an expired session all at once - none of it is touched, but the summary
+# reports it exactly as a real run would; a following real run() then does
+# touch all three (DD-613, AC-1/AC-2).
+# ---------------------------------------------------------------------------
+{
+    my $dry_home = tempdir( CLEANUP => 1 );
+    local $ENV{HOME} = $dry_home;
+    my $dry_paths  = Developer::Dashboard::PathRegistry->new( home => $dry_home );
+    my $dry_keeper = Developer::Dashboard::Housekeeper->new( paths => $dry_paths );
+
+    my $state_base = $dry_paths->state_base_root;
+    my $stale_dir  = File::Spec->catdir( $state_base, 'e2e-stale-root' );
+    make_path($stale_dir);
+    utime time - 7200, time - 7200, $stale_dir or die "Unable to age $stale_dir: $!";
+
+    my $sessions_root = $dry_paths->sessions_root;
+    my $expired_session = File::Spec->catfile( $sessions_root, 'e2e-expired.json' );
+    _write_file( $expired_session, Developer::Dashboard::JSON::json_encode(
+        { session_id => 'e2e-expired', expires_at => '2000-01-01T00:00:00Z' }
+    ) );
+
+    my $tmp = tempdir( CLEANUP => 1 );
+    my $aged_ajax = File::Spec->catfile( $tmp, 'developer-dashboard-ajax-e2e' );
+    _write_file( $aged_ajax, 'e2e aged ajax payload' );
+    utime time - 7200, time - 7200, $aged_ajax or die "Unable to age $aged_ajax: $!";
+
+    my $dry_summary;
+    {
+        no warnings qw(redefine once);
+        local *File::Spec::tmpdir = sub { return $tmp };
+        $dry_summary = $dry_keeper->run( min_age_seconds => 60, dry_run => 1 );
+    }
+    ok( $dry_summary->{dry_run}, 'run(dry_run=>1) flags the summary as a dry run' );
+    ok( -d $stale_dir, 'run(dry_run=>1) leaves the stale state root on disk' );
+    ok( -e $aged_ajax, 'run(dry_run=>1) leaves the aged temp file on disk' );
+    ok( -e $expired_session, 'run(dry_run=>1) leaves the expired session file on disk' );
+    ok( ( grep { $_->{kind} eq 'state-root' } @{ $dry_summary->{removed} } ),
+        'run(dry_run=>1) still reports the stale state root as (would-be) removed' );
+    ok( ( grep { $_->{kind} eq 'ajax-temp-file' } @{ $dry_summary->{removed} } ),
+        'run(dry_run=>1) still reports the aged temp file as (would-be) removed' );
+    is( $dry_summary->{scanned}{expired_sessions}, 1,
+        'run(dry_run=>1) still reports the expired session as (would-be) removed' );
+
+    my $real_summary;
+    {
+        no warnings qw(redefine once);
+        local *File::Spec::tmpdir = sub { return $tmp };
+        $real_summary = $dry_keeper->run( min_age_seconds => 60 );
+    }
+    ok( !$real_summary->{dry_run}, 'a real run() does not flag the summary as a dry run' );
+    ok( !-d $stale_dir, 'a real run() against the same fixture actually removes the stale state root' );
+    ok( !-e $aged_ajax, 'a real run() against the same fixture actually removes the aged temp file' );
+    ok( !-e $expired_session, 'a real run() against the same fixture actually removes the expired session' );
+}
+
+# ---------------------------------------------------------------------------
 # _rotate_collector_logs(): falsy collectors list, non-hash and unnamed jobs,
 # and rotation results that are present versus absent.
 # ---------------------------------------------------------------------------
@@ -75,6 +132,18 @@ my $is_root = ( $> == 0 );
     is( scalar @rotated, 1, '_rotate_collector_logs collects only the jobs whose rotation returns a result' );
     is( $rotated[0]{name}, 'has_result', '_rotate_collector_logs keeps the rotation payload for a producing collector' );
     is( $scanned->{collector_logs}, 2, '_rotate_collector_logs scans both named collectors that declared rotation rules' );
+
+    # DD-613: dry_run must reach the underlying collector store's rotate_log
+    # call, not just live in Housekeeper's own %args.
+    @Local::HKStore::DRY_RUN_CALLS = ();
+    $mixed_keeper->_rotate_collector_logs( scanned => { collector_logs => 0 }, dry_run => 1 );
+    ok( ( @Local::HKStore::DRY_RUN_CALLS && !grep { !$_ } @Local::HKStore::DRY_RUN_CALLS ),
+        '_rotate_collector_logs passes dry_run through to every rotate_log call' );
+
+    @Local::HKStore::DRY_RUN_CALLS = ();
+    $mixed_keeper->_rotate_collector_logs( scanned => { collector_logs => 0 } );
+    ok( ( @Local::HKStore::DRY_RUN_CALLS && !grep { $_ } @Local::HKStore::DRY_RUN_CALLS ),
+        '_rotate_collector_logs passes a false dry_run through on a real run' );
 }
 
 # ---------------------------------------------------------------------------
@@ -113,6 +182,34 @@ my $is_root = ( $> == 0 );
 }
 
 # ---------------------------------------------------------------------------
+# _cleanup_state_roots(): dry_run reports a stale root as removed without
+# actually removing it (DD-613, for Housekeeper's preview mode).
+# ---------------------------------------------------------------------------
+{
+    my $keeper = Developer::Dashboard::Housekeeper->new( paths => $paths );
+    my $state_base = $paths->state_base_root;
+    my $dry_run_stale_dir = File::Spec->catdir( $state_base, 'stale-dry-run' );
+    make_path($dry_run_stale_dir);
+    utime time - 7200, time - 7200, $dry_run_stale_dir or die "Unable to age $dry_run_stale_dir: $!";
+
+    my @removed = $keeper->_cleanup_state_roots(
+        min_age_seconds => 60,
+        scanned         => { state_roots => 0 },
+        dry_run         => 1,
+    );
+    ok( -d $dry_run_stale_dir, '_cleanup_state_roots leaves a stale state root on disk under dry_run' );
+    is( scalar @removed, 1, '_cleanup_state_roots still reports the stale root as (would-be) removed under dry_run' );
+    is( $removed[0]{kind}, 'state-root', '_cleanup_state_roots reports the correct kind under dry_run' );
+
+    my @removed_for_real = $keeper->_cleanup_state_roots(
+        min_age_seconds => 60,
+        scanned         => { state_roots => 0 },
+    );
+    ok( !-d $dry_run_stale_dir, 'a real (non-dry-run) _cleanup_state_roots call against the same fixture actually removes it' );
+    is( scalar @removed_for_real, 1, 'the real call also reports exactly one removal' );
+}
+
+# ---------------------------------------------------------------------------
 # _cleanup_temp_files(): non-file candidates, fresh candidates, and successful
 # removals all in one clean temp directory.
 # ---------------------------------------------------------------------------
@@ -148,6 +245,42 @@ my $is_root = ( $> == 0 );
     ok( -e $fresh_ajax,   '_cleanup_temp_files keeps a candidate that is not yet old enough' );
     ok( -d $ajax_dir,     '_cleanup_temp_files skips glob matches that are not plain files' );
     is( scalar @removed, 2, '_cleanup_temp_files reports exactly the two aged files it removed' );
+}
+
+# ---------------------------------------------------------------------------
+# _cleanup_temp_files(): dry_run reports aged files as removed without
+# actually unlinking them (DD-613, for Housekeeper's preview mode).
+# ---------------------------------------------------------------------------
+{
+    my $keeper = Developer::Dashboard::Housekeeper->new( paths => $paths );
+    my $tmp    = tempdir( CLEANUP => 1 );
+
+    my $aged_ajax = File::Spec->catfile( $tmp, 'developer-dashboard-ajax-aged' );
+    _write_file( $aged_ajax, 'aged ajax payload' );
+    utime time - 7200, time - 7200, $aged_ajax or die "Unable to age $aged_ajax: $!";
+
+    my @removed;
+    {
+        no warnings qw(redefine once);
+        local *File::Spec::tmpdir = sub { return $tmp };
+        @removed = $keeper->_cleanup_temp_files(
+            min_age_seconds => 3600,
+            scanned         => { ajax_temp_files => 0, result_temp_files => 0 },
+            dry_run         => 1,
+        );
+    }
+    ok( -e $aged_ajax, '_cleanup_temp_files leaves an aged ajax temp file on disk under dry_run' );
+    is( scalar @removed, 1, '_cleanup_temp_files still reports the aged file as (would-be) removed under dry_run' );
+
+    {
+        no warnings qw(redefine once);
+        local *File::Spec::tmpdir = sub { return $tmp };
+        $keeper->_cleanup_temp_files(
+            min_age_seconds => 3600,
+            scanned         => { ajax_temp_files => 0, result_temp_files => 0 },
+        );
+    }
+    ok( !-e $aged_ajax, 'a real (non-dry-run) _cleanup_temp_files call against the same fixture actually removes it' );
 }
 
 # ---------------------------------------------------------------------------
@@ -209,10 +342,35 @@ my $is_root = ( $> == 0 );
 {
     my $keeper = Developer::Dashboard::Housekeeper->new( paths => $paths );
 
+    # DD-598: the PID-reuse regression this ticket exists to fix. This test
+    # process's own pid is a REAL, live pid - but it is not the "live"
+    # collector loop (no DEVELOPER_DASHBOARD_LOOP_NAME=live marker, no
+    # "dashboard collector: live" process title). A bare kill(0,$$) used to
+    # be trusted as "still alive"; the fix must reject it on identity.
     my $live_root = File::Spec->catdir( $home, 'live-root' );
     make_path( File::Spec->catdir( $live_root, 'collectors' ) );
     _write_file( File::Spec->catfile( $live_root, 'collectors', 'live.pid' ), "$$\n" );
-    ok( $keeper->_state_root_has_live_collectors($live_root), '_state_root_has_live_collectors returns true when a pidfile points at a live process' );
+    ok( !$keeper->_state_root_has_live_collectors($live_root),
+        '_state_root_has_live_collectors returns false for a live-but-unrelated pid (DD-598 PID-reuse regression)' );
+
+    # Identity confirmed: exercise the wiring (Housekeeper reuses
+    # CollectorRunner's own established identity check rather than
+    # duplicating it - that check's own logic is exhaustively unit-tested in
+    # t/103-collectorrunner-coverage.t) by mocking it to confirm the pid, and
+    # assert Housekeeper passes it the pidfile-basename-derived collector name.
+    {
+        no warnings 'redefine';
+        my @seen_args;
+        local *Developer::Dashboard::CollectorRunner::_is_managed_loop = sub {
+            my ( undef, $pid, $name ) = @_;
+            push @seen_args, [ $pid, $name ];
+            return 1;
+        };
+        ok( $keeper->_state_root_has_live_collectors($live_root),
+            '_state_root_has_live_collectors returns true once identity is confirmed' );
+        is_deeply( \@seen_args, [ [ $$, 'live' ] ],
+            '_state_root_has_live_collectors derives the collector name from the pidfile basename and checks identity via CollectorRunner' );
+    }
 
     my $dead_pid = fork();
     die "fork failed: $!" if !defined $dead_pid;
@@ -226,6 +384,7 @@ my $is_root = ( $> == 0 );
     _write_file( File::Spec->catfile( $mixed_collectors, 'empty.pid' ), '' );  # empty -> undef pid
     _write_file( File::Spec->catfile( $mixed_collectors, 'bad.pid' ), "abc\n" );
     _write_file( File::Spec->catfile( $mixed_collectors, 'dead.pid' ), "$dead_pid\n" );
+    _write_file( File::Spec->catfile( $mixed_collectors, '.pid' ), "$$\n" );   # basename-only "" name, must not crash
     ok( !$keeper->_state_root_has_live_collectors($mixed_root), '_state_root_has_live_collectors returns false when no pidfile resolves to a live process' );
 }
 
@@ -418,10 +577,14 @@ sub _capture_die {
 
     # rotate_log($name, $rotation, %args)
     # Returns a rotation payload only for the collector named has_result.
+    # Records every call's dry_run arg (DD-613) so a test can assert
+    # Housekeeper actually threads it through rather than swallowing it.
     # Input: collector name, rotation hash reference, and passthrough args.
     # Output: rotation payload hash reference, or nothing.
+    our @DRY_RUN_CALLS;
     sub rotate_log {
         my ( $self, $name, $rotation, %args ) = @_;
+        push @DRY_RUN_CALLS, $args{dry_run} ? 1 : 0;
         return { kind => 'collector-log-rotation', name => $name } if $name eq 'has_result';
         return;
     }

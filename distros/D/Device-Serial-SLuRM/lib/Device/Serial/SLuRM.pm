@@ -7,7 +7,7 @@ use v5.28;  # delete %hash{@slice}
 use warnings;
 use Object::Pad 0.807 ':experimental(adjust_params inherit_field)';
 
-package Device::Serial::SLuRM 0.10;
+package Device::Serial::SLuRM 0.11;
 class Device::Serial::SLuRM;
 
 use Carp;
@@ -178,6 +178,18 @@ Optional baud rate to set for communication when opening a device node.
 SLµRM does not specify a particular rate, but a default value of 115.2k will
 apply if left unspecified.
 
+=head2 host
+
+=head2 port
+
+   host => STR,
+   port => NUM or STR
+
+I<Since version 0.11.>
+
+An alternative to the C<dev> argument, giving instead a destination IP address
+to send UDP packets in UDP-wrapped MSLµRM format.
+
 =head2 fh
 
    fh => IO
@@ -186,7 +198,7 @@ An IO handle directly to the the serial port device to be used for reading and
 writing. It will be assumed to be set up correctly; no further setup will be
 performed.
 
-Either C<dev> or C<fh> are required.
+Either C<dev>, C<host> or C<fh> are required.
 
 =head2 retransmit_delay
 
@@ -220,7 +232,7 @@ ADJUST :params ( %params )
 {
    $_protocol = Device::Serial::SLuRM::Protocol->new(
       multidrop => __CLASS__->is_multidrop,
-      delete %params{qw( fh dev baud )},
+      delete %params{qw( fh dev baud host port )},
    );
 }
 
@@ -301,7 +313,7 @@ async method _run
                ( $nodestate->seqno_rx ) = unpack "C", $payload;
 
                if( $seqno == SLURM_PKTCTRL_META_RESET ) {
-                  await $self->send_packet( SLURM_PKTCTRL_META_RESETACK, pack "C", $nodestate->seqno_tx );
+                  await $_protocol->send( SLURM_PKTCTRL_META_RESETACK, $node_id, pack "C", $nodestate->seqno_tx );
                }
                else {
                   $_next_resetack_f->done if $_next_resetack_f;
@@ -573,8 +585,9 @@ async method _reset ( $node_id )
       $_next_resetack_f,
       Future::IO->sleep( $_retransmit_delay * 3 ),
    ) );
-   die "Timed out waiting for reset\n"
+   ( undef $nodestate->did_reset ), die "Timed out waiting for reset\n"
       unless $_next_resetack_f->is_done;
+
    undef $_next_resetack_f;
 }
 

@@ -28,13 +28,17 @@
 extern "C" {
 #endif
 
+#ifdef CFC_NEED_SYMBOL_STRUCT_DEF
+#define CFC_NEED_BASE_STRUCT_DEF
+#endif
+
+#include "CFCBase.h"
+
 typedef struct CFCSymbol CFCSymbol;
 struct CFCClass;
 struct CFCParcel;
 
 #ifdef CFC_NEED_SYMBOL_STRUCT_DEF
-#define CFC_NEED_BASE_STRUCT_DEF
-#include "CFCBase.h"
 struct CFCSymbol {
     CFCBase base;
     char *exposure;
@@ -54,7 +58,7 @@ CFCSymbol*
 CFCSymbol_init(CFCSymbol *self, const char *exposure, const char *name);
 
 void
-CFCSymbol_destroy(CFCSymbol *self);
+CFCSymbol_destroy(CFCBase *base);
 
 /** Return true if the symbols are "equal", false otherwise.
  */

@@ -1,5 +1,17 @@
 Revision history for Device-Serial-SLuRM
 
+0.11    2026-09-01
+        [CHANGES]
+         * Added UDP transport mode and some docs about UDP transport
+
+        [BUGFIXES]
+         * Retry a `RESET` again if the first one failed due to timeout
+         * Don't crash the MSLµRM controller if it receives a spurious
+           META RESET packet
+         * contrib/slurm.c:
+            + Don't retransmit the contents of invalid cmdslot buffers
+            + Fix test harness for `const` marked buffers
+
 0.10    2026-01-29
         [CHANGES]
          * Ensure that REQUEST transactions are mutex-locked on MSLµRM to

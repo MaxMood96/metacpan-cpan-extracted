@@ -1,7 +1,7 @@
 package Data::HashMap::Shared;
 use strict;
 use warnings;
-our $VERSION = '0.17';
+our $VERSION = '0.18';
 
 require XSLoader;
 XSLoader::load('Data::HashMap::Shared', $VERSION);
@@ -416,7 +416,9 @@ Cursors (independent iterators, allow nesting and removal during iteration):
     # cursor auto-destroyed when out of scope
 
 C<shm_xx_each> is also safe to use with C<remove> during iteration.
-Resize/compaction is deferred until iteration ends.
+Tombstone compaction and shrink are deferred until iteration ends; growth is
+not -- a load-driven insert still resizes, and both iterators restart on the
+resulting table-generation bump.
 
 Diagnostics:
 
@@ -541,8 +543,12 @@ supported.
 
 After recovery from a mid-mutation crash, the map data may be partially
 inconsistent (e.g., one entry was being updated when the writer died).
-Map structure (locks, LRU, free lists, counters) is restored, but the
-specific entry being mutated may have stale or partial bytes. Calling
+Locks, the LRU chain and the entry counters are restored. The arena free
+lists are not rebuilt, so blocks in flight at the crash may leak; the specific
+entry being mutated may have stale or partial bytes; and a crash part-way
+through a table resize permanently drops the entries that had not yet been
+re-inserted, because they existed only in the dead writer's private buffer.
+Calling
 C<clear> after detecting a stale lock recovery is recommended for
 safety-critical applications.
 
@@ -679,7 +685,7 @@ its contents while other processes are using it.
 
 =head1 UPGRADING
 
-The on-disk format changed in this release (v9 to v10; a reader-slot occupancy
+The on-disk format changed in 0.16 (v9 to v10; a reader-slot occupancy
 bitmap was added). A file-backed map written by an older release is rejected with
 a version-mismatch error when attached. Migrate existing files in place -- with
 no process attached -- using the bundled tool:

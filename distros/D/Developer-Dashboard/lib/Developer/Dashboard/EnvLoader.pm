@@ -3,7 +3,7 @@ package Developer::Dashboard::EnvLoader;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Cwd qw(abs_path cwd);
 use File::Basename qw(dirname);
@@ -211,6 +211,13 @@ sub _env_file_candidates {
 # Loads the ordered nested skill env chain while preserving overwritten parent
 # values under their cumulative skill-name aliases before deeper skill segments
 # replace them.
+# Trust note (DD-612, Q-027): preservation only applies to a key first set by a
+# PREFIXED layer - the root/unprefixed layer's prefix is '' and never gets
+# recorded in %key_prefix, so a root-set key later overwritten by any skill
+# layer is silently replaced with no alias. This is deliberate, not an
+# oversight: a root .env is the deployment's own baseline, and skill layers
+# are expected to be able to override it without ceremony. Aliasing every
+# base override would produce noisy PREFIX_KEY duplicates for common vars.
 # Input: hash with specs => array reference of { root, prefix } hashes.
 # Output: ordered array reference of the env files that were actually loaded.
 sub _load_skill_layer_specs {

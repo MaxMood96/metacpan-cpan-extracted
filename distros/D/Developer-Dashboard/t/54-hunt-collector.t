@@ -176,11 +176,16 @@ SKIP: {
             select $previous;
         }
 
-        my $real_secure = \&Developer::Dashboard::PathRegistry::secure_file_permissions;
+        # DD-610: the write/secure/rename sequence now lives in
+        # PathRegistry::atomic_write_secure (shared by every DD-599/600/601/
+        # 602 writer), with its own securing step (_chmod_pending) as an
+        # ordinary overridable method - the same rendezvous shape as before,
+        # just retargeted at the new seam between securing and renaming.
+        my $real_chmod_pending = \&Developer::Dashboard::PathRegistry::_chmod_pending;
         my $rendezvoused = 0;
         no warnings 'redefine';
-        local *Developer::Dashboard::PathRegistry::secure_file_permissions = sub {
-            my ( $registry, $file, %args ) = @_;
+        local *Developer::Dashboard::PathRegistry::_chmod_pending = sub {
+            my ( $registry, $file, $mode ) = @_;
             if ( !$rendezvoused && defined $file && $file =~ m{stdout[^/\\]*\.pending\z} ) {
                 $rendezvoused = 1;
                 print {$ready_w} "paused\n";
@@ -188,7 +193,7 @@ SKIP: {
                 die "Rendezvous pipe closed before the overlapping worker was released\n"
                   if !defined $release;
             }
-            return $real_secure->( $registry, $file, %args );
+            return $real_chmod_pending->( $registry, $file, $mode );
         };
         use warnings 'redefine';
 

@@ -2,7 +2,7 @@ package Net::DNS::RR::DS;
 
 use strict;
 use warnings;
-our $VERSION = (qw$Id: DS.pm 2042 2025-12-24 10:23:11Z willem $)[2];
+our $VERSION = (qw$Id: DS.pm 2059 2026-08-28 10:04:18Z willem $)[2];
 
 use base qw(Net::DNS::RR);
 
@@ -222,6 +222,7 @@ sub verify {
 		'ED25519'	     => 15,			# [RFC8080]
 		'ED448'		     => 16,			# [RFC8080]
 		'SM2SM3'	     => 17,			# [RFC9563]
+		'MLDSA44'	     => 18,			# [draft-westerbaan-dnssec-mldsa]
 		'ECC-GOST12'	     => 23,			# [RFC9558]
 
 		'INDIRECT'   => 252,				# [RFC4034]

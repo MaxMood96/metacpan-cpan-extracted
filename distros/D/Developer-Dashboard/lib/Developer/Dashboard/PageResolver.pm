@@ -3,7 +3,7 @@ package Developer::Dashboard::PageResolver;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Developer::Dashboard::PageDocument;
 
@@ -44,14 +44,72 @@ sub list_pages {
 # Input: page id string.
 # Output: Developer::Dashboard::PageDocument object.
 sub load_named_page {
-    my ( $self, $id ) = @_;
+    my ( $self, $id, $report ) = @_;
     die 'Missing page id' if !defined $id || $id eq '';
     my $saved = eval { $self->{pages}->load_saved_page($id) };
     if ($saved) {
         $saved->{meta}{source_kind} = 'saved';
+        _note( $report, 'saved', 'matched' );
         return $saved;
     }
-    return $self->load_provider_page($id);
+    # DD-603: load_saved_page dies for three distinct reasons - genuine
+    # "not found", a file-read failure, or a parse/validation failure - and
+    # only the first one means "fall through to provider lookup". Collapsing
+    # all three into a silent fallthrough turns a real read/parse error into
+    # a misleading generic "not found" once provider lookup also fails to
+    # match. Only the exact not-found die falls through; anything else is
+    # the real diagnostic and must surface as-is. $@ is always a truthy,
+    # eval-set error string here: this line is reached only when $saved is
+    # falsy, and load_saved_page's own contract is to always either die or
+    # return a truthy page hashref, never return falsy without dying.
+    if ( $@ !~ /\APage '\Q$id\E' not found/ ) {
+        _note( $report, 'saved', 'error', $@ );
+        die $@;
+    }
+    _note( $report, 'saved', 'not-found' );
+    return $self->load_provider_page( $id, $report );
+}
+
+# _note($report, $source, $outcome, $detail)
+# Appends one step to an optional resolution report. Does nothing at all when no
+# report is being collected, which is what keeps the default path byte-identical.
+# Input: report arrayref or undef, source name, outcome string, optional detail.
+# Output: nothing.
+sub _note {
+    my ( $report, $source, $outcome, $detail ) = @_;
+    return if !$report;
+    my %step = ( source => $source, outcome => $outcome );
+    if ( defined $detail ) {
+        $detail =~ s/\s+\z//;
+        $step{detail} = $detail;
+    }
+    push @{$report}, \%step;
+    return;
+}
+
+# resolution_report($id)
+# Resolves a page id exactly as load_named_page does, and returns the sequence of
+# sources consulted with what each one said - whether resolution succeeded or not.
+#
+# This exists because the resolver ALREADY knows two things it discards: which
+# kind of saved-storage failure occurred, and which provider ids exist. For the
+# commonest failure - a mistyped or renamed id - the bare "not found" is the
+# least useful thing that could be said, while the answer is sitting in the
+# resolver at the moment it gives up. Perl's own loader is the model: it does not
+# say "module not found", it says which paths it tried.
+#
+# Input: page id string.
+# Output: hash reference with 'resolved' (0 or 1), 'steps' (arrayref of
+#         {source, outcome, detail?}), and 'error' when resolution failed.
+sub resolution_report {
+    my ( $self, $id ) = @_;
+    my @steps;
+    my $page = eval { $self->load_named_page( $id, \@steps ) };
+    return {
+        resolved => $page ? 1 : 0,
+        steps    => \@steps,
+        ( $page ? () : ( error => $@ ) ),
+    };
 }
 
 # providers()
@@ -84,9 +142,17 @@ sub providers {
 # Input: provider page id string.
 # Output: Developer::Dashboard::PageDocument object.
 sub load_provider_page {
-    my ( $self, $id ) = @_;
-    my ($provider) = grep { ref($_) eq 'HASH' && $_->{id} && $_->{id} eq $id } @{ $self->providers };
-    die "Page '$id' not found" if !$provider;
+    my ( $self, $id, $report ) = @_;
+    my @providers = @{ $self->providers };
+    my ($provider) = grep { ref($_) eq 'HASH' && $_->{id} && $_->{id} eq $id } @providers;
+    if ( !$provider ) {
+        # Report the CANDIDATES, not just the verdict. The ids that DO exist are
+        # what a reader needs in order to act on a mistyped or renamed page id.
+        _note( $report, 'providers', 'no-match',
+            join ', ', sort grep { defined && length } map { ref($_) eq 'HASH' ? $_->{id} : () } @providers );
+        die "Page '$id' not found";
+    }
+    _note( $report, 'providers', 'matched' );
 
     my $page;
     if ( ( $provider->{kind} || '' ) eq 'builtin' && $id eq 'system-status' ) {

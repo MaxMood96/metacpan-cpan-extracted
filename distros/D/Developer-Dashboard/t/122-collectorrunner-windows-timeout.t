@@ -301,6 +301,31 @@ SKIP: {
         '_record_command_pid dies when the pid file cannot be flushed at close' );
 }
 
+# ===========================================================================
+# DD-597: same bug class fixed elsewhere this session - _await_windows_command
+# reaps a real child via waitpid and reads $? directly to build its own
+# return value, but without a guard the raw $? from that reap stays set in
+# the caller's process after this sub returns.
+# ===========================================================================
+{
+    my $pidfile = File::Spec->catfile( $home, 'dd597-pollution-command.pid' );
+    my $child   = fork();
+    die "Unable to fork the stand-in Windows command: $!" if !defined $child;
+    if ( !$child ) {
+        POSIX::_exit(9);
+    }
+
+    no warnings 'redefine';
+    local *Developer::Dashboard::CollectorRunner::_spawn_windows_command = sub { return $child };
+    use warnings 'redefine';
+
+    $? = 12 << 8;    ## no critic (Variables::RequireLocalizedPunctuationVars)
+    $runner->_await_windows_command( $pidfile, 30_000, 'dd597-pollution-command' );
+    is( $? >> 8, 12,
+        '_await_windows_command does not leak its own waitpid status into the caller global $?' );
+    unlink $pidfile;
+}
+
 done_testing();
 
 __END__

@@ -30,7 +30,7 @@
 static const CFCMeta CFCSYMBOL_META = {
     "Clownfish::CFC::Model::Symbol",
     sizeof(CFCSymbol),
-    (CFCBase_destroy_t)CFCSymbol_destroy
+    CFCSymbol_destroy
 };
 
 CFCSymbol*
@@ -82,10 +82,12 @@ CFCSymbol_init(CFCSymbol *self, const char *exposure, const char *name) {
 }
 
 void
-CFCSymbol_destroy(CFCSymbol *self) {
+CFCSymbol_destroy(CFCBase *base) {
+    CFCSymbol *self = (CFCSymbol *) base;
+
     FREEMEM(self->exposure);
     FREEMEM(self->name);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 int

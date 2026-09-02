@@ -3,7 +3,7 @@ package Developer::Dashboard::UpdateManager;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Capture::Tiny qw(capture);
 use Cwd qw(cwd);
@@ -46,6 +46,12 @@ sub updates_dir {
 # Output: array reference of update step result hashes.
 sub run {
     my ($self) = @_;
+
+    # DD-597: system() below mutates the caller's global $? as a side
+    # effect; without this guard that stays set in the caller's process
+    # after this sub returns, regardless of the exit code already captured
+    # per-file in this sub's own results.
+    local $?;
 
     my @results;
     my $dir = $self->updates_dir;

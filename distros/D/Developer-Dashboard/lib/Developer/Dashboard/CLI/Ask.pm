@@ -3,7 +3,7 @@ package Developer::Dashboard::CLI::Ask;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Capture::Tiny qw(capture);
 use File::Spec;
@@ -25,6 +25,7 @@ my %BACKEND_FLAG = map { ( $_ => $_ ) } @BACKENDS;
 my $DEFAULT_MODEL    = 'claude-opus-4-8';
 my $DEFAULT_BASE_URL = 'https://api.anthropic.com';
 my $DEFAULT_MAX_TOKENS = 4096;
+my $MAX_BACKEND_ERROR_DETAIL_BYTES = 4000;
 
 # Filename extensions treated as image attachments (everything else is inlined
 # as text). Maps the lowercased extension to the API media type.
@@ -253,6 +254,14 @@ sub _capture_backend {
         my $detail = $stderr;
         $detail =~ s/\s+\z// if defined $detail;
         $detail = defined $detail && $detail ne '' ? $detail : "exit status $exit";
+        # DD-620: a runaway or misbehaving backend producing megabytes of
+        # stderr must not turn into an equally huge, unwieldy exception
+        # message - cap it and say how much was dropped.
+        if ( length($detail) > $MAX_BACKEND_ERROR_DETAIL_BYTES ) {
+            my $omitted = length($detail) - $MAX_BACKEND_ERROR_DETAIL_BYTES;
+            $detail = substr( $detail, 0, $MAX_BACKEND_ERROR_DETAIL_BYTES )
+              . " ... (truncated, $omitted more byte" . ( $omitted == 1 ? '' : 's' ) . ' omitted)';
+        }
         die "$name backend failed: $detail\n";
     }
     $stdout = '' if !defined $stdout;
@@ -437,6 +446,14 @@ sub _extract_api_text {
 
 # _workspace_key($paths, $env)
 # Derives a filesystem-safe key identifying the active workspace conversation.
+# Known limitation (DD-619, Q-029): collapsing every run of non-safe
+# characters to a single '-' means two genuinely different refs that differ
+# only in the characters being collapsed (e.g. "foo/bar" and "foo bar") can
+# sanitize to the identical key and silently share transcript history. This
+# is accepted as-is, deliberately: the collision is narrow (only refs
+# differing exclusively in already-illegal characters) and the impact is
+# shared conversation history, not data loss or a security issue. No
+# collision-proofing (e.g. a hash suffix) or migration is planned.
 # Input: PathRegistry object and environment hash ref.
 # Output: sanitized key string.
 sub _workspace_key {
@@ -486,12 +503,7 @@ sub _load_transcript {
 sub _save_transcript {
     my ( $file, $data, $paths ) = @_;
     my $tmp = "$file.$$.tmp";
-    open my $fh, '>:raw', $tmp or die "Unable to write transcript $tmp: $!\n";
-    print {$fh} json_encode($data);
-    close $fh;
-    rename $tmp, $file or die "Unable to install transcript $file: $!\n";
-    $paths->secure_file_permissions($file);
-    return $file;
+    return $paths->atomic_write_secure( $tmp, $file, json_encode($data) );
 }
 
 # _emit($out, $answer)

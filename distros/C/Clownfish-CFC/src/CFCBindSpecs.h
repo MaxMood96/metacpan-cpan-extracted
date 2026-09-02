@@ -35,9 +35,6 @@ CFCBindSpecs_new(void);
 CFCBindSpecs*
 CFCBindSpecs_init(CFCBindSpecs *specs);
 
-void
-CFCBindSpecs_destroy(CFCBindSpecs *specs);
-
 const char*
 CFCBindSpecs_get_typedefs(void);
 

@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk::Model;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 table 'api_keys';
 

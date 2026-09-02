@@ -31,6 +31,7 @@ t/018-peek-n.t
 t/019-search-delete.t
 t/020-examples.t
 t/021-keypath.t
+t/022-multieval.t
 t/manifest.t
 t/pod-coverage.t
 t/pod.t

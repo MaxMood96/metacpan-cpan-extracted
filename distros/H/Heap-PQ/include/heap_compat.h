@@ -91,9 +91,15 @@
 
 /* Portable comparison call: set $a/$b then invoke the comparator via call_sv.
  * Used in the pre-5.11 fallback path inside heap_sift_{up,down}_custom. */
+/* POP FIRST, CONVERT AFTER: SvIV mentions its argument more than once until
+ * 5.37.1, so SvIV(POPs) pops once per mention and takes the comparison from
+ * whatever sits below the comparator's answer. This path runs on pre-5.11
+ * perls, where the macro form is the only one there is, and a wrong compare
+ * result does not crash - it silently mis-orders the heap. */
 #define HEAP_CMP_CALL(h, sv_a, sv_b, result_var) \
     STMT_START { \
         int _heap_cnt; \
+        SV *_heap_rv; \
         GvSV((h)->gv_a) = (sv_a); \
         GvSV((h)->gv_b) = (sv_b); \
         ENTER; SAVETMPS; \
@@ -101,7 +107,8 @@
         PUTBACK; \
         _heap_cnt = call_sv((h)->comparator, G_SCALAR); \
         SPAGAIN; \
-        (result_var) = _heap_cnt > 0 ? SvIV(POPs) : 0; \
+        if (_heap_cnt > 0) { _heap_rv = POPs; (result_var) = SvIV(_heap_rv); } \
+        else (result_var) = 0; \
         PUTBACK; FREETMPS; LEAVE; \
     } STMT_END
 

@@ -1,5 +1,5 @@
 package Crypt::JWS::OpenSSL::Algorithm::ECC;
-$Crypt::JWS::OpenSSL::Algorithm::ECC::VERSION = '0.003';
+$Crypt::JWS::OpenSSL::Algorithm::ECC::VERSION = '0.004';
 use Moo;
 with qw(
   Crypt::JWS::OpenSSL::Role::Algorithm
@@ -200,7 +200,7 @@ sub _generate_k {
     my $privkey_bytes = $key->to_bin();
     
     substr( $privkey_bytes, 0, 0, "\x00" x ($curve->{'bytelen'} - length $privkey_bytes) );
-        
+    
     my $hash_len = length $digest;
     
     # Initialize cryptographic components V and K
@@ -307,7 +307,7 @@ Crypt::JWS::OpenSSL::Algorithm::ECC - Sign and verify tokens using ECDSA algorit
 
 =head1 VERSION
 
-version 0.003
+version 0.004
 
 =head1 SYNOPSIS
 

@@ -1,5 +1,8 @@
 Release history for Version-Semantic
 
+v2.2.0    2026-09-01T12:56:33Z
+          - Make Version::Core a super-class of Version::Semantic
+
 v2.1.1    2026-08-07T06:10:49Z
           - Configure "develop" phase dependencies
           - Fix greediness of semver_re() if not anchored at the end

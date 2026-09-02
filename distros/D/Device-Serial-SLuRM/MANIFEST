@@ -14,6 +14,7 @@ contrib/t/23multi-request.test
 contrib/t/harness.c
 contrib/t/run-test.pl
 doc/protocol.md
+doc/udp.md
 examples/slurm-recv.pl
 examples/slurm-snoop.pl
 lib/Device/Serial/MSLuRM.pm
@@ -25,12 +26,14 @@ META.json
 META.yml
 README
 t/00use.t
-t/01packet.t
+t/01packet-serial.t
 t/02recv-errors.t
 t/03multi-packet.t
+t/04packet-udp.t
 t/10reset.t
 t/11notify.t
 t/13request.t
+t/20multi-reset.t
 t/21multi-notify.t
 t/23multi-request.t
 t/33rx-request.t

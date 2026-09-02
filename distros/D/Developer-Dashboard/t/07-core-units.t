@@ -5048,6 +5048,7 @@ ok( !Developer::Dashboard::CollectorRunner::_cron_match('*/2', 5), 'cron matcher
             return 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' if $name eq 'powershell.exe';
             return '';
         };
+        local *Developer::Dashboard::ProcessSupervision::command_in_path = \&Developer::Dashboard::CollectorRunner::command_in_path;
         is(
             $runner->_powershell_command,
             'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
@@ -5064,6 +5065,7 @@ ok( !Developer::Dashboard::CollectorRunner::_cron_match('*/2', 5), 'cron matcher
         close $fh;
         local *Developer::Dashboard::CollectorRunner::is_windows = sub { return 1 };
         local *Developer::Dashboard::CollectorRunner::command_in_path = sub { return '' };
+        local *Developer::Dashboard::ProcessSupervision::command_in_path = \&Developer::Dashboard::CollectorRunner::command_in_path;
         local $ENV{SystemRoot} = $fake_system_root;
         is(
             $runner->_powershell_command,
@@ -5080,6 +5082,7 @@ ok( !Developer::Dashboard::CollectorRunner::_cron_match('*/2', 5), 'cron matcher
             return 'C:\\Strawberry\\perl\\bin\\perl.exe' if $name eq 'perl.exe';
             return '';
         };
+        local *Developer::Dashboard::ProcessSupervision::command_in_path = \&Developer::Dashboard::CollectorRunner::command_in_path;
         is(
             $runner->_current_perl_command,
             'C:\\Strawberry\\perl\\bin\\perl.exe',
@@ -5092,6 +5095,7 @@ ok( !Developer::Dashboard::CollectorRunner::_cron_match('*/2', 5), 'cron matcher
         local $Developer::Dashboard::Platform::OS_NAME = 'linux';
         local $^X = '/usr/bin/perl';
         local *Developer::Dashboard::CollectorRunner::command_in_path = sub { return '' };
+        local *Developer::Dashboard::ProcessSupervision::command_in_path = \&Developer::Dashboard::CollectorRunner::command_in_path;
         is(
             $runner->_current_perl_command,
             '/usr/bin/perl',
@@ -5109,6 +5113,7 @@ ok( !Developer::Dashboard::CollectorRunner::_cron_match('*/2', 5), 'cron matcher
             return '/usr/local/bin/perl.exe' if $name eq 'perl.exe';
             return '';
         };
+        local *Developer::Dashboard::ProcessSupervision::command_in_path = \&Developer::Dashboard::CollectorRunner::command_in_path;
         is(
             $runner->_current_perl_command,
             '/usr/local/bin/perl',
@@ -5121,6 +5126,7 @@ ok( !Developer::Dashboard::CollectorRunner::_cron_match('*/2', 5), 'cron matcher
             return '/usr/local/bin/perl.exe' if $name eq 'perl.exe';
             return '';
         };
+        local *Developer::Dashboard::ProcessSupervision::command_in_path = \&Developer::Dashboard::CollectorRunner::command_in_path;
         is(
             $runner->_current_perl_command,
             '/usr/local/bin/perl.exe',
@@ -5128,6 +5134,7 @@ ok( !Developer::Dashboard::CollectorRunner::_cron_match('*/2', 5), 'cron matcher
         );
 
         local *Developer::Dashboard::CollectorRunner::command_in_path = sub { return '' };
+        local *Developer::Dashboard::ProcessSupervision::command_in_path = \&Developer::Dashboard::CollectorRunner::command_in_path;
         is(
             $runner->_current_perl_command,
             '/tmp/nonexistent-collector-perl',
@@ -5150,6 +5157,7 @@ ok( !Developer::Dashboard::CollectorRunner::_cron_match('*/2', 5), 'cron matcher
             return 'C:\\Strawberry\\perl\\bin\\perl.exe' if $name eq 'perl.exe';
             return '';
         };
+        local *Developer::Dashboard::ProcessSupervision::command_in_path = \&Developer::Dashboard::CollectorRunner::command_in_path;
 
         ok(
             $runner->_helper_file_supports_internal_command( $staged_helper, 'collector-loop-foreground' ),
@@ -5242,6 +5250,7 @@ ok( !Developer::Dashboard::CollectorRunner::_cron_match('*/2', 5), 'cron matcher
         no warnings 'redefine';
         local *Developer::Dashboard::CollectorRunner::is_windows = sub { return 1 };
         local *Developer::Dashboard::CollectorRunner::command_in_path = sub { return '' };
+        local *Developer::Dashboard::ProcessSupervision::command_in_path = \&Developer::Dashboard::CollectorRunner::command_in_path;
         local $ENV{SystemRoot} = File::Spec->catdir( tempdir( CLEANUP => 1 ), 'missing-system-root' );
         is(
             $runner->_powershell_command,
@@ -5840,19 +5849,32 @@ dies_like(
         utime time - 7200, time - 7200, $aged_path or die "Unable to age $aged_path: $!";
     }
 
-    my @removed = $branch_keeper->_cleanup_state_roots(
-        min_age_seconds => 60,
-        scanned         => { state_roots => 0, ajax_temp_files => 0 },
-    );
-    ok( !-d $stale_dir, 'cleanup_state_roots removes stale state roots with invalid metadata payloads' );
-    ok( -d $live_dir, 'cleanup_state_roots keeps state roots whose collector pidfile points at a live process' );
-    ok( -d $preserved_dir, 'cleanup_state_roots keeps old state roots whose runtime metadata still points at an existing runtime root' );
-    ok(
-        grep( { $_->{path} eq $stale_dir } @removed ),
-        'cleanup_state_roots reports stale invalid-metadata roots as removed',
-    );
-    ok( !$branch_keeper->_state_root_is_stale( $preserved_dir, 60 ), '_state_root_is_stale keeps roots whose runtime metadata still resolves to a live runtime root' );
-    ok( $branch_keeper->_state_root_has_live_collectors($live_dir), '_state_root_has_live_collectors returns true for live collector pidfiles' );
+    # DD-598: _state_root_has_live_collectors now confirms identity (pid
+    # namespace + env marker/process-title match via CollectorRunner's
+    # established _is_managed_loop) rather than trusting a bare kill(0,$$) -
+    # this test process is not really the "housekeeper" collector loop, so
+    # its own pid must be treated as identity-confirmed here to keep testing
+    # what this block exists to test (state-root retention), not identity
+    # matching itself (which is exhaustively covered in
+    # t/103-collectorrunner-coverage.t and t/77-housekeeper-coverage.t).
+    my @removed;
+    {
+        no warnings 'redefine';
+        local *Developer::Dashboard::CollectorRunner::_is_managed_loop = sub { return 1 };
+        @removed = $branch_keeper->_cleanup_state_roots(
+            min_age_seconds => 60,
+            scanned         => { state_roots => 0, ajax_temp_files => 0 },
+        );
+        ok( !-d $stale_dir, 'cleanup_state_roots removes stale state roots with invalid metadata payloads' );
+        ok( -d $live_dir, 'cleanup_state_roots keeps state roots whose collector pidfile points at a live process' );
+        ok( -d $preserved_dir, 'cleanup_state_roots keeps old state roots whose runtime metadata still points at an existing runtime root' );
+        ok(
+            grep( { $_->{path} eq $stale_dir } @removed ),
+            'cleanup_state_roots reports stale invalid-metadata roots as removed',
+        );
+        ok( !$branch_keeper->_state_root_is_stale( $preserved_dir, 60 ), '_state_root_is_stale keeps roots whose runtime metadata still resolves to a live runtime root' );
+        ok( $branch_keeper->_state_root_has_live_collectors($live_dir), '_state_root_has_live_collectors returns true for live collector pidfiles' );
+    }
 
     my $blank_runtime_meta_dir = File::Spec->catdir( $state_base, 'blank-runtime-root' );
     make_path($blank_runtime_meta_dir);
@@ -6136,6 +6158,56 @@ EOF
     chdir $previous_cwd or die "Unable to chdir back to $previous_cwd: $!";
 }
 {
+    # DD-608: EnvAudit's cross-process channel (DEVELOPER_DASHBOARD_ENV_AUDIT)
+    # must carry provenance (which file supplied a key) but never the literal
+    # secret VALUE that key was loaded with - a value already inherited by an
+    # exec'd child through the ordinary %ENV{$key} it received (or correctly
+    # absent if that child's environment was deliberately narrowed), so the
+    # audit channel duplicating it independently only ever adds exposure, not
+    # capability.
+    local $ENV{DEVELOPER_DASHBOARD_ENV_AUDIT};
+    local $ENV{DD608_SECRET_KEY} = 'dd608-super-secret-value';
+    Developer::Dashboard::EnvAudit->clear();
+    Developer::Dashboard::EnvAudit->record( 'DD608_SECRET_KEY', $ENV{DD608_SECRET_KEY}, '/tmp/dd608-fake.env' );
+
+    my $exported = $ENV{DEVELOPER_DASHBOARD_ENV_AUDIT} // '';
+    unlike( $exported, qr/dd608-super-secret-value/,
+        'DD-608: the exported cross-process audit blob never contains the recorded secret value' );
+    like( $exported, qr/dd608-fake\.env/,
+        'DD-608: the exported cross-process audit blob still carries the source file (provenance)' );
+
+    # Same-process callers still see the correct value (in-memory %AUDIT is
+    # untouched by what gets serialized for export).
+    is_deeply(
+        Developer::Dashboard::EnvAudit->key('DD608_SECRET_KEY'),
+        { value => 'dd608-super-secret-value', envfile => '/tmp/dd608-fake.env' },
+        'DD-608: same-process key() still returns the real value and envfile',
+    );
+
+    # A fresh process rehydrating from the exported blob (empty %AUDIT, only
+    # DEVELOPER_DASHBOARD_ENV_AUDIT plus its own inherited %ENV) reconstructs
+    # the value from its OWN live environment, not from the stripped blob -
+    # so it sees exactly what it actually inherited, never more.
+    {
+        local %Developer::Dashboard::EnvAudit::AUDIT;
+        is_deeply(
+            Developer::Dashboard::EnvAudit->key('DD608_SECRET_KEY'),
+            { value => 'dd608-super-secret-value', envfile => '/tmp/dd608-fake.env' },
+            'DD-608: a fresh process that DID inherit the key reconstructs the correct value from its own %ENV',
+        );
+    }
+    {
+        local $ENV{DD608_SECRET_KEY};
+        local %Developer::Dashboard::EnvAudit::AUDIT;
+        is_deeply(
+            Developer::Dashboard::EnvAudit->key('DD608_SECRET_KEY'),
+            { value => undef, envfile => '/tmp/dd608-fake.env' },
+            'DD-608: a fresh process whose own environment was narrowed (key absent) reports no value, not a smuggled-back one',
+        );
+    }
+    Developer::Dashboard::EnvAudit->clear();
+}
+{
     my $env_home = tempdir( CLEANUP => 1 );
     my $project_root = File::Spec->catdir( $env_home, 'projects', 'cached-cwd-env-project' );
     my $child_root = File::Spec->catdir( $project_root, 'child' );
@@ -6300,19 +6372,18 @@ EOF
     is_deeply(
         $overlay->{env},
         {
+            # DD-608: the exported audit channel is provenance-only (source
+            # file per key), never the value itself - see EnvAudit::_sync_to_env.
             DEVELOPER_DASHBOARD_ENV_AUDIT => json_encode(
                 {
                     NEW_ONLY => {
                         envfile => $env_file,
-                        value   => 'from-file',
                     },
                     PL_ONLY => {
                         envfile => $env_pl_file,
-                        value   => 'leaf-pl',
                     },
                     VERSION => {
                         envfile => $env_file,
-                        value   => 'leaf',
                     },
                 }
             ),
@@ -6363,11 +6434,15 @@ EOF
 }
 
 {
+    # DD-608: the exported blob is provenance-only (no value - see EnvAudit's
+    # _sync_to_env). A real child process reconstructs the value from its own
+    # inherited %ENV{FOO}, which this test sets directly to simulate that
+    # ordinary inheritance, rather than from the (now value-less) blob.
     Developer::Dashboard::EnvAudit->clear();
+    local $ENV{FOO} = 'bar';
     local $ENV{DEVELOPER_DASHBOARD_ENV_AUDIT} = json_encode(
         {
             FOO => {
-                value   => 'bar',
                 envfile => '/tmp/runtime.env',
             },
         }
@@ -6381,7 +6456,7 @@ EOF
                 envfile => '/tmp/runtime.env',
             },
         },
-        'EnvAudit rehydrates its audit inventory from DEVELOPER_DASHBOARD_ENV_AUDIT when a child process inherits it',
+        'EnvAudit rehydrates its audit inventory from DEVELOPER_DASHBOARD_ENV_AUDIT when a child process inherits it, reconstructing value from its own %ENV',
     );
     is_deeply(
         Developer::Dashboard::EnvAudit->key('FOO'),

@@ -1,5 +1,47 @@
 # This file documents the revision history for Perl extension PAGI
 
+0.002008 - 2026-09-01
+
+  [Specification]
+  - HTTP/WebSocket/SSE sub-spec 0.4 -> 0.5. These are new requirements, not
+    clarifications, so $scope->{pagi}{spec_version} moves with them. The core
+    spec is unchanged.
+  - The terminal response event is defined as what it asserts: the
+    application's claim that the response is complete (RFC 9110 S6.1), which
+    the server renders as the chunked terminator or END_STREAM. The existing
+    prohibitions follow from that.
+  - The ban on synthesizing terminal framing binds every producer, not only
+    the server. Middleware that buffers and re-emits a body MUST NOT complete
+    an incomplete stream, nor derive an ETag, Content-Length, or other
+    completeness-dependent metadata from the bytes it happened to see.
+  - Says which of the two signals answers which question: absence of the
+    terminal event governs what may be forwarded or synthesized;
+    disconnect_reason governs only whether to raise or log. The previous
+    wording left it to inference, and every consumer inferred it the same way
+    and wrong.
+  - A response body is either inline events or one file/fh event, never both.
+    Mixing them leaves a body-transforming intermediary unable to honour the
+    encoding it already declared; the server now fails such a send.
+  - An intermediary MUST examine the response head before transforming a body
+    or attaching metadata derived from one, and MUST NOT invalidate what that
+    head promised -- trailers => 1 commits the server to chunked framing, and
+    a 206 body is a range rather than the representation.
+  - An intermediary re-emitting a buffered event MUST preserve its other
+    keys, including more, whose default of 0 makes an omission an assertion
+    of completeness.
+
+  [What may break]
+  - Sending a file/fh body after inline body bytes. Undefined before, so it
+    worked; a conforming server now fails that send. Send the whole body
+    inline instead, or put the leading bytes in the file.
+  - Relying on an intermediary to finish an incomplete response. Middleware
+    may no longer synthesize a terminal event, ETag or Content-Length on an
+    application's behalf, so such a response now stays observably incomplete.
+  - Middleware that transforms bodies without consulting the response head
+    is now non-conforming, even where it happens to work.
+  - Not affected: complete responses, file/fh alone, inline streaming to
+    completion.
+
 0.002007 - 2026-08-29
 
   [Specification clarifications - resolved ambiguities]

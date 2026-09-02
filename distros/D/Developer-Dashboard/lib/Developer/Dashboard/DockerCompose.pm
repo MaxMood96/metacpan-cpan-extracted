@@ -3,7 +3,7 @@ package Developer::Dashboard::DockerCompose;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Capture::Tiny qw(capture);
 use Cwd qw(cwd);
@@ -551,6 +551,8 @@ sub disable_service {
         project_root => $args{project_root},
         service      => $service,
     );
+    die "Refusing service name that escapes the docker config root: $service\n"
+      if !defined $marker;
     my ( undef, $dir ) = File::Spec->splitpath($marker);
     make_path($dir) if !-d $dir;
     open my $fh, '>', $marker or die "Unable to write $marker: $!";
@@ -575,6 +577,8 @@ sub enable_service {
         project_root => $args{project_root},
         service      => $service,
     );
+    die "Refusing service name that escapes the docker config root: $service\n"
+      if !defined $marker;
     unlink $marker or die "Unable to remove $marker: $!" if -e $marker;
     return {
         action   => 'enable',
@@ -629,6 +633,12 @@ sub list_services {
 # Output: resolution hash reference with stdout/stderr/exit_code when executed.
 sub run {
     my ( $self, %args ) = @_;
+
+    # DD-597: system() below mutates the caller's global $? as a side effect;
+    # without this guard that stays set in the caller's process after this
+    # sub returns, regardless of the exit code already captured in this
+    # sub's own return value.
+    local $?;
     my $resolved = $self->resolve(%args);
     return $resolved if $args{dry_run};
 
@@ -659,15 +669,46 @@ sub _discover_base_files {
     return grep { -f $_ } map { File::Spec->catfile( $root, $_ ) } @candidates;
 }
 
+# _contained_service_path($root, $service)
+# Resolves an untrusted service name below the docker toggle root and refuses any
+# result that escapes it. The service name arrives straight from the command line
+# (dashboard docker disable|enable), and File::Spec->catfile neither canonicalises
+# a path nor rejects a parent-directory run, so without this a name containing
+# '../' steered a write to any location the user could reach and an unlink to any
+# file named disabled.yml. Resolution is lexical and never consults the
+# filesystem, so the decision cannot change between the check and the write that
+# follows it.
+# Input: docker toggle root path string and the untrusted service name.
+# Output: contained service directory path string, or undef when it escapes.
+sub _contained_service_path {
+    my ( $root, $service ) = @_;
+    my @resolved;
+
+    for my $part ( grep { $_ !~ m{\A\.?\z} } split m{[\\/]+}, $service ) {
+        if ( $part eq '..' ) {
+            return if !@resolved;
+            pop @resolved;
+            next;
+        }
+        push @resolved, $part;
+    }
+
+    return if !@resolved;
+    return File::Spec->catdir( $root, @resolved );
+}
+
 # _service_disabled_marker_path(%args)
 # Resolves the disabled.yml marker path in the deepest runtime docker root for one isolated service.
 # Input: service name and optional project_root.
-# Output: absolute disabled.yml marker file path string.
+# Output: absolute disabled.yml marker file path string, or undef when the
+#         service name escapes the docker toggle root.
 sub _service_disabled_marker_path {
     my ( $self, %args ) = @_;
     my $service = $args{service} || die 'Missing service';
     my $root = $self->_service_toggle_root(%args);
-    return File::Spec->catfile( $root, $service, 'disabled.yml' );
+    my $dir = _contained_service_path( $root, $service );
+    return if !defined $dir;
+    return File::Spec->catfile( $dir, 'disabled.yml' );
 }
 
 # _service_toggle_root(%args)
@@ -708,6 +749,28 @@ docker compose command line and can optionally execute it.
 =head2 new, resolve, list_services, run
 
 Construct, resolve, list, and optionally execute compose operations.
+
+=head2 disable_service, enable_service
+
+Write and remove the C<disabled.yml> marker for one isolated service, below the
+deepest runtime C<config/docker> root.
+
+The service name reaches these methods straight from the command line and is
+therefore untrusted. It is resolved below the toggle root and any name that
+escapes that root is B<refused> - both methods die rather than fall back to the
+unchecked path. Resolution is lexical and never consults the filesystem, so the
+containment decision cannot change between the check and the write or unlink
+that follows it.
+
+The refusal protects two distinct sinks, and the second is the one usually
+underestimated: C<disable_service> creates directories and writes a file, while
+C<enable_service> B<removes> one, so an uncontained name gave arbitrary deletion
+of any file with that fixed leaf name, not merely arbitrary creation.
+
+One case is deliberately outside this containment: a parent directory that is
+itself a symlink pointing outside the root is lexically innocent and is not
+rejected here. Resolving it would require consulting the filesystem and would
+reopen the time-of-check-to-time-of-use window this approach closes.
 
 =for comment FULL-POD-DOC START
 

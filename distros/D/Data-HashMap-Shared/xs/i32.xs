@@ -661,6 +661,7 @@ reserve(SV* self_sv, UV target)
     CODE:
         EXTRACT_MAP("Data::HashMap::Shared::I32", self_sv);
         if (h->readonly || shm_is_sealed(h)) croak("Data::HashMap::Shared::I32: map is frozen (read-only)");
+        CK_U32(target, "target", "Data::HashMap::Shared::I32");
         RETVAL = shm_i32_reserve(h, (uint32_t)target);
     OUTPUT:
         RETVAL
@@ -823,8 +824,7 @@ DESTROY(SV* self_sv)
         if (!sv_isobject(self_sv) || !sv_derived_from(self_sv, "Data::HashMap::Shared::I32::Cursor")) return;
         ShmCursor* c = INT2PTR(ShmCursor*, SvIV(SvRV(self_sv)));
         if (!c) return;
-        ShmHandle* h = c->current;
-        SV* owner = c->owner;
+        CURSOR_DETACH_IF_MAP_GONE(c, owner, h);
         shm_cursor_destroy(c);
         if (h) shm_i32_flush_deferred(h);
         if (owner) SvREFCNT_dec(owner);

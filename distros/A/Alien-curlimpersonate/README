@@ -38,15 +38,11 @@ DESCRIPTION
     install and the library is compiled at install time. See "SYSTEM
     REQUIREMENTS", because that build is neither short nor dependency-free.
 
-    The pinned version is v2.1.1, built from
-    <https://github.com/vividsnow/curl-impersonate> -- a fork of
-    <https://github.com/lexiforest/curl-impersonate> at that tag, carrying
-    one commit. Upstream's CMake configure aborts under CMake 4, because
-    curl's curl_openssl_check_exists() puts the imported targets
-    "OpenSSL::SSL" and "OpenSSL::Crypto" into "CMAKE_REQUIRED_LIBRARIES" and
-    the scratch project try_compile() generates has no such targets. CMake 3
-    tolerated that; CMake 4 does not. The pin returns to upstream once an
-    equivalent fix lands there.
+    The pinned version is v2.2.2, built from
+    <https://github.com/lexiforest/curl-impersonate> itself. It is an exact
+    tag rather than the newest one: upstream 2.0.0 replaced autotools with a
+    CMake superbuild, and the target names this library is asked for are
+    load-bearing in whatever links it, so neither is left to float.
 
 SYSTEM REQUIREMENTS
     curl-impersonate statically builds BoringSSL, zlib, zstd, brotli,

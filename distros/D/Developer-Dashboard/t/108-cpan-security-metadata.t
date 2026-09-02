@@ -95,7 +95,7 @@ like( $audit, qr/\$repo_root\/app\.psgi/, 'audit gate scans the shipped PSGI act
 my @exclusions = grep { /\S/ && !/^\s*#/ } split /\n/, $exclude;
 is_deeply(
     \@exclusions,
-    [ qw(CPANSA-Plack-2026-7381 CPANSA-File-Temp-2011-4116 CPANSA-Dancer2-2026-13577) ],
+    [ qw(CPANSA-Plack-2026-7381 CPANSA-File-Temp-2011-4116 CPANSA-Dancer2-2026-13577 CPANSA-String-Compare-ConstantTime-2024-13939) ],
     'only exact reviewed no-fixed advisory IDs are excluded',
 );
 

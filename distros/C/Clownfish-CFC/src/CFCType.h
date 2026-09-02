@@ -183,9 +183,6 @@ CFCType_new_arbitrary(struct CFCParcel *parcel, const char *specifier);
 void
 CFCType_resolve(CFCType *self);
 
-void
-CFCType_destroy(CFCType *self);
-
 /** Returns true if two Clownfish::CFC::Model::Type objects are equivalent.
  */
 int
@@ -203,11 +200,10 @@ CFCType_set_specifier(CFCType *self, const char *specifier);
 const char*
 CFCType_get_specifier(CFCType *self);
 
-/** Return the name of the Class variable which corresponds to the object
- * type.  Returns NULL for non-object types.
+/** Return the Class object which corresponds to the object type.
  */
-const char*
-CFCType_get_class_var(CFCType *self);
+struct CFCClass*
+CFCType_get_class(CFCType *self);
 
 int
 CFCType_get_indirection(CFCType *self);

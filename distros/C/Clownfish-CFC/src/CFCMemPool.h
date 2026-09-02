@@ -32,9 +32,6 @@ CFCMemPool_init(CFCMemPool *self, size_t arena_size);
 void*
 CFCMemPool_allocate(CFCMemPool *self, size_t size);
 
-void
-CFCMemPool_destroy(CFCMemPool *self);
-
 #ifdef __cplusplus
 }
 #endif

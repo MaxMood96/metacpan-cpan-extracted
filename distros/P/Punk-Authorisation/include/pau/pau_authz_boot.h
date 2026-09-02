@@ -152,11 +152,14 @@ static void paz_register(pTHX_ SV *app, SV *opts_sv)
     (void)hv_stores(cfg, "class",  newSVsv(class_sv));
     (void)hv_stores(cfg, "policy", newSVsv(policy));
     (void)hv_stores(cfg, "rules",  newRV_noinc((SV *)newHVhv(rules)));
-    (void)hv_stores(cfg, "rank",
-        (rank && pau_is_array(rank))
-            ? newRV_noinc((SV *)av_make(av_len((AV *)SvRV(rank)) + 1,
-                                        AvARRAY((AV *)SvRV(rank))))
-            : newRV_noinc((SV *)newAV()));
+    {   /* An empty ladder has no AvARRAY at all, and av_make asserts its
+         * pointer before it looks at the count - so `rank => []` aborts a
+         * DEBUGGING perl. Copy only when there is something to copy. */
+        AV *src = (rank && pau_is_array(rank)) ? (AV *)SvRV(rank) : NULL;
+        SSize_t n = src ? av_len(src) + 1 : 0;
+        (void)hv_stores(cfg, "rank",
+            newRV_noinc((SV *)(n > 0 ? av_make(n, AvARRAY(src)) : newAV())));
+    }
     {   /* The roles hook is the other half of the ladder: the ladder orders
          * the names, the hook says which the signed-in user holds. It comes
          * from the same `auth` keyword, and on a Punk that cannot be asked

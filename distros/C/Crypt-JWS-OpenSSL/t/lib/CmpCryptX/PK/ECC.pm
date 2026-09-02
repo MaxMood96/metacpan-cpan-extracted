@@ -1,7 +1,9 @@
 package CmpCryptX::PK::ECC;
 use Moo;
+with qw( Crypt::JWS::OpenSSL::Role::Encoder );
 use Crypt::PK::ECC 0.069;
 use Digest::SHA ();
+use version;
 use namespace::clean;
 
 my $ECC_ALGO_MAP = {
@@ -46,7 +48,9 @@ sub verify {
 }
 
 sub _build__is_dt_version {
-    return ( $Crypt::PK::ECC::VERSION >= 0.088 ) ? 1 : 0;
+    my $self = shift;
+    my $checkver = $self->numify_version( $Crypt::PK::ECC::VERSION );
+    return ( $checkver >= 0.088 ) ? 1 : 0;
 }
 
 1;

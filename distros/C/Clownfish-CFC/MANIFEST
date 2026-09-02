@@ -54,11 +54,10 @@ Makefile.local
 MANIFEST			This list of files
 modules/CommonMark/COPYING
 modules/CommonMark/README.md
-modules/CommonMark/src/bench.h
 modules/CommonMark/src/blocks.c
 modules/CommonMark/src/buffer.c
 modules/CommonMark/src/buffer.h
-modules/CommonMark/src/case_fold_switch.inc
+modules/CommonMark/src/case_fold.inc
 modules/CommonMark/src/chunk.h
 modules/CommonMark/src/cmark.c
 modules/CommonMark/src/cmark.h
@@ -67,7 +66,6 @@ modules/CommonMark/src/cmark_ctype.h
 modules/CommonMark/src/cmark_export.h
 modules/CommonMark/src/cmark_version.h
 modules/CommonMark/src/commonmark.c
-modules/CommonMark/src/config.h
 modules/CommonMark/src/entities.inc
 modules/CommonMark/src/houdini.h
 modules/CommonMark/src/houdini_href_e.c
@@ -89,7 +87,6 @@ modules/CommonMark/src/render.c
 modules/CommonMark/src/render.h
 modules/CommonMark/src/scanners.c
 modules/CommonMark/src/scanners.h
-modules/CommonMark/src/scanners.re
 modules/CommonMark/src/utf8.c
 modules/CommonMark/src/utf8.h
 modules/CommonMark/src/xml.c

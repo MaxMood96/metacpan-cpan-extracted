@@ -358,6 +358,16 @@ my $manager = Developer::Dashboard::SkillManager->new( paths => $paths );
     is( $run->{stdout}, 'out', 'streaming command captures stdout' );
     is( $run->{stderr}, 'err', 'streaming command captures stderr' );
 
+    # DD-597: _run_streaming_command reaps its child via waitpid and reads $?
+    # into its own return value, but without a guard at the sub's entry that
+    # raw $? stays set in the caller's process on return.
+    {
+        $? = 12 << 8;    ## no critic (Variables::RequireLocalizedPunctuationVars)
+        $manager->_run_streaming_command( command => [ 'sh', '-c', 'exit 0' ] );
+        is( $? >> 8, 12,
+            '_run_streaming_command does not leak its own child status into the caller global $?' );
+    }
+
     # Empty cwd string takes the no-chdir path; empty banner is skipped.
     my $empty_cwd = $manager->_run_streaming_command( command => ['true'], cwd => '', banner => '' );
     is( $empty_cwd->{exit}, 0, 'streaming command treats an empty cwd as no cwd' );
@@ -1441,6 +1451,32 @@ my $repos = tempdir( CLEANUP => 1 );
     is( $manager->_apt_package_is_installed('nope'), 0, 'apt detection rejects an unmatched dpkg status' );
 }
 
+# DD-592: same bug class DD-585/589/590/591 fixed elsewhere - a query must not
+# leave the caller's global $? holding its own last subprocess's status. None
+# of these three explicitly reads $? (unlike the earlier fixes), but
+# Capture::Tiny::capture returns system()'s own return value automatically,
+# and system() ALSO mutates the GLOBAL $? as an unavoidable side effect
+# regardless of what the block returns - confirmed with a standalone repro
+# before writing this test. A fake binary that exits non-zero (not mocked
+# capture) proves the real subprocess is what pollutes $?.
+{
+    for my $spec (
+        [ '_apt_package_is_installed', 'dpkg-query' ],
+        [ '_apk_package_is_installed', 'apk' ],
+        [ '_dnf_package_is_installed', 'rpm' ],
+    )
+    {
+        my ( $method, $bin_name ) = @$spec;
+        my $bin = tempdir( CLEANUP => 1 );
+        _spew( File::Spec->catfile( $bin, $bin_name ), "#!/bin/sh\nexit 1\n" );
+        chmod 0755, File::Spec->catfile( $bin, $bin_name );
+        local $ENV{PATH} = "$bin:$ENV{PATH}";
+        $? = 19 << 8;    ## no critic (Variables::RequireLocalizedPunctuationVars)
+        $manager->$method('not-a-real-package');
+        is( $? >> 8, 19, "$method does not leak its own $bin_name subprocess status into the caller global \$?" );
+    }
+}
+
 # ===========================================================================
 # _install_skill_dependencies: success with output, and failures with the
 # progress task visible and hidden.
@@ -1596,6 +1632,128 @@ my $repos = tempdir( CLEANUP => 1 );
     local $ENV{PATH} = "$bin:$ENV{PATH}";
     like( $manager->_install_skill_requirements_txt($skill)->{error}, qr/Failed to install skill Python dependencies/, 'requirements.txt install reports pip failures' );
 }
+
+# ===========================================================================
+# DD-618: skill dependency installs are bounded by a timeout, not left to
+# hang indefinitely. A tiny timeout plus a deliberately hanging stub proves
+# the install is actually terminated rather than blocking the caller.
+# ===========================================================================
+{
+    local $ENV{DEVELOPER_DASHBOARD_SKILL_INSTALL_TIMEOUT_MS} = 200;
+    my $bin = tempdir( CLEANUP => 1 );
+    _spew( File::Spec->catfile( $bin, 'npx' ), "#!/bin/sh\nsleep 30\n" );
+    chmod 0755, File::Spec->catfile( $bin, 'npx' );
+    local $ENV{PATH} = "$bin:$ENV{PATH}";
+
+    my $skill = File::Spec->catdir( tempdir( CLEANUP => 1 ), 'node-hang' );
+    make_path($skill);
+    _spew( File::Spec->catfile( $skill, 'package.json' ), '{"dependencies":{"leftpad":"^1.0.0"}}' );
+
+    my $started = time;
+    my $res = $manager->_install_skill_package_json($skill);
+    my $elapsed = time - $started;
+    like( $res->{error}, qr/Timed out installing skill Node dependencies/, 'a hung npm install is terminated with a timeout error, not left blocking' );
+    ok( $elapsed < 10, "a hung npm install returns quickly once its timeout fires (took ${elapsed}s)" );
+}
+{
+    local $ENV{DEVELOPER_DASHBOARD_SKILL_INSTALL_TIMEOUT_MS} = 200;
+    my $bin = tempdir( CLEANUP => 1 );
+    _spew( File::Spec->catfile( $bin, 'python' ),  "#!/bin/sh\nsleep 30\n" );
+    _spew( File::Spec->catfile( $bin, 'python3' ), "#!/bin/sh\nsleep 30\n" );
+    chmod 0755, File::Spec->catfile( $bin, 'python' );
+    chmod 0755, File::Spec->catfile( $bin, 'python3' );
+    local $ENV{PATH} = "$bin:$ENV{PATH}";
+
+    my $skill = File::Spec->catdir( tempdir( CLEANUP => 1 ), 'py-hang' );
+    make_path($skill);
+    _spew( File::Spec->catfile( $skill, 'requirements.txt' ), "requests\n" );
+
+    my $started = time;
+    my $res = $manager->_install_skill_requirements_txt($skill);
+    my $elapsed = time - $started;
+    like( $res->{error}, qr/Timed out installing skill Python dependencies/, 'a hung pip install is terminated with a timeout error, not left blocking' );
+    ok( $elapsed < 10, "a hung pip install returns quickly once its timeout fires (took ${elapsed}s)" );
+}
+{
+    # _skill_install_timeout_ms: env override and its validation/default path.
+    is( $manager->_skill_install_timeout_ms, 300_000, 'skill install timeout defaults to 300000ms with no env override' );
+    local $ENV{DEVELOPER_DASHBOARD_SKILL_INSTALL_TIMEOUT_MS} = 5000;
+    is( $manager->_skill_install_timeout_ms, 5000, 'skill install timeout honours a valid env override' );
+    local $ENV{DEVELOPER_DASHBOARD_SKILL_INSTALL_TIMEOUT_MS} = 'notanumber';
+    is( $manager->_skill_install_timeout_ms, 300_000, 'skill install timeout falls back to the default on a non-numeric env override' );
+    local $ENV{DEVELOPER_DASHBOARD_SKILL_INSTALL_TIMEOUT_MS} = 0;
+    is( $manager->_skill_install_timeout_ms, 300_000, 'skill install timeout falls back to the default on a zero env override' );
+}
+{
+    # _run_streaming_command: timeout_ms is opt-in - omitted means unbounded
+    # behavior is unchanged for every other caller.
+    my $run = $manager->_run_streaming_command( command => [ 'sh', '-c', 'printf ok' ] );
+    is( $run->{stdout}, 'ok', 'streaming command without timeout_ms runs unbounded as before' );
+    ok( !$run->{timed_out}, 'streaming command without timeout_ms never reports timed_out' );
+}
+{
+    # _run_streaming_command: a real command finishing within its timeout
+    # completes normally rather than being killed.
+    my $run = $manager->_run_streaming_command( command => [ 'sh', '-c', 'printf fast' ], timeout_ms => 5000 );
+    is( $run->{stdout}, 'fast', 'streaming command with a generous timeout still completes normally' );
+    ok( !$run->{timed_out}, 'streaming command completing in time never reports timed_out' );
+}
+{
+    # _terminate_streaming_command: a pid that ignores TERM is escalated to
+    # KILL. Two things must both be true for this to actually exercise the
+    # escalation, not just look like it: the child must survive the whole
+    # reap window (a single sleep() would return early once TERM interrupts
+    # it, even while ignored, exercising the same "reaped without KILL"
+    # branch as a cooperative child - looping keeps it alive past the whole
+    # window), and the child must have its ignore-handler installed BEFORE
+    # terminate sends TERM (a bare fork with no synchronization races: TERM
+    # can arrive before the child's first statement runs, in which case the
+    # default disposition kills it immediately and no escalation is ever
+    # exercised - confirmed by reproducing this race directly). A readiness
+    # file makes the parent wait for the handler to be installed first.
+    my $ready = File::Spec->catfile( tempdir( CLEANUP => 1 ), 'ready' );
+    my $pid = fork;
+    die "fork failed: $!" if !defined $pid;    # uncoverable branch true
+    if ( $pid == 0 ) {
+        local $SIG{TERM} = 'IGNORE';
+        open my $fh, '>', $ready or die "Unable to write $ready: $!";    # uncoverable branch true
+        close $fh;
+        sleep 1 for 1 .. 30;
+        exit 0;    # uncoverable statement
+    }
+    my $waited_ready = 0;
+    while ( !-e $ready && $waited_ready < 500 ) {
+        select( undef, undef, undef, 0.005 );
+        $waited_ready++;
+    }
+    $manager->_terminate_streaming_command($pid);
+    my $waited = waitpid( $pid, 1 );
+    ok( $waited == $pid || $waited == -1, 'terminate escalates to KILL when the child ignores TERM, and it is reaped' );
+
+    # A child reaped by someone else before terminate is called: the internal
+    # waitpid answers -1 (no such child), exercising that side of the
+    # $waited == $pid || $waited == -1 condition without needing a KILL -
+    # matching CollectorRunner::_terminate_command_process's own established
+    # test for the identical pattern (t/115-collectorrunner-coverage-2.t).
+    my $gone = fork;
+    die "fork failed: $!" if !defined $gone;    # uncoverable branch true
+    if ( $gone == 0 ) {
+        exit 0;    # uncoverable statement
+    }
+    waitpid( $gone, 0 );
+    ok( $manager->_terminate_streaming_command($gone),
+        'terminate treats a waitpid of -1 as an already-reaped child, without escalating to KILL' );
+
+    ok( $manager->_terminate_streaming_command(undef), 'terminate is a no-op with no pid' );
+    ok( $manager->_terminate_streaming_command('notapid'), 'terminate is a no-op with a non-numeric pid' );
+    # pid 0 is the value that isolates the third guard clause ($pid < 1): it
+    # passes defined-ness and the digits-only regex (unlike a negative pid,
+    # which a leading "-" already fails the regex on), so only $pid < 1
+    # decides the outcome - matching CollectorRunner::_terminate_command_process's
+    # own established "tolerates pid zero" test for the identical shape.
+    ok( $manager->_terminate_streaming_command(0), 'terminate is a no-op with pid zero' );
+}
+
 {
     # _python_dependency_command resolution order.
     my $only3 = tempdir( CLEANUP => 1 );
@@ -1620,6 +1778,30 @@ my $repos = tempdir( CLEANUP => 1 );
     my $nullver = File::Spec->catfile( tempdir( CLEANUP => 1 ), 'null.json' );
     _spew( $nullver, '{"dependencies":{"n":null,"v":"^1.0.0"}}' );
     is_deeply( [ $manager->_package_json_dependency_specs($nullver) ], [ 'n', 'v@^1.0.0' ], 'package.json specs handles a null version as a bare name' );
+
+    # DD-606: a dependency NAME starting with '-' is never a real npm package
+    # name but IS a shape npm's own CLI parses as a flag when it reaches argv
+    # as a bare element - reject it loudly before it can ever get there,
+    # rather than silently forward it.
+    {
+        my $flaglike = File::Spec->catfile( tempdir( CLEANUP => 1 ), 'flaglike.json' );
+        _spew( $flaglike, '{"dependencies":{"--registry":"http://evil.example"}}' );
+        my $err = eval { $manager->_package_json_dependency_specs($flaglike); 1 } ? '' : $@;
+        like( $err, qr/Refusing to install dependency '--registry'/,
+            'DD-606: a dependency name starting with - is refused before it can reach the npm install argv as a flag' );
+    }
+
+    # DD-606: a single flag-like name anywhere among otherwise-legitimate
+    # dependencies must still refuse the whole call - a partial spec list
+    # that silently drops the dangerous entry could still be misread as
+    # success by a caller that doesn't inspect what came back.
+    {
+        my $mixed = File::Spec->catfile( tempdir( CLEANUP => 1 ), 'mixed.json' );
+        _spew( $mixed, '{"dependencies":{"left-pad":"^1.0.0"},"devDependencies":{"-g":"true"}}' );
+        my $err = eval { $manager->_package_json_dependency_specs($mixed); 1 } ? '' : $@;
+        like( $err, qr/Refusing to install dependency '-g'/,
+            'DD-606: a flag-like name in devDependencies is refused even when other sections are legitimate' );
+    }
 
   SKIP: {
         skip 'cannot deny read to root', 1 if $> == 0;

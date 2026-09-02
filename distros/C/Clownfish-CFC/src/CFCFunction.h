@@ -53,9 +53,6 @@ CFCFunction_init(CFCFunction *self, const char *exposure, const char *name,
                  struct CFCType *return_type, struct CFCParamList *param_list,
                  struct CFCDocuComment *docucomment, int is_inline);
 
-void
-CFCFunction_destroy(CFCFunction *self);
-
 /** Test whether bindings can be generated for a function.
   */
 int

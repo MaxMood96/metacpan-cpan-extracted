@@ -81,10 +81,13 @@ S_strip(char *comment) {
     FREEMEM(scratch);
 }
 
+static void
+CFCDocuComment_destroy(CFCBase *base);
+
 static const CFCMeta CFCDOCUCOMMENT_META = {
     "Clownfish::CFC::Model::DocuComment",
     sizeof(CFCDocuComment),
-    (CFCBase_destroy_t)CFCDocuComment_destroy
+    CFCDocuComment_destroy
 };
 
 CFCDocuComment*
@@ -211,15 +214,17 @@ CFCDocuComment_parse(const char *raw_text) {
     return self;
 }
 
-void
-CFCDocuComment_destroy(CFCDocuComment *self) {
+static void
+CFCDocuComment_destroy(CFCBase *base) {
+    CFCDocuComment *self = (CFCDocuComment *) base;
+
     CFCUtil_free_string_array(self->param_names);
     CFCUtil_free_string_array(self->param_docs);
     FREEMEM(self->description);
     FREEMEM(self->brief);
     FREEMEM(self->long_des);
     FREEMEM(self->retval);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 const char*

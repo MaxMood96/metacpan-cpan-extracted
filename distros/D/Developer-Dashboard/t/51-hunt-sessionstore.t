@@ -8,6 +8,7 @@ use Test::More;
 
 use lib 'lib';
 
+use Developer::Dashboard::PathRegistry ();
 use Developer::Dashboard::SessionStore;
 
 # Warnings are errors for this repository, so surface any warning as a
@@ -24,6 +25,21 @@ $SIG{__WARN__} = sub { die "WARNING: $_[0]" };
     sub new { my ( $class, %args ) = @_; return bless {%args}, $class; }
     sub sessions_root  { return $_[0]->{root}; }
     sub sessions_roots { return @{ $_[0]->{roots} }; }
+    # DD-610: create() now delegates its write-temp/secure/rename mechanics
+    # to the shared PathRegistry::atomic_write_secure helper. That method
+    # never touches its invocant's internals, so forwarding straight through
+    # keeps this lightweight double answering everything SessionStore needs
+    # without pulling in the full PathRegistry runtime.
+    sub atomic_write_secure {
+        my ( $self, @rest ) = @_;
+        return Developer::Dashboard::PathRegistry::atomic_write_secure( $self, @rest );
+    }
+    # atomic_write_secure dispatches to _chmod_pending as a method on its
+    # invocant, so this double needs it too.
+    sub _chmod_pending {
+        my ( $self, @rest ) = @_;
+        return Developer::Dashboard::PathRegistry::_chmod_pending( $self, @rest );
+    }
 }
 
 # write_file($path, $content)

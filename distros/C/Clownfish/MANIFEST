@@ -56,6 +56,8 @@ cfcore/Clownfish/Vector.c
 cfcore/Clownfish/Vector.cfh
 cftest/Clownfish/Test.c
 cftest/Clownfish/Test.cfh
+cftest/Clownfish/Test/RefObj.c
+cftest/Clownfish/Test/RefObj.cfh
 cftest/Clownfish/Test/TestBlob.c
 cftest/Clownfish/Test/TestBlob.cfh
 cftest/Clownfish/Test/TestBoolean.c

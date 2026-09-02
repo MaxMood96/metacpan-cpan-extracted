@@ -29,7 +29,7 @@ requires:
 resources:
   homepage: https://github.com/ology/MIDI-RtMidi-Util
   repository: https://github.com/ology/MIDI-RtMidi-Util.git
-version: '0.0201'
+version: '0.0301'
 x_Dist_Zilla:
   perl:
     version: '5.042000'

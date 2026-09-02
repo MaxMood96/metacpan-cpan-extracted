@@ -51,3 +51,32 @@ TASKS
   send 0xB501 +C "Y" +C
 RECV 0x55
 RECV 0xC500 +C +C
+
+!Duplicate request before response sends nothing
+RECV 0x55
+RECV 0x3601 +C "Z" +C
+  request 6 "Z"
+RECV 0x55
+RECV 0x3601 +C "Z" +C
+  # nothing
+RESPOND 6 "Y"
+  send 0x55
+  send 0xB601 +C "Y" +C
+RECV 0x55
+RECV 0xC600 +C +C
+
+!Delayed running of TASKS does not emit invalid cmd slot data
+RECV 0x55
+RECV 0x3701 +C "a" +C
+  request 7 "a"
+RESPOND 7 "b"
+  send 0x55
+  send 0xB701 +C "b" +C
+RECV 0x55
+RECV 0x3701 +C "a" +C
+  needtasks
+# Do not yet run tasks; ACK the response
+RECV 0x55
+RECV 0xC700 +C +C
+TASKS
+  # nothing

@@ -119,23 +119,99 @@ fi
 # anything names advisories, and a run that died prints a Perl diagnostic and no
 # advisory at all - so the decision is made on that and the output is passed
 # through unchanged either way.
+
+# TWO RUNS, AND THEY ANSWER DIFFERENT QUESTIONS (DD-567).
+#
+# The first run includes the interpreter and exists to be READ. The second
+# excludes it and is the only one allowed to decide the exit status, because the
+# subject of THIS gate is the set of distributions installed in the isolated root
+# it was given. The interpreter is not one of them: this distribution does not
+# ship perl, cannot patch it, and does not declare it as a runtime dependency.
+#
+# That is not a judgement made here. CLAUDE.md already classes host interpreter
+# advisories as environmental rather than release blockers, and
+# script/cpan-audit-declared-chain - the gate this project treats as
+# authoritative - already skips the interpreter outright. Until now the two gates
+# disagreed about scope, and the one that said "in scope" ran FIRST in CI: on
+# 2026-08-16 an advisory against perl 5.44.0 (CVE-2026-15534) failed this step and
+# skipped the declared-chain audit, the full test run and the coverage gate with
+# it. Five merges reached master with no test verdict at all while every local run
+# reported PASS.
+#
+# The scope is what changed. The strictness did not: a distribution advisory in
+# the isolated root still exits 5, including when an interpreter advisory appears
+# in the same run, and a cpan-audit that died before auditing is still UNUSABLE
+# rather than clean. Pinned by t/156-cpan-audit-interpreter-scope.t.
 set +e
 audit_output="$(cpan-audit installed "$perl5_root" --perl --exclude-file "$exclusions" 2>&1)"
-audit_status=$?
 set -e
 
 printf '%s\n' "$audit_output"
+
+set +e
+verdict_output="$(cpan-audit installed "$perl5_root" --exclude-file "$exclusions" 2>&1)"
+audit_status=$?
+set -e
 
 if [ "$audit_status" -eq 0 ]; then
   exit 0
 fi
 
-if printf '%s' "$audit_output" | grep -q -E 'CPANSA-|[0-9]+ advisor'; then
+# DECIDE ON THE SUBJECT OF EACH ADVISORY, NOT ON A FLAG (DD-567, second attempt).
+#
+# The first attempt ran cpan-audit a second time without --perl and trusted that
+# to drop the interpreter. It does not. Counted on 2026-08-17: perl is reported
+# once with the flag and once without - the flag only changes how the version is
+# rendered (==5.044000 versus 5.044000). CI proved the fix void while the local
+# tests passed, because the SHIM emitted perl only under --perl and so encoded
+# the assumption under test.
+#
+# So the subject is read directly. cpan-audit names each finding as
+# "DIST (have VERSION) has N advisor...", and this gate's subject is the
+# DISTRIBUTIONS installed in the isolated root. The interpreter is not one of
+# them: this product does not ship perl, cannot patch it, and CLAUDE.md classes
+# host interpreter advisories as environmental - a position
+# script/cpan-audit-declared-chain already takes by skipping perl outright.
+#
+# ANSI is stripped first. CI output is coloured (ESC[31mperl (have ...) and a
+# matcher that worked on the plain local form would pass every test here and fail
+# in the only place that matters.
+plain_verdict="$(printf '%s' "$verdict_output" | sed -e 's/\x1b\[[0-9;]*m//g')"
+offending="$(printf '%s\n' "$plain_verdict" \
+  | grep -E '^[A-Za-z0-9_:-]+ \(have [^)]*\) has [0-9]+ advisor' \
+  | grep -vE '^perl \(have ' || true)"
+
+if [ -n "$offending" ]; then
+  # PRINT THE RUN THAT DECIDED (DD-574). The block above prints the run that
+  # INCLUDES the interpreter, for visibility; this is the run whose subject is
+  # the isolated root alone, and it is the one that just failed the gate.
+  #
+  # Without this the gate exits 5 having shown only the interpreter advisory,
+  # so a reader concludes the interpreter failed it - which is precisely the
+  # thing DD-567 exists to prevent. CI run 31982450230 did exactly that, and it
+  # is worse than the bug DD-567 fixed: a gate that fails for a STATED wrong
+  # reason at least tells you where to look.
+  printf '%s\n' '--- the advisories that decided this gate (distributions only; the interpreter is not this gate subject) ---'
+  printf '%s\n' "$offending"
+
   # A real finding. Remapped to a single status of its own rather than passed
   # through, because cpan-audit's own non-zero statuses vary with what it found
   # (65 and 66 have both been seen) and could collide with the gate's 1, 2, 3
   # and 4. A finding must not be able to impersonate a usage error.
   exit 5
+fi
+
+# ADVISORIES FOUND, BUT NONE OF THEM THIS GATE'S SUBJECT.
+#
+# cpan-audit exits non-zero for a finding, so reaching here with recognisable
+# advisory lines means it audited successfully and everything it found was the
+# interpreter's. That is a PASS for this gate, and it must be distinguished from
+# the block below - a run that died before auditing, which also exits non-zero
+# and has no advisory lines at all. Collapsing the two is the exact confusion
+# status 4 was created to end (DD-517).
+if printf '%s\n' "$plain_verdict" | grep -qE '^[A-Za-z0-9_:-]+ \(have [^)]*\) has [0-9]+ advisor'; then
+  printf '%s\n' 'no advisory against any distribution in this root; the only findings are against the perl interpreter, which this gate does not judge - see script/cpan-audit-declared-chain'
+  exit 0
 fi
 
 cat >&2 <<EOF

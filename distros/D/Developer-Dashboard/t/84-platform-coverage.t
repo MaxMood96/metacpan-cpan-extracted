@@ -417,6 +417,18 @@ is(
     like( $@, qr/Unable to exec java/, 'java exec failure surfaced' );
 }
 
+# DD-597: the javac launch mutates the caller's global $? as a side effect
+# (the sub reads it into its own $exit_code); without a guard at the sub's
+# entry that stays set in the caller's process after the sub returns via the
+# die path (the only path that can return control to a caller at all - a
+# successful exec replaces the process image).
+{
+    local $Developer::Dashboard::Platform::SYSTEM_LAUNCHER = sub { $? = 7 << 8; 1 };    ## no critic (Variables::RequireLocalizedPunctuationVars)
+    $? = 12 << 8;                                                                       ## no critic (Variables::RequireLocalizedPunctuationVars)
+    eval { Developer::Dashboard::Platform::_exec_java_source($hello); 1 };
+    is( $? >> 8, 12, '_exec_java_source does not leak javac\'s exit status into the caller global $? on the die path' );
+}
+
 # ---------------------------------------------------------------------------
 # _passwd_entry / passwd_user_name / passwd_home_directory : the Windows
 # short-circuit, the absent-record outcome, and the resolved record.

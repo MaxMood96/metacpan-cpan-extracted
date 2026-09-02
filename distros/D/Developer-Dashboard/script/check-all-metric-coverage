@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 
-# IMPORTANT: this checker has to tell three different failures apart, because
+# IMPORTANT: this checker has to tell four different failures apart, because
 # responding to one of them as if it were another is what costs whole rounds.
 # A coverage SHORTFALL is a fact about the code. An UNREADABLE report is a fact
 # about the report. An INSTRUMENT FAILURE is a fact about the environment: the
@@ -19,6 +19,7 @@ use constant EXIT_CLEAN      => 0;
 use constant EXIT_SHORTFALL  => 1;
 use constant EXIT_UNREADABLE => 2;
 use constant EXIT_INSTRUMENT => 3;
+use constant EXIT_STALE       => 4;
 
 # The parse errors Devel::Cover surfaces when the reader's serializer is not the
 # one that wrote the database. Neither text names the real cause, which is why
@@ -256,8 +257,87 @@ sub _check_report {
         return EXIT_SHORTFALL;
     }
 
-    print "coverage gate: statement, branch, condition, and subroutine totals are 100.0\n";
+    my ( $stale, $examined ) = _stale_annotations($lines);
+
+    if ( @{$stale} ) {
+        print {*STDERR} "coverage gate: stale uncoverable annotation(s) - marked unreachable, but the suite "
+            . "reached them, so a covered outcome is being excluded from a total that reads 100.0 because "
+            . "of the exclusion:\n";
+        print {*STDERR} "coverage gate:   $_\n" for @{$stale};
+        return EXIT_STALE;
+    }
+
+    # An empty subject is not a clean result and must not print the same line as
+    # a real one - a scan for a marker is exactly the check that passes because
+    # it matched nothing. This is INFORMATIONAL rather than an error, so it goes
+    # to standard output: a successful gate emits nothing on standard error, a
+    # contract older than this scan and asserted by t/107.
+    print "coverage gate: statement, branch, condition, and subroutine totals are 100.0"
+        . (
+        $examined
+        ? "; $examined detail rows examined, no stale uncoverable annotations"
+        : '; examined no annotation detail rows, so nothing was checked for stale uncoverable annotations'
+        ) . "\n";
     return EXIT_CLEAN;
+}
+
+# Purpose: find uncoverable annotations the suite actually exercised.
+# Input: an array reference of report lines.
+# Output: a list of "FILE line N" strings, one per stale annotation, and the
+#         number of detail rows examined - the second is what distinguishes a
+#         clean scan from one whose subject was empty.
+#
+# Devel::Cover checks its own annotations: when code marked uncoverable IS
+# covered, the detail row carries *** in a column headed `err`. That marker is
+# on standard output, inside the per-line sections, and coverage-gate already
+# forwards the whole report here - so this reads a finding the instrument has
+# already made rather than re-deriving it from raw counts.
+#
+# THE REPORT IS NOT ONE TABLE. Sections whose headers end in `code`, `branch`
+# and `condition` each have their own column widths, so the offset of the code
+# column is recomputed at every header. A reader that reuses one section's
+# offsets silently skips the others, which is where branch and condition
+# annotations live - measured at 3 entries found where the true count was far
+# larger.
+sub _stale_annotations {
+    my ($lines) = @_;
+
+    my ( @stale, $examined, $file, $code_column );
+    $examined = 0;
+
+    for my $line ( @{$lines} ) {
+        # A bare path line names the file the next sections describe.
+        if ( $line =~ m{\A(\S*lib/\S+\.(?:pm|pl))\s*\z} ) {
+            $file        = $1;
+            $code_column = undef;
+            next;
+        }
+
+        # Every detail section announces its own layout.
+        if ( $line =~ /\Aline\s+err\s+/ ) {
+            my ($last) = $line =~ /(\S+)\s*\z/;
+            $code_column = defined $last ? rindex( $line, $last ) : undef;
+            next;
+        }
+
+        next if !defined $code_column;
+        # A detail row is a line number followed by COLUMNS, so the separator
+        # must be a space or tab - never \s, which also matches the newline and
+        # so admits a line consisting solely of digits. Those occur: a Perl
+        # source line that is just `1` appears in the report's code column, and
+        # counting 8 of them inflated the examined total from 38,647 to 38,655.
+        # The number this scan reports is what distinguishes a real clean run
+        # from one whose subject was empty, so it has to be exact.
+        next if $line !~ /\A(\d+)[ \t]/;
+
+        my $number  = $1;
+        my $metrics = substr $line, 0, $code_column;
+        $examined++;
+        push @stale, sprintf( '%s line %d', ( defined $file ? $file : 'unknown file' ), $number )
+            if index( $metrics, '***' ) >= 0;
+    }
+
+    return ( \@stale, $examined );
 }
 
 # Purpose: report that the gate could not read what it was given, which must
@@ -281,7 +361,7 @@ coverage failure
 =head1 WHAT IT IS
 
 A fail-closed filter. It reads a C<Devel::Cover> text report on standard input,
-echoes it so the operator still sees the table, and turns it into one of four
+echoes it so the operator still sees the table, and turns it into one of five
 verdicts, each with its own exit status.
 
 =head1 WHAT IT IS FOR
@@ -302,6 +382,12 @@ did not produce what it claimed to produce, and the gate must never read that as
 a clean result.
 
 =item * An B<instrument failure> is a fact about the environment.
+
+=item * A B<stale annotation> is a fact about a claim: an C<# uncoverable>
+comment asserts an outcome cannot be reached, and this one was. Devel::Cover
+marks such a row with C<***> in its C<err> column, and that marker already
+arrives here inside the report - it was simply read past until the Total row
+was reached.
 C<Devel::Cover::DB::IO> picks its on-disk serialization format at C<BEGIN> from
 whatever C<@INC> makes visible - Sereal, then JSON, then Storable - and records
 that choice nowhere. On a host carrying two C<Devel::Cover> installations whose
@@ -338,6 +424,13 @@ Exit statuses are the interface:
 =item * B<1> - a genuine shortfall; the failing metrics are named.
 
 =item * B<2> - the report could not be read, or never arrived.
+
+=item * B<4> - a B<stale uncoverable annotation>: the report marks a line as
+uncoverable that the suite actually reached, so a covered outcome is being
+excluded from a total that reads 100.0 because of the exclusion. The offending
+file and line are named. This is deliberately not folded into B<1>, because a
+shortfall is a fact about how much the tests cover and this is a fact about a
+claim the tests were told not to check.
 
 =item * B<3> - the instrument could not read its own database.
 

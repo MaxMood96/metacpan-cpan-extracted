@@ -3,7 +3,7 @@ package Developer::Dashboard::ActionRunner;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Capture::Tiny qw(capture);
 use Cwd qw(cwd);
@@ -270,6 +270,12 @@ sub _wait_status_exit_code {
 # Output: normalized exit status integer when reaped, otherwise undef.
 sub _background_child_exit_status {
     my ( $self, $command_pid ) = @_;
+
+    # DD-597: waitpid below reads $? into this sub's own return value, but
+    # without this guard the raw $? from that reap stays set in the caller's
+    # process after this sub returns. `local` restores the caller's $? on
+    # return regardless of what runs inside.
+    local $?;
     my $reaped = waitpid( $command_pid, WNOHANG );
     return if $reaped != $command_pid;
     return $self->_wait_status_exit_code($?);
@@ -282,6 +288,11 @@ sub _background_child_exit_status {
 # Output: boolean true when waitpid reaped the child.
 sub _reap_child_process {
     my ( $self, $pid ) = @_;
+    # A QUERY MUST NOT DECIDE ITS CALLER'S EXIT STATUS (DD-585/589-593/597,
+    # DD-670). waitpid below reads the reaped child's status into $?, and
+    # without this guard that value leaks into whatever _pid_is_running's own
+    # caller reads next.
+    local $?;
     return 0 if !defined $pid || $pid !~ /^\d+$/ || $pid < 1;
     my $waited = waitpid( $pid, WNOHANG );
     return $waited == $pid ? 1 : 0;
@@ -294,6 +305,11 @@ sub _reap_child_process {
 # Output: one-letter process state string or undef.
 sub _read_process_state {
     my ( $self, $pid ) = @_;
+    # A QUERY MUST NOT DECIDE ITS CALLER'S EXIT STATUS (DD-591, same shape as
+    # DD-585/DD-589/DD-590). The ps fallback below runs whenever /proc is
+    # unreadable for this pid; without this guard its raw $? stays set in the
+    # caller's process after this sub returns.
+    local $?;
     my $proc = "/proc/$pid/stat";
     if ( -r $proc ) {
         open my $fh, '<', $proc or return;    # uncoverable branch true
@@ -399,6 +415,12 @@ sub _is_action_trusted {
 # Output: structured result hash reference.
 sub _run_command {
     my ( $self, %args ) = @_;
+
+    # DD-597: system() below mutates the caller's global $? as a side effect;
+    # without this guard that stays set in the caller's process after this
+    # sub returns, regardless of the exit code already captured in this sub's
+    # own return value.
+    local $?;
     my $cmd        = $args{cmd};
     my $cwd        = $args{cwd};
     my $env        = $args{env} || {};

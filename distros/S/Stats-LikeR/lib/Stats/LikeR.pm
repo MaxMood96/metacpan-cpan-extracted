@@ -3,7 +3,7 @@
 require 5.010;
 use strict;
 package Stats::LikeR;
-our $VERSION = 0.312;
+our $VERSION = 0.313;
 require XSLoader;
 use autodie ':default';
 use warnings FATAL => 'all';
@@ -5017,7 +5017,7 @@ Stats::LikeR - Get basic statistical functions, like in R, but with Perl using X
 
 =head1 VERSION
 
-version 0.312
+version 0.313
 
 =head1 Synopsis
 
@@ -10785,11 +10785,13 @@ C<$left> and C<$right> may each be an B<AoH> (array of row hash references), a B
 
 =back
 
-Keys are matched on the B<stringified> cell value. A row whose key cell is C<undef> (or absent) never matches — the pandas C<NaN> rule — so such a row is dropped by an inner/right join and appears only as a left- or right-only row in a left/outer/right join.
+Keys are matched on the B<stringified> cell value. A row whose key cell is C<undef> (or absent) never matches, so such a row is dropped by an inner/right join and appears only as a left- or right-only row in a left/outer/right join. This is SQL's rule for C<NULL> keys, and R's C<merge(..., incomparables = NA)>; note that it is I<not> what either reference does by default — R's default (C<incomparables = NULL>) and pandas both match a missing key to a missing key.
 
 =head3 Colliding columns (C<suffixes>)
 
 A non-key column that appears in B<both> frames would collide, so each copy is renamed by appending a suffix: C<.x> to the left copy and C<.y> to the right by default (R's convention). Override with C<< suffixes =E<gt> ['_left', '_right'] >>.
+
+Under C<left.on>/C<right.on> the same applies to a right-hand non-key column named after the B<left key>, since the single output key column carries the left name: it is suffixed too, as R does with C<no.dups = TRUE>. If the suffixes still leave two output columns sharing a name, C<merge> dies rather than return a frame with a column missing.
 
 =head3 Output shape
 
@@ -13181,13 +13183,13 @@ one of its two tails, magnified until it can be seen.
   <td>If true, performs a paired t-test. <code>x</code> and <code>y</code> must be the same length.</td>
 </tr>
 <tr>
-  <td><code>var_equal</code></td>
+  <td><code>var_equal</code> (alias <code>var.equal</code>)</td>
   <td>Boolean</td>
   <td><code>FALSE</code></td>
   <td>If true, assumes equal variances (standard two-sample). If false, performs Welch's t-test with unequal variances.</td>
 </tr>
 <tr>
-  <td><code>conf.level</code></td>
+  <td><code>conf.level</code> (alias <code>conf_level</code>)</td>
   <td>Float</td>
   <td>0.95</td>
   <td>Confidence level for the returned confidence interval. Must be strictly between 0 and 1 (R also accepts the degenerate 0 and 1). See [Extreme <code>conf.level</code>](#extreme-conf.level) for the precision limit past about <code>0.9999</code>.</td>
@@ -14410,7 +14412,478 @@ C<t/model_pvalue_tails.t> and C<t/oneway_test.R.scipy.t>.
 
 =head1 Changes
 
-=head2 0.311 2026-08-28 CDT
+=head2 0.313 2026-09-01 CDT
+
+=head3 C<merge>: a C<left.on>/C<right.on> join died when the right frame reused the key's name
+
+The result of a join carries B<one> key column, under the left name — R's
+convention, and not pandas', which keeps both. That left one collision
+unaccounted for: with C<left.on>/C<right.on>, a I<non-key> column on the right can
+be named after the I<left key>, and it then collides with the output key column
+rather than with a left data column. The suffix rule only looked at the left
+frame's data columns, so nothing was renamed and the collision guard fired:
+
+ merge($parents, $children, 'left.on' => 'name', 'right.on' => 'parent');
+ # merge: output column 'name' collides; adjust 'suffixes'
+
+That is C<tests/reg-tests-1d.R>'s parents/children join, and both references
+perform it: R suffixes the right-hand copy under C<no.dups = TRUE> (the default
+since R 3.5.0 — "if a C<by.x> column name matches one of C<y>, the y version gets
+suffixed as well"), and pandas keeps both key columns so the question never
+arises. C<merge> now suffixes it too, giving R's names exactly:
+
+=for html <table>
+<thead>
+<tr>
+  <th></th>
+  <th>columns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>R 4.6.1</td>
+  <td><code>name</code>, <code>sex.x</code>, <code>age.x</code>, <code>name.y</code>, <code>sex.y</code>, <code>age.y</code></td>
+</tr>
+<tr>
+  <td><code>merge</code> before</td>
+  <td><i>croaks</i></td>
+</tr>
+<tr>
+  <td><code>merge</code> now</td>
+  <td><code>name</code>, <code>sex.x</code>, <code>age.x</code>, <code>name.y</code>, <code>sex.y</code>, <code>age.y</code></td>
+</tr>
+</tbody>
+</table>
+
+Every input this changes used to croak, so no join that worked before returns
+anything different. If the suffixes still leave two output columns sharing a
+name, C<merge> still dies rather than hand back a frame with a column missing —
+which is R's behaviour too (C<suffixes = c(".z", ".z")> is an error there).
+
+=head3 C<merge> is now cross-validated against R's and pandas' own merge suites
+
+C<t/merge.R.pandas.t> (329 tests) takes its cases from the references' test
+suites rather than inventing them, in the manner of the other C<t/*.R.scipy.t>
+files:
+
+=over
+
+=item * B<R 4.6.1> — 28 frames and 83 cases: the examples in
+C<src/library/base/man/merge.Rd> (authors/books, and the C<incomparables>
+example), plus R's own regression cases for C<merge> from C<reg-tests-1a.R>
+(PR#1510 C<by.x>/C<by.y> with multiple matches; the Cartesian product that did
+not make column names unique in 2.3.0; "merging when NA is a level"; the two
+character matrices that failed pre-2.0.0; merge on zero-row frames, not
+allowed ≤ 2.4.0), C<reg-tests-1b.R> (the 2.15.0 and 2.15.1 suffixes
+regressions; the C<women> zero-row merges that failed in 2.7.0),
+C<reg-tests-1d.R> (the C<by.y> naming case above) and C<reg-tests-2.R> (the
+authors/books joins moved out of C<merge.Rd>, and the 2002 case where every
+column is a join key).
+
+=item * B<pandas 2.2.3> — 31 frames and 60 cases from
+C<pandas/tests/reshape/merge/test_merge.py> (C<test_intelligently_handle_join_key>
+GH#733, C<test_merge_overlap>, C<test_merge_different_column_key_names>,
+C<test_merge_same_order_left_right> GH#35382, C<test_left_merge_empty_dataframe>,
+all ten parametrisations of C<test_merge_empty> GH#52777,
+C<test_merge_on_ints_floats>, C<test_merge_non_unique_index_many_to_many>,
+C<test_merge_suffix>), C<test_merge_cross.py> (all four cross-join tests) and
+C<test_multi.py> (C<test_merge_na_keys>,
+C<test_merge_multiple_cols_with_mixed_cols_index> GH#29522).
+
+=back
+
+Each frozen case runs through B<every input/output shape> — AoH, HoA and HoH on
+the left crossed with the same on the right and with both output shapes, 18
+joins per case — and its output column names are checked separately, because a
+join whose answer has no rows is exactly what several of the reference cases are
+about and a row-by-row comparison cannot see the names. Beyond the tables the
+file pins row order against pandas' C<sort=False>, R's C<by>/C<by.x>/C<by.y> and
+pandas' C<left_on>/C<right_on> spellings, every error path the references
+document, and double-valued keys with dyadic literals.
+
+The two tables are generated by C<t/merge.R.pandas.R> and C<t/merge.R.pandas.py>,
+committed beside the test; the test itself never runs R or python, and needs
+neither installed. Both blocks reproduce byte-identically from the generators,
+and the pandas block is byte-identical under pandas 2.2.3 and 3.0.4, so nothing
+frozen there is specific to a release.
+
+C<t/merge.t> also gained the cases a data frame cannot express, and so no
+reference case can reach: an AoH row missing the key column entirely, a missing
+non-key cell, the C<0> / C<'0'> / C<'0.0'> key identity, a NUL byte inside a key, a
+wide character, C<Inf>/C<-Inf>/C<NaN> keys, and blessed frames.
+
+=head3 An C<undef> join key matches nothing — which is I<not> "the pandas C<NaN> rule"
+
+The documentation for C<merge> credited its treatment of a missing join key to
+pandas, and C<LikeR.xs> credited it to R's default. Both attributions were wrong,
+in the same direction: B<both references match a missing key to a missing key.>
+On C<merge.Rd>'s own C<incomparables> example the two agree with each other
+exactly and disagree with C<merge>:
+
+=for html <table>
+<thead>
+<tr>
+  <th>join</th>
+  <th>R 4.6.1</th>
+  <th>pandas 2.2.3</th>
+  <th><code>merge</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>by = c("k1","k2")</code></td>
+  <td>3 rows</td>
+  <td>3 rows</td>
+  <td>2 rows</td>
+</tr>
+<tr>
+  <td><code>by = "k1"</code></td>
+  <td>6 rows</td>
+  <td>6 rows</td>
+  <td>2 rows</td>
+</tr>
+</tbody>
+</table>
+
+The behaviour is right and unchanged — it is SQL's rule for a C<NULL> key, which
+is C<merge(..., incomparables = NA)> in R, the line C<merge.Rd> itself runs, and
+what C<merge>'s documentation describes everywhere else. Only the credit was
+wrong; R's default is C<incomparables = NULL>. The corrected wording says which
+rule it is and that it is not either reference's default, and
+C<t/merge.R.pandas.t> now asserts the divergence — with R's own
+C<incomparables = NA> answers frozen beside the generalised ones — so changing it
+later has to be deliberate.
+
+=head3 11 leak checks reported Devel::Cover's own counters as leaks
+
+C<t/vif_hoslem.t> failed under C<cover> with 37 leaks attributed to a line of
+C<hosmer_lemeshow> that allocates nothing (C<next unless defined ... &&
+looks\_like\_number ...>), and the leaked SVs were bare C<IV>s holding values like
+C<98113961175368> — pointers. They are Devel::Cover's per-line counters, which
+are allocated inside whichever block happens to be running and which
+C<Test::LeakTrace> then counts; the same test reports 0 leaks on a plain perl.
+
+Around ninety test files already guard their leak checks with
+C<$INC{'Devel/Cover.pm'}> for this reason. Eleven did not:
+C<t/age_standardize.t>, C<t/dunn_test.t>, C<t/effect_sizes.t>, C<t/friedman_test.t>,
+C<t/glm_families.t>, C<t/ks_test.R.scipy.t>, C<t/mcnemar_test.t>, C<t/prop_test.t>,
+C<t/tied.frames.t>, C<t/vif_hoslem.t> and — for an import it never used —
+C<t/_parse_csv.t>. Four of them failed; the rest passed only by luck, since
+whether the counters land inside the measured block depends on which lines get
+their first coverage there, which moves with file order. All of them are guarded
+now, in the two forms the suite already uses, and the whole suite passes under
+C<Devel::Cover> (143 files, 35008 tests) as well as without it (143 files, 35577
+tests — the difference is the leak checks, which still run and still report 0
+leaks outside coverage mode).
+
+=head3 C<pt> near zero and C<pf>'s upper tail lost up to eight digits to a cancellation
+
+C<incbeta()>, the regularized incomplete beta every t, F and binomial tail is
+built on, took only C<x> and re-formed C<1 - x> by subtraction. Its reflected
+branch — C<I_x(a,b) = 1 - I_{1-x}(b,a)>, taken exactly when C<x> is the side near
+C<1> — then needs that complement, and forming it as C<1.0 - x> is catastrophic
+cancellation there. Once C<|1 - x|> fell below C<2^-53> it collapsed to C<0> and
+took the whole tail with it:
+
+=for html <table>
+<thead>
+<tr>
+  <th>call</th>
+  <th>returned</th>
+  <th>correct to 21 digits</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>pf(1e-12, 1, 1e6, 'lower.tail' =&gt; 0)</code></td>
+  <td><code>1</code> exactly</td>
+  <td><code>0.999999202115638638</code></td>
+</tr>
+<tr>
+  <td><code>pt(1e-6, 1e6)</code></td>
+  <td><code>0.5</code> exactly</td>
+  <td><code>0.500000398942180682</code></td>
+</tr>
+<tr>
+  <td><code>pt(-1e-8, 1)</code></td>
+  <td><code>0.5</code> exactly</td>
+  <td><code>0.499999996816901138</code></td>
+</tr>
+</tbody>
+</table>
+
+Every caller had the complement exactly, and was throwing it away: C<pf> builds
+C<x = df1·f/D> and C<1-x = df2/D> over one denominator, C<pt> has
+C<x = df/(df + t²)> against C<t²/(df + t²)>, and C<pbinom>'s lower tail is
+C<I_{1-p}(n-k, k+1)> with C<p> itself to hand. So the fix is to pass both —
+C<incbeta_xy(a, b, x, y)>, which is R's own split (C<bratio()> takes C<x> and C<y>
+as separate arguments for this reason), with C<incbeta()> kept as the
+one-argument wrapper for the callers that genuinely have only C<x>, such as a
+bisection midpoint.
+
+Worst error against C<mpmath> at C<mp.dps = 80>, over a 372-point grid:
+
+=for html <table>
+<thead>
+<tr>
+  <th></th>
+  <th>before</th>
+  <th>after</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>pt</code>, either tail</td>
+  <td><code>3.99e-07</code> absolute</td>
+  <td><code>1.11e-16</code> (1 ulp)</td>
+</tr>
+<tr>
+  <td><code>pf</code> upper tail</td>
+  <td><code>3.19e-08</code> relative</td>
+  <td><code>2.74e-11</code></td>
+</tr>
+<tr>
+  <td><code>pf</code> lower tail</td>
+  <td><code>2.01e-12</code> relative</td>
+  <td><code>2.46e-13</code></td>
+</tr>
+</tbody>
+</table>
+
+The two tails also add up again: C<pf(1e-12, 1, 1e6)>'s lower and upper summed
+to C<1 + 7.98e-07> before, which is what first showed the bug.
+
+This reached C<t_test>, whose p-value is C<1 -> that tail: a statistic small
+enough on enough degrees of freedom had its p-value pinned at exactly C<1>
+instead of C<1 - 4e-7>. C<d_pf> now calls C<pf()> rather than repeating its
+expression, so the two can no longer drift apart on the complement argument.
+
+The one place C<incbeta_xy> does B<not> help is the Clopper-Pearson upper bound
+for a handful of successes in ~1e9 trials, which still carries ~2e-9 of relative
+error. The cancellation there is in the continued fraction's own argument during
+bisection, not in a complement a caller could have supplied, so C<t/binom_test.R.scipy.t>'s
+existing note — that fixing it properly means porting C<bratio()> — still stands.
+
+=head3 C<t_test> rejected C<conf.level>, the spelling its own documentation lists
+
+ t_test(\@x, \@y, 'conf.level' => 0.99);
+ # t_test: unknown argument 'conf.level'
+
+C<t_test> accepted only the underscored C<conf_level> and C<var_equal>, while its
+parameter table in this file has always documented the argument as
+C<conf.level>, and while every sibling in the module — C<var_test>,
+C<wilcox_test>, C<prop_test>, C<cmh_test>, C<glm> and the rest — already took both
+spellings. C<var.equal>, which is what R calls it, was refused too. Both dotted
+forms now work, and the parameter table records the aliases.
+
+=head3 C<rank>, C<wilcox_test> and C<ks_test> are 1.6× to 2.3× faster
+
+These were still sorting through C<qsort()>, whose comparator the compiler cannot
+inline; the module's own C<LIKER_DEFINE_SORT()> introsort and C<nv_sort()> were
+already used by the three internal rankers but not by these. Ordering I<n>
+records costs O(I<n> log I<n>) comparisons and an indirect call on each is most of
+what such a sort costs — the figure C<LIKER_DEFINE_SORT>'s own comment records is
+210µs against C<qsort()>'s 355µs on 5000 NVs.
+
+Measured on 20,000 doubles:
+
+=for html <table>
+<thead>
+<tr>
+  <th></th>
+  <th>before</th>
+  <th>after</th>
+  <th>speedup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>wilcox_test</code> (two samples)</td>
+  <td>6.11 ms</td>
+  <td>2.64 ms</td>
+  <td>2.3×</td>
+</tr>
+<tr>
+  <td><code>rank</code></td>
+  <td>2.87 ms</td>
+  <td>1.43 ms</td>
+  <td>2.0×</td>
+</tr>
+<tr>
+  <td><code>ks_test</code> (two samples)</td>
+  <td>3.70 ms</td>
+  <td>2.37 ms</td>
+  <td>1.6×</td>
+</tr>
+</tbody>
+</table>
+
+C<rank_and_count_ties()>, which C<wilcox_test>, C<ks_test> and five other functions
+share, had been sorting C<RankInfo> records through C<cmp_nv3> — a comparator that
+reads a bare C<NV>. That worked only because C<val> is the struct's first member
+and a pointer to a struct is a pointer to its first member: true, but fragile as
+well as slow. It has a generated ordering of its own now.
+
+What is left in C<rank> is no longer the sort. Reading the same 20,000 values back
+out of an C<AV> in plain perl costs 0.37 ms, so the gather loop and the C<newSVnv>
+per result are now most of the call.
+
+=head3 Five new cross-validation files, from R's and SciPy's own test suites
+
+4,444 tests, taking their cases from the references' suites and documented
+examples rather than inventing them, in the manner of the existing
+C<t/*.R.scipy.t> files. Expected values are frozen literals; the generators are
+committed beside each test and are never run by it, so nothing here needs R,
+python or C<mpmath> at install time.
+
+=for html <table>
+<thead>
+<tr>
+  <th>file</th>
+  <th>tests</th>
+  <th>sources</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>t/t_test.R.scipy.t</code></td>
+  <td>2437</td>
+  <td><code>t.test.Rd</code>; <code>reg-tests-1a.R:4529</code> (one group of size one), <code>reg-tests-2.R:3199</code>, <code>reg-tests-1e.R:1985</code>; SciPy's <code>TestTTest_1samp</code>, <code>TestTTestIndMore</code>, <code>TestTTestRel</code>, <code>TestTTestCI</code></td>
+</tr>
+<tr>
+  <td><code>t/tukey_aov_prcomp.R.t</code></td>
+  <td>940</td>
+  <td>a 637-point <code>ptukey</code>/<code>qtukey</code> grid; PlantGrowth and chickwts <code>TukeyHSD</code>; mtcars <code>anova</code>/<code>vif</code>; USArrests <code>prcomp</code>; <code>scale</code></td>
+</tr>
+<tr>
+  <td><code>t/p_adjust.R.t</code></td>
+  <td>767</td>
+  <td>every method in R's own <code>p.adjust.methods</code>, on <code>p.adjust.Rd</code>'s own p-vector</td>
+</tr>
+<tr>
+  <td><code>t/friedman_mcnemar_prop_cmh.R.t</code></td>
+  <td>274</td>
+  <td>Hollander &amp; Wolfe (1973) p.140ff; Agresti (1990) p.350; Fleiss (1981) p.139; Agresti's Rabbits and <code>UCBAdmissions</code></td>
+</tr>
+<tr>
+  <td><code>t/pf_pt_tails.R.mpmath.t</code></td>
+  <td>26</td>
+  <td><code>mpmath</code> at <code>mp.dps = 80</code>, plus R on the same grid</td>
+</tr>
+</tbody>
+</table>
+
+C<t_test> had no cross-validation at all before this, which is how the
+C<conf.level> croak above survived. Each documented case is crossed over the
+whole argument space its function exposes — alternative × C<var_equal> × C<mu> ×
+C<conf.level> × C<paired>, C<correct>, C<exact>, C<p> — because a reference case
+exercised only at its defaults pins one code path out of dozens.
+
+Two things fell out of writing them.
+
+B<< C<t/tukey.t>'s tolerances understate the C<ptukey> port by ten orders of
+magnitude. >> It checks C<qtukey> to an absolute C<1e-3> and the C<TukeyHSD> columns
+to C<1e-4>, where the Copenhaver & Holland port actually agrees with R to
+C<3.0e-14> and C<2.5e-12> over the new grid. A C<1e-3> limit would not notice the
+port being replaced by a normal approximation, which is the regression it exists
+to catch. The new file checks it properly; the old one is left alone.
+
+B<A tail probability needs an absolute tolerance, not a relative one, across NV
+widths.> C<ptukey>'s internals are deliberately plain C<double>, exactly as R's
+C<src/nmath/ptukey.c> has them, so the quadrature does not move with perl's C<NV>
+— but its I<argument> C<q = |diff| / se> comes from the C<aov> mean square, which
+is computed in C<NV>. On the chickwts C<horsebean-casein> comparison, where
+C<p adj> is C<3.07e-08>:
+
+=for html <table>
+<thead>
+<tr>
+  <th>NV width</th>
+  <th><code>p adj</code></th>
+  <th>relative</th>
+  <th>absolute</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>double</code></td>
+  <td><code>3.0701967967949884e-08</code></td>
+  <td>—</td>
+  <td>—</td>
+</tr>
+<tr>
+  <td>x87 <code>long double</code></td>
+  <td><code>3.0701966635682254e-08</code></td>
+  <td><code>4.34e-08</code></td>
+  <td><code>1.3e-16</code></td>
+</tr>
+<tr>
+  <td><code>long double</code></td>
+  <td><code>3.0701956643675032e-08</code></td>
+  <td><code>3.69e-07</code></td>
+  <td><code>1.1e-14</code></td>
+</tr>
+<tr>
+  <td><code>__float128</code></td>
+  <td><code>3.0701956643675032e-08</code></td>
+  <td><code>3.69e-07</code></td>
+  <td><code>1.1e-14</code></td>
+</tr>
+</tbody>
+</table>
+
+Every width agrees to about C<1e-14> absolute, which is all a probability in the
+C<1e-8> tail can be asked for. Conversely C<pf> and C<pt> come out three to four
+orders I<more> accurate on the wider widths (C<2.74e-11> → C<1.1e-15> for C<pf>'s
+upper tail), which is the evidence that what is left there is the continued
+fraction's convergence and not another cancellation — a cancellation does not
+improve with the working precision.
+
+=head3 C<qf> is more accurate than R's own C<qf> in the far lower tail
+
+Writing the file above turned up a disagreement in the other direction, so it is
+recorded rather than quietly reconciled. Asked for the F quantile deep in the
+lower tail, R bottoms out at a fixed resolution:
+
+=for html <table>
+<thead>
+<tr>
+  <th></th>
+  <th><code>qf(1e-8, 1, 2)</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mpmath</code>, <code>mp.dps = 80</code></td>
+  <td><code>2.0000000000000003e-16</code></td>
+</tr>
+<tr>
+  <td><code>qf</code></td>
+  <td><code>2.0000000000000000e-16</code></td>
+</tr>
+<tr>
+  <td>R 4.6.1 <code>qf</code></td>
+  <td><code>4.4408920985006262e-16</code> — which is <code>2^-51</code></td>
+</tr>
+</tbody>
+</table>
+
+R is out by 122% there. Over the 108-point grid in C<t/pf_pt_tails.R.mpmath.t>,
+C<qf> is within C<7.6e-15> relative of 80-digit truth at every point and R is out
+by as much as C<1.22>, on 17 of them. The test asserts C<qf> against C<mpmath> and
+separately asserts that R really is the worse of the two, so that "fixing" C<qf>
+towards R would fail loudly instead of passing quietly.
+
+Also recorded there: C<qtukey> is I<not> an exact inverse of C<ptukey>, in R or
+here. R's C<qtukey.c> is a secant iteration that stops once successive iterates
+differ by less than a hardcoded C<const static double eps = 0.0001> — an absolute
+C<1e-4> in C<q>, not a relative tolerance on C<p> — so C<ptukey(qtukey(p))> recovers
+C<p> only to about C<1e-7>. R's own worst round trip over that grid is
+C<1.2744607e-07>, and this port's is the same to the digits printed, which is the
+strongest evidence in the file that the port really is faithful rather than
+merely close.
+
+=head2 0.312 2026-08-28 CDT
 
 =head3 80-bit x87 arithmetic broke four test files on 32-bit x86
 
@@ -14533,8 +15006,6 @@ failure that could not be reproduced here at all; the assembly shows plain
 C<-std=gnu99> emitting C<fdivl> and C<ret> with no rounding between them, and the
 flag inserting the C<fstpl>/C<fldl> round-trip that narrows the result. Only a
 real 32-bit perl will exercise it.
-
-=head2 0.312 2026-08-30
 
 =head3 C<cor_test()>: five disagreements with R, one of which moves p-values
 

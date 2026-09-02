@@ -338,6 +338,28 @@ is( $app->handle( path => '/js/route-skill/fallback.js', remote_addr => '127.0.0
     is( $app_api->handle( path => '/ajax/demo.json', query => 'type=json', remote_addr => '203.0.113.7', headers => { host => $ah, cookie => $cookie } )->[0], 200, 'session cookie keeps ajax access' );
     # unregistered route WITH session cookie -> authorized
     ok( $app_api->handle( path => '/app/welcome', query => '', remote_addr => '203.0.113.7', headers => { host => $ah, cookie => $cookie } )->[0], 'session cookie authorizes app route' );
+    # DD-605: Web::App::handle() applies the CSRF fetch-metadata check before
+    # dispatching to /logout, but Web::DancerApp's actual route for GET
+    # /logout calls logout_response() DIRECTLY via _run_backend, bypassing
+    # handle() (and its CSRF check) entirely - the same architectural shape
+    # POST /login has, which login_response() correctly compensates for by
+    # calling _csrf_rejection_response itself. This test calls
+    # logout_response() directly, matching exactly what the real Dancer2
+    # route does, so it actually exercises the vulnerable path rather than
+    # handle()'s already-protected one. For a helper session this isn't just
+    # an unwanted logout, it permanently deletes the account (the "throwaway
+    # helper account" design, t/125).
+    my ($cookie_session_id) = $cookie =~ /dashboard_session=([^;]+)/;
+    ok( $sessions->get($cookie_session_id), 'helper session exists before the cross-site logout attempt' );
+    ok( $auth->get_user('helper'), 'helper account exists before the cross-site logout attempt' );
+    my $foreign_logout = $app_api->logout_response(
+        remote_addr => '203.0.113.7',
+        headers     => { host => $ah, cookie => $cookie, 'sec-fetch-site' => 'cross-site' },
+    );
+    is( $foreign_logout->[0], 403, 'cross-site GET /logout (direct logout_response call, matching the real Dancer2 route) is rejected, not silently actioned' );
+    ok( $sessions->get($cookie_session_id), 'helper session still exists after the rejected cross-site logout' );
+    ok( $auth->get_user('helper'), 'helper account still exists after the rejected cross-site logout' );
+
     # logout removes the helper user (role helper + username set)
     is( $app_api->handle( path => '/logout', remote_addr => '203.0.113.7', headers => { host => $ah, cookie => $cookie } )->[0], 302, 'logout with helper session' );
     # logout with no session
@@ -368,6 +390,22 @@ is( $app->handle( path => '/js/route-skill/fallback.js', remote_addr => '127.0.0
     ok( !$app_api->_authorize_api_request( headers => {} ), 'api auth empty headers' );
     ok( !$app_api->_authorize_api_request( headers => { 'x-dd-api-key' => [], 'x-dd-api-secret' => [] } ), 'api auth ref headers' );
     ok( !$app_api->_authorize_api_request(), 'api auth no headers' );
+
+    # DD-604: the secret-hash comparison must go through the same
+    # constant-time helper Auth.pm::verify_user uses, not a bare `ne` that
+    # leaks a partial match through response timing.
+    {
+        my $calls = 0;
+        no warnings 'redefine';
+        local *Developer::Dashboard::Auth::_secure_compare = sub {
+            $calls++;
+            return $_[0] eq $_[1] ? 1 : 0;
+        };
+        use warnings 'redefine';
+        ok( $app_api->_authorize_api_request( path => '/ajax/demo.json', headers => { 'x-dd-api-key' => 'good', 'x-dd-api-secret' => 'sekret' } ),
+            'DD-604: api auth still succeeds through the constant-time helper' );
+        is( $calls, 1, 'DD-604: _authorize_api_request calls Auth::_secure_compare exactly once for a checked secret' );
+    }
     is( ref( $app_api->_api_keys ), 'HASH', 'api keys hash' );
 }
 
@@ -854,6 +892,17 @@ is( $m->_missing_named_page_response('x')->[0], 200, 'missing page editor -> 200
     is_deeply( [ $m->_ip_pairs_from_ifconfig ], [], 'ifconfig parser returns nothing on a failed command' );
 }
 
+# DD-597: _ip_pairs_from_ip's own system() call mutates the caller's global
+# $? as a side effect; without a guard at the sub's entry that stays set in
+# the caller's process after this sub returns - a query function must not
+# decide its caller's exit status. Runs the real 'ip' binary (unmocked) to
+# prove the guard, not just this sub's own return value.
+{
+    $? = 12 << 8;    ## no critic (Variables::RequireLocalizedPunctuationVars)
+    $m->_ip_pairs_from_ip;
+    is( $? >> 8, 12, '_ip_pairs_from_ip does not leak its own subprocess status into the caller global $?' );
+}
+
 # =====================================================================
 # 19. Static file serving edge cases.
 # =====================================================================
@@ -898,6 +947,32 @@ is( $m->_skill_route_spec( '', 'route-skill', 't' ), undef, 'skill route spec em
     local *Developer::Dashboard::PathRegistry::runtime_roots   = sub { return ( $dup, $dup ); };
     local *Developer::Dashboard::PathRegistry::dashboards_roots = sub { return ( $dup, $dup ); };
     ok( scalar( $m->_static_file_roots('js') ), 'static roots dedup repeated roots' );
+}
+
+# _static_file_roots caches the resolved list per type (DD-622)
+{
+    no warnings 'redefine';
+    my $probe_root = File::Spec->catdir( $home, 'probe' );
+    local *Developer::Dashboard::PathRegistry::runtime_roots    = sub { return ($probe_root); };
+    local *Developer::Dashboard::PathRegistry::dashboards_roots = sub { return (); };
+
+    my @first = $m->_static_file_roots('cachetest');
+    my $cached_ref = $m->{_static_file_roots_cache}{cachetest}{roots};
+    ok( $cached_ref, 'DD-622: the first call populates the per-type cache entry' );
+    my @second = $m->_static_file_roots('cachetest');
+    is( $m->{_static_file_roots_cache}{cachetest}{roots}, $cached_ref,
+        'DD-622: a repeat call for the same type reuses the same cached array reference without rebuilding it' );
+    is_deeply( \@second, \@first, 'DD-622: the cached call returns the same root list as the first' );
+
+    my $probe_root2 = File::Spec->catdir( $home, 'probe2' );
+    local *Developer::Dashboard::PathRegistry::runtime_roots = sub { return ($probe_root2); };
+    my @third = $m->_static_file_roots('cachetest');
+    isnt( $m->{_static_file_roots_cache}{cachetest}{roots}, $cached_ref,
+        'DD-622: changing the underlying runtime_roots invalidates the cache and forces a rebuild (new array reference)' );
+    isnt( "@third", "@first", 'DD-622: the recomputed root list reflects the changed runtime_roots' );
+
+    my @other_type = $m->_static_file_roots('othertype');
+    isnt( "@other_type", "@third", "DD-622: a different type gets its own cached list rather than sharing the first type's" );
 }
 
 # _bundled_public_asset_path guards + dist_dir/inc variants

@@ -3,7 +3,30 @@ package Developer::Dashboard;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+use Exporter 'import';
+use Cwd ();
+use Developer::Dashboard::Handle;
+
+our $VERSION = '4.29';
+
+our @EXPORT = ('d2');
+
+my %HANDLE_BY_CWD;
+
+# d2()
+# Returns a Developer::Dashboard::Handle scoped to the current working
+# directory - the same runtime, project-root discovery, and configured path
+# aliases the dashboard/d2 command line resolves, callable in-process. See
+# Developer::Dashboard::Handle for what the returned object can do
+# (->paths, ->run, and any dashboard subcommand as a bareword method).
+# Memoized per working directory: repeated calls from the same directory
+# reuse the same handle instead of rebuilding its registry each time.
+# Input: none.
+# Output: Developer::Dashboard::Handle object.
+sub d2 {
+    my $cwd = Cwd::cwd();
+    return $HANDLE_BY_CWD{$cwd} //= Developer::Dashboard::Handle->new( cwd => $cwd );    # uncoverable condition false
+}
 
 1;
 
@@ -18,7 +41,7 @@ __END__
 Developer::Dashboard - a local home for development work
 
 =head1 VERSION
-4.26
+4.29
 
 =head1 INTRODUCTION
 
@@ -2715,7 +2738,7 @@ security verification guidance, then keep the focused web and SSL regressions
 green:
 
   rg -n "LWP::Simple|HTTP::Tiny|JSON::PP|capture_merged" bin lib t
-  rg -n "companies house|ewf|xmlgw|chips|tuxedo|chs|grover|cidev|pbs|password=|dsn=" bin lib README doc t
+  rg -n "companies house|\\bewf|xmlgw|chips|tuxedo|\\bchs|grover|cidev|pbs|password=|dsn=" bin lib README doc t
   rg -n "X-Content-Type-Options|nosniff|Content-Security-Policy|X-Frame-Options|Referrer-Policy|SameSite=Strict|HttpOnly" lib doc SECURITY
   rg -n "Transient token URLs are disabled|_transient_url_tokens_allowed|verify_user|login_response|_session_cookie" lib/Developer/Dashboard/Web lib/Developer/Dashboard/Auth.pm
   rg -n "DBI->connect|\\$dbh->prepare\\(\\$sql\\)|table_info|column_info" bin/dashboard lib t
@@ -3648,6 +3671,30 @@ with exit codes returned from the capture block rather than read separately.
 It uses C<LWP::UserAgent> for real outbound HTTP in active runtime paths such
 as the Java source lookup or mirror path behind C<dashboard of> and
 C<dashboard open-file>.
+
+=head1 EMBEDDING IN PERL CODE
+
+Perl code that wants the same runtime the C<dashboard>/C<d2> command line
+resolves - a configured path alias, or the output of any other subcommand -
+does not need to build a path registry, file registry, and config loader by
+hand. C<use Developer::Dashboard> exports C<d2()>, a memoized runtime handle
+scoped to the current working directory:
+
+    use Developer::Dashboard;
+
+    my $foo = d2->paths->{foo};                    # in-process, no subprocess
+    my $out = d2->doctor;                           # shells to `dashboard doctor`
+    my $res = d2->run( 'tira.ticket.show', '--ref', 'DD-726' );
+                                                      # dotted subcommands
+
+C<< d2->paths >> resolves in-process, the same table C<dashboard paths>
+prints. Any other bareword method name shells to that C<dashboard>
+subcommand; C<< d2->run(...) >> is the explicit form for a dotted subcommand
+that cannot be spelled as a plain Perl method name. Output is decoded from
+JSON into a real Perl structure automatically when it looks like JSON,
+otherwise returned as plain text; a failing subcommand raises an exception
+with its error output attached rather than returning silently as if it had
+succeeded.
 
 =head1 SEE ALSO
 

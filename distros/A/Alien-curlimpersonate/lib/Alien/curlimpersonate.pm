@@ -1,7 +1,7 @@
 package Alien::curlimpersonate;
 use v5.10; use strict; use warnings;
 use parent 'Alien::Base';
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 1;
 
 __END__
@@ -48,14 +48,11 @@ libcurl-impersonate to find, so the probe always selects a C<share> install
 and the library is compiled at install time. See L</"SYSTEM REQUIREMENTS">,
 because that build is neither short nor dependency-free.
 
-The pinned version is B<v2.1.1>, built from
-L<https://github.com/vividsnow/curl-impersonate> -- a fork of
-L<https://github.com/lexiforest/curl-impersonate> at that tag, carrying one
-commit. Upstream's CMake configure aborts under CMake 4, because curl's
-C<curl_openssl_check_exists()> puts the imported targets C<OpenSSL::SSL> and
-C<OpenSSL::Crypto> into C<CMAKE_REQUIRED_LIBRARIES> and the scratch project
-C<try_compile()> generates has no such targets. CMake 3 tolerated that; CMake 4
-does not. The pin returns to upstream once an equivalent fix lands there.
+The pinned version is B<v2.2.2>, built from
+L<https://github.com/lexiforest/curl-impersonate> itself. It is an exact tag
+rather than the newest one: upstream 2.0.0 replaced autotools with a CMake
+superbuild, and the target names this library is asked for are load-bearing in
+whatever links it, so neither is left to float.
 
 =head1 SYSTEM REQUIREMENTS
 

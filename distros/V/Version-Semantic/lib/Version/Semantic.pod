@@ -48,20 +48,20 @@ object with the C<v> prefix (if originally set) but without the pre-release
 and the build extensions. The C<is_core()> predicate method indicates if a
 version object has no pre-release extension and no build extension.
 
-The C<to_string()> object method returns the semantic version string of an
-object including the C<v> prefix (if originally set). The method is used to
-overload the stringification C<""> operator.
-
 The C<compare_to()> object method implements the L<SemVer precedence
 rules|https://semver.org/spec/v2.0.0.html#spec-item-11>. This method is used
 to overload the numeric comparison C<E<lt>=E<gt>> operator. This allows you
 to compare version objects.
 
+The C<to_string()> object method returns the semantic version string of an
+object including the C<v> prefix (if originally set). The method is used to
+overload the stringification C<""> operator.
+
 =head1 ABOUT PRE-RELEASES
 
 Perl recognizes two version styles: decimal versions and dotted decimal
-versions. The dotted decimal version style is the newer one. It matches the
-SemVer scheme but doesn't allow pre-release and build extensions.
+versions. The three-component dotted decimal version style is the newer one. It
+matches the SemVer scheme but doesn't allow pre-release and build extensions.
 
 If the archive file of a Perl distribution has a name ending in C<TRIAL[0-9]*>
 (before the file extension), it indicates that the distribution is a
@@ -94,6 +94,21 @@ example). This strategy should be considered experimental.
 
 Other Perl CPAN distributions that provide version object incrementation
 implementations are L<Version::Next> and L<Perl::Version>.
+
+=head1 SUPER-CLASS
+
+As of version v2.2.0 this module (C<Version::Semantic>) contains
+the cuckoo package C<Version::Core>. This package represents the
+super-class implementation that the C<Version::Semantic> class inherits
+from. C<Version::Core> provides the public methods C<corever_re()>,
+C<parse()>, C<prefix()>, C<major()>, C<minor()>, C<patch()>, C<has_prefix()>,
+C<version_core()>, C<compare_to()>, C<to_string()>, and C<increment()>
+. Besides the constructor C<new()> the overridden methods are C<parse()>,
+C<compare_to()>, C<to_string()>, and C<increment()>.
+
+The C<corever_re()> class method provides the regular expression that is
+used by the C<parse()> method. The C<parse()> method adds a C<\A> anchor at
+the beginning and a C<\z> anchor at the end of the regular expression pattern.
 
 =head1 SEE ALSO
 

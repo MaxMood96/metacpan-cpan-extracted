@@ -178,6 +178,22 @@ static HV *pcx_params_merged(pTHX_ AV *av) {
 }
 
 /* does the blessed ref have method $meth? (a ->can without the call) */
+/* Is this exactly a Punk::Future? A cached stash pointer compare, so the two
+ * dispatch paths can skip the ->can and ->isa probes they would otherwise pay
+ * per request. Deliberately not sv_derived_from: a subclass answers no and
+ * takes the general duck-typed path, which is the safe way round.
+ *
+ * pcx_pf_get1 is its companion - the value of a settled future, awaiting a
+ * pending one and croaking exactly as ->get does. It is defined in
+ * punk_future.h, which the unity build includes after this file. */
+static HV *PCX_PF_STASH = NULL;
+static int pcx_is_punk_future(pTHX_ SV *sv) {
+    if (!(SvROK(sv) && SvOBJECT(SvRV(sv)))) return 0;
+    if (!PCX_PF_STASH) PCX_PF_STASH = gv_stashpvs("Punk::Future", 0);
+    return PCX_PF_STASH && SvSTASH(SvRV(sv)) == PCX_PF_STASH;
+}
+static SV *pcx_pf_get1(pTHX_ SV *f);
+
 static int pcx_can(pTHX_ SV *obj, const char *meth) {
     HV *stash = (SvROK(obj) && SvOBJECT(SvRV(obj))) ? SvSTASH(SvRV(obj)) : NULL;
     return (stash && gv_fetchmethod_autoload(stash, meth, 0)) ? 1 : 0;
@@ -224,6 +240,14 @@ static SV *punk_coerce(pTHX_ SV *c, SV *ret) {
     if (SvROK(ret) && SvTYPE(SvRV(ret)) == SVt_PVCV) return SvREFCNT_inc(ret);
     if (pcx_is_triplet(aTHX_ ret)) return SvREFCNT_inc(ret);
     if (SvROK(ret) && SvOBJECT(SvRV(ret))) {
+        /* One of ours: read the value in C rather than walking @ISA for
+         * Punk::Response and then dispatching ->get through perl. */
+        if (pcx_is_punk_future(aTHX_ ret)) {
+            SV *got = pcx_pf_get1(aTHX_ ret);
+            SV *r   = punk_coerce(aTHX_ c, got ? got : &PL_sv_undef);
+            if (got) SvREFCNT_dec(got);
+            return r;
+        }
         if (sv_derived_from(ret, "Punk::Response"))
             return pcx_call_meth(aTHX_ ret, "finalize", NULL, 0, 1);
         if (pcx_can(aTHX_ ret, "on_ready")) {

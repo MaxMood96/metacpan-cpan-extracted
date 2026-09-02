@@ -254,6 +254,7 @@ static void on_recv(uint8_t pktctrl, uint8_t b[], uint8_t len)
       if(cmdi < 0)
         break;
 
+      tx.need_retx_cmdslot &= ~(1 << cmdi);
       cmdslots[cmdi].state = CMDSTATE_FREE;
       break;
   }
@@ -360,7 +361,7 @@ void slurm_do_tasks(void)
       switch(cmdslots[cmdi].state) {
         case CMDSTATE_FREE:
         case CMDSTATE_EXECUTING:
-          break;
+          continue;
 
         case CMDSTATE_RESPONDED: pktctrl |= SLURM_PKT_RESPONSE; break;
         case CMDSTATE_ERRORED:   pktctrl |= SLURM_PKT_ERR;      break;

@@ -28,4 +28,12 @@ SKIP: {
     ok exists $lines{'lib/Data/HashMap/Shared.pm'}, 'MANIFEST includes .pm';
 }
 
+# Every variant must declare the main module's version: a release that bumps
+# only the main .pm leaves the variant packages indexed at the previous release.
+for my $variant (qw(II IS SI SS I16 I16S I32 I32S SI16 SI32)) {
+    my $class = "Data::HashMap::Shared::$variant";
+    unless (eval "require $class; 1") { fail("load $class: $@"); next }
+    is $class->VERSION, $v, "$class VERSION matches the main module";
+}
+
 done_testing;

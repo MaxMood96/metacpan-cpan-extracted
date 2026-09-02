@@ -271,6 +271,21 @@ my $child = quietly( sub {
 } );
 like( $child->{stdout}, qr/direct-out/, 'direct child runner captures stdout and clears last_result when none is supplied' );
 
+# DD-597: _run_child_command_streaming reaps its child via waitpid and reads
+# $? into its own return value, but without a guard at the sub's entry that
+# raw $? stays set in the caller's process on return.
+{
+    $? = 12 << 8;    ## no critic (Variables::RequireLocalizedPunctuationVars)
+    quietly( sub {
+        $disp->_run_child_command_streaming(
+            command    => [ '/bin/sh', '-c', 'exit 0' ],
+            stdin_mode => 'null',
+        );
+    } );
+    is( $? >> 8, 12,
+        '_run_child_command_streaming does not leak its own child status into the caller global $?' );
+}
+
 # ---------------------------------------------------------------------------
 # execute_hooks() where the command has no runnable file but the skill has
 # layers: falls back to _skill_layers and returns empty.

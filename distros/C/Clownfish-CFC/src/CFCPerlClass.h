@@ -44,9 +44,6 @@ CFCPerlClass*
 CFCPerlClass_init(CFCPerlClass *self, struct CFCParcel *parcel,
                   const char *class_name);
 
-void
-CFCPerlClass_destroy(CFCPerlClass *self);
-
 /** Add a new class binding to the registry.  Each unique parcel/class-name
  * combination may only be registered once.
  */

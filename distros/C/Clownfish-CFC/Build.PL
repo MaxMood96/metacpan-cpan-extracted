@@ -23,7 +23,7 @@ my $builder = Clownfish::CFC::Build->new(
     module_name => 'Clownfish::CFC',
     license     => 'apache',
     dist_author => 'The Lucy search project',
-    dist_version       => '0.7.0',
+    dist_version       => '0.8.0',
     dist_abstract      => 'CFC Clownfish compiler',
     requires           => { 'perl' => '5.8.3', },
     configure_requires => { 'Module::Build' => 0.280801 },

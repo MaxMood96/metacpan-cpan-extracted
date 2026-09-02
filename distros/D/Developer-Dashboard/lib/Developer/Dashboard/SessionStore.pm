@@ -3,7 +3,7 @@ package Developer::Dashboard::SessionStore;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Crypt::URandom qw(urandom);
 use File::Spec;
@@ -48,11 +48,31 @@ sub create {
         updated_at  => _now_iso8601(),
     };
     my $file = $self->_session_file($session_id);
-    open my $fh, '>:raw', $file or die "Unable to write $file: $!";
-    print {$fh} json_encode($record);
-    close $fh;
-    chmod 0600, $file;
+    # DD-600: write to a per-writer temp file with an unpredictable name and
+    # secure it BEFORE the atomic rename into the final path - never open the
+    # final path directly and secure it afterward. The session_id IS the
+    # bearer credential for an authenticated session, so a local reader
+    # watching the sessions directory for new files could read and reuse it
+    # during the window this closed, even without knowing the session_id in
+    # advance. Matches Auth.pm::add_user's DD-599 fix and Collector.pm's own
+    # correct _atomic_write_text ordering.
+    my $tmp = $self->_pending_session_file($file);
+    $self->{paths}->atomic_write_secure( $tmp, $file, json_encode($record) );
     return $record;
+}
+
+# _pending_session_file($file)
+# Builds the per-writer staging path create() writes to before the atomic
+# rename into $file. Its own sub (rather than an inline sprintf) exists so a
+# coverage test can override it to a fixed, predictable path when it needs to
+# pre-stage that exact location to force a write failure - the real path is
+# deliberately unpredictable (mixing pid and wall-clock time) so two writers
+# can never collide on it.
+# Input: final destination file path string.
+# Output: staging file path string.
+sub _pending_session_file {
+    my ( $self, $file ) = @_;
+    return sprintf '%s.%s.%s.pending', $file, $$, time;
 }
 
 # get($session_id)
@@ -153,10 +173,11 @@ sub _session_file_candidates {
 # never touches inherited or shared parent-layer session stores. Files it cannot
 # read or parse as a session record are left untouched on purpose: the sweep only
 # removes records it can positively confirm are expired.
-# Input: none.
-# Output: number of expired session files removed.
+# Input: optional dry_run boolean - when true, counts what would be removed
+# without unlinking anything (DD-613, for Housekeeper's preview mode).
+# Output: number of expired session files removed (or that would be removed).
 sub sweep_expired {
-    my ($self) = @_;
+    my ( $self, %args ) = @_;
     my $root = $self->{paths}->sessions_root;
     opendir my $dh, $root or die "Unable to read sessions root $root: $!";
     my @entries = readdir $dh;
@@ -175,7 +196,7 @@ sub sweep_expired {
         my $expires_at = $record->{expires_at};
         next if !defined $expires_at || $expires_at eq '';
         next if _iso8601_to_epoch($expires_at) > $now;
-        $removed++ if unlink $file;
+        $removed++ if $args{dry_run} || unlink $file;
     }
     return $removed;
 }

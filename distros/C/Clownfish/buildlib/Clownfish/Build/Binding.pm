@@ -16,7 +16,7 @@ package Clownfish::Build::Binding;
 use strict;
 use warnings;
 
-our $VERSION = '0.007000';
+our $VERSION = '0.008000';
 $VERSION = eval $VERSION;
 
 sub bind_all {
@@ -82,11 +82,11 @@ PPCODE:
     cfish_String *str = CFISH_Obj_To_String(obj);
     CFISH_DECREF(str);
 
-int
-refcount(obj)
-    cfish_Obj *obj;
+U32
+refcount(sv)
+    SV *sv;
 CODE:
-    RETVAL = (int)CFISH_REFCOUNT_NN(obj);
+    RETVAL = SvREFCNT(SvROK(sv) ? SvRV(sv) : sv);
 OUTPUT: RETVAL
 END_XS_CODE
 
@@ -640,6 +640,8 @@ END_XS_CODE
 }
 
 sub bind_obj {
+    my @hand_rolled = qw( Destroy );
+
     my $pod_spec = Clownfish::CFC::Binding::Perl::Pod->new;
     my $synopsis = <<'END_SYNOPSIS';
     package MyObj;
@@ -737,13 +739,18 @@ END_POD
         pod    => $to_perl_pod,
     );
     $pod_spec->add_method(
-        method => 'Destroy',
         alias  => 'DESTROY',
         pod    => $destroy_pod,
     );
 
     my $xs_code = <<'END_XS_CODE';
 MODULE = Clownfish     PACKAGE = Clownfish::Obj
+
+void
+DESTROY(sv)
+    SV *sv
+PPCODE:
+    XSBind_destroy(aTHX_ sv);
 
 SV*
 get_class(self)
@@ -790,12 +797,9 @@ END_XS_CODE
     my $binding = Clownfish::CFC::Binding::Perl::Class->new(
         class_name => "Clownfish::Obj",
     );
-    $binding->bind_method(
-        alias  => 'DESTROY',
-        method => 'Destroy',
-    );
     $binding->append_xs($xs_code);
     $binding->set_pod_spec($pod_spec);
+    $binding->exclude_method($_) for @hand_rolled;
 
     Clownfish::CFC::Binding::Perl::Class->register($binding);
 }

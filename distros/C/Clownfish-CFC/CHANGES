@@ -1,5 +1,20 @@
 Revision history for Clownfish
 
+0.8.0  2026-08-30
+
+  Improvements:
+
+    * modules: Update libcmark to 0.31.2
+
+  Bugfixes:
+
+    * runtime: Don't warn about function pointer casts
+    * compiler: Allow to pass extra cflags for Clownfish code
+    * TestUtils: Fix signed integer overflow in TestUtils_random_i64s
+    * String: Make sure that StrIter_Next doesn't return negative values
+    * Regen charmonizer.c to not run POSIX sh via cmd.exe
+    * Multiple Perl-related fixes from 2018 not yet released in 0.6.x
+
 0.7.0  2026-08-15
   * Fork from Apache Clownfish -> Clownfish
 

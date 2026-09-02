@@ -1,0 +1,163 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use FindBin ();
+use lib "$FindBin::Bin/../lib";
+use App::Envdoctor::Scanner ();
+use Cwd ();
+
+exit run_diff( @ARGV[ 1 .. $#ARGV ] ) if @ARGV && $ARGV[0] eq 'diff';
+exit run_sync( @ARGV[ 1 .. $#ARGV ] ) if @ARGV && $ARGV[0] eq 'sync';
+exit run_init( @ARGV[ 1 .. $#ARGV ] ) if @ARGV && $ARGV[0] eq 'init';
+exit run_fix( @ARGV[ 1 .. $#ARGV ] )  if @ARGV && $ARGV[0] eq 'fix';
+
+my $dir    = '.';
+my $strict = 0;
+my $json   = 0;
+my @args   = @ARGV;
+shift @args if @args && $args[0] eq 'scan';
+while (@args) {
+    my $a = shift @args;
+    if ( $a eq '-d' || $a eq '--dir' ) { $dir = shift @args // '.'; }
+    elsif ( $a =~ /^--dir=(.*)$/ )     { $dir = $1; }
+    elsif ( $a eq '--strict' )         { $strict = 1; }
+    elsif ( $a eq '--json' )           { $json   = 1; }
+}
+
+my $root     = Cwd::abs_path($dir) // $dir;
+my $findings = App::Envdoctor::Scanner::scan($root);
+my @errors   = grep { $_->{severity} eq 'error' } @$findings;
+my @warnings = grep { $_->{severity} eq 'warning' } @$findings;
+
+if ($json) {
+    require JSON::PP;
+    my @rows = map {
+        {   rule     => $_->{rule},
+            severity => $_->{severity},
+            name     => $_->{name},
+            message  => $_->{message},
+            file     => $_->{origin}{file},
+            line     => $_->{origin}{line},
+        }
+    } @$findings;
+    print JSON::PP->new->canonical->encode( \@rows ), "\n";
+    exit( ( @errors || ( $strict && @warnings ) ) ? 1 : 0 );
+}
+
+print "ENVIRONMENT AUDIT\n";
+print '=' x 40, "\n";
+if ( !@$findings ) {
+    print "\nNo issues found.\n";
+    exit 0;
+}
+my $loc = sub {
+    my $o = shift->{origin};
+    return ( defined $o && defined $o->{file} ) ? " $o->{file}:$o->{line}" : '';
+};
+if (@errors) {
+    print "\nErrors\n";
+    printf "  x %s%s  %s\n", $_->{name}, $loc->($_), $_->{message} for @errors;
+}
+if (@warnings) {
+    print "\nWarnings\n";
+    printf "  ! %s%s  %s\n", $_->{name}, $loc->($_), $_->{message} for @warnings;
+}
+printf "\nSummary: %d error(s), %d warning(s)\n", scalar(@errors), scalar(@warnings);
+
+exit( ( @errors || ( $strict && @warnings ) ) ? 1 : 0 );
+
+sub _parse_sub {
+    my @a = @_;
+    my ( $dir, $dry, $json, @pos ) = ( '.', 0, 0 );
+    while (@a) {
+        my $x = shift @a;
+        if    ( $x eq '-d' || $x eq '--dir' ) { $dir = shift @a // '.'; }
+        elsif ( $x =~ /^--dir=(.*)$/ )        { $dir = $1; }
+        elsif ( $x eq '--dry-run' )           { $dry = 1; }
+        elsif ( $x eq '--json' )              { $json = 1; }
+        else                                  { push @pos, $x; }
+    }
+    return ( $dir, $dry, $json, @pos );
+}
+
+sub run_diff {
+    my ( $dir, undef, $json, @pos ) = _parse_sub(@_);
+    my ( $a, $b ) = @pos;
+    my $root = Cwd::abs_path($dir) // $dir;
+    my $d = App::Envdoctor::Scanner::diff_labels( $root, $a, $b );
+    if ($json) {
+        require JSON::PP;
+        print JSON::PP->new->canonical->encode( { a => $a, b => $b, %$d } ), "\n";
+        return 0;
+    }
+    print "ENVIRONMENT DIFF: $a vs $b\n";
+    print '=' x 40, "\n";
+    if ( @{ $d->{onlyInA} } ) { print "Only in $a:\n"; print "  + $_\n" for @{ $d->{onlyInA} }; }
+    if ( @{ $d->{onlyInB} } ) { print "Only in $b:\n"; print "  + $_\n" for @{ $d->{onlyInB} }; }
+    printf "Common: %d variable(s)\n", scalar @{ $d->{common} };
+    return 0;
+}
+
+sub _generate_args {
+    my @a = @_;
+    my ( $dir, $force ) = ( '.', 0 );
+    while (@a) {
+        my $x = shift @a;
+        if    ( $x eq '-d' || $x eq '--dir' ) { $dir = shift @a // '.'; }
+        elsif ( $x =~ /^--dir=(.*)$/ )        { $dir = $1; }
+        elsif ( $x eq '--force' )             { $force = 1; }
+    }
+    return ( $dir, $force );
+}
+
+sub run_init {
+    my ( $dir, $force ) = _generate_args(@_);
+    my $root = Cwd::abs_path($dir) // $dir;
+    my ( $example, $md ) = App::Envdoctor::Scanner::generate($root);
+    for my $spec ( [ '.env.example', $example ], [ 'ENVIRONMENT.md', $md ] ) {
+        my ( $name, $content ) = @$spec;
+        my $target = File::Spec->catfile( $root, $name );
+        if ( -e $target && !$force ) {
+            print "skipped $name (exists)\n";
+            next;
+        }
+        open my $fh, '>', $target or die "cannot write $target: $!";
+        print {$fh} $content;
+        close $fh;
+        print $force ? "wrote $name\n" : "created $name\n";
+    }
+    return 0;
+}
+
+sub run_fix {
+    my ( $dir, undef ) = _generate_args(@_);
+    my $root = Cwd::abs_path($dir) // $dir;
+    my ( $example, $md ) = App::Envdoctor::Scanner::generate($root);
+    for my $spec ( [ '.env.example', $example ], [ 'ENVIRONMENT.md', $md ] ) {
+        my ( $name, $content ) = @$spec;
+        my $target = File::Spec->catfile( $root, $name );
+        open my $fh, '>', $target or die "cannot write $target: $!";
+        print {$fh} $content;
+        close $fh;
+        print "wrote $name\n";
+    }
+    return 0;
+}
+
+sub run_sync {
+    my ( $dir, $dry, $json, @pos ) = _parse_sub(@_);
+    my ( $from, $to ) = @pos;
+    my $root = Cwd::abs_path($dir) // $dir;
+    my $added = App::Envdoctor::Scanner::sync_labels( $root, $from, $to, $dry );
+    if ($json) {
+        require JSON::PP;
+        print JSON::PP->new->canonical->encode(
+            { from => $from, to => $to, added => $added, dryRun => ( $dry ? \1 : \0 ) } ), "\n";
+        return 0;
+    }
+    if ( !@$added ) { print "Already in sync.\n"; return 0; }
+    my $verb = $dry ? 'Would sync' : 'Synced';
+    printf "%s %d variable(s) from %s to %s:\n", $verb, scalar @$added, $from, $to;
+    print "  + $_\n" for @$added;
+    return 0;
+}

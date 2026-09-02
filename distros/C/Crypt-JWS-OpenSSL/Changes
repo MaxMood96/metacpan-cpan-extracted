@@ -1,4 +1,9 @@
 
+0.004    2026-09-01
+         * Fix Crypt::JWS::OpenSSL::Util::PEM method generate_rsa_key_pair
+           to call the mehods available in the installed Crypt::OpenSSL::RSA
+         * Fix over simplistic version checks
+         
 0.003    2026-08-31
          No changes since 0.002_01       
 

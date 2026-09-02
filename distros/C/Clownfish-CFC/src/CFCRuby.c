@@ -46,10 +46,13 @@ struct CFCRuby {
 static void
 S_replace_double_colons(char *text, char replacement);
 
+static void
+CFCRuby_destroy(CFCBase *base);
+
 static const CFCMeta CFCRUBY_META = {
     "Clownfish::CFC::Binding::Ruby",
     sizeof(CFCRuby),
-    (CFCBase_destroy_t)CFCRuby_destroy
+    CFCRuby_destroy
 };
 
 CFCRuby*
@@ -97,8 +100,10 @@ CFCRuby_init(CFCRuby *self, CFCParcel *parcel, CFCHierarchy *hierarchy,
     return self;
 }
 
-void
-CFCRuby_destroy(CFCRuby *self) {
+static void
+CFCRuby_destroy(CFCBase *base) {
+    CFCRuby *self = (CFCRuby *) base;
+
     CFCBase_decref((CFCBase*)self->parcel);
     CFCBase_decref((CFCBase*)self->hierarchy);
     FREEMEM(self->lib_dir);
@@ -110,7 +115,7 @@ CFCRuby_destroy(CFCRuby *self) {
     FREEMEM(self->boot_h_path);
     FREEMEM(self->boot_c_path);
     FREEMEM(self->boot_func);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 static void
@@ -171,13 +176,12 @@ S_write_boot_h(CFCRuby *self) {
 
 static void
 S_write_boot_c(CFCRuby *self) {
-    CFCClass **ordered   = CFCHierarchy_ordered_classes(self->hierarchy);
+    CFCClass **ordered   = CFCParcel_get_classes(self->parcel);
     char *pound_includes = CFCUtil_strdup("");
     const char *prefix   = CFCParcel_get_prefix(self->parcel);
 
     for (size_t i = 0; ordered[i] != NULL; i++) {
         CFCClass *klass = ordered[i];
-        if (CFCClass_included(klass)) { continue; }
 
         const char *include_h  = CFCClass_include_h(klass);
         pound_includes = CFCUtil_cat(pound_includes, "#include \"",
@@ -202,8 +206,8 @@ S_write_boot_c(CFCRuby *self) {
         "%s\n"
         "\n"
         "void\n"
-        "%s() {\n"
-        "    %sbootstrap_parcel(void);\n"
+        "%s(void) {\n"
+        "    %sbootstrap_parcel();\n"
         "\n"
         "    cfish_StackString *alias = CFISH_SSTR_WRAP_UTF8(\"\", 0);\n"
         "}\n"
@@ -219,7 +223,6 @@ S_write_boot_c(CFCRuby *self) {
 
     FREEMEM(content);
     FREEMEM(pound_includes);
-    FREEMEM(ordered);
 }
 
 void

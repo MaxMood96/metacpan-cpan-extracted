@@ -44,7 +44,7 @@ TestUtils_random_i64s(int64_t *buf, size_t count, int64_t min,
     uint64_t  range = min < limit ? (uint64_t)limit - (uint64_t)min : 0;
     int64_t *ints = buf ? buf : (int64_t*)CALLOCATE(count, sizeof(int64_t));
     for (size_t i = 0; i < count; i++) {
-        ints[i] = min + (int64_t)(TestUtils_random_u64() % range);
+        ints[i] = (int64_t) ((uint64_t) min + TestUtils_random_u64() % range);
     }
     return ints;
 }
@@ -65,7 +65,7 @@ TestUtils_random_f64s(double *buf, size_t count) {
     double *f64s = buf ? buf : (double*)CALLOCATE(count, sizeof(double));
     for (size_t i = 0; i < count; i++) {
         uint64_t num = TestUtils_random_u64();
-        f64s[i] = CHY_U64_TO_DOUBLE(num) / (double)UINT64_MAX;
+        f64s[i] = (double)num / (double)UINT64_MAX;
     }
     return f64s;
 }

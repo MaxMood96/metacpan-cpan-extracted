@@ -428,6 +428,19 @@ my $source_page = Developer::Dashboard::PageDocument->new(
     is( scalar $runner->_read_process_state(999995), undef, '_read_process_state() returns undef when ps exits non-zero' );
 }
 
+# DD-591: same bug class DD-585/DD-589 fixed in CollectorRunner.pm and
+# IndicatorStore.pm - a query must not leave the caller's global $? holding
+# its own last subprocess's status. Unlike the mocked-capture cases above,
+# this exercises the REAL system('ps', ...) call (a genuinely nonexistent
+# pid forces the real ps fallback, not a stubbed one), because a mocked
+# capture never touches the real $? this bug is about.
+{
+    $? = 7 << 8;    ## no critic (Variables::RequireLocalizedPunctuationVars)
+    $runner->_read_process_state(999994);
+    is( $? >> 8, 7,
+        '_read_process_state() does not leak its own ps subprocess status into the caller global $?' );
+}
+
 # ---------------------------------------------------------------------------
 # Background actions: the successful fork/detach path plus its deadline,
 # supervisor-exit, timeout, forced-kill, and boot-failure branches
@@ -539,6 +552,18 @@ my $source_page = Developer::Dashboard::PageDocument->new(
     };
     ok( !$boot_fail, 'background action surfaces a detach failure' );
     like( $@, qr/Unable to detach background action session/, 'detach failure explains itself' );
+}
+
+# DD-597: same bug class DD-585/589-593 fixed elsewhere - _run_command's own
+# system() call mutates the global $?, and without a guard that stays set in
+# the caller's process after this sub returns. A real (unmocked) command runs
+# here specifically to prove the guard, not just its return value.
+{
+    my $home = tempdir( CLEANUP => 1 );
+    $? = 12 << 8;    ## no critic (Variables::RequireLocalizedPunctuationVars)
+    $runner->_run_command( cmd => 'true', cwd => $home, env => {} );
+    is( $? >> 8, 12,
+        '_run_command does not leak its own subprocess status into the caller global $?' );
 }
 
 done_testing;

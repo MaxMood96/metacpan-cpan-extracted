@@ -20,9 +20,9 @@ package Clownfish;
 
 use 5.008003;
 
-our $VERSION = '0.007000';
+our $VERSION = '0.008000';
 $VERSION = eval $VERSION;
-our $MAJOR_VERSION = 0.007000;
+our $MAJOR_VERSION = 0.008000;
 
 use Exporter 'import';
 BEGIN {
@@ -38,14 +38,14 @@ BEGIN {
     require DynaLoader;
     our @ISA = qw( DynaLoader );
     # This loads a large number of disparate subs.
-    bootstrap Clownfish '0.7.0';
+    bootstrap Clownfish '0.8.0';
 }
 
 sub error {$Clownfish::Err::error}
 
 {
     package Clownfish::Obj;
-    our $VERSION = '0.007000';
+    our $VERSION = '0.008000';
     $VERSION = eval $VERSION;
     use Carp qw( confess );
     # Clownfish objects are not thread-safe.
@@ -62,7 +62,7 @@ sub error {$Clownfish::Err::error}
 
 {
     package Clownfish::Class;
-    our $VERSION = '0.007000';
+    our $VERSION = '0.008000';
     $VERSION = eval $VERSION;
 
     sub _find_parent_class {
@@ -107,7 +107,7 @@ sub error {$Clownfish::Err::error}
 
 {
     package Clownfish::Method;
-    our $VERSION = '0.007000';
+    our $VERSION = '0.008000';
     $VERSION = eval $VERSION;
     no warnings 'redefine';
     sub CLONE_SKIP { 0; }
@@ -116,7 +116,7 @@ sub error {$Clownfish::Err::error}
 
 {
     package Clownfish::Err;
-    our $VERSION = '0.007000';
+    our $VERSION = '0.008000';
     $VERSION = eval $VERSION;
     sub do_to_string { shift->to_string }
     use Scalar::Util qw( blessed );
@@ -155,12 +155,13 @@ sub error {$Clownfish::Err::error}
 
 {
     package Clownfish::Boolean;
-    our $VERSION = '0.007000';
+    our $VERSION = '0.008000';
     $VERSION = eval $VERSION;
     use Exporter 'import';
     our @EXPORT_OK = qw( $true_singleton $false_singleton );
     our $true_singleton  = Clownfish::Boolean->singleton(1);
     our $false_singleton = Clownfish::Boolean->singleton(0);
+    sub DESTROY { }    # leak all
 }
 
 1;

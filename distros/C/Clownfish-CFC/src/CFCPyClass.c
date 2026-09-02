@@ -42,7 +42,7 @@ static size_t registry_size = 0;
 static size_t registry_cap  = 0;
 
 static void
-S_CFCPyClass_destroy(CFCPyClass *self);
+S_CFCPyClass_destroy(CFCBase *base);
 
 static char*
 S_pytype_struct_def(CFCPyClass *self);
@@ -50,7 +50,7 @@ S_pytype_struct_def(CFCPyClass *self);
 static const CFCMeta CFCPERLCLASS_META = {
     "Clownfish::CFC::Binding::Python::Class",
     sizeof(CFCPyClass),
-    (CFCBase_destroy_t)S_CFCPyClass_destroy
+    S_CFCPyClass_destroy
 };
 
 CFCPyClass*
@@ -67,13 +67,15 @@ CFCPyClass_new(CFCClass *client) {
 }
 
 static void
-S_CFCPyClass_destroy(CFCPyClass *self) {
+S_CFCPyClass_destroy(CFCBase *base) {
+    CFCPyClass *self = (CFCPyClass *) base;
+
     CFCBase_decref((CFCBase*)self->parcel);
     CFCBase_decref((CFCBase*)self->client);
     FREEMEM(self->class_name);
     FREEMEM(self->pre_code);
     FREEMEM(self->meth_defs);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 static int

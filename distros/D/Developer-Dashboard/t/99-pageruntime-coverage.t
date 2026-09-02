@@ -169,6 +169,13 @@ sub write_file {
     my $op = $runtime->_run_single_block( code => '1;', page => $obj_page );
     is( $op->{stderr}, '', '_run_single_block accepts a page object without a skill source' );
 
+    # DD-597: the block's own executed code can run system(), which mutates
+    # the caller's global $? as a side effect; without a guard at the sub's
+    # entry that stays set in the caller's process on return.
+    $? = 12 << 8;    ## no critic (Variables::RequireLocalizedPunctuationVars)
+    $runtime->_run_single_block( code => 'system("sh", "-c", "exit 5");' );
+    is( $? >> 8, 12, '_run_single_block does not leak its executed code\'s subprocess status into the caller global $?' );
+
     # Skill source + skill page -> runtime_root / skill_name chain fully true.
     my $skill_page = Developer::Dashboard::PageDocument->new(
         id   => 'skill-page',
@@ -521,6 +528,28 @@ is( $runtime->_system_context( runtime_context => {}, source => '' )->{cwd}, '.'
     is( $alive[0], 0, '_saved_ajax_child_exited reports a still-present pid as not exited' );
 }
 
+# DD-593: same $? leak class as DD-585/589/590/591/592 - _saved_ajax_child_exited
+# reaps a real child via waitpid(WNOHANG) and reads the global $? into its own
+# return value without localizing it, so the reaped child's exit status leaks
+# into the caller's $? after this sub returns. A mocked pid never touches the
+# real $? this bug is about, so this forks a genuine child and reaps it for real.
+{
+    my $child = fork();
+    die "fork failed: $!" if !defined $child;
+    if ( !$child ) {
+        POSIX::_exit(5);
+    }
+    my $deadline = time + 5;
+    1 while kill( 0, $child ) && time < $deadline;
+
+    $? = 7 << 8;    ## no critic (Variables::RequireLocalizedPunctuationVars)
+    my @reaped = $runtime->_saved_ajax_child_exited($child);
+    is( $reaped[0], 1, '_saved_ajax_child_exited reaps a real exited child' );
+    is( $reaped[1] >> 8, 5, '_saved_ajax_child_exited reports the reaped child exit code' );
+    is( $? >> 8, 7,
+        '_saved_ajax_child_exited does not leak the reaped child status into the caller global $?' );
+}
+
 # ---- _close_saved_ajax_streams (L583 / L591) ---------------------------------
 {
     is( $runtime->_close_saved_ajax_streams(undef), 1, '_close_saved_ajax_streams tolerates a missing select set' );
@@ -734,6 +763,24 @@ is( $runtime->_system_context( runtime_context => {}, source => '' )->{cwd}, '.'
     like( $collected, qr/stdout-line/, 'stream_saved_ajax_file forwards worker stdout' );
     like( $collected, qr/stderr-line/, 'stream_saved_ajax_file forwards worker stderr' );
     is( $res->{exit_code}, 0, 'stream_saved_ajax_file reports a clean exit code for a successful worker' );
+
+    # DD-593: same $? leak class as DD-585/589/590/591/592 - a clean run with no
+    # disconnect and no stream error falls through to the direct
+    # waitpid($pid,0); $status = $?; fallback, which reads the reaped worker's
+    # status into $status without ever localizing $?, leaking it into the
+    # caller's global $? after this sub returns.
+    my $collected2 = '';
+    $? = 7 << 8;    ## no critic (Variables::RequireLocalizedPunctuationVars)
+    $runtime->stream_saved_ajax_file(
+        path          => $ok_file,
+        page          => 'pg',
+        type          => 'text',
+        params        => { a => 1, file => 'stream-ok.pl', type => 'text' },
+        stdout_writer => sub { $collected2 .= defined $_[0] ? $_[0] : ''; return 1 },
+        stderr_writer => sub { $collected2 .= defined $_[0] ? $_[0] : ''; return 1 },
+    );
+    is( $? >> 8, 7,
+        'stream_saved_ajax_file direct-wait fallback does not leak the reaped worker status into the caller global $?' );
 
     # path only: params, writers, page, and type all defaulted (L400/401/402/409 right).
     my $bare_res = $runtime->stream_saved_ajax_file( path => $ok_file );

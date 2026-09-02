@@ -433,6 +433,13 @@ _setopt_defaults(self_sv, opt_hv)
         curl_easy_setopt(self->easy, CURLOPT_FOLLOWLOCATION, 1L);
     if ((sv = hv_fetchs(o, "proxy", 0)) && SvOK(*sv))
         curl_easy_setopt(self->easy, CURLOPT_PROXY, SvPV_nolen(*sv));
+    /* "" enables every built-in decoder without pinning a list. The header the
+       impersonate target installs is a custom one, and a custom header of the
+       same name replaces libcurl's generated Accept-Encoding rather than adding
+       to it -- so the bytes on the wire stay the target's and only the decoding
+       changes. */
+    if ((sv = hv_fetchs(o, "decode", 0)) && SvTRUE(*sv))
+        curl_easy_setopt(self->easy, CURLOPT_ACCEPT_ENCODING, "");
 
 SV *
 _request(self_sv, method, url, headers_hv, body_sv)

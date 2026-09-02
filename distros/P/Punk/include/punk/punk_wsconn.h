@@ -59,6 +59,18 @@ static int PUNK_HM_TRIED = 0;
 
 /* NULL means "no detach seam": websocket routes then need blocking mode.
  * PUNK_NO_HM_ABI forces that path for tests. */
+/* Once the table has resolved there is nothing left to decide, and the answer
+ * cannot change: the resolution is attempted exactly once. Callers on a hot
+ * path take this instead of punk_hm, because punk_hm's env check is a linear
+ * scan of the environment - unmeasurable with a handful of variables, and 40%
+ * of a future-returning request with the few hundred a container carries.
+ * Unresolved, this falls through to the full path, so the switch still works
+ * for the block-mode callers that read it per call. */
+static const hm_abi *punk_hm(pTHX);
+static const hm_abi *punk_hm_resolved(pTHX) {
+    return PUNK_HM ? PUNK_HM : punk_hm(aTHX);
+}
+
 static const hm_abi *punk_hm(pTHX) {
     if (getenv("PUNK_NO_HM_ABI")) return NULL;
     if (!PUNK_HM_TRIED) {

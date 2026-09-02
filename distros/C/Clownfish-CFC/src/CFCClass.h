@@ -84,29 +84,6 @@ CFCClass_do_create(CFCClass *self, struct CFCParcel *parcel,
                    struct CFCFileSpec *file_spec, const char *parent_class_name,
                    int is_final, int is_inert, int is_abstract);
 
-void
-CFCClass_destroy(CFCClass *self);
-
-/** Retrieve a Class, if one has already been created.
- *
- * @param class_name The name of the Class.
- */
-CFCClass*
-CFCClass_fetch_singleton(const char *class_name);
-
-/** Retrieve a Class by its struct sym.
- *
- * @param full_struct_sym The Class's full struct sym.
- */
-CFCClass*
-CFCClass_fetch_by_struct_sym(const char *full_struct_sym);
-
-/** Empty out the registry, decrementing the refcount of all Class singleton
- * objects.
- */
-void
-CFCClass_clear_registry(void);
-
 /** Add a child class.
  */
 void
@@ -161,12 +138,6 @@ CFCClass_resolve_types(CFCClass *self);
  */
 void
 CFCClass_grow_tree(CFCClass *self);
-
-/** Return this class and all its child classes as an array, where all
- * children appear after their parent nodes.
- */
-CFCClass**
-CFCClass_tree_to_ladder(CFCClass *self);
 
 /** Read host-specific data for the class from a JSON hash.
  */
@@ -226,11 +197,6 @@ CFCClass_inert_vars(CFCClass *self);
 const char*
 CFCClass_get_nickname(CFCClass *self);
 
-/** Set the parent Class. (Not class name, Class.)
- */
-void
-CFCClass_set_parent(CFCClass *self, CFCClass *parent);
-
 CFCClass*
 CFCClass_get_parent(CFCClass *self);
 
@@ -254,6 +220,12 @@ CFCClass_inert(CFCClass *self);
 
 int
 CFCClass_abstract(CFCClass *self);
+
+int
+CFCClass_in_parcel(CFCClass *self, struct CFCParcel *parcel);
+
+int
+CFCClass_in_same_parcel(CFCClass *self, CFCClass *other);
 
 const char*
 CFCClass_get_struct_sym(CFCClass *self);

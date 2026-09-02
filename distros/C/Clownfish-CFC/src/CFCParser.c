@@ -20,6 +20,7 @@
 #define CFC_NEED_BASE_STRUCT_DEF
 #include "CFCBase.h"
 #include "CFCParser.h"
+#include "CFCClass.h"
 #include "CFCParcel.h"
 #include "CFCFile.h"
 #include "CFCFileSpec.h"
@@ -39,17 +40,19 @@ struct CFCParser {
     struct CFCBase *result;
     int errors;
     int lineno;
-    char *class_name;
-    int class_is_final;
+    CFCClass *klass;
     CFCFileSpec *file_spec;
     CFCMemPool *pool;
     CFCParcel  *parcel;
 };
 
+static void
+CFCParser_destroy(CFCBase *base);
+
 static const CFCMeta CFCPARSER_META = {
     "Clownfish::CFC::Parser",
     sizeof(CFCParser),
-    (CFCBase_destroy_t)CFCParser_destroy
+    CFCParser_destroy
 };
 
 CFCParser*
@@ -67,22 +70,24 @@ CFCParser_init(CFCParser *self) {
     self->result         = NULL;
     self->errors         = false;
     self->lineno         = 0;
-    self->class_name     = NULL;
+    self->klass          = NULL;
     self->file_spec      = NULL;
     self->pool           = NULL;
     self->parcel         = NULL;
     return self;
 }
 
-void
-CFCParser_destroy(CFCParser *self) {
+static void
+CFCParser_destroy(CFCBase *base) {
+    CFCParser *self = (CFCParser *) base;
+
     CFCParseHeaderFree(self->header_parser, free);
-    FREEMEM(self->class_name);
+    CFCBase_decref((CFCBase*)self->klass);
     CFCBase_decref((CFCBase*)self->file_spec);
     CFCBase_decref((CFCBase*)self->pool);
     CFCBase_decref(self->result);
     CFCBase_decref((CFCBase*)self->parcel);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 CFCParser *CFCParser_current_state  = NULL;
@@ -176,29 +181,15 @@ CFCParser_get_parcel(CFCParser *self) {
 }
 
 void
-CFCParser_set_class_name(CFCParser *self, const char *class_name) {
-    FREEMEM(self->class_name);
-    if (class_name) {
-        self->class_name = CFCUtil_strdup(class_name);
-    }
-    else {
-        self->class_name = NULL;
-    }
+CFCParser_set_class(CFCParser *self, CFCClass *klass) {
+    CFCBase_incref((CFCBase*)klass);
+    CFCBase_decref((CFCBase*)self->klass);
+    self->klass = klass;
 }
 
-const char*
-CFCParser_get_class_name(CFCParser *self) {
-    return self->class_name;
-}
-
-void
-CFCParser_set_class_final(CFCParser *self, int is_final) {
-    self->class_is_final = is_final;
-}
-
-int
-CFCParser_get_class_final(CFCParser *self) {
-    return self->class_is_final;
+CFCClass*
+CFCParser_get_class(CFCParser *self) {
+    return self->klass;
 }
 
 void

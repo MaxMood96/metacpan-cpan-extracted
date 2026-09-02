@@ -41,9 +41,6 @@ CFCParamList_init(CFCParamList *self, int variadic);
 void
 CFCParamList_resolve_types(CFCParamList *self);
 
-void
-CFCParamList_destroy(CFCParamList *self);
-
 /** Add a parameter to the ParamList.
  *
  * @param variable A Clownfish::CFC::Model::Variable.

@@ -98,10 +98,13 @@ S_format_tap_skip(int test_num, int num_skipped, const char *fmt,
 static void
 S_format_tap_summary(const CFCTest *test);
 
+static void
+CFCTest_destroy(CFCBase *base);
+
 static const CFCMeta CFCTEST_META = {
     "Clownfish::CFC::Test",
     sizeof(CFCTest),
-    (CFCBase_destroy_t)CFCTest_destroy
+    CFCTest_destroy
 };
 
 static const char *S_test_files_dir;
@@ -172,9 +175,9 @@ CFCTest_init(CFCTest *self, const char *formatter_name) {
     return self;
 }
 
-void
-CFCTest_destroy(CFCTest *self) {
-    CFCBase_destroy((CFCBase*)self);
+static void
+CFCTest_destroy(CFCBase *base) {
+    CFCBase_destroy(base);
 }
 
 int

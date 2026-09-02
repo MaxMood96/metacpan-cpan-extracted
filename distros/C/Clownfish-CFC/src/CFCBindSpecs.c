@@ -59,10 +59,13 @@ static void
 S_add_inherited_meth(CFCBindSpecs *self, CFCMethod *method, CFCClass *klass,
                      int meth_index);
 
+static void
+CFCBindSpecs_destroy(CFCBase *base);
+
 static const CFCMeta CFCBINDSPECS_META = {
     "Clownfish::CFC::Binding::Core::Specs",
     sizeof(CFCBindSpecs),
-    (CFCBase_destroy_t)CFCBindSpecs_destroy
+    CFCBindSpecs_destroy
 };
 
 CFCBindSpecs*
@@ -82,14 +85,16 @@ CFCBindSpecs_init(CFCBindSpecs *self) {
     return self;
 }
 
-void
-CFCBindSpecs_destroy(CFCBindSpecs *self) {
+static void
+CFCBindSpecs_destroy(CFCBase *base) {
+    CFCBindSpecs *self = (CFCBindSpecs *) base;
+
     FREEMEM(self->novel_specs);
     FREEMEM(self->overridden_specs);
     FREEMEM(self->inherited_specs);
     FREEMEM(self->class_specs);
     FREEMEM(self->init_code);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 const char*
@@ -160,7 +165,7 @@ CFCBindSpecs_add_class(CFCBindSpecs *self, CFCClass *klass) {
         parent_ptr = CFCUtil_strdup("NULL");
     }
     else {
-        if (CFCClass_get_parcel(klass) == CFCClass_get_parcel(parent)) {
+        if (CFCClass_in_same_parcel(klass, parent)) {
             parent_ptr
                 = CFCUtil_sprintf("&%s", CFCClass_full_class_var(parent));
         }
@@ -339,7 +344,7 @@ S_add_novel_meth(CFCBindSpecs *self, CFCMethod *method, CFCClass *klass,
     const char *sep = meth_index == 0 ? "" : ",\n";
 
     char *full_override_sym;
-    if (!CFCMethod_final(method)) {
+    if (!CFCMethod_final(method) && !CFCMethod_excluded_from_host(method)) {
         full_override_sym = CFCMethod_full_override_sym(method, klass);
     }
     else {
@@ -379,7 +384,7 @@ S_parent_offset(CFCBindSpecs *self, CFCMethod *method, CFCClass *klass,
     char *parent_offset = NULL;
     char *parent_offset_sym = CFCMethod_full_offset_sym(method, parent);
 
-    if (CFCClass_get_parcel(parent) == CFCClass_get_parcel(klass)) {
+    if (CFCClass_in_same_parcel(klass, parent)) {
         parent_offset = CFCUtil_sprintf("&%s", parent_offset_sym);
     }
     else {

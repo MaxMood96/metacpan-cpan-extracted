@@ -49,9 +49,6 @@ CFCFileSpec*
 CFCFileSpec_init(CFCFileSpec *self, const char *source_dir,
                  const char *path_part, const char *ext, int is_included);
 
-void
-CFCFileSpec_destroy(CFCFileSpec *self);
-
 const char*
 CFCFileSpec_get_path(CFCFileSpec *self);
 

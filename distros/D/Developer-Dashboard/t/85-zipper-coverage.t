@@ -4,6 +4,25 @@ use strict;
 use warnings;
 use utf8;
 
+# DD-601: the CORE::GLOBAL::rename override must be installed before
+# Developer::Dashboard::Zipper is compiled so the module's own rename call in
+# _saved_ajax_url_and_store resolves through this intercept - matching
+# DD-599/DD-600's established pattern. $DD601_OBSERVED_RENAME_MODE records
+# the permission mode of the SOURCE file at the exact moment of a rename
+# whose target matches $DD601_WATCH_TARGET, proving the file was already
+# secured before it became visible at that (predictable) final path.
+our $DD601_WATCH_TARGET;
+our $DD601_OBSERVED_RENAME_MODE;
+
+BEGIN {
+    *CORE::GLOBAL::rename = sub {
+        my ( $from, $to ) = @_;
+        $DD601_OBSERVED_RENAME_MODE = ( stat($from) )[2] & 07777
+          if defined $DD601_WATCH_TARGET && $to eq $DD601_WATCH_TARGET;
+        return CORE::rename( $from, $to );
+    };
+}
+
 use Test::More;
 use File::Path qw(make_path);
 use File::Spec;
@@ -88,7 +107,12 @@ my $rt_err = eval { Developer::Dashboard::Zipper::saved_ajax_file_path( file => 
 like( $rt_err, qr/runtime_root is required/, 'saved_ajax_file_path dies without a runtime_root' );
 
 # ---------------------------------------------------------------------------
-# _saved_ajax_url_and_store(): success, undef code, open failure, chmod failure.
+# _saved_ajax_url_and_store(): success, undef code, and DD-601's TOCTOU fix:
+# the predictable final path must never become visible with loose
+# permissions - a bare stat() after the call returns can't prove this (a
+# later chmod always leaves the final state correct even with the bug), so
+# this intercepts the rename that makes the file visible under its final
+# name and checks the SOURCE file's permissions at that exact moment.
 # ---------------------------------------------------------------------------
 my $stored = Developer::Dashboard::Zipper::_saved_ajax_url_and_store(
     runtime_root => $rt,
@@ -106,10 +130,112 @@ my $stored_undef = Developer::Dashboard::Zipper::_saved_ajax_url_and_store(
 );
 ok( -f $stored_undef->{path}, '_saved_ajax_url_and_store writes an empty file when code is undef' );
 
-# open('>') failure: the target already exists as a directory.
+{
+    my $old_umask = umask(0);
+    local $DD601_WATCH_TARGET = Developer::Dashboard::Zipper::saved_ajax_file_path( runtime_root => $rt, file => 'rename-observed' );
+    local $DD601_OBSERVED_RENAME_MODE;
+    Developer::Dashboard::Zipper::_saved_ajax_url_and_store(
+        runtime_root => $rt,
+        file         => 'rename-observed',
+        code         => 'print "rename observed";',
+        type         => 'text',
+    );
+    umask($old_umask);
+    ok( defined $DD601_OBSERVED_RENAME_MODE, 'DD-601: _saved_ajax_url_and_store renamed a source file into the predictable final path (rename observed)' );
+    is( sprintf( '%04o', $DD601_OBSERVED_RENAME_MODE // -1 ), '0700',
+        'DD-601: the source file was already 0700 BEFORE the rename that made it visible at its final, predictable path - even under umask(0)' );
+}
+
+# DD-601: force the earlier open-stage die. _pending_ajax_file is pinned to a
+# fixed path (rather than relying on the real pid/time-based name, which
+# cannot be pre-staged reliably) so a directory can occupy it - matching
+# Collector.pm::_pending_path's own override technique and DD-599/DD-600.
+{
+    my $target       = Developer::Dashboard::Zipper::saved_ajax_file_path( runtime_root => $rt, file => 'open-blocked' );
+    my $pending_path = "$target.blocked-open.pending";
+    mkdir $pending_path or die "Unable to create $pending_path: $!";
+    no warnings 'redefine';
+    local *Developer::Dashboard::Zipper::_pending_ajax_file = sub { return $pending_path };
+    use warnings 'redefine';
+    my $open_err = eval {
+        Developer::Dashboard::Zipper::_saved_ajax_url_and_store(
+            runtime_root => $rt,
+            file         => 'open-blocked',
+            code         => 'x',
+            type         => 'text',
+        );
+        1;
+    } ? '' : $@;
+    like( $open_err, qr/Unable to write \Q$pending_path\E/, '_saved_ajax_url_and_store dies when the pending file cannot be opened for writing' );
+    rmdir $pending_path or die "Unable to remove $pending_path: $!";
+}
+
+# DD-601: force the close-stage die. /dev/full always fails a write with
+# ENOSPC; the handler code here is far smaller than Perl's IO buffer, so
+# print() itself returns true (buffered, not yet flushed to the device) and
+# the error only surfaces at close() - matching DD-599/DD-600.
+SKIP: {
+    skip 'requires a writable /dev/full to force a write failure', 1
+      if !-e '/dev/full' || !-w '/dev/full';
+
+    my $target       = Developer::Dashboard::Zipper::saved_ajax_file_path( runtime_root => $rt, file => 'write-blocked' );
+    my $pending_path = "$target.forced-full.pending";
+    no warnings 'redefine';
+    local *Developer::Dashboard::Zipper::_pending_ajax_file = sub { return $pending_path };
+    use warnings 'redefine';
+
+    skip "unable to symlink /dev/full: $!", 1
+      if !symlink( '/dev/full', $pending_path );
+
+    my @warnings;
+    my $write_fail;
+    {
+        local $SIG{__WARN__} = sub { push @warnings, $_[0] };
+        $write_fail = eval {
+            Developer::Dashboard::Zipper::_saved_ajax_url_and_store(
+                runtime_root => $rt,
+                file         => 'write-blocked',
+                code         => 'x',
+                type         => 'text',
+            );
+            1;
+        } ? '' : $@;
+    }
+    like( $write_fail, qr/Unable to close \Q$pending_path\E/, '_saved_ajax_url_and_store dies when the pending write cannot be flushed to the device at close' );
+    unlink $pending_path;
+}
+
+# chmod failure: a symlink to a root-owned world-writable device we cannot
+# chmod. DD-601: the temp path is pinned via an overridden _pending_ajax_file
+# so the symlink lands on the path that is actually chmod-ed now.
+{
+    my $target       = Developer::Dashboard::Zipper::saved_ajax_file_path( runtime_root => $rt, file => 'chmodfail' );
+    my $pending_path = "$target.chmod-blocked.pending";
+    no warnings 'redefine';
+    local *Developer::Dashboard::Zipper::_pending_ajax_file = sub { return $pending_path };
+    use warnings 'redefine';
+    symlink( File::Spec->devnull, $pending_path ) or die "Unable to symlink devnull: $!";
+    my $chmod_err = eval {
+        Developer::Dashboard::Zipper::_saved_ajax_url_and_store(
+            runtime_root => $rt,
+            file         => 'chmodfail',
+            code         => 'x',
+            type         => 'text',
+        );
+        1;
+    } ? '' : $@;
+    like( $chmod_err, qr/Unable to chmod/, '_saved_ajax_url_and_store dies when the pending file cannot be chmod-ed' );
+    unlink $pending_path;
+}
+
+# DD-601: force the rename-stage die by making the final handler path an
+# existing directory. The pending temp write still succeeds, since only the
+# FINAL path is a directory - matching DD-599's victim_file technique
+# (saved_ajax_file_path is deterministic, so the final path can be
+# pre-staged directly, unlike DD-600's random-session_id case).
 my $rt_dir = File::Spec->catdir( $home, 'runtime-dir' );
 make_path( File::Spec->catdir( $rt_dir, 'dashboards', 'ajax', 'blocked' ) );
-my $open_err = eval {
+my $rename_err = eval {
     Developer::Dashboard::Zipper::_saved_ajax_url_and_store(
         runtime_root => $rt_dir,
         file         => 'blocked',
@@ -118,23 +244,7 @@ my $open_err = eval {
     );
     1;
 } ? '' : $@;
-like( $open_err, qr/Unable to write/, '_saved_ajax_url_and_store dies when the handler file cannot be opened for writing' );
-
-# chmod failure: a symlink to a root-owned world-writable device we cannot chmod.
-my $rt_chmod = File::Spec->catdir( $home, 'runtime-chmod' );
-make_path( File::Spec->catdir( $rt_chmod, 'dashboards', 'ajax' ) );
-my $chmod_link = File::Spec->catfile( $rt_chmod, 'dashboards', 'ajax', 'chmodfail' );
-symlink( File::Spec->devnull, $chmod_link ) or die "Unable to symlink devnull: $!";
-my $chmod_err = eval {
-    Developer::Dashboard::Zipper::_saved_ajax_url_and_store(
-        runtime_root => $rt_chmod,
-        file         => 'chmodfail',
-        code         => 'x',
-        type         => 'text',
-    );
-    1;
-} ? '' : $@;
-like( $chmod_err, qr/Unable to chmod/, '_saved_ajax_url_and_store dies when the handler file cannot be chmod-ed' );
+like( $rename_err, qr/Unable to rename/, '_saved_ajax_url_and_store dies when the handler cannot be installed at its final path' );
 
 # ---------------------------------------------------------------------------
 # load_saved_ajax_code(): missing file, readable file, unreadable file.

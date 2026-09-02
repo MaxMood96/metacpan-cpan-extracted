@@ -279,6 +279,16 @@ dies_like(
     );
 }
 
+{
+    # DD-597: system() above mutates the caller's global $? as a side
+    # effect; without a guard at the sub's entry that stays set in the
+    # caller's process after this sub returns, regardless of the exit code
+    # already captured in this sub's own return value.
+    $? = 12 << 8;    ## no critic (Variables::RequireLocalizedPunctuationVars)
+    Developer::Dashboard::CLI::Upgrade::_run_command( [ $^X, '-e', 'exit 7' ] );
+    is( $? >> 8, 12, '_run_command does not leak its own subprocess status into the caller global $?' );
+}
+
 for my $case (
     [ sub { Developer::Dashboard::CLI::Upgrade::run_upgrade() }, qr/Missing upgrade arguments/, 'missing argument storage fails clearly' ],
     [ sub { Developer::Dashboard::CLI::Upgrade::run_upgrade( args => 'not-an-array' ) }, qr/array reference/, 'non-array arguments fail clearly' ],

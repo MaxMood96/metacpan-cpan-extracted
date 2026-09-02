@@ -3,7 +3,7 @@ package Developer::Dashboard::CLI::Ticket;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Capture::Tiny qw(capture);
 use Cwd qw(cwd);
@@ -22,6 +22,7 @@ our @EXPORT_OK = qw(
   build_workspace_plan
   list_sessions
   registered_workspace_dir
+  resolve_attach_runner
   resolve_ticket_request
   resolve_workspace_request
   run_ticket_command
@@ -155,6 +156,12 @@ sub ticket_environment {
 # Output: hash reference with stdout, stderr, and exit_code keys.
 sub tmux_command {
     my (%args) = @_;
+
+    # DD-597: system() below mutates the caller's global $? as a side
+    # effect; without this guard that stays set in the caller's process
+    # after this sub returns, regardless of the exit code already captured
+    # in this sub's own return value.
+    local $?;
     my $argv = $args{args} || [];
     die 'tmux args must be an array reference' if ref($argv) ne 'ARRAY';
 
@@ -168,6 +175,64 @@ sub tmux_command {
         stderr    => $stderr,
         exit_code => $exit_code,
     };
+}
+
+# exec_workspace_attach(%args)
+# Hands this process over to tmux for the attach, replacing the process image so
+# no perl parent is left waiting behind an interactive session.
+# Input: args array reference for tmux.
+# Output: never returns on success; dies when the handoff itself fails.
+sub exec_workspace_attach {
+    my (%args) = @_;
+
+    # No default. An argv of [] would exec a bare tmux, which is not an attach at
+    # all, and the fallback was a branch that could only be exercised by letting
+    # this replace the test process. Requiring the caller to say what it wants is
+    # both safer and testable.
+    my $argv = $args{args};
+
+    # Both sides of this guard ARE recorded, and the annotation that used to sit
+    # here claimed otherwise (DD-537, corrected under DD-532). It reasoned that
+    # passing the guard means reaching the exec below, which replaces the process
+    # image before Devel::Cover can write anything. That is true of the exec and
+    # false of the guard: a child that reaches the guard and is then replaced has
+    # already recorded this line, so the false side is covered - Devel::Cover
+    # flagged it as "marked uncoverable but covered", which is an error rather
+    # than a gap, and it was the whole of this file's missing branch coverage.
+    die 'tmux args must be an array reference' if ref($argv) ne 'ARRAY';
+
+    # Neither line below can be recorded by Devel::Cover: exec replaces the
+    # process image, so the coverage database is never written from here, and a
+    # forked child that execs successfully takes its record with it. The guard
+    # above IS reachable and is tested; only the handoff itself is not.
+    # Shaped exactly like the handoffs in PageRuntime and SkillDispatcher, which
+    # both measure 100.0, because the wrapping `if` creates a branch Devel::Cover
+    # cannot measure: on a SUCCESSFUL exec the process is replaced before anything
+    # is recorded, and on a FAILING one the count lands on the exec line itself.
+    #
+    # The spec drives a failing exec (no tmux on PATH), so this statement IS
+    # executed and recorded. The die below is not: Devel::Cover cannot attribute a
+    # statement that follows a failed exec - the count lands on the exec - so it
+    # reports zero even though the test asserts its message. PageRuntime records
+    # exactly the same thing at its own handoff.
+    exec 'tmux', @{$argv};
+    die "Unable to exec tmux to attach the workspace session: $!\n";    # uncoverable statement
+}
+
+# resolve_attach_runner(%args)
+# Chooses what performs the attach: an explicitly supplied runner, otherwise an
+# injected tmux runner, otherwise the real exec handoff.
+# Input: optional attach and tmux coderefs.
+# Output: coderef that performs the attach.
+#
+# The tmux fallback is deliberate rather than incidental. A caller that injects a
+# tmux runner is observing this command instead of running it, and an observer
+# that got a real exec would have its process replaced mid-test. Routing the
+# attach to the same injected runner makes that impossible by construction, which
+# is worth more than the symmetry of always execing.
+sub resolve_attach_runner {
+    my (%args) = @_;
+    return $args{attach} || $args{tmux} || \&exec_workspace_attach;
 }
 
 # _tmux_stdout(%args)
@@ -305,6 +370,12 @@ sub _tmux_status_interval_seconds {
     return 15;
 }
 
+# apply_ticket_status(%args)
+# Configures a tmux session's status bar to show the dashboard's ticket
+# indicator on top while preserving whatever status line the session already
+# had, restoring it below the indicator.
+# Input: session name, and optional tmux/dashboard command overrides for tests.
+# Output: 1 on success, dies on a tmux configuration error.
 sub apply_ticket_status {
     my (%args) = @_;
     my $session = $args{session} || die 'Missing session name';
@@ -501,7 +572,15 @@ sub run_workspace_command {
         tmux    => $tmux,
     );
 
-    my $attached = $tmux->( args => $plan->{attach_argv} );
+    # The handoff. Every tmux call above is a query or a setup command whose
+    # output is read; this one is interactive and lasts as long as the session,
+    # so it is not captured. On a real run this never returns.
+    my $attach = resolve_attach_runner(%args);
+    # A runner that reports nothing is a runner that raised nothing: treat a
+    # missing exit code as success rather than comparing undef, which warns - and
+    # warnings are errors here. Found by a test that returned nothing on purpose.
+    my $attached = $attach->( args => $plan->{attach_argv} ) || {};
+    $attached->{exit_code} = 0 if !defined $attached->{exit_code};
     die sprintf "Unable to attach tmux ticket session '%s': %s%s",
       $plan->{session},
       ( $attached->{stderr} || '' ),

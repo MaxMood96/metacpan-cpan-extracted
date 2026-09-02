@@ -1,0 +1,58 @@
+{
+   "abstract" : "error reporting client for a self-hosted ForgeOps instance",
+   "author" : [
+      "ForgeOps <support@getforgeops.net>"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "ExtUtils::MakeMaker version 7.62, CPAN::Meta::Converter version 2.150010",
+   "license" : [
+      "mit"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "ForgeOps-Tracker",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "perl" : "5.014"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "Test::More" : "0.98"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/Luke-Popwell/forge-ops-tracker-perl/issues"
+      },
+      "homepage" : "https://getforgeops.net",
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/Luke-Popwell/forge-ops-tracker-perl.git",
+         "web" : "https://github.com/Luke-Popwell/forge-ops-tracker-perl"
+      }
+   },
+   "version" : "v0.1.0",
+   "x_serialization_backend" : "JSON::PP version 4.06"
+}

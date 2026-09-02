@@ -37,7 +37,7 @@ QUICK EXAMPLE
     produces
 
       {
-        '__TOCOPY__' => {
+        __TOCOPY__ => {
           root => '/usr/local',
         },
         paths => {
@@ -1193,13 +1193,13 @@ DESCRIPTION
 
            my $obj = Config::INI::RefVars->new(varname_chk_re => qr/^[A-Z]/);
            my $src = <<'EOT';
-              [the section]
-              A=the value
-              xYZ=123
-              Z1=z2
-              Y=
+             [the section]
+             A=the value
+             xYZ=123
+             Z1=z2
+             Y=
            EOT
-          $obj->parse_ini(src => $src);
+           $obj->parse_ini(src => $src);
 
         This will result in an exception with the message "'xYZ': var name
         does not match varname_chk_re".
@@ -1346,14 +1346,14 @@ DESCRIPTION
    Separator in Variable Names
        my $cfg = Config::INI::RefVars->new(separator => "/");
 
-       my $ini =<<'INI';
-        [FOO]
-        var=abcde
+       my $ini = <<'INI';
+         [FOO]
+         var=abcde
 
-        [BAR]
-        FOO/var=my var in section BAR
-        a=$(FOO/var)
-        b=$(BAR/FOO/var)
+         [BAR]
+         FOO/var=my var in section BAR
+         a=$(FOO/var)
+         b=$(BAR/FOO/var)
        INI
 
     By specifying the "separator" argument, qualified variable references
@@ -1538,6 +1538,5 @@ SUPPORT
 LICENSE AND COPYRIGHT
     This software is copyright (c) 2026 by #AUTHOR#.
 
-    This is free software; you can redistribute it and/or modify it under
-    the same terms as the Perl 5 programming language system itself.
+    This software is licensed under the Artistic License 2.0.
 

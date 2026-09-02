@@ -20,7 +20,7 @@ package Clownfish::CFC::Perl::Build::Charmonic;
 
 use base qw( Module::Build );
 
-our $VERSION = '0.007000';
+our $VERSION = '0.008000';
 $VERSION = eval $VERSION;
 
 use Carp;
@@ -51,6 +51,13 @@ my $CHARMONY_PM_PATH     = 'Charmony.pm';
 # Charmony.pm files.
 sub ACTION_charmony {
     my $self = shift;
+
+    # Charmonizer doesn't support fat binaries on macOS.
+    for my $key (qw( ccflags ldflags lddlflags )) {
+        my $flags = $self->config($key);
+        $flags =~ s/-arch \w+\s*//g;
+        $self->config( $key => $flags );
+    }
 
     my $cc              = $self->config('cc');
     my $is_msvc         = lc($cc) =~ /^cl\b/;
@@ -110,6 +117,9 @@ sub ACTION_charmony {
         '--', $self->config('ccflags'),
         '-I' . File::Spec->catdir($self->config('archlibexp'), 'CORE'),
     );
+    if ( $ENV{CFISH_EXTRA_CFLAGS} ) {
+        push @command, $self->split_like_shell( $ENV{CFISH_EXTRA_CFLAGS} );
+    }
     if ( $ENV{CHARM_VALGRIND} ) {
         unshift @command, "valgrind", "--leak-check=yes";
     }

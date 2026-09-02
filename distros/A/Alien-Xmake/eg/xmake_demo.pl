@@ -1,4 +1,5 @@
 use v5.40;
+use blib;
 use Alien::Xmake;
 use Path::Tiny;
 
@@ -9,7 +10,7 @@ my $version   = $xmake->config('version');
 say "Using xmake $version at $xmake_bin";
 
 # Create a temporary project directory
-my $project_dir = Path::Tiny->tempdir( CLEANUP => 1 );
+my $project_dir = Path::Tiny->tempdir( CLEANUP => 0 );
 say "Working in: $project_dir";
 
 # Use 'xmake create' to generate a C shared library project

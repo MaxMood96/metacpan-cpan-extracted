@@ -1,0 +1,45 @@
+Logic::Relational - A pure-Perl relational logic system.
+
+Version 0.01
+
+Logic::Relational provides a relational logic engine in pure Perl, offering logical variables, structural unification, facts, rules, and backtracking depth-first search. 
+
+It is most straightforwardly used with its syntax layer, Logic::Relational::Syntax, which provides a hybrid Perl/Prolog-like syntax. 
+
+Various examples are in the "examples" folder.
+
+See the POD in Logic::Relational for more documentation.
+
+INSTALLATION
+
+To install this module, run the following commands:
+
+	perl Makefile.PL
+	make
+	make test
+	make install
+
+SUPPORT AND DOCUMENTATION
+
+After installing, you can find documentation for this module with the
+perldoc command.
+
+    perldoc Logic::Relational
+
+You can also look for information at:
+
+    RT, CPAN's request tracker (report bugs here)
+        https://rt.cpan.org/NoAuth/Bugs.html?Dist=Logic-Relational
+
+    Search CPAN
+        https://metacpan.org/release/Logic-Relational
+
+
+LICENSE AND COPYRIGHT
+
+This software is Copyright (c) 2026 by Matt Johnson <mjohnson@affectivesilicon.com>.
+
+This is free software, licensed under:
+
+  The GNU General Public License, Version 3, June 2007
+

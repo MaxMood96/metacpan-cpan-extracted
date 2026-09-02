@@ -79,6 +79,21 @@ METHODS
         itself, so a redirect loop ends with "Number of redirects hit
         maximum amount" rather than spinning.
 
+    decode => $bool
+        Decompress the response body. libcurl decodes whatever it was built
+        with -- here gzip, deflate, br and zstd -- and "$res->{body}" is the
+        decoded bytes. Off by default, so the body arrives exactly as the
+        origin sent it.
+
+        This does not change the request on the wire. The "Accept-Encoding"
+        the impersonate target installs is a custom header, and libcurl lets
+        a custom header replace the one it would generate itself, so the
+        fingerprint is untouched; only the response side differs.
+
+        "$res->{headers}" still reports the origin's "Content-Encoding" and
+        "Content-Length", which now describe the bytes before decoding.
+        Anything forwarding this response onward must drop both.
+
     proxy => $url
         Route requests through a proxy, e.g. 'http://127.0.0.1:8080' or
         'socks5h://host:1080'. Credentials go in the URL. Note that a proxy

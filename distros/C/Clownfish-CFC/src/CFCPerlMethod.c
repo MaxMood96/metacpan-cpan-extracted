@@ -42,7 +42,7 @@ S_xsub_body(CFCPerlMethod *self, CFCClass *klass);
 
 // Create an assignment statement for extracting $self from the Perl stack.
 static char*
-S_self_assign_statement(CFCPerlMethod *self);
+S_self_assign_statement(CFCPerlMethod *self, CFCClass *klass);
 
 // Return code for an xsub which uses labeled params.
 static char*
@@ -86,10 +86,13 @@ static char*
 S_obj_callback_body(CFCMethod *method, const char *callback_start,
                     const char *refcount_mods);
 
+static void
+CFCPerlMethod_destroy(CFCBase *base);
+
 static const CFCMeta CFCPERLMETHOD_META = {
     "Clownfish::CFC::Binding::Perl::Method",
     sizeof(CFCPerlMethod),
-    (CFCBase_destroy_t)CFCPerlMethod_destroy
+    CFCPerlMethod_destroy
 };
 
 CFCPerlMethod*
@@ -114,10 +117,12 @@ CFCPerlMethod_init(CFCPerlMethod *self, CFCClass *klass, CFCMethod *method) {
     return self;
 }
 
-void
-CFCPerlMethod_destroy(CFCPerlMethod *self) {
+static void
+CFCPerlMethod_destroy(CFCBase *base) {
+    CFCPerlMethod *self = (CFCPerlMethod *) base;
+
     CFCBase_decref((CFCBase*)self->method);
-    CFCPerlSub_destroy((CFCPerlSub*)self);
+    CFCPerlSub_destroy(base);
 }
 
 char*
@@ -214,19 +219,16 @@ S_xsub_body(CFCPerlMethod *self, CFCClass *klass) {
 
 // Create an assignment statement for extracting $self from the Perl stack.
 static char*
-S_self_assign_statement(CFCPerlMethod *self) {
+S_self_assign_statement(CFCPerlMethod *self, CFCClass *klass) {
     CFCParamList *param_list = CFCMethod_get_param_list(self->method);
     CFCVariable **vars = CFCParamList_get_variables(param_list);
-    CFCType *type = CFCVariable_get_type(vars[0]);
-    const char *self_name = CFCVariable_get_name(vars[0]);
-    const char *type_c = CFCType_to_c(type);
-    if (!CFCType_is_object(type)) {
-        CFCUtil_die("Not an object type: %s", type_c);
-    }
-    const char *class_var = CFCType_get_class_var(type);
-    char pattern[] = "arg_%s = (%s)XSBind_perl_to_cfish_noinc("
+    const char *self_name  = CFCVariable_get_name(vars[0]);
+    const char *struct_sym = CFCClass_full_struct_sym(klass);
+    const char *class_var  = CFCClass_full_class_var(klass);
+    char pattern[] = "arg_%s = (%s*)XSBind_perl_to_cfish_noinc("
                      "aTHX_ ST(0), %s, NULL);";
-    char *statement = CFCUtil_sprintf(pattern, self_name, type_c, class_var);
+    char *statement = CFCUtil_sprintf(pattern, self_name, struct_sym,
+                                      class_var);
 
     return statement;
 }
@@ -244,7 +246,7 @@ S_xsub_def_labeled_params(CFCPerlMethod *self, CFCClass *klass) {
     char *param_specs = CFCPerlSub_build_param_specs((CFCPerlSub*)self, 1);
     char *arg_decls   = CFCPerlSub_arg_declarations((CFCPerlSub*)self, 0);
     char *meth_type_c = CFCMethod_full_typedef(method, klass);
-    char *self_assign = S_self_assign_statement(self);
+    char *self_assign = S_self_assign_statement(self, klass);
     char *arg_assigns = CFCPerlSub_arg_assignments((CFCPerlSub*)self);
     char *body        = S_xsub_body(self, klass);
 
@@ -314,7 +316,7 @@ S_xsub_def_positional_args(CFCPerlMethod *self, CFCClass *klass) {
     int num_vars = CFCParamList_num_vars(param_list);
     char *arg_decls   = CFCPerlSub_arg_declarations((CFCPerlSub*)self, 0);
     char *meth_type_c = CFCMethod_full_typedef(method, klass);
-    char *self_assign = S_self_assign_statement(self);
+    char *self_assign = S_self_assign_statement(self, klass);
     char *arg_assigns = CFCPerlSub_arg_assignments((CFCPerlSub*)self);
     char *body        = S_xsub_body(self, klass);
 
@@ -475,10 +477,11 @@ S_callback_start(CFCMethod *method) {
     // Iterate over arguments, mapping them to Perl scalars.
     CFCVariable **arg_vars = CFCParamList_get_variables(param_list);
     for (int i = 1; arg_vars[i] != NULL; i++) {
-        CFCVariable *var      = arg_vars[i];
-        const char  *name     = CFCVariable_get_name(var);
-        CFCType     *type     = CFCVariable_get_type(var);
-        const char  *c_type   = CFCType_to_c(type);
+        CFCVariable *var       = arg_vars[i];
+        const char  *name      = CFCVariable_get_name(var);
+        CFCType     *type      = CFCVariable_get_type(var);
+        const char  *specifier = CFCType_get_specifier(type);
+        const char  *c_type    = CFCType_to_c(type);
 
         // Add labels when there are two or more parameters.
         if (num_args > 1) {
@@ -492,6 +495,9 @@ S_callback_start(CFCMethod *method) {
             // Wrap Clownfish object types in Perl objects.
             params = CFCUtil_cat(params, "    mPUSHs(XSBind_cfish_to_perl(",
                                  "aTHX_ (cfish_Obj*)", name, "));\n", NULL);
+        }
+        else if (strcmp(specifier, "bool") == 0) {
+            params = CFCUtil_cat(params, "    mPUSHi(!!", name, ");\n", NULL);
         }
         else if (CFCType_is_integer(type)) {
             // Convert primitive integer types to IV Perl scalars.

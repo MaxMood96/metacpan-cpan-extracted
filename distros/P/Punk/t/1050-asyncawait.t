@@ -152,9 +152,19 @@ my $app = T::AA::App->to_app;
     }
     package main;
 
-    my ($inner, $outer) = T::AA::Cancel::make();
-    $outer->cancel;
-    ok($inner->is_cancelled, 'cancelling the caller cancels the awaited future');
+    # Before perl 5.24, Future::AsyncAwait registers a code block on the
+    # outer future instead of chaining the inner one, so a cancel has
+    # nothing to travel along. Measured with a logging Awaitable class on
+    # 5.22 vs 5.24 with the same F::AA; see t/1002-awaitable.t for the call
+    # traces. Nothing Punk::Future does can change it.
+    SKIP: {
+        skip 'Future::AsyncAwait chains cancellation into the awaited '
+           . 'future only on perl 5.24+', 1 unless $] >= 5.024;
+        my ($inner, $outer) = T::AA::Cancel::make();
+        $outer->cancel;
+        ok($inner->is_cancelled,
+            'cancelling the caller cancels the awaited future');
+    }
 }
 
 # ---- on a real loop: suspend, resume, and pump ---------------------------

@@ -3,19 +3,27 @@ package Developer::Dashboard::Auth;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Fcntl qw(:mode);
 use Digest::SHA qw(sha256_hex hmac_sha256);
 use File::Spec;
 use POSIX qw(strftime);
 use Socket qw(AF_INET AF_INET6 SOCK_STREAM getaddrinfo inet_ntoa inet_ntop unpack_sockaddr_in unpack_sockaddr_in6);
+use String::Compare::ConstantTime ();
 
 use Developer::Dashboard::JSON qw(json_encode json_decode);
 
 # Work factor for the PBKDF2-HMAC-SHA256 helper-password scheme. This is the
 # iteration count new helper passwords are stretched with; it is also recorded
 # per-record so each stored hash is always verified with its own work factor.
+# Performance budget (DD-628): a single derivation at this iteration count is
+# expected to complete in well under a second on a reference host - the
+# deliberate security/usability tradeoff is stretching enough to resist
+# offline brute force without making every login noticeably slow.
+# t/82-auth-coverage.t's PBKDF2 timing test guards against a regression here
+# (an accidental iteration-count change, or an unexpectedly slow crypto
+# backend) going unnoticed until users complain.
 my $PBKDF2_ITERATIONS = 210_000;
 
 # Scheme label stored in a helper-user record so verify_user knows which
@@ -86,11 +94,31 @@ sub add_user {
         updated_at      => _now_iso8601(),
     };
     my $file = $self->_user_file($username);
-    open my $fh, '>:raw', $file or die "Unable to write $file: $!";
-    print {$fh} json_encode($record);
-    close $fh;
-    chmod 0600, $file;
+    # DD-599: write to a per-writer temp file with an unpredictable name and
+    # secure it BEFORE the atomic rename into the final, predictable path -
+    # never open the final path directly and secure it afterward. The final
+    # path is a guessable username.json, so a window where it exists there
+    # with loose (umask-determined) permissions is a real exposure for the
+    # credential record it holds; the temp name is unpredictable, so an
+    # equivalent brief window on it is not. Matches Collector.pm's own
+    # correct _atomic_write_text ordering.
+    my $tmp = $self->_pending_user_file($file);
+    $self->{paths}->atomic_write_secure( $tmp, $file, json_encode($record) );
     return $record;
+}
+
+# _pending_user_file($file)
+# Builds the per-writer staging path add_user writes to before the atomic
+# rename into $file. Its own sub (rather than an inline sprintf) exists so a
+# coverage test can override it to a fixed, predictable path when it needs to
+# pre-stage that exact location to force a write failure - the real path is
+# deliberately unpredictable (mixing pid and wall-clock time) so two writers
+# can never collide on it.
+# Input: final destination file path string.
+# Output: staging file path string.
+sub _pending_user_file {
+    my ( $self, $file ) = @_;
+    return sprintf '%s.%s.%s.pending', $file, $$, time;
 }
 
 # verify_user(%args)
@@ -427,17 +455,16 @@ sub _pbkdf2_hmac_sha256_hex {
 
 # _secure_compare($left, $right)
 # Compares two strings in length-constant time so password-hash verification
-# does not leak how many leading characters matched through timing.
+# does not leak how many leading characters matched through timing. Delegates
+# to the CPAN-audited String::Compare::ConstantTime rather than hand-rolling
+# the XOR loop (DD-614), reducing the custom security-sensitive surface this
+# project has to maintain and re-verify itself.
 # Input: two strings (either may be undef).
 # Output: boolean true only when both are defined, equal length, and identical.
 sub _secure_compare {
     my ( $left, $right ) = @_;
     return 0 if !defined $left || !defined $right;
-    return 0 if length($left) != length($right);
-    my $diff = 0;
-    $diff |= ord( substr( $left, $_, 1 ) ) ^ ord( substr( $right, $_, 1 ) )
-      for 0 .. length($left) - 1;
-    return $diff == 0 ? 1 : 0;
+    return String::Compare::ConstantTime::equals( $left, $right ) ? 1 : 0;
 }
 
 # _now_iso8601()

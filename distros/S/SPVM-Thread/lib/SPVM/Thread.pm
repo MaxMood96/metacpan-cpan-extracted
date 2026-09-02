@@ -1,6 +1,6 @@
 package SPVM::Thread;
 
-our $VERSION = "0.010";
+our $VERSION = "0.011";
 
 1;
 
@@ -24,6 +24,20 @@ This class is a binding of L<std::thread in C++|https://en.cppreference.com/w/cp
   });
   
   $thread->join;
+
+=head1 Fields
+
+=head2 task
+
+C<has task : L<Callback|SPVM::Callback>;>
+
+A task exceuted by a thread.
+
+=head2 caller_info
+
+C<has caller_info : L<CallerInfo|SPVM::CallerInfo>;>
+
+Thead caller information.
 
 =head1 Class Methods
 

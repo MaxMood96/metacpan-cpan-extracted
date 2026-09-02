@@ -22,7 +22,7 @@ housekeeper - private built-in command wrapper for Developer Dashboard
 
 =head1 SYNOPSIS
 
-  dashboard housekeeper
+  dashboard housekeeper [--dry-run]
 
 =head1 DESCRIPTION
 
@@ -35,6 +35,9 @@ public C<dashboard> entrypoint can stay a thin switchboard.
 
 This staged helper exposes the built-in temp-state cleanup command. It gives
 the public runtime one stable way to run the shared temp housekeeper logic.
+C<--dry-run> reports exactly what a real run would scan, remove, and rotate
+without touching anything on disk, so an operator can preview the effect
+before trusting it on an unfamiliar host.
 
 =head1 WHY IT EXISTS
 
@@ -86,6 +89,14 @@ Example 4:
 
 Rerun the focused staged-helper and thin-loader tests after changing helper
 dispatch behavior.
+
+Example 5:
+
+  dashboard housekeeper --dry-run
+
+Preview exactly what a real run would scan, remove, and rotate - state
+roots, temp files, collector logs, and expired sessions - without touching
+any of it, before trusting the cleanup on an unfamiliar host.
 
 
 =for comment FULL-POD-DOC END

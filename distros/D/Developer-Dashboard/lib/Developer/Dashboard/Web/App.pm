@@ -3,7 +3,7 @@ package Developer::Dashboard::Web::App;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Capture::Tiny qw(capture);
 use Digest::SHA qw(sha256_hex);
@@ -23,6 +23,7 @@ use Developer::Dashboard::PageRuntime;
 use Developer::Dashboard::Codec qw(decode_payload);
 use Developer::Dashboard::Zipper ();
 use Developer::Dashboard::SkillDispatcher ();
+use Developer::Dashboard::Auth ();
 our $MODULE_SOURCE_PATH = File::Spec->rel2abs(__FILE__);
 our $ORIG_CWD = cwd();    # compile-time CWD so rel2abs resolves correctly even after chdir
 
@@ -517,7 +518,11 @@ sub _authorize_api_request {
     return undef if ref($entry) ne 'HASH';
     return undef if ref( $entry->{ajax} ) ne 'ARRAY';
     return undef if !( scalar grep { $_ eq ( $args{path} || '' ) } @{ $entry->{ajax} } );
-    return undef if sha256_hex($api_secret) ne ( $entry->{secret} || '' );
+    # DD-604: compare via the same constant-time helper Auth.pm::verify_user
+    # already uses for password-hash verification - a bare `ne` short-circuits
+    # at the first differing byte, leaking how many leading characters of the
+    # client-supplied secret matched through response timing.
+    return undef if !Developer::Dashboard::Auth::_secure_compare( sha256_hex($api_secret), $entry->{secret} || '' );
     return { api_key => $api_key };
 }
 
@@ -612,6 +617,14 @@ sub _post_logout_location {
 # Output: response array reference.
 sub logout_response {
     my ( $self, %args ) = @_;
+    # DD-605: the Dancer2 route for GET /logout calls this method directly
+    # via _run_backend, bypassing handle() and its CSRF fetch-metadata check
+    # entirely - the same architectural exposure POST /login has, which
+    # login_response() already compensates for with this exact guard. For a
+    # helper session, a foreign-origin GET here doesn't just log the victim
+    # out, it permanently deletes their account (Auth->remove_user below).
+    my $csrf_response = $self->_csrf_rejection_response(%args);
+    return $csrf_response if $csrf_response;
     my $headers = $args{headers} || {};
     my $session = $self->{sessions}->from_cookie( $headers->{cookie}, remote_addr => $args{remote_addr} );
     if ($session) {
@@ -2794,6 +2807,13 @@ sub _legacy_ajax_allowed {
 # Terminates one saved-Ajax singleton worker on explicit browser page-lifecycle cleanup.
 # Input: normalized request params containing one singleton name.
 # Output: response array reference with a no-content status.
+# Trust note (DD-626, Q-028): any caller who passes the normal auth gate -
+# helper, admin, or API tier alike - may stop ANY singleton by name, including
+# one a different user started. Singleton names are page-defined identifiers,
+# not per-user secrets, so this is a deliberate design choice rather than an
+# oversight: within this tool's local-first, small-trusted-circle trust model,
+# cross-user interference between authenticated helpers is accepted and no
+# per-user ownership tracking is added.
 sub ajax_singleton_stop_response {
     my ( $self, %args ) = @_;
     my ($params) = $self->_request_params(%args);
@@ -3112,6 +3132,12 @@ sub _ip_interface_pairs {
 # Output: list of hashes with iface and ip keys.
 sub _ip_pairs_from_ip {
     my ($self) = @_;
+
+    # DD-597: system() below mutates the caller's global $? as a side
+    # effect; without this guard that stays set in the caller's process
+    # after this sub returns - a query function must not decide its
+    # caller's exit status.
+    local $?;
     return () if !command_in_path('ip');
     my ( $stdout, undef, $exit_code ) = capture {
         system 'ip', '-o', '-4', 'addr', 'show', 'up', 'scope', 'global';
@@ -3132,6 +3158,12 @@ sub _ip_pairs_from_ip {
 # Output: list of hashes with iface and ip keys.
 sub _ip_pairs_from_ipconfig {
     my ($self) = @_;
+
+    # DD-597: system() below mutates the caller's global $? as a side
+    # effect; without this guard that stays set in the caller's process
+    # after this sub returns - a query function must not decide its
+    # caller's exit status.
+    local $?;
     return () if !command_in_path('ipconfig');
     my ( $stdout, undef, $exit_code ) = capture {
         system 'ipconfig';
@@ -3160,6 +3192,12 @@ sub _ip_pairs_from_ipconfig {
 # Output: list of hashes with iface and ip keys.
 sub _ip_pairs_from_ifconfig {
     my ($self) = @_;
+
+    # DD-597: system() below mutates the caller's global $? as a side
+    # effect; without this guard that stays set in the caller's process
+    # after this sub returns - a query function must not decide its
+    # caller's exit status.
+    local $?;
     return () if !command_in_path('ifconfig');
     my ( $stdout, undef, $exit_code ) = capture {
         system 'ifconfig';
@@ -3299,25 +3337,35 @@ sub _skill_static_file_path {
 
 # _static_file_roots($type)
 # Returns candidate public directories for static file serving in lookup order.
+# Cached per instance and type (DD-622): a cheap key is recomputed on every
+# call from the same inputs the root list depends on, and the expensive
+# root-building walk only reruns when that key changes - matching the
+# cache-key pattern File.pm/Folder.pm use for their config-alias caches.
 # Input: asset type string such as js, css, or others.
 # Output: ordered list of directory path strings.
 sub _static_file_roots {
     my ( $self, $type ) = @_;
-    my @roots;
-    my %seen;
 
     my $paths = $self->{pages} && ref( $self->{pages} ) eq 'Developer::Dashboard::PageStore'
       ? $self->{pages}{paths}
       : undef;
-    if ($paths) {
-        for my $runtime_root ( $paths->runtime_roots ) {
-            my $root = File::Spec->catdir( $runtime_root, 'dashboard', 'public', $type );
-            push @roots, $root if !$seen{$root}++;
-        }
-        for my $dashboards_root ( $paths->dashboards_roots ) {
-            my $root = File::Spec->catdir( $dashboards_root, 'public', $type );
-            push @roots, $root if !$seen{$root}++;
-        }
+    my @runtime_roots    = $paths ? $paths->runtime_roots    : ();
+    my @dashboards_roots = $paths ? $paths->dashboards_roots : ();
+    my $cache_key = join "\n", $type, ( $ENV{HOME} || $ENV{USERPROFILE} || '' ), @runtime_roots, @dashboards_roots;
+
+    my $cache = $self->{_static_file_roots_cache} ||= {};
+    return @{ $cache->{$type}{roots} }
+      if $cache->{$type} && $cache->{$type}{key} eq $cache_key;
+
+    my @roots;
+    my %seen;
+    for my $runtime_root (@runtime_roots) {
+        my $root = File::Spec->catdir( $runtime_root, 'dashboard', 'public', $type );
+        push @roots, $root if !$seen{$root}++;
+    }
+    for my $dashboards_root (@dashboards_roots) {
+        my $root = File::Spec->catdir( $dashboards_root, 'public', $type );
+        push @roots, $root if !$seen{$root}++;
     }
 
     my $home_root = File::Spec->catdir(
@@ -3328,6 +3376,8 @@ sub _static_file_roots {
         $type
     );
     push @roots, $home_root if !$seen{$home_root}++;
+
+    $cache->{$type} = { key => $cache_key, roots => \@roots };
     return @roots;
 }
 

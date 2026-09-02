@@ -14,6 +14,33 @@
 use strict;
 use warnings;
 
+# BEFORE anything tries to load Devel::Cover. The product's dependencies live in
+# the operator's local library tree, and PERL5LIB is exported only by the
+# interactive shell profile - so cron, transient systemd units and agent
+# tool-shells all start without it. Launched that way the gate died immediately
+# with "Can't locate Crypt/URandom.pm ... you may need to install the
+# Crypt::URandom module", naming a dependency that IS declared in cpanfile,
+# dist.ini and Makefile.PL and IS installed. The diagnosis pointed at the product
+# and the fault was the environment.
+#
+# This must extend the ONE environment the three coverage commands inherit, never
+# be set per command: the note at the top of this file exists because a chain
+# typed as three shell lines can set the library path on one and omit it from the
+# next, leaving the reader unable to parse what the writer just wrote.
+BEGIN {
+    my $home = $ENV{HOME};
+    if ( defined $home && length $home ) {
+        my $local_lib = "$home/perl5/lib/perl5";
+        if ( -d $local_lib ) {
+            my $current = $ENV{PERL5LIB};
+            if ( !defined $current || !grep { $_ eq $local_lib } split /:/, $current ) {
+                $ENV{PERL5LIB} = defined $current && length $current ? "$local_lib:$current" : $local_lib;
+            }
+            unshift @INC, $local_lib if !grep { $_ eq $local_lib } @INC;
+        }
+    }
+}
+
 use Capture::Tiny qw(capture);
 use Digest::SHA qw(sha256_hex);
 use Fcntl qw(:flock);

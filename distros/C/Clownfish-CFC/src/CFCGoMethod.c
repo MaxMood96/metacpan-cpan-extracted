@@ -45,12 +45,12 @@ struct CFCGoMethod {
 };
 
 static void
-S_CFCGoMethod_destroy(CFCGoMethod *self);
+S_CFCGoMethod_destroy(CFCBase *base);
 
 static const CFCMeta CFCGOMETHOD_META = {
     "Clownfish::CFC::Binding::Go::Method",
     sizeof(CFCGoMethod),
-    (CFCBase_destroy_t)S_CFCGoMethod_destroy
+    S_CFCGoMethod_destroy
 };
 
 CFCGoMethod*
@@ -63,10 +63,12 @@ CFCGoMethod_new(CFCMethod *method) {
 }
 
 static void
-S_CFCGoMethod_destroy(CFCGoMethod *self) {
+S_CFCGoMethod_destroy(CFCBase *base) {
+    CFCGoMethod *self = (CFCGoMethod *) base;
+
     CFCBase_decref((CFCBase*)self->method);
     FREEMEM(self->sig);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 CFCMethod*

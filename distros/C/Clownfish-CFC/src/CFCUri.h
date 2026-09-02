@@ -43,9 +43,6 @@ CFCUri_new(const char *uri, struct CFCClass *klass);
 CFCUri*
 CFCUri_init(CFCUri *self, const char *uri, struct CFCClass *klass);
 
-void
-CFCUri_destroy(CFCUri *self);
-
 const char*
 CFCUri_get_string(CFCUri *self);
 

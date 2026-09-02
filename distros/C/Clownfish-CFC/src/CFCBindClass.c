@@ -81,10 +81,13 @@ S_override_decs(CFCBindClass *self);
 static char*
 S_short_names(CFCBindClass *self);
 
+static void
+CFCBindClass_destroy(CFCBase *base);
+
 static const CFCMeta CFCBINDCLASS_META = {
     "Clownfish::CFC::Binding::Core::Class",
     sizeof(CFCBindClass),
-    (CFCBase_destroy_t)CFCBindClass_destroy
+    CFCBindClass_destroy
 };
 
 CFCBindClass*
@@ -104,11 +107,13 @@ CFCBindClass_init(CFCBindClass *self, CFCClass *client) {
     return self;
 }
 
-void
-CFCBindClass_destroy(CFCBindClass *self) {
+static void
+CFCBindClass_destroy(CFCBase *base) {
+    CFCBindClass *self = (CFCBindClass *) base;
+
     FREEMEM(self->short_names_macro);
     CFCBase_decref((CFCBase*)self->client);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 char*

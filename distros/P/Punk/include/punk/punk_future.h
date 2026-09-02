@@ -531,8 +531,10 @@ static void pf_combine(pTHX_ SV *G, int mode, SV **inputs, int n) {
  * (the ABI cannot read a future's values back, so the wrapper's own struct
  * stays authoritative). Off-loop a timer just sleeps and settles at once. */
 
+/* Asked once per future created, so it takes the resolved-table accessor
+ * rather than punk_hm, whose env check would be paid per future. */
 static void pf_detect(pTHX_ punk_future *pf) {
-    const hm_abi *A = punk_hm(aTHX);
+    const hm_abi *A = punk_hm_resolved(aTHX);
     void *loop = A ? A->cur_loop(aTHX) : NULL;
     if (loop) { pf->is_loop = 1; pf->abi = A; pf->loop = loop; }
 }
@@ -621,6 +623,24 @@ static void pf_await(pTHX_ SV *self) {
         croak("Punk::Future: await on a pending future with no event loop "
               "to drive it");
     }
+}
+
+/* The first value of a settled future, awaiting a pending one first: what
+ * `->get` yields in scalar context, croaking the same way, but reached
+ * without a perl method dispatch. Declared in punk_context.h, whose coerce
+ * path is the caller. Returns +1. */
+static SV *pcx_pf_get1(pTHX_ SV *f) {
+    punk_future *pf = pf_of(aTHX_ f);
+    SV **v;
+    if (pf->state == PF_PENDING) pf_await(aTHX_ f);
+    if (pf->state == PF_CANCELLED)
+        croak("Punk::Future: get on a cancelled future");
+    if (pf->state == PF_FAILED) {
+        SV **e = pf->vals ? av_fetch(pf->vals, 0, 0) : NULL;
+        croak_sv(e && *e ? *e : sv_2mortal(newSVpvs("Punk::Future failed")));
+    }
+    v = pf->vals ? av_fetch(pf->vals, 0, 0) : NULL;
+    return (v && *v) ? newSVsv(*v) : newSV(0);
 }
 
 /* a future that settles after secs: a loop timer, or a plain sleep off-loop */

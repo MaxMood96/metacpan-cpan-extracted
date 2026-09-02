@@ -30,10 +30,13 @@ struct CFCDocument {
     char *name;
 };
 
+static void
+CFCDocument_destroy(CFCBase *base);
+
 static const CFCMeta CFCDOCUMENT_META = {
     "Clownfish::CFC::Model::Document",
     sizeof(CFCDocument),
-    (CFCBase_destroy_t)CFCDocument_destroy
+    CFCDocument_destroy
 };
 
 static CFCDocument **registry = NULL;
@@ -76,12 +79,14 @@ CFCDocument_do_create(CFCDocument *self, const char *path,
     return self;
 }
 
-void
-CFCDocument_destroy(CFCDocument *self) {
+static void
+CFCDocument_destroy(CFCBase *base) {
+    CFCDocument *self = (CFCDocument *) base;
+
     FREEMEM(self->path);
     FREEMEM(self->path_part);
     FREEMEM(self->name);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 static void

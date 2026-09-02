@@ -6,7 +6,7 @@ use warnings;
 use parent 'Punk::Plugin';
 use Punk::Authorisation ();
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 1;
 

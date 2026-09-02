@@ -90,6 +90,7 @@ lib/Developer/Dashboard/EnvLoader.pm
 lib/Developer/Dashboard/File.pm
 lib/Developer/Dashboard/FileRegistry.pm
 lib/Developer/Dashboard/Folder.pm
+lib/Developer/Dashboard/Handle.pm
 lib/Developer/Dashboard/Housekeeper.pm
 lib/Developer/Dashboard/IndicatorStore.pm
 lib/Developer/Dashboard/InternalCLI.pm
@@ -102,6 +103,7 @@ lib/Developer/Dashboard/PageStore.pm
 lib/Developer/Dashboard/PathRegistry.pm
 lib/Developer/Dashboard/PerlEnv.pm
 lib/Developer/Dashboard/Platform.pm
+lib/Developer/Dashboard/ProcessSupervision.pm
 lib/Developer/Dashboard/Prompt.pm
 lib/Developer/Dashboard/Runtime/Result.pm
 lib/Developer/Dashboard/RuntimeManager.pm
@@ -110,6 +112,7 @@ lib/Developer/Dashboard/SeedSync.pm
 lib/Developer/Dashboard/SessionStore.pm
 lib/Developer/Dashboard/SkillDispatcher.pm
 lib/Developer/Dashboard/SkillManager.pm
+lib/Developer/Dashboard/StreamDrain.pm
 lib/Developer/Dashboard/UpdateManager.pm
 lib/Developer/Dashboard/Web/App.pm
 lib/Developer/Dashboard/Web/DancerApp.pm
@@ -176,6 +179,7 @@ t/07-core-units.t
 t/08-web-update-coverage.t
 t/09-runtime-manager.t
 t/10-extension-action-docker.t
+t/100-cli-runtimecontrol-coverage.t
 t/100-runtimemanager-coverage.t
 t/101-web-app-coverage.t
 t/102-skillmanager-coverage.t
@@ -237,7 +241,24 @@ t/15-cli-module-coverage.t
 t/15-release-metadata.t
 t/150-coverage-gate-lock-rename.t
 t/151-coverage-gate-launch-boundary.t
+t/152-bounded-command.t
+t/153-collector-loop-accumulation.t
+t/154-collector-signal-recorded.t
+t/155-coverage-gate-library-path.t
+t/156-cpan-audit-interpreter-scope.t
+t/157-ci-verdicts-survive-an-early-failure.t
+t/158-operator-tool-specs.t
+t/159-dollar-question-guard-sweep.t
 t/16-bookmark-play-nav.t
+t/160-process-supervision-extraction.t
+t/161-doctor-ssl-certificate-expiry.t
+t/161-fractional-sleep-guard-sweep.t
+t/162-streaming-reader-axes.t
+t/163-stream-drain-extraction.t
+t/164-page-resolution-failure-contract.t
+t/164-stream-drain-eintr.t
+t/165-page-resolution-report.t
+t/166-dashboard-d2-handle.t
 t/17-web-server-ssl.t
 t/18-web-service-config.t
 t/19-skill-system.t
@@ -318,6 +339,8 @@ t/98-cli-openfile-coverage.t
 t/99-pageruntime-coverage.t
 t/features/dd392-cve-remediation.feature
 t/fuzz/scorecard-fast-check.mjs
+t/lib/Local/BoundedCommand.pm
+t/lib/Local/BrowserProbe.pm
 t/lib/Local/CollectorFixture.pm
 t/lib/Local/DockerGuard.pm
 t/lib/Local/PSGITest.pm

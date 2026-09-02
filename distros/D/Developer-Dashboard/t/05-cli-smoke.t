@@ -902,6 +902,18 @@ if ( !$UNDER_COVER ) {
     print {$rotating_log_fh} "line-1\nline-2\nline-3\nline-4\nline-5\nline-6\n";
     close $rotating_log_fh or die "Unable to close $rotating_log: $!";
 
+    # DD-613: --dry-run must report the same would-be rotation without
+    # touching the log file, before the real invocation below actually
+    # rotates it.
+    my $dry_run_housekeeper = json_decode( _run_in_home( $collector_log_home, "$perl -I'$lib' '$dashboard' housekeeper --dry-run" ) );
+    is( $dry_run_housekeeper->{ok}, 1, 'dashboard housekeeper --dry-run reports a successful preview scan' );
+    ok( $dry_run_housekeeper->{dry_run}, 'dashboard housekeeper --dry-run flags the summary as a dry run' );
+    open my $unrotated_log_fh, '<', $rotating_log or die "Unable to read $rotating_log: $!";
+    my $unrotated_log = do { local $/; <$unrotated_log_fh> };
+    close $unrotated_log_fh or die "Unable to close $rotating_log: $!";
+    is( $unrotated_log, "line-1\nline-2\nline-3\nline-4\nline-5\nline-6\n",
+        'dashboard housekeeper --dry-run leaves the collector log completely unrotated' );
+
     my $housekeeper_run = json_decode( _run_in_home( $collector_log_home, "$perl -I'$lib' '$dashboard' housekeeper" ) );
     is( $housekeeper_run->{ok}, 1, 'dashboard housekeeper reports a successful cleanup scan' );
     ok( exists $housekeeper_run->{scanned}, 'dashboard housekeeper reports scan counts' );

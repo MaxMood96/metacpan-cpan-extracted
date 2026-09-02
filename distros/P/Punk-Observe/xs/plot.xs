@@ -380,6 +380,7 @@ popl_timeseries(SV *res, ...)
         {
             HV *layout = newHV(), *yaxis = newHV(), *title = newHV();
             SV *args[4];
+            SV *safe;
             int got;
             int logsafe = 0;
 
@@ -389,7 +390,10 @@ popl_timeseries(SV *res, ...)
                 PUTBACK;
                 got = call_pv("Punk::Observe::Plot::_log_is_safe", G_SCALAR);
                 SPAGAIN;
-                logsafe = got ? SvTRUE(POPs) : 0;
+                /* Popped into a variable first: before 5.32 SvTRUE mentions
+                 * its argument up to five times, and SvTRUE(POPs) pops once
+                 * per mention. */
+                if (got) { safe = POPs; logsafe = SvTRUE(safe) ? 1 : 0; }
                 PUTBACK;
                 FREETMPS; LEAVE;
                 SPAGAIN;

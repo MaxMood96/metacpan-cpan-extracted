@@ -15,7 +15,7 @@
 
 package Clownfish::CFC::Model::DocuComment;
 use Clownfish::CFC;
-our $VERSION = '0.007000';
+our $VERSION = '0.008000';
 $VERSION = eval $VERSION;
 
 1;

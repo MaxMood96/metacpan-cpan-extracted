@@ -5,6 +5,7 @@ author:
 build_requires:
   Config: '0'
   ExtUtils::MakeMaker: '0'
+  Module::Loaded: '0'
   Test2::Require::ReleaseTesting: '0'
   Test2::V1: '0'
   Test::API: '0'
@@ -16,7 +17,7 @@ configure_requires:
   strict: '0'
   warnings: '0'
 dynamic_config: 0
-generated_by: 'ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013'
+generated_by: 'ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150015'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -27,9 +28,12 @@ no_index:
     - t
     - inc
 provides:
+  Version::Core:
+    file: lib/Version/Semantic.pm
+    version: v2.2.0
   Version::Semantic:
     file: lib/Version/Semantic.pm
-    version: v2.1.1
+    version: v2.2.0
 requires:
   Carp: '1.32'
   overload: '0'
@@ -39,5 +43,5 @@ requires:
 resources:
   bugtracker: https://codeberg.org/XSven/Version-Semantic/issues
   repository: https://codeberg.org/XSven/Version-Semantic.git
-version: v2.1.1
+version: v2.2.0
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

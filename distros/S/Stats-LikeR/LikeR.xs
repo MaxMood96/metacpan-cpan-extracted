@@ -36,7 +36,7 @@ compilers the keyword may not be recognised at all: MSVC accepts it only under
 spells it __restrict__, and a strict C89 compiler has no equivalent. Map it
 where a spelling exists and define it away where none does. This has to sit
 below every #include above, so that it cannot rewrite a parameter named
-`restrict` inside a system header.*/
+`restrict` inside a system header*/
 #if !defined(__cplusplus) && !defined(restrict)
 #  if defined(_MSC_VER)
 #    define restrict __restrict
@@ -1271,7 +1271,7 @@ static NV ft_dhyper_log(long x, long m, long n, long k) {
 
 typedef struct {
 	long lo, hi, ns, m, n, k, x;
-	NV *logdc;   // central log hypergeometric density over the support
+	NV *logdc; // central log hypergeometric density over the support
 } ft_support;
 
 static int ft_init(ft_support *S, long a, long b, long c, long d) {
@@ -1313,20 +1313,20 @@ static NV ft_mnhyper(const ft_support *restrict S, NV ncp, NV *restrict scratch)
 static NV ft_pnhyper(const ft_support *restrict S, long q, NV ncp, bool upper,
                      NV *restrict scratch) {
 	if (ncp == 1.0) {
-	  NV s = 0;
-	  for (long i = 0; i < S->ns; i++) {
-		   long j = S->lo + i;
-		   if (upper ? (j >= q) : (j <= q)) s += nv_exp(S->logdc[i]);
-	  }
-	  return s;
+		NV s = 0;
+		for (long i = 0; i < S->ns; i++) {
+			long j = S->lo + i;
+			if (upper ? (j >= q) : (j <= q)) s += nv_exp(S->logdc[i]);
+		}
+		return s;
 	}
 	if (ncp == 0.0)   return upper ? (NV)(q <= S->lo) : (NV)(q >= S->lo);
 	if (nv_isinf(ncp))   return upper ? (NV)(q <= S->hi) : (NV)(q >= S->hi);
 	ft_dnhyper(S, ncp, scratch);
 	NV s = 0;
 	for (long i = 0; i < S->ns; i++) {
-	  long j = S->lo + i;
-	  if (upper ? (j >= q) : (j <= q)) s += scratch[i];
+		long j = S->lo + i;
+		if (upper ? (j >= q) : (j <= q)) s += scratch[i];
 	}
 	return s;
 }
@@ -2058,7 +2058,6 @@ static LmDesign *lm_design_build(pTHX_ HV *data_hoa,
 		}
 		Safefree(cs); Safefree(cl);
 	}
-
 	// pass 2: which variables are factors, and what are their levels
 	Newxz(vfac, d->nvar ? d->nvar : 1, int);
 	Newxz(d->factor, d->nvar ? d->nvar : 1, LmFactor);
@@ -2084,9 +2083,9 @@ static LmDesign *lm_design_build(pTHX_ HV *data_hoa,
 				}
 				Safefree(s);
 			}
-			/*A column of strings with nothing readable in it is no use as a
-			factor; fall back to treating it as continuous, which is what
-			this code did before factors were expanded per component.*/
+	/*A column of strings with nothing readable in it is no use as a
+	factor; fall back to treating it as continuous, which is what
+	this code did before factors were expanded per component.*/
 			if (nlev == 0) { Safefree(levels); continue; }
 			qsort(levels, nlev, sizeof(char*), cmp_string_wt);
 			vfac[j] = (int)d->nfactor;
@@ -2102,7 +2101,6 @@ static LmDesign *lm_design_build(pTHX_ HV *data_hoa,
 			}
 		}
 	}
-
 	//pass 3: order terms by degree, as R's terms() does
 	{
 		unsigned int *restrict order = NULL;
@@ -2163,7 +2161,6 @@ static LmDesign *lm_design_build(pTHX_ HV *data_hoa,
 			full[tstart[t] + c] = !present;
 		}
 	}
-
 	//pass 5: emit the columns
 	col_cap = 16; comp_cap = 4;
 	Newxz(d->col, col_cap, LmCol);
@@ -2414,16 +2411,16 @@ static void pa_kernel(const NV *p, NV *adj, size_t n,
 	} else if (strcmp(meth, "holm") == 0) {
 		NV cummax = 0.0;
 		for (size_t i = 0; i < n; i++) {
-			 NV v = arr[i].p * (n - i);
-			 if (v > cummax) cummax = v;
-			 adj[arr[i].orig_idx] = (cummax < 1.0) ? cummax : 1.0;
+			NV v = arr[i].p * (n - i);
+			if (v > cummax) cummax = v;
+			adj[arr[i].orig_idx] = (cummax < 1.0) ? cummax : 1.0;
 		}
 	} else if (strcmp(meth, "hochberg") == 0) {
 		NV cummin = 1.0;
 		for (SSize_t i = n - 1; i >= 0; i--) {
-			 NV v = arr[i].p * (n - i);
-			 if (v < cummin) cummin = v;
-			 adj[arr[i].orig_idx] = (cummin < 1.0) ? cummin : 1.0;
+			NV v = arr[i].p * (n - i);
+			if (v < cummin) cummin = v;
+			adj[arr[i].orig_idx] = (cummin < 1.0) ? cummin : 1.0;
 		}
 	} else if (strcmp(meth, "bh") == 0) {
 		NV cummin = 1.0;
@@ -2453,8 +2450,7 @@ static void pa_kernel(const NV *p, NV *adj, size_t n,
 			   min_val = temp;
 			}
 		}
-		// pa <- q <- rep(min, n)
-		for (size_t i = 0; i < n; i++) {
+		for (size_t i = 0; i < n; i++) {// pa <- q <- rep(min, n)
 			 pa[i] = min_val;
 			 q_arr[i] = min_val;
 		}
@@ -2478,10 +2474,10 @@ static void pa_kernel(const NV *p, NV *adj, size_t n,
 			 for (size_t i = 0; i < i2_len; i++) {
 				 q_arr[n_mj + 1 + i] = q_arr[n_mj];
 			}
-			 // pa <- pmax(pa, q)
+			// pa <- pmax(pa, q)
 			for (size_t i = 0; i < n; i++) {
 				if (pa[i] < q_arr[i]) {
-				   pa[i] = q_arr[i];
+					pa[i] = q_arr[i];
 				}
 			}
 		}
@@ -2671,9 +2667,9 @@ static NV pearson_corr(const NV *x, const NV *y, size_t n) {
 			const NV vxx = sxx - cx * cx / n;
 			const NV vyy = syy - cy * cy / n;
 			const NV vxy = sxy - cx * cy / n;
-			/*Rounding can leave a centred sum of squares a hair below zero on
-			a constant column; sqrt() of that would be NaN where the honest
-			answer is "no variance to correlate".*/
+	/*Rounding can leave a centred sum of squares a hair below zero on
+	a constant column; sqrt() of that would be NaN where the honest
+	answer is "no variance to correlate".*/
 			const NV den = (vxx > 0.0 && vyy > 0.0) ? nv_sqrt(vxx * vyy) : 0.0;
 			if (den == 0.0) return NV_NAN;
 			return vxy / den;
@@ -2806,7 +2802,6 @@ static void kendall_count_pairs(const NV *x, const NV *y, size_t n,
 		}
 		i = j + 1;
 	}
-
 	//ytie: pairs of equal y over all data — from a separate y sort.
 	NV *restrict ys;
 	Newx(ys, n, NV);
@@ -2820,7 +2815,6 @@ static void kendall_count_pairs(const NV *x, const NV *y, size_t n,
 		i = j + 1;
 	}
 	Safefree(ys);
-
 	//D: discordant pairs = y-inversions in (x,y)-sorted order.
 	NV *restrict yv, *restrict tmp;
 	Newx(yv, n, NV);
@@ -2999,16 +2993,47 @@ lgamma()s are each ~1.6e8 and sum to ~1.5e7, so their last bits are worth
 into a relative error in the result.  stirlerr()/bd0() never form those large
 intermediates, so they hold ~1e-15 at any size.  Written a/(a+b)*b so the
 product cannot overflow for huge a and b.*/
-static NV _incbeta_front(NV a, NV b, NV x) {
-	return (a / (a + b)) * b * nv_exp(bt_dbinom_raw_log(a, a + b, x, 1.0 - x));
+/*y is the caller's 1-x, passed in rather than formed here, for the reason
+given at incbeta_xy() below.*/
+static NV _incbeta_front(NV a, NV b, NV x, NV y) {
+	return (a / (a + b)) * b * nv_exp(bt_dbinom_raw_log(a, a + b, x, y));
 }
 
-static NV incbeta(NV a, NV b, NV x) {
+/*I_x(a, b) where the caller supplies BOTH x and y = 1 - x.
+
+Every caller here builds x as a ratio whose complement is another exact
+ratio over the same denominator -- pf() has x = df1*f/D and 1-x = df2/D,
+pt_upper() has x = df/(df + t^2) and 1-x = t^2/(df + t^2) -- so the
+complement is available to full relative precision and only ever loses that
+precision by being thrown away and re-formed as 1.0 - x.
+
+Which matters because the reflected branch below needs the complement, and
+takes that branch exactly when x is the side near 1: there 1.0 - x is
+catastrophic cancellation, and at |1 - x| < 2^-53 it collapses to 0 and the
+whole tail with it.  Measured against mpmath at mp.dps = 60, the single-
+argument form gave pf(1e-12, 1, 1e6, lower.tail = FALSE) = 1 exactly where
+the tail is 0.99999920211563864 (7.98e-7 absolute), and pt(1e-6, 1e6) = 0.5
+exactly where R and mpmath agree on 0.50000039894218068 (3.99e-7).  With the
+complement passed in, both are within 1 ulp.  This is R's own split -- its
+bratio() takes x and y as separate arguments for the same reason.
+
+x >= 1.0 is deliberately NOT short-circuited to 1.0: a y that is still
+positive when x has already rounded to 1.0 is precisely the case this
+function exists to get right, and the front factor's x^(n-k) is then wrong
+by a relative (n-k)*y, which is smaller than y itself at every call site
+here.  Only y <= 0 means the upper tail has really vanished.*/
+static NV incbeta_xy(NV a, NV b, NV x, NV y) {
 	if (x <= 0.0) return 0.0;
-	if (x >= 1.0) return 1.0;
+	if (y <= 0.0) return 1.0;
 	if (x < (a + 1.0) / (a + b + 2.0))
-		return _incbeta_front(a, b, x) * _incbeta_cf(a, b, x) / a;
-	return 1.0 - _incbeta_front(b, a, 1.0 - x) * _incbeta_cf(b, a, 1.0 - x) / b;
+		return _incbeta_front(a, b, x, y) * _incbeta_cf(a, b, x) / a;
+	return 1.0 - _incbeta_front(b, a, y, x) * _incbeta_cf(b, a, y) / b;
+}
+
+/*For callers that genuinely have only x -- a bisection midpoint, or a
+probability whose complement is not separately known.*/
+static NV incbeta(NV a, NV b, NV x) {
+	return incbeta_xy(a, b, x, 1.0 - x);
 }
 
 /*P(T > t): pt(t, df, lower.tail = FALSE).
@@ -3052,14 +3077,18 @@ static NV pt_upper(NV t, NV df) {
 		prob_2tail = nv_exp(-0.5 * df * (2.0 * nv_log(nv_fabs(t)) - nv_log(df))
 		                    - lbeta - nv_log(0.5 * df));
 	} else {
-		prob_2tail = incbeta(df / 2.0, 0.5, df / (df + t * t));
+		/*t*t/(df + t*t) is the exact complement of df/(df + t*t); handing
+		both to incbeta_xy() is what keeps pt() accurate for small |t|,
+		where the complement is the tiny one.*/
+		const NV tt = t * t, dtt = df + tt;
+		prob_2tail = incbeta_xy(df / 2.0, 0.5, df / dtt, tt / dtt);
 	}
 	return (t > 0) ? 0.5 * prob_2tail : 1.0 - 0.5 * prob_2tail;
 }
 
 static NV get_t_pvalue(NV t, NV df, const char*alt) {
-	NV x = df / (df + t * t);
-	NV prob_2tail = incbeta(df / 2.0, 0.5, x);
+	NV tt = t * t, dtt = df + tt;		//see pt_upper() on the exact complement
+	NV prob_2tail = incbeta_xy(df / 2.0, 0.5, df / dtt, tt / dtt);
 	if (strcmp(alt, "less") == 0) return (t < 0) ? 0.5 * prob_2tail : 1.0 - 0.5 * prob_2tail;
 	if (strcmp(alt, "greater") == 0) return (t > 0) ? 0.5 * prob_2tail : 1.0 - 0.5 * prob_2tail;
 	return prob_2tail;
@@ -3232,7 +3261,6 @@ the whole point of the recursion.*/
 static void nv_introsort(NV *a, size_t lo, size_t hi, unsigned int depth) {
 	while (hi - lo >= NV_SEL_ISORT) {
 		if (depth-- == 0) { nv_heapsort(a + lo, hi - lo + 1); return; }
-
 		/*median of three, left in place: a[lo] <= pivot <= a[hi], so both
 		ends double as sentinels that stop the scans below*/
 		size_t mid = lo + (hi - lo) / 2;
@@ -3240,7 +3268,6 @@ static void nv_introsort(NV *a, size_t lo, size_t hi, unsigned int depth) {
 		if (a[hi]  < a[lo])  nv_swap(&a[hi],  &a[lo]);
 		if (a[hi]  < a[mid]) nv_swap(&a[hi],  &a[mid]);
 		const NV pivot = a[mid];
-
 		size_t i = lo, j = hi;
 		for (;;) {
 			do { i++; } while (a[i] < pivot);
@@ -3819,8 +3846,11 @@ static NV kendall_exact_pvalue(size_t n, NV s_obs, const char *alt) {
 // F-distribution Cumulative Distribution Function P(F <= f)
 static NV pf(NV f, NV df1, NV df2) {
 	if (f <= 0.0) return 0.0;
-	NV x = (df1 * f) / (df1 * f + df2);
-	return incbeta(df1 / 2.0, df2 / 2.0, x);
+	/*df2/denom is the exact 1 - x; see incbeta_xy().  Without it the lower
+	tail loses digits from the other end, where it is the one near 1:
+	pf(1e12, 1, 1) was 7e-12 relative off mpmath, now 1 ulp.*/
+	NV denom = df1 * f + df2;
+	return incbeta_xy(df1 / 2.0, df2 / 2.0, (df1 * f) / denom, df2 / denom);
 }
 
 /*Upper tail P(F > f)  ==  R's pf(f, df1, df2, lower.tail = FALSE).
@@ -3830,14 +3860,19 @@ Computed in the upper tail directly via the beta symmetry
 so 1-x = df2 / (df1·f + df2) is formed without any subtraction.  Writing
 this as `1 - pf(...)` instead throws away the whole answer once the p-value
 drops below ~1e-16 (the ulp of 1.0): R reports 1.2e-76 where the naive form
-returns a flat 0, and loses relative precision from about 1e-9 downward.*/
+returns a flat 0, and loses relative precision from about 1e-9 downward.
+
+x = df1·f / (df1·f + df2) is handed over as well, because for small f this
+tail is the side near 1 and incbeta_xy() then needs the small complement --
+re-forming it as 1.0 - (df2/denom) is the cancellation that made
+pf(1e-12, 1, 1e6, lower.tail = FALSE) return exactly 1.*/
 static NV pf_upper(NV f, NV df1, NV df2) {
 	if (nv_isnan(f) || nv_isnan(df1) || nv_isnan(df2)) return NAN;   //NaN in, NaN out
 	if (f <= 0.0)   return 1.0;
 	if (nv_isinf(f))   return 0.0;   //zero within-group variance: R gives p = 0
 	NV denom = df1 * f + df2;
 	if (nv_isinf(denom)) return 0.0; //p underflows anyway
-	return incbeta(df2 / 2.0, df1 / 2.0, df2 / denom);
+	return incbeta_xy(df2 / 2.0, df1 / 2.0, df2 / denom, (df1 * f) / denom);
 }
 
 //Householder QR Decomposition for Sequential Sums of Squares
@@ -5157,9 +5192,21 @@ static NV nv_sorted_median(const NV *a, size_t n) {
    kruskal_test() used to be one of those callers and is not any more: it wants
    per-group rank sums rather than the ranks themselves, so it fuses the tie
    scan with the aggregation over KWObs and never stores a rank.  See KWObs. */
+/*Ascending by value only, like RANKITEM_LESS: every member of a tie group gets
+the same averaged rank below, so their relative order cannot reach the answer.
+
+This replaces a qsort() through cmp_nv3, which worked only because `val` is
+RankInfo's first member and a pointer to a struct is a pointer to its first
+member -- true but fragile, and it paid an un-inlinable indirect call on each
+of the O(n log n) comparisons.  wilcox_test() on two 20000-element samples went
+from 6.11ms to 2.80ms with this change alone -- a factor of 2.2, since the sort
+was more than half the call.*/
+#define RANKINFO_LESS(a, b) ((a).val < (b).val)
+LIKER_DEFINE_SORT(RankInfo, rankinfo, RANKINFO_LESS)
+
 static NV rank_and_count_ties(RankInfo *ri, size_t n, bool *restrict has_ties) {
 	if (n == 0) return 0.0;
-	qsort(ri, n, sizeof(RankInfo), cmp_nv3);
+	rankinfo_sort(ri, n);
 	size_t i = 0;
 	NV tie_adj = 0.0;
 	*has_ties = FALSE;
@@ -5524,8 +5571,11 @@ Time is O(m*n); memory is O(min(m,n)). Beyond this we warn and go asymptotic.*/
 #define KS_EXACT_MAX_PRODUCT 10000000.0
 static void calc_2sample_stats(NV *x, size_t nx, NV *y, size_t ny,
                                NV *d, NV *d_plus, NV *d_minus) {
-	qsort(x, nx, sizeof(NV), cmp_nv3);
-	qsort(y, ny, sizeof(NV), cmp_nv3);
+	/*nv_sort() rather than qsort(): the inlined comparison is worth about
+	40% of a sort this size (see LIKER_DEFINE_SORT).  Both samples reach here
+	with NaN already dropped by the gather loop in ks_test().*/
+	nv_sort(x, nx);
+	nv_sort(y, ny);
 	NV max_d = 0.0, max_d_plus = 0.0, max_d_minus = 0.0;
 	size_t i = 0, j = 0;
 	while (i < nx || j < ny) {
@@ -7521,7 +7571,10 @@ static NV bt_dbinom(long x, long n, NV p) {
 static NV bt_pbinom_lower(long k, long n, NV p) {
 	if (k < 0)  return 0.0;
 	if (k >= n) return 1.0;
-	return incbeta((NV)(n - k), (NV)(k + 1), 1.0 - p);
+	/*p is the exact complement of the 1-p this branch evaluates at, so pass
+	it rather than let incbeta_xy() re-form it; that is what holds the lower
+	tail together for a tiny p, where 1-p rounds to 1.0.*/
+	return incbeta_xy((NV)(n - k), (NV)(k + 1), 1.0 - p, p);
 }
 static NV bt_pbinom_upper(long k, long n, NV p) {
 	if (k < 0)  return 1.0;
@@ -8382,40 +8435,38 @@ typedef struct {
 	NV rnd; // random tie-break key (ties.method => 'random')
 } rank_pair;
 
-// value ascending, ties broken by original index ascending
-static int rank_cmp_idx_asc(const void *a, const void *b) {
-	const rank_pair *pa = (const rank_pair *)a;
-	const rank_pair *pb = (const rank_pair *)b;
-	if (pa->val < pb->val) return -1;
-	if (pa->val > pb->val) return  1;
-	if (pa->idx < pb->idx) return -1;
-	if (pa->idx > pb->idx) return  1;
-	return 0;
-}
+/*Three orderings of rank_pair, each generated as an inlined sort rather than
+reached through a qsort() comparator, for the reason LIKER_DEFINE_SORT's own
+comment gives: ordering n records costs O(n log n) comparisons and an indirect
+call on each is most of what the sort costs.  Measured on 20000 doubles,
+rank() went from 2.87ms to 1.43ms -- a factor of 2.0.  The internal rankers
+already sorted this way (rankitem_sort, kpair_sort); rank() was the one that
+did not.
 
-// value ascending, ties broken by original index descending ('last')
-static int rank_cmp_idx_desc(const void *a, const void *b) {
-	const rank_pair *pa = (const rank_pair *)a;
-	const rank_pair *pb = (const rank_pair *)b;
-	if (pa->val < pb->val) return -1;
-	if (pa->val > pb->val) return  1;
-	if (pa->idx > pb->idx) return -1;
-	if (pa->idx < pb->idx) return  1;
-	return 0;
-}
+What is left is not the sort.  Reading the same 20000 values back out of an AV
+in plain perl costs 0.37ms, so the gather loop and the newSVnv() per result are
+now most of the call, and there is little more to win here without changing
+what rank() returns.
 
-// value ascending, ties broken randomly ('random'); idx as final fallback
-static int rank_cmp_rnd_asc(const void *a, const void *b) {
-	const rank_pair *pa = (const rank_pair *)a;
-	const rank_pair *pb = (const rank_pair *)b;
-	if (pa->val < pb->val) return -1;
-	if (pa->val > pb->val) return  1;
-	if (pa->rnd < pb->rnd) return -1;
-	if (pa->rnd > pb->rnd) return  1;
-	if (pa->idx < pb->idx) return -1;
-	if (pa->idx > pb->idx) return  1;
-	return 0;
-}
+Every value reaching these has already been screened for NaN by the gather
+loop below, which is what they need: a comparison against NaN is false either
+way, so no comparison sort can order one.
+
+Each LESS is a strict weak ordering.  Ties on val fall through to the
+tie-break key, so no two distinct records ever compare equal in both
+directions -- idx is unique by construction, and is the final fallback even in
+the random ordering so that two equal random keys cannot make the ordering
+inconsistent.*/
+#define RANK_PAIR_LESS_IDX_ASC(a, b)                                          \
+	((a).val < (b).val || ((a).val == (b).val && (a).idx < (b).idx))
+#define RANK_PAIR_LESS_IDX_DESC(a, b)                                         \
+	((a).val < (b).val || ((a).val == (b).val && (a).idx > (b).idx))
+#define RANK_PAIR_LESS_RND(a, b)                                              \
+	((a).val < (b).val || ((a).val == (b).val &&                              \
+	 ((a).rnd < (b).rnd || ((a).rnd == (b).rnd && (a).idx < (b).idx))))
+LIKER_DEFINE_SORT(rank_pair, rank_pair_asc,  RANK_PAIR_LESS_IDX_ASC)
+LIKER_DEFINE_SORT(rank_pair, rank_pair_desc, RANK_PAIR_LESS_IDX_DESC)
+LIKER_DEFINE_SORT(rank_pair, rank_pair_rnd,  RANK_PAIR_LESS_RND)
 
 // ties.method codes
 #define RANK_AVERAGE 0
@@ -8525,7 +8576,7 @@ column and a row frame (AoH/HoH) row by row, so neither is transposed into
 the other on the way in and the only cells copied are the ones the result
 keeps.  Join keys match on the *stringified* cell value (canonical,
 length-prefixed), the natural Perl hash-join semantics; an undef/missing
-key cell never matches (pandas NaN rule).*/
+key cell never matches (SQL's NULL rule; R's incomparables = NA).*/
 #define MG_KEYSEP "\x1e"
 #define MG_INNER 0
 #define MG_LEFT  1
@@ -8966,8 +9017,11 @@ is the common case and the prefix and its two separators are, on an integer
 id, about as many bytes again to hash and to compare.
 
 Returns FALSE with the arena rewound if any key cell is missing or undef: an
-undef key matches nothing, which is pandas' NaN rule and what R's merge() does
-under its default incomparables = NA.*/
+undef key matches nothing.  That is SQL's rule for a NULL key and R's
+merge(..., incomparables = NA), and it is deliberately *not* what either
+reference does by default: R's default is incomparables = NULL and pandas
+matches NaN to NaN, both of which join a missing key to a missing key.  The
+divergence is recorded and asserted in t/merge.R.pandas.t.*/
 static bool
 mg_key(pTHX_ dd_ctx *T, const mg_frame *f, const mg_col *keys,
        SSize_t nkeys, SSize_t i, size_t start) {
@@ -10644,7 +10698,7 @@ static void dens_read_x(pTHX_ SV *sv, const char *fname,
 	}
 	Newx(xs, n, NV);
 	Copy(x, xs, n, NV);
-	qsort(xs, n, sizeof(NV), cmp_nv3);
+	nv_sort(xs, n);		//inlined comparison; see LIKER_DEFINE_SORT
 	*x_out = x; *xs_out = xs; *n_out = n;
 }
 
@@ -10915,9 +10969,10 @@ static NV d_pf(NV q, const NV *par, bool lower, bool give_log) {
 	if (!lower) return dist_log(pf_upper(q, df1, df2), give_log);
 	if (q <= 0.0)    return dist_log(0.0, give_log);
 	if (nv_isinf(q)) return dist_log(1.0, give_log);
-	const NV denom = df1 * q + df2;
-	if (nv_isinf(denom)) return dist_log(1.0, give_log);  //the tail is 1 anyway
-	return dist_log(incbeta(df1 / 2.0, df2 / 2.0, df1 * q / denom), give_log);
+	if (nv_isinf(df1 * q + df2)) return dist_log(1.0, give_log); //tail is 1 anyway
+	/*pf() itself, rather than a second copy of the same expression, so the
+	two can never drift apart on the complement argument.*/
+	return dist_log(pf(q, df1, df2), give_log);
 }
 
 /*Solve I_t(a, b) = p for t, returning t AND 1 - t, each to full relative
@@ -12015,9 +12070,9 @@ void rank(...)
 			for (size_t k = 0; k < n; k++) pairs[k].rnd = Drand01();
 
 		if (n > 1) {
-			if      (ties == RANK_RANDOM) qsort(pairs, n, sizeof(rank_pair), rank_cmp_rnd_asc);
-			else if (ties == RANK_LAST)   qsort(pairs, n, sizeof(rank_pair), rank_cmp_idx_desc);
-			else                          qsort(pairs, n, sizeof(rank_pair), rank_cmp_idx_asc);
+			if      (ties == RANK_RANDOM) rank_pair_rnd_sort(pairs, n);
+			else if (ties == RANK_LAST)   rank_pair_desc_sort(pairs, n);
+			else                          rank_pair_asc_sort(pairs, n);
 		}
 
 		// assign ranks (1-based) by non-NA index
@@ -14083,7 +14138,7 @@ CODE:
 	} else if (y_sv && SvPOK(y_sv)) {// 1 SAMPLE
 	  const char *dist = SvPV_nolen(y_sv);
 	  if (strEQ(dist, "pnorm")) {
-		   qsort(x_data, valid_nx, sizeof(NV), cmp_nv3);
+		   nv_sort(x_data, valid_nx);	//NaN already dropped above
 		   NV max_d = 0.0, max_d_plus = 0.0, max_d_minus = 0.0;
 		   for (size_t i = 0; i < valid_nx; i++) {
 		       NV cdf_obs_low  = (NV)i / valid_nx;
@@ -18303,8 +18358,15 @@ SV* t_test(...)
 			else if (strEQ(key, "y"))           y_sv        = val;
 			else if (strEQ(key, "mu"))          mu          = SvNV(val);
 			else if (strEQ(key, "paired"))      paired      = SvTRUE(val);
-			else if (strEQ(key, "var_equal"))   var_equal   = SvTRUE(val);
-			else if (strEQ(key, "conf_level"))  conf_level  = SvNV(val);
+			/*Both spellings of the two dotted R names, as every sibling here
+			already accepts (var_test, wilcox_test, prop_test, glm, ...).
+			t_test took only the underscored form, so the 'conf.level' its own
+			documentation lists -- and the 'var.equal' R spells it with -- were
+			a croak rather than an argument.*/
+			else if (strEQ(key, "var_equal") || strEQ(key, "var.equal"))
+				var_equal = SvTRUE(val);
+			else if (strEQ(key, "conf_level") || strEQ(key, "conf.level"))
+				conf_level = SvNV(val);
 			else if (strEQ(key, "alternative")) alternative = SvPV_nolen(val);
 			else croak("t_test: unknown argument '%s'", key);
 		}
@@ -18821,7 +18883,7 @@ PPCODE:
 	//tie correction: sum over distinct values of (t^3 - t)
 	NV *xs = NULL; Newx(xs, N, NV);
 	memcpy(xs, x, N * sizeof(NV));
-	qsort(xs, N, sizeof(NV), cmp_nv3);
+	nv_sort(xs, N);		//inlined comparison; see LIKER_DEFINE_SORT
 	NV tsum = 0.0;
 	{
 		size_t a = 0;
@@ -18926,7 +18988,7 @@ PPCODE:
 
 		//tie correction: sum over tie groups of (u^3 - u) within this block
 		memcpy(sorted, rowbuf, k * sizeof(NV));
-		qsort(sorted, k, sizeof(NV), cmp_nv3);
+		nv_sort(sorted, k);	//inlined comparison; see LIKER_DEFINE_SORT
 		size_t a = 0;
 		while (a < k) {
 			size_t b = a;
@@ -22152,7 +22214,7 @@ CODE:
 	are ours, not R's -- R's kruskal.test() reports no per-group statistics --
 	so there is no reference to hold them to beyond that.*/
 	NV *restrict group_rank_sums = NULL;
-	NV *restrict group_val_sums  = NULL;   // For Mean
+	NV *restrict group_val_sums  = NULL; // For Mean
 	size_t *restrict group_counts = NULL;
 	Newxz(group_rank_sums, k, NV);
 	Newxz(group_val_sums,  k, NV);
@@ -22247,8 +22309,7 @@ OUTPUT:
 SV* var_test(...)
 CODE:
 {
-	SV* x_sv = NULL;
-	SV* y_sv = NULL;
+	SV* x_sv = NULL, * y_sv = NULL;
 	NV ratio = 1.0, conf_level = NV_CONF_95;
 	const char*alternative = "two.sided";
 	Stack_off_t arg_idx = 0;
@@ -22409,7 +22470,6 @@ CODE:
 				while ((entry = hv_iternext(hv))) // Collect all HE pointers in one pass
 				 entries[i++] = entry;
 
-	
 				for (i = 0; i < limit; i++) {//Partial Fisher-Yates (only 'limit' passes)
 				 I32 j    = i + (I32)(Drand01() * (count - i));
 				 HE *tmp  = entries[i];
@@ -22418,11 +22478,10 @@ CODE:
 				}
 	//Pre-size result hash to avoid rehashing during population
 				hv_ksplit(ret_hv, limit);
-
 				for (i = 0; i < limit; i++) {
 				 HEK *hek = HeKEY_hek(entries[i]);
-				 /*hv_store() with a precomputed hash skips the hash
-				 computation entirely.  Negative klen signals UTF-8.*/
+ /*hv_store() with a precomputed hash skips the hash
+ computation entirely.  Negative klen signals UTF-8.*/
 				 (void)hv_store(
 					 ret_hv,
 					 HEK_KEY(hek),
@@ -22536,11 +22595,8 @@ PPCODE:
 	if ((items - 2) & 1)
 		croak("merge: options after the two frames must be name => value pairs");
 
-	SV *left  = ST(0);
-	SV *right = ST(1);
-
-	SV *how_sv = NULL, *on_sv = NULL;
-	SV *lon_sv = NULL, *ron_sv = NULL;
+	SV *left  = ST(0), *right = ST(1);
+	SV *how_sv = NULL, *on_sv = NULL, *lon_sv = NULL, *ron_sv = NULL;
 	SV *suf_sv = NULL, *out_sv = NULL;
 	for (Stack_off_t oi = 2; oi < items; oi += 2) {
 		STRLEN ol;
@@ -22568,14 +22624,12 @@ PPCODE:
 		else croak("merge: how must be 'inner', 'left', 'right', 'outer', or "
 		           "'cross' (got '%s')", h);
 	}
-
 	if (on_sv && (lon_sv || ron_sv))
 		croak("merge: give either 'on'/'by' or 'left.on'/'right.on', not both");
 	if ((lon_sv && !ron_sv) || (ron_sv && !lon_sv))
 		croak("merge: 'left.on' and 'right.on' must be given together");
 	if (how == MG_CROSS && (on_sv || lon_sv || ron_sv))
 		croak("merge: a cross join takes no join keys");
-
 	ENTER; SAVETMPS;
 	SV *suf0 = NULL, *suf1 = NULL;//suffixes
 	if (suf_sv) {
@@ -22714,7 +22768,16 @@ PPCODE:
 	for (SSize_t c = 0; c < nrc; c++) {
 		SV *kn = *av_fetch(rc_src, c, 0);
 		SV *outn;
-		if (hv_exists_ent(lc_set, kn, 0)) {
+	/*lkset as well as lc_set: the output key column carries the left
+	key's name, so under left.on/right.on a right-hand data column can
+	be named after it and would otherwise collide with it rather than
+	with a left data column.  R suffixes that column too -- merge.Rd's
+	no.dups, TRUE since R 3.5.0, "if a by.x column name matches one of
+	y, the y version gets suffixed as well" -- and the case is
+	tests/reg-tests-1d.R's parents/children join, which produced a
+	duplicated `name` column in R <= 3.4.x.  With `on` this cannot
+	fire: a right column named after a key is a key.*/
+		if (hv_exists_ent(lc_set, kn, 0) || hv_exists_ent(lkset, kn, 0)) {
 			outn = newSVsv(kn); sv_catsv(outn, suf1);
 		} else outn = newSVsv(kn);
 		if (hv_exists_ent(uni, outn, 0))
@@ -23024,8 +23087,7 @@ CODE:
 			}
 			// 5. Merge data across potentially mismatched inner structures
 			if (h_row_hv) {
-				if (SvTYPE(SvRV(i_row_sv)) == SVt_PVHV) {
-					// Hash into Hash (Direct copy)
+				if (SvTYPE(SvRV(i_row_sv)) == SVt_PVHV) {// Hash into Hash (Direct copy)
 					HV *i_inner_hv = (HV *)SvRV(i_row_sv);
 					HE *i_inner_entry;
 					hv_iterinit(i_inner_hv);
@@ -23034,8 +23096,7 @@ CODE:
 						SV *col_val    = hv_iterval(i_inner_hv, i_inner_entry);
 						hv_store_ent(h_row_hv, col_key_sv, SvREFCNT_inc(col_val), 0);
 					}
-				} else if (SvTYPE(SvRV(i_row_sv)) == SVt_PVAV) {
-					// Array into Hash (Read pairs)
+				} else if (SvTYPE(SvRV(i_row_sv)) == SVt_PVAV) {// Array into Hash (Read pairs)
 					AV *i_inner_av = (AV *)SvRV(i_row_sv);
 					SSize_t inner_top_idx = av_len(i_inner_av);
 					for (SSize_t idx = 0; idx < inner_top_idx; idx += 2) {
@@ -23768,17 +23829,17 @@ CODE:
 	7.8 ms with; -O3, 6.7 ms against 5.7.*/
 	NV *restrict XtX = (NV*)safecalloc(p * p, sizeof(NV));
 	for (size_t i = 0; i < n; i++) {
-	  for (size_t j = 0; j < p; j++) {
-		   for (size_t k = j; k < p; k++) {
-			   XtX[j * p + k] += X_mat[i * p + j] * X_mat[i * p + k];
-		   }
-	  }
+		for (size_t j = 0; j < p; j++) {
+			for (size_t k = j; k < p; k++) {
+				XtX[j * p + k] += X_mat[i * p + j] * X_mat[i * p + k];
+			}
+		}
 	}
 	// Mirror the symmetric lower triangle
 	for (size_t j = 0; j < p; j++) {
-	  for (size_t k = 0; k < j; k++) {
-		   XtX[j * p + k] = XtX[k * p + j];
-	  }
+		for (size_t k = 0; k < j; k++) {
+			XtX[j * p + k] = XtX[k * p + j];
+		}
 	}
 	// 8. Jacobi Eigen Decomposition
 	NV *eigen_val = (NV*)safemalloc(p * sizeof(NV));
@@ -23790,9 +23851,9 @@ CODE:
 	NV *sdev = (NV*)safemalloc(k_cols * sizeof(NV));
 	NV n_adj = (n > 1) ? (NV)(n - 1) : 1.0;
 	for (size_t j = 0; j < k_cols; j++) {
-	  NV e_val = eigen_val[j];
-	  if (e_val < 0.0) e_val = 0.0; // clamp floating point inaccuracy
-	  sdev[j] = nv_sqrt(e_val / n_adj);
+		NV e_val = eigen_val[j];
+		if (e_val < 0.0) e_val = 0.0; // clamp floating point inaccuracy
+		sdev[j] = nv_sqrt(e_val / n_adj);
 	}
 	if (tol >= 0.0) {
 	  size_t rank_est = 0;
@@ -23817,31 +23878,31 @@ CODE:
 	}
 	hv_stores(res_hv, "rotation", newRV_noinc((SV*)rot_av));
 	if (retx) {
-	  AV *x_ret_av = newAV();
-	  for (size_t i = 0; i < n; i++) {
-		   AV *row_x = newAV();
-		   for (size_t m = 0; m < k_cols; m++) {
-			   NV x_rot_val = 0.0;
-			   for (size_t c = 0; c < p; c++) {
-				   x_rot_val += X_mat[i * p + c] * eigen_vec[c * p + m];
-			   }
-			   av_push(row_x, newSVnv(x_rot_val));
-		   }
-		   av_push(x_ret_av, newRV_noinc((SV*)row_x));
-	  }
-	  hv_stores(res_hv, "x", newRV_noinc((SV*)x_ret_av));
+		AV *x_ret_av = newAV();
+		for (size_t i = 0; i < n; i++) {
+			AV *row_x = newAV();
+			for (size_t m = 0; m < k_cols; m++) {
+				NV x_rot_val = 0.0;
+				for (size_t c = 0; c < p; c++) {
+					x_rot_val += X_mat[i * p + c] * eigen_vec[c * p + m];
+				}
+				av_push(row_x, newSVnv(x_rot_val));
+			}
+			av_push(x_ret_av, newRV_noinc((SV*)row_x));
+		}
+		hv_stores(res_hv, "x", newRV_noinc((SV*)x_ret_av));
 	}
 	if (colnames) {
-	  AV *names_av = newAV();
-	  for (size_t j = 0; j < p; j++) {
-		   av_push(names_av, newSVpv(colnames[j], 0));
-	  }
-	  hv_stores(res_hv, "varnames", newRV_noinc((SV*)names_av));
+		AV *names_av = newAV();
+		for (size_t j = 0; j < p; j++) {
+			av_push(names_av, newSVpv(colnames[j], 0));
+		}
+		hv_stores(res_hv, "varnames", newRV_noinc((SV*)names_av));
 	}
 	if (center) {
-	  AV *c_av = newAV();
-	  for (size_t j = 0; j < p; j++) av_push(c_av, newSVnv(cen_vec[j]));
-	  hv_stores(res_hv, "center", newRV_noinc((SV*)c_av));
+		AV *c_av = newAV();
+		for (size_t j = 0; j < p; j++) av_push(c_av, newSVnv(cen_vec[j]));
+		hv_stores(res_hv, "center", newRV_noinc((SV*)c_av));
 	} else {
 	  hv_stores(res_hv, "center", newSVsv(&PL_sv_no));
 	}
@@ -23852,10 +23913,9 @@ CODE:
 	} else {
 	  hv_stores(res_hv, "scale", newSVsv(&PL_sv_no));
 	}
-	// Cleanup
-	if (colnames) {
-	  for (size_t i = 0; i < p; i++) Safefree(colnames[i]);
-	  Safefree(colnames);
+	if (colnames) {// Cleanup
+		for (size_t i = 0; i < p; i++) Safefree(colnames[i]);
+		Safefree(colnames);
 	}
 	Safefree(X_mat); Safefree(cen_vec); Safefree(sc_vec);
 	Safefree(XtX); Safefree(eigen_val); Safefree(eigen_vec); Safefree(sdev);
@@ -23885,7 +23945,6 @@ CODE:
 			SV *row_val     = hv_iterval(in_hv, he_row);
 			HV *in_inner_hv;
 			SvGETMAGIC(row_val);
-
 			if (!SvROK(row_val) || SvTYPE(SvRV(row_val)) != SVt_PVHV)
 				 croak("Stats::LikeR::transpose: Hash mode – inner element is not a hash ref");
 			in_inner_hv = (HV *)SvRV(row_val);
@@ -23933,18 +23992,18 @@ CODE:
 				 ncols = av_len((AV *)SvRV(*elem)) + 1;
 			}
 			for (SSize_t i = 1; i < nrows; i++) {
-				 SV     **elem      = av_fetch(in_av, i, 0);
-				 SSize_t  row_ncols;
-				 if (!elem || !*elem)
-					  croak("Stats::LikeR::transpose: Array mode – row %d is missing", (int)i);
-				 SvGETMAGIC(*elem);
-				 if (!SvROK(*elem) || SvTYPE(SvRV(*elem)) != SVt_PVAV)
-					  croak("Stats::LikeR::transpose: Array mode – row %d is not an array ref", (int)i);
-				 row_ncols = av_len((AV *)SvRV(*elem)) + 1;
-				 if (row_ncols != ncols)
-					  croak("Stats::LikeR::transpose: Array mode – ragged array: "
-							"row 0 has %d cols, row %d has %d",
-							(int)ncols, (int)i, (int)row_ncols);
+				SV     **elem      = av_fetch(in_av, i, 0);
+				SSize_t  row_ncols;
+				if (!elem || !*elem)
+				  croak("Stats::LikeR::transpose: Array mode – row %d is missing", (int)i);
+				SvGETMAGIC(*elem);
+				if (!SvROK(*elem) || SvTYPE(SvRV(*elem)) != SVt_PVAV)
+				  croak("Stats::LikeR::transpose: Array mode – row %d is not an array ref", (int)i);
+				row_ncols = av_len((AV *)SvRV(*elem)) + 1;
+				if (row_ncols != ncols)
+				  croak("Stats::LikeR::transpose: Array mode – ragged array: "
+						"row 0 has %d cols, row %d has %d",
+						(int)ncols, (int)i, (int)row_ncols);
 			}
 			if (ncols > 0) {// Pass 2: output[j][i] = input[i][j]
 				av_extend(out_av, ncols - 1);
@@ -23953,7 +24012,7 @@ CODE:
 					SV *col_ref    = newRV_noinc((SV *)out_col_av);
 					if (!av_store(out_av, j, col_ref)) {
 						SvREFCNT_dec(col_ref);
-						croak("Stats::LikeR::transpose: Array mode – "
+						croak("Stats::LikeR::transpose: Array mode: "
 								"failed to allocate output column %d", (int)j);
 					}
 					av_extend(out_col_av, nrows - 1);
@@ -23977,7 +24036,7 @@ CODE:
 			}
 		}
 	} else { // Unsupported
-	  croak("Stats::LikeR::transpose: Input must be a hash ref or array ref");
+		croak("Stats::LikeR::transpose: Input must be a hash ref or array ref");
 	}
 	RETVAL = SvREFCNT_inc(retval_sv);
 OUTPUT:
@@ -24155,8 +24214,7 @@ PPCODE:
 
 			//else leave is_aoh/is_hoh = 0 => HoA path below
 		}
-		// empty hash: is_aoh = is_hoh = 0 => HoA path yields []
-	} else {
+	} else {// empty hash: is_aoh = is_hoh = 0 => HoA path yields []
 		croak("vals: first argument must be an array-ref (AoH) or hash-ref (HoA, HoH)");
 	}
 	//out_av is mortalised up front so any later croak frees it cleanly
@@ -24424,7 +24482,7 @@ PPCODE:
 		el = av_fetch(data_av, i, 0);
 		srt[i] = (el && SvOK(*el)) ? SvNV(*el) : 0.0;
 	}
-	qsort(srt, (size_t) n, sizeof(NV), cmp_nv3);
+	nv_sort(srt, (size_t) n);	//inlined comparison; see LIKER_DEFINE_SORT
 
 	//quantile cutpoints via linear interpolation (numpy/pandas default)
 	Newx(edges, m, NV);
@@ -24463,12 +24521,10 @@ PPCODE:
 		Safefree(edges);
 		croak("_qcut_core: data has too few distinct values to form bins");
 	}
-
 	edge_av = newAV();
 	av_extend(edge_av, ne - 1);
 	for (j = 0; j < ne; j++)
 		av_push(edge_av, newSVnv(edges[j]));
-
 	/*assign each original value to a 0-based bin only if codes are wanted;
 	lowest bin is inclusive on both ends*/
 	if (want_codes) {
@@ -24499,9 +24555,7 @@ PPCODE:
 			av_push(code_av, newSViv(bin));
 		}
 	}
-
 	Safefree(edges);
-
 	EXTEND(SP, 2);
 	if (want_codes)
 		PUSHs(sv_2mortal(newRV_noinc((SV *) code_av)));
@@ -24772,7 +24826,6 @@ SV* density(...)
 		IV n_arg = 512;
 		size_t nb = 1000;
 		Stack_off_t ai = 0;
-
 		if (ai < items && SvROK(ST(ai)) && SvTYPE(SvRV(ST(ai))) == SVt_PVAV) {
 			x_sv = ST(ai);
 			ai++;
@@ -24852,12 +24905,10 @@ SV* density(...)
 		bool bw_is_rule = FALSE;
 		short int bw_rule = DENS_BW_NRD0;
 		HV *res = NULL;
-
 		if (!x_sv || !SvROK(x_sv) || SvTYPE(SvRV(x_sv)) != SVt_PVAV)
 			croak("density: 'x' is required and must be an array reference");
 		if (n_arg < 1) croak("density: 'n' must be at least 1");
 		if (n_arg > (IV)1 << 26) croak("density: 'n' is too large");
-
 		{
 			AV *xav = (AV *)SvRV(x_sv);
 			N0 = (size_t)(av_len(xav) + 1);
@@ -24977,7 +25028,6 @@ SV* density(...)
 			bw_is_rule = TRUE; //the default, bw = "nrd0"
 			bw_rule = DENS_BW_NRD0;
 		}
-
 		if (bw_is_rule) {
 			if (nx < 2) {
 				err = "need at least 2 points to select a bandwidth automatically";
@@ -24991,7 +25041,7 @@ SV* density(...)
 			}
 			Newx(xs, nx, NV);
 			Copy(xf, xs, nx, NV);
-			qsort(xs, nx, sizeof(NV), cmp_nv3);
+			nv_sort(xs, nx);	//inlined comparison; see LIKER_DEFINE_SORT
 			err = dens_bw_rule(aTHX_ bw_rule, xf, xs, nx, nb,
 			                   FALSE, 0.0, FALSE, 0.0, FALSE, 0.0, &bw);
 			if (err) goto dens_cleanup;
@@ -24999,7 +25049,6 @@ SV* density(...)
 		if (!nv_isfinite(bw)) { err = "non-finite 'bw'"; goto dens_cleanup; }
 		bw *= adjust;
 		if (!(bw > 0.0)) { err = "'bw' is not positive."; goto dens_cleanup; }
-
 		if (!have_from || !have_to) {
 			NV mn = NV_INF, mx = -NV_INF;
 			for (size_t i = 0; i < nx; i++) {
@@ -25011,7 +25060,6 @@ SV* density(...)
 		}
 		if (!nv_isfinite(from)) { err = "non-finite 'from'"; goto dens_cleanup; }
 		if (!nv_isfinite(to))   { err = "non-finite 'to'";   goto dens_cleanup; }
-
 		m = 2 * n;
 		Newx(yre, m, NV);  Newxz(yim, m, NV);
 		Newx(kre, m, NV);  Newxz(kim, m, NV);
@@ -25022,7 +25070,6 @@ SV* density(...)
 			NV lo = from - ext * bw, up = to + ext * bw;
 			NV mult = old_coords ? 2.0 : (NV)(2 * n - 1) / (NV)(n - 1);
 			const NV pi = DENS_PI;
-
 			dens_bindist(xf, wf, nx, lo, up, n, yre);
 			for (size_t i = 0; i < m; i++) yre[i] *= totMass;
 			dens_kernel_grid(kernel, bw, mult * (up - lo), n, kre);

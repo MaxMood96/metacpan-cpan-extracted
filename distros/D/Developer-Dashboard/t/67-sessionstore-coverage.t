@@ -4,6 +4,28 @@ use strict;
 use warnings;
 use utf8;
 
+# DD-600: the CORE::GLOBAL::rename override must be installed before
+# Developer::Dashboard::SessionStore is compiled so the module's own rename
+# call in create() resolves through this intercept - matching DD-599's
+# established pattern in t/82-auth-coverage.t / t/54-hunt-collector.t.
+# Unlike DD-599's username-keyed final path, create()'s final path is keyed
+# by a random session_id only known AFTER create() returns, so this records
+# every observed rename's target and the SOURCE file's permission mode at
+# that exact moment (rather than pre-filtering by a known target); the test
+# correlates the last recorded rename against create()'s returned session_id
+# afterward.
+our $DD600_OBSERVED_RENAME_TO;
+our $DD600_OBSERVED_RENAME_MODE;
+
+BEGIN {
+    *CORE::GLOBAL::rename = sub {
+        my ( $from, $to ) = @_;
+        $DD600_OBSERVED_RENAME_TO   = $to;
+        $DD600_OBSERVED_RENAME_MODE = ( stat($from) )[2] & 07777;
+        return CORE::rename( $from, $to );
+    };
+}
+
 use Test::More;
 use File::Path qw(make_path);
 use File::Spec;
@@ -156,6 +178,87 @@ my $write_session = sub {
     like( $err, qr/Unable to write/, 'create dies when the session file cannot be written' );
 }
 
+# --- create: the session record's PREDICTABLE final path must never become
+# visible with loose permissions - a bare stat() after create() returns can't
+# prove this (a later chmod always leaves the final state correct even with
+# the bug), so this intercepts the rename that makes the file visible under
+# its final name and checks the SOURCE file's permissions at that exact
+# moment: by the time anything could observe the file at its predictable
+# path, it must already be secured. ------------------------------------
+{
+    my $old_umask = umask(0);
+    local $DD600_OBSERVED_RENAME_TO;
+    local $DD600_OBSERVED_RENAME_MODE;
+    my $record = $store->create( username => 'rename-observed-user', remote_addr => '127.0.0.1' );
+    umask($old_umask);
+    my $expected_file = $store->_session_file( $record->{session_id} );
+    is( $DD600_OBSERVED_RENAME_TO, $expected_file,
+        'DD-600: create renamed a source file into the predictable final session path (rename observed)' );
+    is( sprintf( '%04o', $DD600_OBSERVED_RENAME_MODE // -1 ), '0600',
+        'DD-600: the source file was already 0600 BEFORE the rename that made it visible at its final, predictable path - even under umask(0)' );
+    $store->delete( $record->{session_id} );    # avoid polluting later state
+}
+
+# --- create: force the earlier open-stage die. _pending_session_file is
+# pinned to a fixed path (rather than relying on the real pid/time-based
+# name, which cannot be pre-staged reliably) so a directory can occupy it -
+# matching Collector.pm::_pending_path's own override technique in
+# t/89-collector-coverage.t and DD-599's t/82-auth-coverage.t. -----------
+{
+    my $target       = $store->_session_file('open-blocked-session');
+    my $pending_path = "$target.blocked-open.pending";
+    mkdir $pending_path or die "Unable to create $pending_path: $!";
+    no warnings 'redefine';
+    local *Developer::Dashboard::SessionStore::_pending_session_file = sub { return $pending_path };
+    use warnings 'redefine';
+    my $open_fail = eval { $store->create( username => 'open-blocked-user' ); 1 } ? '' : $@;
+    like( $open_fail, qr/Unable to write \Q$pending_path\E/, 'create dies when the pending file cannot be opened' );
+    rmdir $pending_path or die "Unable to remove $pending_path: $!";
+}
+
+SKIP: {
+    skip 'requires a writable /dev/full to force a write failure', 1
+      if !-e '/dev/full' || !-w '/dev/full';
+
+    my $target       = $store->_session_file('write-blocked-session');
+    my $pending_path = "$target.forced-full.pending";
+    no warnings 'redefine';
+    local *Developer::Dashboard::SessionStore::_pending_session_file = sub { return $pending_path };
+    use warnings 'redefine';
+
+    skip "unable to symlink /dev/full: $!", 1
+      if !symlink( '/dev/full', $pending_path );
+
+    # DD-600: /dev/full always fails a write with ENOSPC. The session record
+    # is far smaller than Perl's IO buffer, so print() itself returns true
+    # (buffered, not yet flushed to the device) and the error only surfaces
+    # at close() - exercising the close-stage die branch, distinct from the
+    # open-stage die covered above.
+    my @warnings;
+    my $write_fail;
+    {
+        local $SIG{__WARN__} = sub { push @warnings, $_[0] };
+        $write_fail = eval { $store->create( username => 'write-blocked-user' ); 1 } ? '' : $@;
+    }
+    like( $write_fail, qr/Unable to close \Q$pending_path\E/, 'create dies when the pending write cannot be flushed to the device at close' );
+    unlink $pending_path;
+}
+
+# --- create: force the rename-stage die by making the final session path
+# an existing directory. _session_file is pinned to a fixed path (the real
+# path is keyed by a random session_id only known after create() returns,
+# so it cannot be pre-staged) - the pending temp write still succeeds, since
+# only the FINAL path is a directory. --------------------------------------
+{
+    my $victim_file = File::Spec->catfile( $store->{paths}->sessions_root, 'rename-blocked-session.json' );
+    mkdir $victim_file or die "Unable to stage directory $victim_file: $!";
+    no warnings 'redefine';
+    local *Developer::Dashboard::SessionStore::_session_file = sub { return $victim_file };
+    use warnings 'redefine';
+    my $rename_fail = eval { $store->create( username => 'rename-blocked-user' ); 1 } ? '' : $@;
+    like( $rename_fail, qr/Unable to rename/, 'create dies when the record cannot be installed at its final path' );
+}
+
 # --- sweep_expired: an unopenable sessions root makes opendir die -------
 {
     no warnings qw(redefine once);
@@ -194,6 +297,24 @@ my $write_session = sub {
     no warnings qw(redefine once);
     local *Developer::Dashboard::PathRegistry::sessions_root = sub { return $dir };
     is( $store->sweep_expired, 0, 'sweep_expired leaves a record whose expiry is the empty string untouched' );
+}
+
+# --- sweep_expired: dry_run counts an expired file without unlinking it -
+# (DD-613, for Housekeeper's preview mode)
+{
+    my $dir = File::Spec->catdir( $home, 'sweep-dry-run' );
+    make_path($dir);
+    my $file = File::Spec->catfile( $dir, 'expired.json' );
+    open my $fh, '>:raw', $file or die "Unable to write $file: $!";
+    print {$fh} json_encode( { session_id => 'expired', expires_at => '2000-01-01T00:00:00Z' } );
+    close $fh;
+
+    no warnings qw(redefine once);
+    local *Developer::Dashboard::PathRegistry::sessions_root = sub { return $dir };
+    is( $store->sweep_expired( dry_run => 1 ), 1, 'sweep_expired counts an expired file as removed under dry_run' );
+    ok( -f $file, 'sweep_expired leaves the expired file on disk under dry_run' );
+    is( $store->sweep_expired, 1, 'a real (non-dry-run) sweep_expired against the same fixture actually removes it' );
+    ok( !-f $file, 'the real sweep_expired call removed the file this time' );
 }
 
 # --- sweep_expired: an expired file that cannot be unlinked is not counted

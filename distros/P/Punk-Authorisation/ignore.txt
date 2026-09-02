@@ -14,3 +14,4 @@ Punk-Authorisation-*
 *.o
 *.bs
 *.c
+example/.*/var/

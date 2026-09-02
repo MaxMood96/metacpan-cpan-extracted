@@ -1,7 +1,7 @@
 ####################################################################
 #
 #     This file was generated using XDR::Parse version v1.0.1
-#                   and LibVirt version v12.6.0
+#                   and LibVirt version v12.7.0
 #
 #      Don't edit this file, use the source template instead
 #
@@ -18,14 +18,14 @@ use Future::AsyncAwait;
 use Object::Pad 0.821;
 use Sublike::Extended 0.29 'method', 'sub'; # From XS-Parse-Sublike, used by Future::AsyncAwait
 
-class Sys::Async::Virt::Domain v0.6.6;
+class Sys::Async::Virt::Domain v0.6.7;
 
 use Carp qw(croak);
 use Log::Any qw($log);
 
-use Protocol::Sys::Virt::TypedParams v12.6.0;
-use Protocol::Sys::Virt::URI v12.6.0;
-use Protocol::Sys::Virt::Remote::XDR v12.6.0;
+use Protocol::Sys::Virt::TypedParams v12.7.0;
+use Protocol::Sys::Virt::URI v12.7.0;
+use Protocol::Sys::Virt::Remote::XDR v12.7.0;
 my $remote = 'Protocol::Sys::Virt::Remote::XDR';
 
 use constant {
@@ -306,6 +306,7 @@ use constant {
     IOTHREAD_POLL_MAX_NS                                              => "poll_max_ns",
     IOTHREAD_POLL_GROW                                                => "poll_grow",
     IOTHREAD_POLL_SHRINK                                              => "poll_shrink",
+    IOTHREAD_POLL_WEIGHT                                              => "poll_weight",
     IOTHREAD_THREAD_POOL_MIN                                          => "thread_pool_min",
     IOTHREAD_THREAD_POOL_MAX                                          => "thread_pool_max",
     DEVICE_MODIFY_CURRENT                                             => 0,
@@ -446,6 +447,7 @@ use constant {
     STATS_IOTHREAD_SUFFIX_POLL_MAX_NS                                 => ".poll-max-ns",
     STATS_IOTHREAD_SUFFIX_POLL_GROW                                   => ".poll-grow",
     STATS_IOTHREAD_SUFFIX_POLL_SHRINK                                 => ".poll-shrink",
+    STATS_IOTHREAD_SUFFIX_POLL_WEIGHT                                 => ".poll-weight",
     STATS_MEMORY_BANDWIDTH_MONITOR_COUNT                              => "memory.bandwidth.monitor.count",
     STATS_MEMORY_BANDWIDTH_MONITOR_PREFIX                             => "memory.bandwidth.monitor.",
     STATS_MEMORY_BANDWIDTH_MONITOR_SUFFIX_NAME                        => ".name",
@@ -894,6 +896,14 @@ use constant {
     GUEST_INFO_LOAD_1M                                                => "load.1m",
     GUEST_INFO_LOAD_5M                                                => "load.5m",
     GUEST_INFO_LOAD_15M                                               => "load.15m",
+    GUEST_INFO_DEVICE_COUNT                                           => "device.count",
+    GUEST_INFO_DEVICE_PREFIX                                          => "device.",
+    GUEST_INFO_DEVICE_SUFFIX_DRIVER_NAME                              => ".driverName",
+    GUEST_INFO_DEVICE_SUFFIX_DRIVER_DATE                              => ".driverDate",
+    GUEST_INFO_DEVICE_SUFFIX_DRIVER_VERSION                           => ".driverVersion",
+    GUEST_INFO_DEVICE_SUFFIX_ID_TYPE                                  => ".idType",
+    GUEST_INFO_DEVICE_SUFFIX_PCI_VENDOR                               => ".pciVendor",
+    GUEST_INFO_DEVICE_SUFFIX_PCI_DEVICE                               => ".pciDevice",
     GUEST_INFO_USERS                                                  => (1 << 0),
     GUEST_INFO_OS                                                     => (1 << 1),
     GUEST_INFO_TIMEZONE                                               => (1 << 2),
@@ -902,6 +912,7 @@ use constant {
     GUEST_INFO_DISKS                                                  => (1 << 5),
     GUEST_INFO_INTERFACES                                             => (1 << 6),
     GUEST_INFO_LOAD                                                   => (1 << 7),
+    GUEST_INFO_DEVICES                                                => (1 << 8),
     AGENT_RESPONSE_TIMEOUT_BLOCK                                      => -2,
     AGENT_RESPONSE_TIMEOUT_DEFAULT                                    => -1,
     AGENT_RESPONSE_TIMEOUT_NOWAIT                                     => 0,
@@ -2385,7 +2396,7 @@ Sys::Async::Virt::Domain - Client side proxy to remote LibVirt domain
 
 =head1 VERSION
 
-v0.6.6
+v0.6.7
 
 =head1 SYNOPSIS
 
@@ -4278,6 +4289,8 @@ See documentation of L<virDomainUpdateDeviceFlags|https://libvirt.org/html/libvi
 
 =item IOTHREAD_POLL_SHRINK
 
+=item IOTHREAD_POLL_WEIGHT
+
 =item IOTHREAD_THREAD_POOL_MIN
 
 =item IOTHREAD_THREAD_POOL_MAX
@@ -4557,6 +4570,8 @@ See documentation of L<virDomainUpdateDeviceFlags|https://libvirt.org/html/libvi
 =item STATS_IOTHREAD_SUFFIX_POLL_GROW
 
 =item STATS_IOTHREAD_SUFFIX_POLL_SHRINK
+
+=item STATS_IOTHREAD_SUFFIX_POLL_WEIGHT
 
 =item STATS_MEMORY_BANDWIDTH_MONITOR_COUNT
 
@@ -5454,6 +5469,22 @@ See documentation of L<virDomainUpdateDeviceFlags|https://libvirt.org/html/libvi
 
 =item GUEST_INFO_LOAD_15M
 
+=item GUEST_INFO_DEVICE_COUNT
+
+=item GUEST_INFO_DEVICE_PREFIX
+
+=item GUEST_INFO_DEVICE_SUFFIX_DRIVER_NAME
+
+=item GUEST_INFO_DEVICE_SUFFIX_DRIVER_DATE
+
+=item GUEST_INFO_DEVICE_SUFFIX_DRIVER_VERSION
+
+=item GUEST_INFO_DEVICE_SUFFIX_ID_TYPE
+
+=item GUEST_INFO_DEVICE_SUFFIX_PCI_VENDOR
+
+=item GUEST_INFO_DEVICE_SUFFIX_PCI_DEVICE
+
 =item GUEST_INFO_USERS
 
 =item GUEST_INFO_OS
@@ -5469,6 +5500,8 @@ See documentation of L<virDomainUpdateDeviceFlags|https://libvirt.org/html/libvi
 =item GUEST_INFO_INTERFACES
 
 =item GUEST_INFO_LOAD
+
+=item GUEST_INFO_DEVICES
 
 =item AGENT_RESPONSE_TIMEOUT_BLOCK
 

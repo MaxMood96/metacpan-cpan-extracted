@@ -19,3 +19,19 @@ CPANSA-File-Temp-2011-4116
 # session before this advisory is excluded. Reviewed 2026-08-08 under DD-451;
 # revisit if a fixed Dancer2 ships or the app ever adopts Dancer2 sessions.
 CPANSA-Dancer2-2026-13577
+
+# CPANSA-String-Compare-ConstantTime-2024-13939 (CVE-2024-13939) has no fixed
+# release - 0.321 is both the affected ceiling and the newest release on CPAN.
+# The weakness is that equals() returns early (non-constant-time) when the two
+# strings differ in LENGTH, which can leak a secret's length through timing,
+# though never its contents. Both call sites in this project (Auth.pm's
+# _secure_compare, used by verify_user and by Web/App.pm's
+# _authorize_api_request) always compare two sha256_hex() digests - fixed at
+# 64 hex characters on both sides - so an attacker has no length to vary and
+# nothing to leak through this path. The hand-rolled implementation DD-614
+# replaced had the identical exposure (its own explicit length check preceded
+# the constant-time loop), so adopting this module is not a new regression.
+# Reviewed 2026-08-19 under DD-614; revisit if a fixed release ships, or if
+# _secure_compare is ever used to compare a variable-length attacker-supplied
+# value directly.
+CPANSA-String-Compare-ConstantTime-2024-13939

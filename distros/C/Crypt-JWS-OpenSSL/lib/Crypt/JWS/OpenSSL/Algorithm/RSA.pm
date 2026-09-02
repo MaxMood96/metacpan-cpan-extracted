@@ -1,5 +1,5 @@
 package Crypt::JWS::OpenSSL::Algorithm::RSA;
-$Crypt::JWS::OpenSSL::Algorithm::RSA::VERSION = '0.003';
+$Crypt::JWS::OpenSSL::Algorithm::RSA::VERSION = '0.004';
 use Moo;
 with qw(
     Crypt::JWS::OpenSSL::Role::Algorithm
@@ -140,10 +140,10 @@ sub _get_public_key_params {
 
 sub _build_can_use_pkcs1_padding {
     my $self = shift;
-    my $_rsa_ver = $Crypt::OpenSSL::RSA::VERSION;
+    my $_rsa_ver = $self->numify_version($Crypt::OpenSSL::RSA::VERSION);
     
-    ## these versions are broken
-    if ( $_rsa_ver == 0.36 || $_rsa_ver == 0.37  ) {
+    ## version 0.36 and 0.37 are broken
+    if ( $_rsa_ver > 0.35 && $_rsa_ver < 0.38  ) {
         return 0;
     }
     
@@ -161,7 +161,8 @@ sub _build_can_use_pkcs1_padding {
 
 sub _build__version_supports_pss {
     my $self = shift;
-    return ( $Crypt::OpenSSL::RSA::VERSION >= 0.38 ) ? 1 : 0;
+    my $_rsa_ver = $self->numify_version($Crypt::OpenSSL::RSA::VERSION);
+    return ( $_rsa_ver >= 0.38 ) ? 1 : 0;
 }
 
 1;
@@ -178,7 +179,7 @@ Crypt::JWS::OpenSSL::Algorithm::RSA - Sign and verify tokens using RSA algorithm
 
 =head1 VERSION
 
-version 0.003
+version 0.004
 
 =head1 SYNOPSIS
 

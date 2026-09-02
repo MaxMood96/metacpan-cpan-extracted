@@ -28,6 +28,7 @@
 #include "CFCDocument.h"
 #include "CFCHierarchy.h"
 #include "CFCMethod.h"
+#include "CFCParcel.h"
 #include "CFCUri.h"
 #include "CFCUtil.h"
 
@@ -41,10 +42,13 @@ struct CFCC {
     char         *man_footer;
 };
 
+static void
+CFCC_destroy(CFCBase *base);
+
 static const CFCMeta CFCC_META = {
     "Clownfish::CFC::Binding::C",
     sizeof(CFCC),
-    (CFCBase_destroy_t)CFCC_destroy
+    CFCC_destroy
 };
 
 CFCC*
@@ -68,15 +72,17 @@ CFCC_init(CFCC *self, CFCHierarchy *hierarchy, const char *header,
     return self;
 }
 
-void
-CFCC_destroy(CFCC *self) {
+static void
+CFCC_destroy(CFCBase *base) {
+    CFCC *self = (CFCC *) base;
+
     CFCBase_decref((CFCBase*)self->hierarchy);
     CFCBase_decref((CFCBase*)self->html_gen);
     FREEMEM(self->c_header);
     FREEMEM(self->c_footer);
     FREEMEM(self->man_header);
     FREEMEM(self->man_footer);
-    CFCBase_destroy((CFCBase*)self);
+    CFCBase_destroy(base);
 }
 
 void
@@ -87,24 +93,37 @@ CFCC_write_html_docs(CFCC *self) {
 void
 CFCC_write_man_pages(CFCC *self) {
     CFCHierarchy  *hierarchy = self->hierarchy;
-    CFCClass     **ordered   = CFCHierarchy_ordered_classes(hierarchy);
+    CFCParcel    **parcels   = CFCParcel_all_parcels();
 
     size_t num_classes = 0;
-    for (size_t i = 0; ordered[i] != NULL; i++) {
-        CFCClass *klass = ordered[i];
-        if (!CFCClass_included(klass)) { ++num_classes; }
+    for (size_t i = 0; parcels[i] != NULL; i++) {
+        CFCParcel *parcel = parcels[i];
+        if (!CFCParcel_is_installed(parcel)) { continue; }
+
+        CFCClass **ordered = CFCParcel_get_classes(parcel);
+        for (size_t j = 0; ordered[j] != NULL; j++) {
+            CFCClass *klass = ordered[j];
+            if (!CFCClass_public(klass)) { continue; }
+            ++num_classes;
+        }
     }
     char **man_pages = (char**)CALLOCATE(num_classes, sizeof(char*));
 
     // Generate man pages, but don't write.  That way, if there's an error
     // while generating the pages, we leak memory but don't clutter up the file 
     // system.
-    for (size_t i = 0, j = 0; ordered[i] != NULL; i++) {
-        CFCClass *klass = ordered[i];
-        if (CFCClass_included(klass)) { continue; }
+    for (size_t i = 0; parcels[i] != NULL; i++) {
+        CFCParcel *parcel = parcels[i];
+        if (!CFCParcel_is_installed(parcel)) { continue; }
 
-        char *man_page = CFCCMan_create_man_page(klass);
-        man_pages[j++] = man_page;
+        CFCClass **ordered = CFCParcel_get_classes(parcel);
+        for (size_t j = 0, k = 0; ordered[j] != NULL; j++) {
+            CFCClass *klass = ordered[j];
+            if (!CFCClass_public(klass)) { continue; }
+
+            char *man_page = CFCCMan_create_man_page(klass);
+            man_pages[k++] = man_page;
+        }
     }
 
     const char *dest = CFCHierarchy_get_dest(hierarchy);
@@ -112,27 +131,31 @@ CFCC_write_man_pages(CFCC *self) {
         = CFCUtil_sprintf("%s" CHY_DIR_SEP "man" CHY_DIR_SEP "man3", dest);
 
     // Write out any man pages that have changed.
-    for (size_t i = 0, j = 0; ordered[i] != NULL; i++) {
-        CFCClass *klass = ordered[i];
-        if (CFCClass_included(klass)) { continue; }
+    for (size_t i = 0; parcels[i] != NULL; i++) {
+        CFCParcel *parcel = parcels[i];
+        if (!CFCParcel_is_installed(parcel)) { continue; }
 
-        char *raw_man_page = man_pages[j++];
-        if (!raw_man_page) { continue; }
-        char *man_page = CFCUtil_sprintf("%s%s%s", self->man_header,
-                                         raw_man_page, self->man_footer);
+        CFCClass **ordered = CFCParcel_get_classes(parcel);
+        for (size_t j = 0, k = 0; ordered[j] != NULL; j++) {
+            CFCClass *klass = ordered[j];
+            if (!CFCClass_public(klass)) { continue; }
 
-        const char *full_struct_sym = CFCClass_full_struct_sym(klass);
-        char *filename = CFCUtil_sprintf("%s" CHY_DIR_SEP "%s.3", man3_path,
-                                         full_struct_sym);
-        CFCUtil_write_if_changed(filename, man_page, strlen(man_page));
-        FREEMEM(filename);
-        FREEMEM(man_page);
-        FREEMEM(raw_man_page);
+            char *raw_man_page = man_pages[k++];
+            char *man_page = CFCUtil_sprintf("%s%s%s", self->man_header,
+                                             raw_man_page, self->man_footer);
+
+            const char *full_struct_sym = CFCClass_full_struct_sym(klass);
+            char *filename = CFCUtil_sprintf("%s" CHY_DIR_SEP "%s.3", man3_path,
+                                             full_struct_sym);
+            CFCUtil_write_if_changed(filename, man_page, strlen(man_page));
+            FREEMEM(filename);
+            FREEMEM(man_page);
+            FREEMEM(raw_man_page);
+        }
     }
 
     FREEMEM(man3_path);
     FREEMEM(man_pages);
-    FREEMEM(ordered);
 }
 
 void

@@ -12,9 +12,18 @@ Alien::Xmake - Locate, Download, or Build and Install Xmake
 
     my $xmake = Alien::Xmake->new;
 
-    system $xmake->exe, '--help';
-    system $xmake->exe, qw[create -t qt.widgetapp test];
+    print $xmake->version;         # v3.0.6
+    print $xmake->buildid;         # HEAD.9fdcf69f6
 
+    $xmake->show('platforms');     # @platforms = ('windows', 'linux', ...)
+    $xmake->show('targets', format => 'json');   # decoded JSON structure
+
+    $xmake->create('hello', template => 'console');   # scaffold a project
+    $xmake->configure(mode => 'debug');               # configure a build
+    $xmake->build;                                    # build it
+    $xmake->run;                                      # run the target
+
+    system $xmake->exe, '--help';
     system $xmake->xrepo, qw[info libpng];
 
 =head1 DESCRIPTION
@@ -34,42 +43,502 @@ the L<community|https://xmake.io/about/contact.html>.
 
 =for html <p align="center"><img width="916" height="236" src="https://xmake.io/assets/img/index/xmake-basic-render.gif"></p>
 
-=head1 Methods
+=head1 METHODS
 
-Not many are required or provided.
+A thin wrapper around the C<xmake> command line. Methods named after C<xmake> actions (C<build>, C<clean>, C<create>,
+...) stream the command's output to your terminal and return true on success. Query-style methods (C<show>, C<lua -l>,
+...) capture the output and return it to you instead. Most methods accept C<%options>; unrecognized extra arguments can
+be passed with C<targets =E<gt> [...]> and C<args =E<gt> [...]> and are appended to the command line verbatim.
 
-=head2 C<install_type()>
+=head2 C<new( ... )>
+
+    my $xmake = Alien::Xmake->new( verbose => 1 );
+
+Creates a new instance.
+
+=over
+
+=item B<verbose>
+
+Constructor option. Boolean. If true, prints the command being run to C<STDOUT> before executing it.
+
+=item B<yes>
+
+Constructor option. Boolean. Auto-confirms any interactive C<xmake>/C<xrepo> prompt by passing C<-y> (equivalent to
+C<confirm =E<gt> 'yes'>). Useful when a build is driven programmatically or its output is captured (e.g.
+L<Capture::Tiny>) so an install that would normally prompt never hangs waiting on C<STDIN>. C<confirm =E<gt> ...> takes
+precedence when both are set.
+
+=item B<confirm>
+
+Constructor option. Supplies an explicit answer (C<yes>, C<no>, or C<def>) to any prompt xmake asks, passed through as
+C<--confirm=...>. Takes precedence over C<yes =E<gt> 1>. May be terse: C<Alien::Xmake-E<gt>new( confirm =E<gt> 'yes'
+)>.
+
+=back
+
+=head2 C<build( [$target], %options )>
+
+    $xmake->build;                             # build the default targets
+    $xmake->build('hello', all => 1);          # also build dependent targets of hello
+    $xmake->build( rebuild => 1, jobs => 8 );
+
+Compiles the targets defined in C<xmake.lua>.
+
+=over
+
+=item B<rebuild>
+
+Force a rebuild (C<-r>).
+
+=item B<all>
+
+Build all dependent targets as well (C<-a>).
+
+=item B<shallow>
+
+Do not build the dependent targets (C<--shallow>).
+
+=item B<group>
+
+Only build targets in this group (C<-g>).
+
+=item B<dry_run>
+
+Only print the command line about to be executed (C<--dry-run>).
+
+=item B<jobs>, B<linkjobs>
+
+Number of parallel compile/link jobs.
+
+=item B<linkonly>
+
+Only link (skip compilation) (C<--linkonly>).
+
+=item B<files>
+
+A comma-joined string or arrayref of files to build manually (C<--files=>).
+
+=back
+
+=head2 C<clean( [$target], %options )>
+
+    $xmake->clean;
+    $xmake->clean( all => 1 );
+
+Removes the build artifacts. C<all> cleans dependent targets, C<group> restricts to a target group.
+
+=head2 C<create( $name, %options )>
+
+    $xmake->create('hello', template => 'console');
+    $xmake->create('libz', template => 'shared', language => 'c');
+
+Generates a new project directory named C<$name> (clone of C<xmake create>).
+
+=over
+
+=item B<language>
+
+Project language (C<c>, C<c++>, C<go>, C<rust>, ...).
+
+=item B<template>
+
+Project template (C<console>, C<static>, C<shared>, C<qt.widgetapp>, ...).
+
+=item B<force>
+
+Overwrite an existing directory (C<-f>).
+
+=item B<list>
+
+List all available templates instead of creating (C<--list>).
+
+=item B<project>
+
+Alternate project path (C<-P>).
+
+=back
+
+=head2 C<configure( %options )>
+
+    $xmake->configure(mode => 'debug', plat => 'windows', arch => 'x64');
+
+Configures the current project (clone of C<xmake config>). Accepts the shared platform/toolchain options (C<plat>,
+C<arch>, C<mode>, C<kind>, C<toolchain>, C<toolchain_host>, C<cross>, C<target_os>, C<sdk>, C<runtimes>, C<vs>,
+C<vs_toolset>, C<vs_sdkver>, C<vs_runtime>, C<ndk>, C<ndk_stdcxx>, C<ndk_sdkver>, C<android_sdk>, C<mingw>, C<emsdk>,
+C<cuda>, C<qt>, C<qt_host>, C<vcpkg>, C<wdk>, C<build_toolver>, C<ccache>, C<ccachedir>, C<debugger>, C<trybuild>,
+C<tryconfigs>, C<require>, C<includedirs>, C<linkdirs>, C<links>, C<syslinks>, C<rc*>, C<fc*>, ...) as well as the
+compiler/flag subtables C<cflags>, C<cxflags>, C<cxxflags>, C<mflags>, C<mmflags>, C<mxflags>, C<ldflags>, C<arflags>,
+C<asflags>, C<shflags>, and C<cuflags>. Any C<--key=value> pair can be passed via C<set =E<gt> { key =E<gt> value }>.
+
+=over
+
+=item B<clean>
+
+Reset the configuration to defaults (C<-c>).
+
+=item B<check>
+
+Only check the configuration and exit (C<--check>).
+
+=item B<menu>
+
+Open the interactive configuration menu (C<--menu>).
+
+=item B<export>, B<import>
+
+Export/import configuration files.
+
+=item B<builddir>
+
+Alternate build directory (C<-o>).
+
+=back
+
+=head2 C<global( %options )>
+
+    $xmake->global(network => 'y', theme => 'default');
+    $xmake->global(vs => '2022');
+
+Reads/writes global (user-level) configuration. Shares the platform/toolchain options from C<configure( ... )> that
+exist on C<global> (C<android_sdk>, C<build_toolver>, C<cuda>, C<emsdk>, C<mingw>, C<ndk>, C<ndk_sdkver>, C<qt>,
+C<qt_host>, C<vcpkg>, C<vs>, C<wdk>).
+
+=over
+
+=item B<clean>
+
+Reset global configuration to defaults (C<-c>).
+
+=item B<check>, B<menu>
+
+Same semantics as C<configure( ... )>.
+
+=item B<theme>, B<debugger>, B<ccache>
+
+Global UI/terminal settings.
+
+=item B<cachedir>
+
+Global cache directory.
+
+=item B<policies>
+
+Global policy overrides (C<--policies=>).
+
+=item B<network>, B<proxy>, B<proxy_hosts>, B<proxy_pac>
+
+Network settings, e.g. C<network =E<gt> 'n'> to go offline, C<insecure_ssl =E<gt> 1> to skip HTTPS verification.
+
+=item B<pkg_searchdirs>, B<pkg_cachedir>, B<pkg_installdir>
+
+Global package search/cache/install directories.
+
+=back
+
+=head2 C<install( [$target], %options )>
+
+    $xmake->install;
+    $xmake->install('hello', installdir => './dist');
+
+Installs the built binaries to a staging directory (C<DESTDIR>).
+
+=over
+
+=item B<installdir>
+
+The install directory (C<-o>); C<bindir>, C<libdir>, C<includedir> adjust the per-kind subdirectories.
+
+=item B<all>
+
+Install all targets (C<-a>).
+
+=item B<group>
+
+Install all targets in the group (C<-g>).
+
+=item B<binaries>, B<headers>, B<libraries>, B<packages>
+
+Set to C<y> or C<n> to enable or disable installing that kind of file.
+
+=back
+
+=head2 C<uninstall( [$target], %options )>
+
+    $xmake->uninstall;
+    $xmake->uninstall('hello');
+
+Uninstalls installed binaries from the install directory. Supports C<installdir>, C<bindir>, C<libdir>, C<includedir>,
+C<group> and C<admin>.
+
+=head2 C<package( [$target], %options )>
+
+    $xmake->package;                                      # package release artifacts
+    $xmake->package('hello', outputdir => './dist');
+
+Packages the built targets into distribution archives/installers. C<outputdir> selects the destination, C<format> the
+package format (C<-f>, e.g. C<deb>, C<rpm>, C<nsis>), C<all> includes dependent targets, and C<homepage>,
+C<description>, C<url>, C<version> and C<shasum> fill the package metadata.
+
+=head2 C<pack( [$pkg], %options )>
+
+    $xmake->pack('libpng', formats => ['zip', 'targz'], jobs => 4);
+
+Bundles an installed package from the local package cache into distribution archives. C<outputdir> selects the
+destination, C<formats> the archive format(s) (C<zip>, C<targz>, ...), C<basename>, C<autobuild> and C<jobs> tune the
+archive name, rebuild behavior and parallelism.
+
+=head2 C<require( [$pkg], %options )>
+
+    $xmake->require('libpng');
+    my $list = $xmake->require( list => 1 );
+    my $json = $xmake->require( 'libpng', depgraph => 1, format => 'json' );
+
+Installs and manages the packages declared (or requested) for the current project.
+
+=over
+
+=item B<list>
+
+List the required packages (C<-l>, captured output).
+
+=item B<scan>
+
+Scan for missing/unused package configs (C<--scan>, captured).
+
+=item B<info>
+
+Show package information (C<--info>, captured).
+
+=item B<depgraph>
+
+Show the package dependency graph (C<--depgraph>, captured; combine with C<format =E<gt> 'json'> or C<'dot'>).
+
+=item B<force>, B<shallow>, B<jobs>, B<linkjobs>, B<clean>
+
+Standard package-install controls. B<clean_modes> resets the configs of the matched packages, B<clean> only clears
+unused packages, B<build> always build from source, and B<addon> manages addon packages.
+
+=back
+
+=head2 C<run( [$target], %options )>
+
+    $xmake->run;
+    $xmake->run('hello', args => [qw[--flag value]]);
+
+Runs the build target (or the C<run> script). C<debug> attaches a debugger, C<all>/C<group> select targets, C<workdir>
+sets the working directory (C<-w>), C<jobs> sets the parallelism and C<detach> runs the target in the background. Extra
+program arguments go in C<args>.
+
+=head2 C<test( [$target], %options )>
+
+    $xmake->test;
+    $xmake->test( 'hello', rebuild => 1 );
+
+Runs the project's tests. C<group>, C<workdir>, C<jobs> and C<rebuild> behave as elsewhere.
+
+=head2 C<update( [$version], %options )>
+
+    $xmake->update;                           # update xmake itself
+    $xmake->update('v3.0.6', scriptonly => 1);
+
+Updates the C<xmake> installation. C<version> optionally pins a version. C<scriptonly> only updates the scripts
+(C<-s>), C<integrate> re-integrates the shell environment, C<force> downloads even when up to date and C<uninstall>
+flags the previous version for removal.
+
+=head2 C<service( %options )>
+
+    $xmake->service( start => 1, distcc => 1 );     # run the distcc service
+    $xmake->service( status => 1 );
+
+Controls the built-in xmake services. One of C<start>, C<stop>, C<restart>, C<status>, C<connect>, C<disconnect>,
+C<reconnect>, C<sync>, C<clean>; C<remote>, C<distcc>, C<ccache>, C<add-user>, C<rm-user>, C<gen-token> select or
+modify the service, C<host> and C<session> target a specific server/session, and C<logs>/C<pull> fetch server logs.
+
+=head2 C<addon( [$name], %options )>
+
+    $xmake->addon('gcc_flags', install => 1);
+    my $found = $xmake->addon('flags', search => 1);   # captured output
+
+Installs, removes, lists or searches xmake addon packages (C<install>, C<remove>, C<list>, C<search>, C<upgrade>).
+C<all> applies an operation to every addon and C<force> bypasses checks.
+
+=head2 C<check( [$checker], %options )>
+
+    my $list = $xmake->check( list => 1 );
+    $xmake->check('gcc_flags.logic');
+
+Lists available checkers (captured) or runs a named check script. C<info> explains a checker (captured).
+
+=head2 C<doxygen( [$srcdir], %options )>
+
+    $xmake->doxygen('./src', outputdir => './docs');
+
+Generates Doxygen documentation for C<$srcdir>. C<outputdir> selects the documentation directory.
+
+=head2 C<format( [$target], %options )>
+
+    $xmake->format('hello', style => 'google');
+    $xmake->format( dry_run => 1, files => ['a.c', 'b.c'] );
+
+Formats the project sources with clang-format. C<style> chooses the style (C<google>, C<llvm>, ...), C<create> writes a
+default C<.clang-format>, C<dry_run> only reports files that would change (C<-n>), C<error> treats style mismatches as
+errors (C<-e>), C<files> limits formatting to the given files, and C<all>/C<group>/C<jobs> behave as elsewhere.
+
+=head2 C<lua( [$script], %options )>
+
+    my @scripts = $xmake->lua( list => 1 );
+    $xmake->lua('print(\"hello\")');
+
+Runs a C<xmake> Lua script. C<list> lists the built-in scripts (captured), C<command> runs the C<script> argument as a
+command, C<deserialize> records the output in the given format and C<stdin> reads the script from standard input.
+
+=head2 C<macro( [$name], %options )>
+
+    $xmake->macro('mybuild', begin => 1);     # begin recording
+    $xmake->macro('mybuild', end => 1);       # and stop
+    my $list = $xmake->macro( list => 1 );
+
+Records and replays the shell commands that follow (clone of C<xmake macro>). C<begin>/C<end> control recording,
+C<show> prints a recorded macro, C<list> lists them (captured), C<delete>/C<clear> remove them and C<export>/C<import>
+move them between machines.
+
+=head2 C<project( %options )>
+
+    $xmake->project( kind => 'vsxmake' );
+    $xmake->project( kind => 'make', targets => ['hello'] );
+
+Generates IDE/third-party project files (C<vs>, C<vsxmake>, C<make>, C<cmake>, C<compile_commands>, ...). C<kind>
+selects the generator, C<modes>/C<archs> restrict the configs to generate, C<target> generates only for that target and
+C<lsp> writes LSP-friendly output (C<compile_flags.txt> or C<compile_commands.json>).
+
+=head2 C<repo( [$name], %options )>
+
+    my $repos = $xmake->repo( list => 1 );
+    $xmake->repo('local_extra', add => 1, url => 'git@github.com:me/xmake-repo.git');
+
+Manages custom package repositories. C<add>, C<remove>, C<update>, C<clear> and C<list> select the operation (C<list>
+returns captured output); C<global> restricts the change to the global config; C<url> and C<branch> are used when
+adding.
+
+=head2 C<show( [$list], %options )>
+
+    my @platforms = $xmake->show('platforms');
+    my @targets   = $xmake->show('targets', format => 'json');
+    my $plain     = $xmake->show('targets', target => 'hello');
+
+Shows information about the current project or the C<xmake> installation.
+
+=over
+
+=item B<$list>
+
+List name: C<platforms>, C<architectures>, C<toolchains>, C<buildmodes>, C<targets>, C<packages>, C<rules>, C<themes>,
+C<envs>, C<apis> or C<policies>. When given, the value(s) are returned as a list (whitespace-split; the raw lines if a
+single value) and ANSI color codes are stripped.
+
+=item B<format>
+
+Output format. C<json> returns the decoded data structure, C<dot> renders dependency graphs. Only meaningful with
+C<info =E<gt> 'depgraph'> or a listing.
+
+=item B<target>
+
+Restrict output to a specific target (C<--target=>).
+
+=item B<info>
+
+What to show (C<depgraph>, ...). Combine with C<format>.
+
+=item B<group>
+
+Filter targets by group.
+
+=item B<json>, B<pretty>
+
+Legacy flags (C<--json>) and pretty formatting.
+
+=back
+
+=head2 C<watch( %options )>
+
+    $xmake->watch( commands => 'xmake build' );
+    $xmake->watch( script => 'my_script.lua' );
+
+Rebuilds (or runs) the project whenever source files change. C<commands> holds the command to rerun (C<-c>), C<script>
+the path of the script to watch, C<watchdirs>/C<plaindirs> add extra watched/ignored directories, C<run> reruns the
+given target and C<target> the target to build. Arbitrary program arguments are passed via C<argv>.
+
+=head2 C<task( $name, %options )>
+
+    $xmake->task('show', args => ['-l', 'toolchains']);
+
+Generic escape hatch that runs any xmake task/plugin by name with C<%options>, streaming output and returning success.
+Reach for this when a dedicated method doesn't exist yet.
+
+=head2 C<version( )>
+
+    my $ver = $xmake->version;
+
+Returns the xmake version (e.g. C<v3.0.6>).
+
+=head2 C<buildid( )>
+
+    my $build = $xmake->buildid;
+
+Returns the xmake build stamp (e.g. C<HEAD.9fdcf69f6>), if any.
+
+=head2 C<config( )>
+
+    my %conf  = %{ $xmake->config };
+    my $bin   = $xmake->config('bin');
+
+Returns the install-time data stored by L<Alien::Xmake::ConfigData>: the install type, install directory, and version.
+The details of the Alien::Xmake::ConfigData object created at install time describe the exact contents.
+
+=head2 C<pkg_config( $package )>
+
+    my $flags = $xmake->pkg_config('zlib');
+    # { cflags => '-I...', libs => '-L... -lz' }
+
+Installs C<$package> with C<xrepo install -y>, then returns its compile/link flags via C<xrepo fetch>.
+
+=head2 C<install_type( )>
 
 Returns 'system' or 'shared'.
 
-=head2 C<exe()>
+=head2 C<exe( )>
 
-    system Alien::Xmake->exe;
+    system $xmake->exe;
 
 Returns the full path to the Xmake executable.
 
-=head2 C<xrepo()>
+=head2 C<xrepo( )>
 
-    system Alien::Xmake->xrepo;
+    system $xmake->xrepo;
 
 Returns the full path to the L<xrepo|https://github.com/xmake-io/xmake-repo> executable.
 
-=head2 C<bin_dir()>
+=head2 C<bin_dir( )>
 
     use Env qw[@PATH];
-    unshift @PATH, Alien::Xmake->bin_dir;
+    unshift @PATH, $xmake->bin_dir;
 
-Returns a list of directories you should push onto your PATH.
+Returns the directory containing the Xmake executable; push it onto your C<PATH>. For a 'system' install this step will
+not be required.
 
-For a 'system' install this step will not be required.
+=head2 C<cflags( )>, C<libs( )>, C<dynamic_libs( )>
 
-=head2 C<version()>
+Stubs returning empty values. Provided for compatibility with consumers that expect the standard Alien API surface; use
+C<pkg_config( )> or L<Alien::Xrepo> for real flags.
 
-    my $ver = Alien::Xmake->version;
+=head2 C<alien_helper( )>
 
-Returns the version of Xmake installed.
+    use alienfile;
+    # ...
+        [ '%{xmake}', 'install' ],
 
-Under a 'system' install, C<xmake --version> is run once and the version number is cached.
+Returns a hashref of helpers: C<%{xmake}> and C<%{xrepo}>, suitable for use in C<alienfile> recipes.
 
 =head1 Alien::Base Helper
 
@@ -217,7 +686,7 @@ This library is free software; you can redistribute it and/or modify it under th
 
 =head1 AUTHOR
 
-Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+Sanko Robinson L<https://github.com/sanko>
 
 =for stopwords xmake macOS wxWidgets CMake gotta FreeBSD MacOS
 

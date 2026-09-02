@@ -3,7 +3,7 @@ package Developer::Dashboard::PathRegistry;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Digest::MD5 qw(md5_hex);
 use Cwd qw(abs_path getcwd);
@@ -1071,6 +1071,55 @@ sub secure_file_permissions {
     my $mode = $args{executable} ? 0700 : 0600;
     chmod $mode, $file or die sprintf 'Unable to chmod %s to %04o: %s', $file, $mode, $!;    # uncoverable branch true
     return $file;
+}
+
+# atomic_write_secure($tmp, $file, $content, %opts)
+# Writes $content to the given unpredictable per-writer staging path, secures
+# it, and only then atomically renames it into its final, predictable
+# destination - the one ordering that avoids a window where the file exists
+# at $file with loose (umask-determined) permissions (DD-599/600/601/602
+# each independently reimplemented this sequence; this is the single place
+# every writer should reach for instead).
+#
+# Deliberately does NOT go through secure_file_permissions: that method only
+# secures paths under home_runtime_path/state_root, but config_root (and
+# anything beneath it, e.g. Auth.pm's users_root) is NOT gated by
+# is_home_runtime_path and can resolve outside both when a project-local
+# .developer-dashboard layer is the active runtime_root (DD-OOP-LAYERS) -
+# reusing the gated method here would silently stop securing those files.
+# chmod unconditionally instead, matching what every migrated call site
+# already did before this helper existed.
+#
+# Callers keep their own staging-path-naming helper (e.g. _pending_user_file)
+# so existing fault-injection tests that override it to a fixed, predictable
+# path keep working unchanged - this method only does the write/secure/rename
+# mechanics, not staging-path generation.
+# Input: staging file path, final destination path, content string, optional
+# executable boolean.
+# Output: destination file path string.
+sub atomic_write_secure {
+    my ( $self, $tmp, $file, $content, %opts ) = @_;
+    my $mode = $opts{executable} ? 0700 : 0600;
+    open my $fh, '>:raw', $tmp or die "Unable to write $tmp: $!";
+    print {$fh} $content or die "Unable to write $tmp: $!";
+    close $fh or die "Unable to close $tmp: $!";
+    $self->_chmod_pending( $tmp, $mode );
+    rename $tmp, $file or die "Unable to rename $tmp to $file: $!";
+    return $file;
+}
+
+# _chmod_pending($tmp, $mode)
+# Secures one staging file before atomic_write_secure's rename. Its own
+# method (rather than an inline chmod call) exists so a concurrency test can
+# override it to pause a writer between securing its staging file and
+# renaming it into place, proving two overlapping writers cannot corrupt
+# each other's result (t/54-hunt-collector.t).
+# Input: staging file path and target permission mode integer.
+# Output: staging file path string.
+sub _chmod_pending {
+    my ( $self, $tmp, $mode ) = @_;
+    chmod $mode, $tmp or die sprintf 'Unable to chmod %s to %04o: %s', $tmp, $mode, $!;
+    return $tmp;
 }
 
 # _is_state_path($path)

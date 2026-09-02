@@ -33,9 +33,6 @@ struct cmark_node;
 CFCDocuComment*
 CFCDocuComment_parse(const char *raw_text);
 
-void
-CFCDocuComment_destroy(CFCDocuComment *self);
-
 const char*
 CFCDocuComment_get_description(CFCDocuComment *self);
 

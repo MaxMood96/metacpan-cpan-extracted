@@ -341,6 +341,74 @@ is( $paths->cwd, $home, 'the public cwd compatibility accessor delegates to the 
 }
 
 # --------------------------------------------------------------------------
+# atomic_write_secure (DD-610): the single write-temp/secure-temp/rename
+# helper every DD-599/600/601/602 call site now delegates to, so this is the
+# one place that sequence's failure modes need executable proof.
+# --------------------------------------------------------------------------
+{
+    my $fresh = tempdir( CLEANUP => 1 );
+    my $reg   = Developer::Dashboard::PathRegistry->new( home => $fresh );
+
+    # Success path: default 0600 and the explicit executable 0700 variant.
+    my $target = File::Spec->catfile( $fresh, 'atomic-target' );
+    my $tmp    = "$target.pending";
+    is( $reg->atomic_write_secure( $tmp, $target, "hello\n" ), $target,
+        'atomic_write_secure returns the destination path' );
+    ok( !-e $tmp, 'the staging file is gone once the rename lands' );
+    ok( -e $target, 'the destination file exists' );
+    open my $read_fh, '<', $target or die "Unable to read $target: $!";
+    my $written = do { local $/; <$read_fh> };
+    close $read_fh;
+    is( $written, "hello\n", 'the destination file holds the written content' );
+    is( ( stat($target) )[2] & 07777, 0600, 'a default-mode write lands at 0600' );
+
+    my $exec_target = File::Spec->catfile( $fresh, 'atomic-exec-target' );
+    my $exec_tmp    = "$exec_target.pending";
+    $reg->atomic_write_secure( $exec_tmp, $exec_target, '#!/bin/true', executable => 1 );
+    is( ( stat($exec_target) )[2] & 07777, 0700, 'an executable write lands at 0700' );
+
+    # Open failure: the staging path is itself an existing directory.
+    my $open_target = File::Spec->catfile( $fresh, 'open-blocked-target' );
+    my $open_pending = "$open_target.pending-dir";
+    mkdir $open_pending or die "Unable to create $open_pending: $!";
+    my $open_err = eval { $reg->atomic_write_secure( $open_pending, $open_target, 'x' ); 1 } ? '' : $@;
+    like( $open_err, qr/\AUnable to write \Q$open_pending\E/, 'atomic_write_secure dies when the staging file cannot be opened' );
+    rmdir $open_pending or die "Unable to remove $open_pending: $!";
+
+    SKIP: {
+        skip 'requires a writable /dev/full to force a write failure', 1
+          if !-e '/dev/full' || !-w '/dev/full';
+
+        my $write_target = File::Spec->catfile( $fresh, 'write-blocked-target' );
+        my $write_pending = "$write_target.pending-full";
+        skip "unable to symlink /dev/full: $!", 1
+          if !symlink( '/dev/full', $write_pending );
+
+        my $write_err = eval { $reg->atomic_write_secure( $write_pending, $write_target, 'x' x 200_000 ); 1 } ? '' : $@;
+        like( $write_err, qr/\AUnable to (?:write|close) \Q$write_pending\E/,
+            'atomic_write_secure dies when the staging write cannot be flushed to the device' );
+        unlink $write_pending if -l $write_pending;
+    }
+
+    # chmod failure: a symlink to a root-owned device we cannot chmod.
+    my $chmod_target = File::Spec->catfile( $fresh, 'chmod-blocked-target' );
+    my $chmod_pending = "$chmod_target.pending-devnull";
+    symlink( File::Spec->devnull, $chmod_pending ) or die "Unable to symlink devnull: $!";
+    my $chmod_err = eval { $reg->atomic_write_secure( $chmod_pending, $chmod_target, 'x' ); 1 } ? '' : $@;
+    like( $chmod_err, qr/\AUnable to chmod \Q$chmod_pending\E/, 'atomic_write_secure dies when the staging file cannot be chmod-ed' );
+    unlink $chmod_pending;
+
+    # Rename failure: the final destination is an existing directory.
+    my $rename_target = File::Spec->catdir( $fresh, 'rename-blocked-target' );
+    mkdir $rename_target or die "Unable to create $rename_target: $!";
+    my $rename_pending = "$rename_target.pending-rename";
+    my $rename_err = eval { $reg->atomic_write_secure( $rename_pending, $rename_target, 'x' ); 1 } ? '' : $@;
+    like( $rename_err, qr/\AUnable to rename \Q$rename_pending\E to \Q$rename_target\E/,
+        'atomic_write_secure dies when the staging file cannot be renamed into place' );
+    unlink $rename_pending if -e $rename_pending;
+}
+
+# --------------------------------------------------------------------------
 # _is_state_path guards, including a failing / empty state_base_root.
 # --------------------------------------------------------------------------
 {

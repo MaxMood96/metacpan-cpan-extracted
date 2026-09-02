@@ -4,10 +4,30 @@ use strict;
 use warnings;
 use utf8;
 
+# DD-599: the CORE::GLOBAL::rename override must be installed before
+# Developer::Dashboard::Auth is compiled so the module's own rename call in
+# add_user resolves through this intercept - matching the established
+# pattern in t/54-hunt-collector.t. $DD599_OBSERVED_RENAME_MODE records the
+# permission mode of the SOURCE file at the exact moment of a rename whose
+# target matches $DD599_WATCH_TARGET, proving the file was already secured
+# before it became visible at that (predictable) final path.
+our $DD599_WATCH_TARGET;
+our $DD599_OBSERVED_RENAME_MODE;
+
+BEGIN {
+    *CORE::GLOBAL::rename = sub {
+        my ( $from, $to ) = @_;
+        $DD599_OBSERVED_RENAME_MODE = ( stat($from) )[2] & 07777
+          if defined $DD599_WATCH_TARGET && $to eq $DD599_WATCH_TARGET;
+        return CORE::rename( $from, $to );
+    };
+}
+
 use Test::More;
 use File::Spec;
 use File::Temp qw(tempdir);
 use Socket qw(AF_INET6);
+use Time::HiRes qw(time);
 
 use lib 'lib';
 
@@ -43,6 +63,25 @@ isa_ok( $auth, 'Developer::Dashboard::Auth', 'constructed auth manager' );
     is( $record->{username}, 'alice', 'add_user stores the requested username' );
     is( $record->{iterations}, 210_000, 'add_user records the default PBKDF2 work factor' );
 
+    # DD-599: the credential record's PREDICTABLE final path (username.json)
+    # must never become visible with loose permissions - a bare stat() after
+    # add_user returns can't prove this (a later chmod always leaves the
+    # final state correct even with the bug), so this intercepts the rename
+    # that makes the file visible under its final name and checks the SOURCE
+    # file's permissions at that exact moment: by the time anything could
+    # observe the file at its predictable path, it must already be secured.
+    {
+        my $old_umask = umask(0);
+        local $DD599_WATCH_TARGET = File::Spec->catfile( $paths->users_root, 'rename-observed-user.json' );
+        local $DD599_OBSERVED_RENAME_MODE;
+        $auth->add_user( username => 'rename-observed-user', password => 'password123' );
+        umask($old_umask);
+        ok( defined $DD599_OBSERVED_RENAME_MODE, 'DD-599: add_user renamed a source file into the predictable final path (rename observed)' );
+        is( sprintf( '%04o', $DD599_OBSERVED_RENAME_MODE // -1 ), '0600',
+            'DD-599: the source file was already 0600 BEFORE the rename that made it visible at its final, predictable path - even under umask(0)' );
+        $auth->remove_user('rename-observed-user');    # avoid polluting list_users' exact-membership assertions below
+    }
+
     my $no_username = eval { $auth->add_user( password => 'password123' ); 1 } ? '' : $@;
     like( $no_username, qr/Missing username/, 'add_user dies without a username' );
 
@@ -55,12 +94,60 @@ isa_ok( $auth, 'Developer::Dashboard::Auth', 'constructed auth manager' );
     my $short_password = eval { $auth->add_user( username => 'carol', password => 'short' ); 1 } ? '' : $@;
     like( $short_password, qr/at least 8 characters/, 'add_user rejects passwords shorter than eight characters' );
 
-    # Force the write-failure die: make the target record path an existing
-    # directory so the ">:raw" open cannot succeed.
+    # Force a write-stage die: make the target record path an existing
+    # directory. DD-599: add_user now writes to a temp file first (which
+    # succeeds, since only the FINAL path is a directory) and fails at the
+    # rename into place instead - still a hard failure, just at a different,
+    # more accurate stage than before the fix.
     my $victim_file = $auth->_user_file('victim');
     mkdir $victim_file or die "Unable to stage directory $victim_file: $!";
     my $write_fail = eval { $auth->add_user( username => 'victim', password => 'password123' ); 1 } ? '' : $@;
-    like( $write_fail, qr/Unable to write/, 'add_user dies when the record file cannot be opened for writing' );
+    like( $write_fail, qr/Unable to rename/, 'add_user dies when the record cannot be installed at its final path' );
+
+    # DD-599: force the earlier open-stage die. _pending_user_file is pinned
+    # to a fixed path (rather than relying on the real pid/time-based name,
+    # which cannot be pre-staged reliably) so a directory can occupy it -
+    # matching Collector.pm::_pending_path's own override technique in
+    # t/89-collector-coverage.t.
+    {
+        my $target       = $auth->_user_file('open-blocked');
+        my $pending_path = "$target.blocked-open.pending";
+        mkdir $pending_path or die "Unable to create $pending_path: $!";
+        no warnings 'redefine';
+        local *Developer::Dashboard::Auth::_pending_user_file = sub { return $pending_path };
+        use warnings 'redefine';
+        my $open_fail = eval { $auth->add_user( username => 'open-blocked', password => 'password123' ); 1 } ? '' : $@;
+        like( $open_fail, qr/Unable to write \Q$pending_path\E/, 'add_user dies when the pending file cannot be opened' );
+        rmdir $pending_path or die "Unable to remove $pending_path: $!";
+    }
+
+  SKIP: {
+        skip 'requires a writable /dev/full to force a write failure', 1
+          if !-e '/dev/full' || !-w '/dev/full';
+
+        my $target       = $auth->_user_file('write-blocked');
+        my $pending_path = "$target.forced-full.pending";
+        no warnings 'redefine';
+        local *Developer::Dashboard::Auth::_pending_user_file = sub { return $pending_path };
+        use warnings 'redefine';
+
+        skip "unable to symlink /dev/full: $!", 1
+          if !symlink( '/dev/full', $pending_path );
+
+        # DD-599: /dev/full always fails a write with ENOSPC. The credential
+        # record is far smaller than Perl's IO buffer, so print() itself
+        # returns true (buffered, not yet flushed to the device) and the
+        # error only surfaces at close() - exercising the close-stage die
+        # branch, distinct from the open-stage die covered above.
+        my @warnings;
+        my $write_fail;
+        {
+            local $SIG{__WARN__} = sub { push @warnings, $_[0] };
+            $write_fail = eval { $auth->add_user( username => 'write-blocked', password => 'password123' ); 1 } ? '' : $@;
+        }
+        like( $write_fail, qr/Unable to close \Q$pending_path\E/, 'add_user dies when the pending write cannot be flushed to the device at close' );
+        unlink $pending_path;
+    }
 }
 
 # verify_user guards, the PBKDF2 verification path, and a record that omits the
@@ -89,6 +176,18 @@ isa_ok( $auth, 'Developer::Dashboard::Auth', 'constructed auth manager' );
         $auth->verify_user( username => 'noiter', password => 'password123' ),
         'verify_user falls back to the default work factor when a record omits its iteration count',
     );
+}
+
+# DD-628: performance budget for the PBKDF2 work factor. The bound is
+# deliberately generous (not a tight benchmark) so a contended host does not
+# flake this test; it exists to catch a gross regression (e.g. an accidental
+# 10x iteration-count change, or a genuinely broken/slow crypto backend), not
+# to police normal timing variance.
+{
+    my $start = time();
+    Developer::Dashboard::Auth::_pbkdf2_hmac_sha256_hex( 'password123', 'budget-salt', 210_000 );
+    my $elapsed = time() - $start;
+    ok( $elapsed < 5, "PBKDF2 at the current work factor completes within the documented performance budget (took ${elapsed}s)" );
 }
 
 # get_user must surface an open failure on a record that exists but is

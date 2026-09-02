@@ -6,7 +6,7 @@ use warnings;
 use XSLoader ();
 use Punk::Command ();
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 XSLoader::load('Punk::Authorisation', $VERSION);
 

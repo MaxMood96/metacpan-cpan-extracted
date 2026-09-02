@@ -3,7 +3,7 @@ package Developer::Dashboard::Zipper;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Exporter 'import';
 use File::Basename qw(dirname);
@@ -13,6 +13,7 @@ use Scalar::Util qw(blessed);
 use URI::Escape qw(uri_escape);
 
 use Developer::Dashboard::Codec qw(encode_payload decode_payload);
+use Developer::Dashboard::PathRegistry ();
 
 our @EXPORT = qw(zip unzip _cmdx _cmdp __cmdx acmdx Ajax);
 our $AJAX_CONTEXT = {};
@@ -223,14 +224,38 @@ sub _saved_ajax_url_and_store {
     my $path = saved_ajax_file_path(%args);
     my $dir = dirname($path);
     make_path($dir) if !-d $dir;
-    open my $fh, '>', $path or die "Unable to write $path: $!";
-    print {$fh} defined $args{code} ? $args{code} : '';
-    close $fh;
-    chmod 0700, $path or die "Unable to chmod $path: $!";
+    # DD-601: write to a per-writer temp file with an unpredictable name and
+    # secure it BEFORE the atomic rename into the final, predictable path -
+    # never open the final path directly and secure it afterward. This is an
+    # EXECUTABLE ajax handler (code that later runs as a process), so a
+    # window where it exists at its final path with loose (umask-determined)
+    # permissions is worse than a data file: a local reader could tamper
+    # with the source before it is secured. Matches Auth.pm/SessionStore.pm's
+    # DD-599/DD-600 fix and Collector.pm's own correct _atomic_write_text
+    # ordering.
+    my $tmp = _pending_ajax_file($path);
+    Developer::Dashboard::PathRegistry->atomic_write_secure(
+        $tmp, $path, ( defined $args{code} ? $args{code} : '' ),
+        executable => 1,
+    );
     return {
         path => $path,
         %{ _saved_ajax_url(%args) },
     };
+}
+
+# _pending_ajax_file($path)
+# Builds the per-writer staging path _saved_ajax_url_and_store writes to
+# before the atomic rename into $path. Its own sub (rather than an inline
+# sprintf) exists so a coverage test can override it to a fixed, predictable
+# path when it needs to pre-stage that exact location to force a write
+# failure - the real path is deliberately unpredictable (mixing pid and
+# wall-clock time) so two writers can never collide on it.
+# Input: final destination file path string.
+# Output: staging file path string.
+sub _pending_ajax_file {
+    my ($path) = @_;
+    return sprintf '%s.%s.%s.pending', $path, $$, time;
 }
 
 # _validate_saved_ajax_file($file)

@@ -3373,6 +3373,7 @@ static void por_q_call(pTHX_ SV *q, const char *meth, SV **args, int nargs) {
 static int por_q_lock(pTHX_ SV *q, const char *name, IV lease, IV owner) {
     dSP;
     int n, ok = 0;
+    SV *r;
     ENTER; SAVETMPS; PUSHMARK(SP);
     XPUSHs(q);
     XPUSHs(sv_2mortal(newSVpv(name, 0)));
@@ -3382,7 +3383,11 @@ static int por_q_lock(pTHX_ SV *q, const char *name, IV lease, IV owner) {
     PUTBACK;
     n = call_method("lock", G_SCALAR | G_EVAL);
     SPAGAIN;
-    if (n) ok = SvTRUE(POPs);
+    /* POP FIRST, TEST AFTER. Before 5.32 SvTRUE mentions its argument up to
+     * five times, so SvTRUE(POPs) pops repeatedly: the grant is read from
+     * whatever sits below it, the lease reads as lost on a queue that granted
+     * it, and the walk off the stack base is a SEGV on a debugging perl. */
+    if (n) { r = POPs; ok = SvTRUE(r) ? 1 : 0; }
     PUTBACK;
     FREETMPS; LEAVE;
     if (SvTRUE(ERRSV)) ok = 0;

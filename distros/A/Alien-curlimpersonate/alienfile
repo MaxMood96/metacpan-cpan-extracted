@@ -4,13 +4,11 @@ use alienfile;
 probe sub { 'share' };
 
 share {
-    # A fork of lexiforest/curl-impersonate at v2.1.1, carrying one commit:
-    # upstream's configure aborts under CMake 4 because curl's
-    # curl_openssl_check_exists() puts imported OpenSSL targets in
-    # CMAKE_REQUIRED_LIBRARIES, which try_compile's scratch project has not got.
-    # The pin moves back to upstream once an equivalent fix lands there.
-    meta->prop->{start_url} = 'https://github.com/vividsnow/curl-impersonate.git';
-    plugin 'Download::Git' => ( version => qr/^v(2\.1\.1)-cmake4$/ );   # pin
+    # An exact tag, never the latest: upstream 2.0.0 replaced autotools with a
+    # CMake superbuild, so a floating pin would have broken the build outright
+    # the moment that tag was cut. Target names are load-bearing downstream too.
+    meta->prop->{start_url} = 'https://github.com/lexiforest/curl-impersonate.git';
+    plugin 'Download::Git' => ( version => qr/^v(2\.2\.2)$/ );   # pin
 
     # A CMake superbuild since upstream 2.0.0. Alien::cmake3 supplies a cmake
     # where the system has none, but it only promises 3.x -- see the check below.

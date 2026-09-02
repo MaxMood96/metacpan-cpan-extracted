@@ -1,5 +1,10 @@
 Revision history for Heap-PQ
 
+0.07  2026-09-02
+      - Fixes: the pre-5.11 comparator path reads the result it was given,
+        where SvIV(POPs) popped once per mention and mis-ordered the heap
+      - Adds: t/022-multieval.t
+
 0.06  2026-07-07
       - guard PUSH_MULTICALL / dMULTICALL /
         MULTICALL / POP_MULTICALL behind PERL_VERSION_GE(5,11,0). 

@@ -3,11 +3,15 @@ package Developer::Dashboard::Doctor;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use File::Find ();
 use File::Spec;
+use Time::Local qw(timegm);
+use Capture::Tiny qw(capture);
 
+use Developer::Dashboard::Config ();
+use Developer::Dashboard::FileRegistry ();
 use Developer::Dashboard::InternalCLI ();
 use Developer::Dashboard::JSON qw(json_decode);
 
@@ -33,9 +37,11 @@ sub run {
     my @roots = $self->_audit_roots( fix => $fix );
     my @helper_issues = $self->_helper_issues( fix => $fix );
     my @shell_issues = $self->_shell_bootstrap_issues( fix => $fix );
+    my @ssl_issues = $self->_ssl_certificate_issues( now => $args{now} );
     my @issues = map { @{ $_->{issues} || [] } } @roots;
     push @issues, @helper_issues;
     push @issues, @shell_issues;
+    push @issues, @ssl_issues;
     my $hooks = $self->_doctor_hook_results;
     my @hook_failures = grep { ( $_->{exit_code} || 0 ) != 0 } values %{$hooks};
 
@@ -420,6 +426,19 @@ sub _slurp_text_file {
     return defined($text) ? $text : q{};    # uncoverable branch false
 }
 
+# _config()
+# Lazily constructs the merged runtime config loader, following the same shape
+# Housekeeper::_config already uses for this exact pattern.
+# Input: none.
+# Output: Developer::Dashboard::Config object.
+sub _config {
+    my ($self) = @_;
+    return $self->{config} ||= Developer::Dashboard::Config->new(
+        paths => $self->{paths},
+        files => Developer::Dashboard::FileRegistry->new( paths => $self->{paths} ),    # uncoverable condition false
+    );
+}
+
 # _mode_octal($path)
 # Returns the permission bits for one file-system entry in four-digit octal form.
 # Input: file or directory path string.
@@ -429,6 +448,104 @@ sub _mode_octal {
     my @stat = stat($path);
     return undef if !@stat;
     return sprintf '%04o', $stat[2] & 07777;
+}
+
+# _ssl_certificate_issues(%args)
+# Reports on the active SSL certificate's remaining validity, so a long-running
+# server whose certificate expires under it is flagged before it fails silently -
+# regeneration only happens inside generate_self_signed_cert, which runs when the
+# web server STARTS, so an already-running instance never re-enters it (DD-651).
+# A certificate that does not exist raises nothing: that is the normal,
+# SSL-never-used state, matching _audit_root's own idiom for an absent root
+# (exists => 0, issue_count => 0) rather than a failure to inspect. A certificate
+# that IS present but cannot be parsed is the case this project's "a checker that
+# cannot look must not report clean" rule actually protects, and is reported
+# distinctly from valid, near-expiry and expired.
+# Input: optional now (epoch seconds, for testability) and warn_days (default 30).
+# Output: list of zero or one issue hashrefs.
+sub _ssl_certificate_issues {
+    my ( $self, %args ) = @_;
+    my $now = $args{now} || time;    # uncoverable condition false
+    my $warn_days =
+      defined $args{warn_days} ? $args{warn_days} : $self->_config->ssl_warn_days;
+
+    my $cert_dir = File::Spec->catdir( $self->{paths}->home_runtime_path, 'certs' );
+    my $cert_file = File::Spec->catfile( $cert_dir, 'server.crt' );
+
+    return () if !-f $cert_file;
+
+    # DD-670: guard $? before the subprocess call below sets it, so a caller
+    # further up the stack that reads $? afterward is never misled by this
+    # sub's own openssl invocation.
+    local $?;
+    my ( $stdout, $stderr, $exit ) = capture {
+        system( 'openssl', 'x509', '-in', $cert_file, '-noout', '-enddate' );
+    };
+    if ( $exit != 0 ) {
+        return (
+            {
+                kind     => 'certificate',
+                severity => 'unknown',
+                path     => $cert_file,
+                detail   => "certificate at $cert_file could not be parsed - cannot determine expiry",
+            }
+        );
+    }
+
+    my $not_after_epoch = _ssl_parse_enddate($stdout);
+    return () if !defined $not_after_epoch;
+
+    my $days_remaining = int( ( $not_after_epoch - $now ) / 86_400 );
+
+    if ( $days_remaining < 0 ) {
+        return (
+            {
+                kind     => 'certificate',
+                severity => 'failure',
+                path     => $cert_file,
+                detail   => sprintf(
+                    'certificate at %s expired %d day(s) ago', $cert_file, -$days_remaining
+                ),
+            }
+        );
+    }
+
+    return () if $days_remaining > $warn_days;
+
+    return (
+        {
+            kind     => 'certificate',
+            severity => 'warning',
+            path     => $cert_file,
+            detail   => sprintf(
+                'certificate at %s expires in %d day(s)', $cert_file, $days_remaining
+            ),
+        }
+    );
+}
+
+# _ssl_parse_enddate($openssl_output)
+# Parses the epoch seconds out of `openssl x509 -noout -enddate`'s
+# "notAfter=Mon DD HH:MM:SS YYYY GMT" line. The certificate this project generates
+# is always GMT (openssl's own default for -enddate), so no timezone offset is
+# applied - unlike Collector.pm's log-timestamp parser, which handles arbitrary
+# offsets because log lines are not.
+# Input: the command's stdout string.
+# Output: epoch seconds, or undef if the line does not match.
+sub _ssl_parse_enddate {
+    my ($output) = @_;
+    return undef
+      if $output !~
+      /notAfter=(\w+)\s+(\d+)\s+(\d+):(\d+):(\d+)\s+(\d+)\s+GMT/;
+    my ( $month_name, $day, $hour, $minute, $second, $year ) =
+      ( $1, $2, $3, $4, $5, $6 );
+    my %month_index = (
+        Jan => 0, Feb => 1, Mar => 2,  Apr => 3,  May => 4,  Jun => 5,
+        Jul => 6, Aug => 7, Sep => 8,  Oct => 9,  Nov => 10, Dec => 11,
+    );
+    my $month = $month_index{$month_name};
+    return undef if !defined $month;
+    return timegm( $second, $minute, $hour, $day, $month, $year );
 }
 
 1;

@@ -4,6 +4,23 @@ use strict;
 use warnings;
 use utf8;
 
+# DD-621: intercepts chmod calls made by Developer::Dashboard::Runtime::Result
+# so a test can prove _open_channel_file's own explicit chmod actually fires,
+# not just that the end state happens to be 0600 (File::Temp already defaults
+# to 0600, so the end state alone cannot distinguish "explicitly chmod'd" from
+# "never touched"). Installed in a BEGIN block, before the target module
+# compiles, so its own bareword chmod call resolves through this override -
+# matching this project's established CORE::GLOBAL::rename interception
+# technique (DD-599/600/601), which only works at compile-time ordering.
+our @DD621_CHMOD_CALLS;
+BEGIN {
+    *CORE::GLOBAL::chmod = sub {
+        my ( $mode, @files ) = @_;
+        push @DD621_CHMOD_CALLS, [ $mode, @files ];
+        return CORE::chmod( $mode, @files );
+    };
+}
+
 use Encode qw(decode);
 use File::Spec;
 use File::Temp qw(tempdir);
@@ -242,6 +259,31 @@ my $P = 'Developer::Dashboard::Runtime::Result';
     is_deeply( Developer::Dashboard::Runtime::Result::current(), $payload, 'current() reads the payload back through the file-backed channel' );
 
     is( Developer::Dashboard::Runtime::Result::clear_current(), '', 'clear_current releases the file-backed channel handle' );
+}
+
+# ---------------------------------------------------------------------------
+# DD-621: the RESULT tempfile's permission mode is explicit, not just assumed
+# from File::Temp's own default - proven under a permissive umask, where a
+# trusted-default implementation would produce a wide-open file instead.
+# ---------------------------------------------------------------------------
+{
+    @DD621_CHMOD_CALLS = ();
+    my $old_umask = umask(0);
+    my ( $fh, $fd_path ) = Developer::Dashboard::Runtime::Result::_open_channel_file();
+    umask($old_umask);
+    my $mode = ( stat($fh) )[2] & 07777;
+    is( sprintf( '%04o', $mode ), '0600',
+        '_open_channel_file creates the RESULT tempfile at exactly 0600, even under a permissive umask' );
+    # File::Temp's own tempfile() already issues its own internal chmod on
+    # the path as part of creation, so the call count alone cannot prove
+    # _open_channel_file's OWN explicit chmod fired - it targets the
+    # filehandle specifically (File::Temp's targets the path string), which
+    # is the one distinguishing signal available here.
+    my @fh_calls = grep { ref $_->[1] eq 'GLOB' } @DD621_CHMOD_CALLS;
+    is( scalar(@fh_calls), 1, '_open_channel_file explicitly chmods the tempfile handle exactly once' );
+    is( $fh_calls[0][0], 0600, "the explicit chmod call requests mode 0600" );
+    ok( defined $fd_path && length $fd_path, '_open_channel_file still returns a usable fd-backed path' );
+    close $fh;
 }
 
 # ---------------------------------------------------------------------------

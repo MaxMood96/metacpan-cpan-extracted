@@ -177,6 +177,25 @@ _finish_future(self, c, ret, on_error = &PL_sv_undef, method = &PL_sv_undef, aft
                                      : newRV_noinc((SV *)newAV()));
             RETVAL = punk_closure(aTHX_ pc_ffs_cb, cap);
         }
+        /* One of ours: the class is known, so the two probes above and the
+         * method call below are all answers we already have. Chain it in C -
+         * one closure and one capture instead of three of each. A subclass
+         * misses the stash compare and takes the general path, which is
+         * slower and correct. */
+        else if (nonblocking && can_then && pcx_is_punk_future(aTHX_ ret)) {
+            AV *cap = newAV();
+            SV *clos;
+            punk_future *pg = pf_new(aTHX);
+            RETVAL = pf_bless(aTHX_ pg, "Punk::Future");
+            av_push(cap, newSVsv(c));
+            av_push(cap, SvOK(on_error) ? newSVsv(on_error) : newSV(0));
+            av_push(cap, newSVsv(method));
+            av_push(cap, SvOK(after) ? newSVsv(after)
+                                     : newRV_noinc((SV *)newAV()));
+            av_push(cap, newSVsv(RETVAL));
+            clos = sv_2mortal(punk_closure(aTHX_ pc_ff_both_cb, cap));
+            pf_react(aTHX_ pf_of(aTHX_ ret), ret, PFR_ON_READY, clos);
+        }
         else if (nonblocking && can_then) {
             AV *cd = newAV(), *cf = newAV();
             SV *done, *fail, *argv[2];

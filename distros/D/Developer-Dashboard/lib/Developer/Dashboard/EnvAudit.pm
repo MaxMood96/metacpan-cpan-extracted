@@ -3,7 +3,7 @@ package Developer::Dashboard::EnvAudit;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Developer::Dashboard::JSON qw(json_decode json_encode);
 
@@ -80,7 +80,13 @@ sub _audit_copy {
 
 # _load_from_env()
 # Lazily rehydrates the audit inventory from the exported process environment
-# so exec'd child helpers can inspect the same env provenance.
+# so exec'd child helpers can inspect the same env provenance. The exported
+# blob carries only provenance (DD-608: it never carries the secret value
+# itself, to avoid duplicating loaded secrets into every exec'd child's %ENV
+# regardless of whether that child was meant to see them) - the value is
+# reconstructed from THIS process's own live %ENV{$key}, so a child sees
+# exactly what it actually inherited, correctly undef if its environment was
+# deliberately narrowed rather than a smuggled-back copy from the parent.
 # Input: none.
 # Output: true value.
 sub _load_from_env {
@@ -92,7 +98,7 @@ sub _load_from_env {
     die "DEVELOPER_DASHBOARD_ENV_AUDIT must decode to a hash\n" if ref($decoded) ne 'HASH';
     %AUDIT = map {
         $_ => {
-            value   => $decoded->{$_}{value},
+            value   => $ENV{$_},
             envfile => $decoded->{$_}{envfile},
         }
     } CORE::keys %{$decoded};
@@ -100,13 +106,19 @@ sub _load_from_env {
 }
 
 # _sync_to_env()
-# Serializes the in-process audit inventory back into the environment so exec'd
-# child processes can inspect the same env provenance.
+# Serializes the in-process audit inventory's PROVENANCE back into the
+# environment so exec'd child processes can inspect the same env provenance.
+# Deliberately excludes the recorded value (DD-608): every exec'd child
+# inherits this blob via %ENV regardless of which of its own env vars were
+# scrubbed for it, so a value carried here would duplicate secrets into
+# children never meant to receive them. The key name and source file are not
+# secret; the value is.
 # Input: none.
 # Output: true value.
 sub _sync_to_env {
     my ($class) = @_;
-    $ENV{DEVELOPER_DASHBOARD_ENV_AUDIT} = json_encode( $class->_audit_copy );
+    my %provenance_only = map { $_ => { envfile => $AUDIT{$_}{envfile} } } CORE::keys %AUDIT;
+    $ENV{DEVELOPER_DASHBOARD_ENV_AUDIT} = json_encode( \%provenance_only );
     return 1;
 }
 

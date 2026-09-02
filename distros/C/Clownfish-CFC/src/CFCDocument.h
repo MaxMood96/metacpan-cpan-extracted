@@ -33,9 +33,6 @@ CFCDocument*
 CFCDocument_do_create(CFCDocument *self, const char *path,
                       const char *path_part);
 
-void
-CFCDocument_destroy(CFCDocument *self);
-
 CFCDocument**
 CFCDocument_get_registry(void);
 

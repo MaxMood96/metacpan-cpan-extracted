@@ -603,6 +603,57 @@ XS_INTERNAL(pc_ff_done_cb) {
     XSRETURN(1);
 }
 
+/* The Punk::Future path, fused.
+ *
+ * Chaining a handler's future through `then` builds three closures per
+ * request: a done callback, a fail callback, and the one `then` makes inside
+ * itself to drive the derived future. Each is a fresh CV - punk_closure is
+ * newXS - plus a capture AV. When the handler's future is one of ours none of
+ * that indirection buys anything: this is a single reaction that reads the
+ * settled state itself and settles the derived future directly, so one
+ * closure and one AV do the work of three.
+ *
+ * Capture: [ c, on_error, method, after, derived ]. No wrap flag - the wrap
+ * exists to satisfy CPAN Future's "a then callback must return a Future"
+ * rule, and nothing here goes through `then`.
+ *
+ * The source future arrives as $_[0], which is what PFR_ON_READY passes. */
+XS_INTERNAL(pc_ff_both_cb);
+XS_INTERNAL(pc_ff_both_cb) {
+    dXSARGS;
+    AV *cap  = punk_clos_cap(aTHX_ cv);
+    SV *c    = *av_fetch(cap, 0, 0);
+    SV *oe   = *av_fetch(cap, 1, 0);
+    int hd   = pc_is_head(aTHX_ *av_fetch(cap, 2, 0));
+    AV *aft  = pc_after_of(aTHX_ *av_fetch(cap, 3, 0));
+    SV *derived = *av_fetch(cap, 4, 0);
+    SV *src  = items > 0 ? ST(0) : NULL;
+    punk_future *sf = src ? pf_of(aTHX_ src) : NULL;
+    SV *resp;
+    if (!sf || !derived) XSRETURN_EMPTY;
+    if (sf->state == PF_DONE) {
+        SV **v = sf->vals ? av_fetch(sf->vals, 0, 0) : NULL;
+        resp = punk_deliver(aTHX_ c, v && *v ? *v : &PL_sv_undef, hd, aft);
+    }
+    else if (sf->state == PF_FAILED) {
+        SV **e = sf->vals ? av_fetch(sf->vals, 0, 0) : NULL;
+        SV *err = (e && *e && SvOK(*e)) ? *e : sv_2mortal(newSVpvs("failed"));
+        SV *handled = punk_handle_error(aTHX_ c, err, SvOK(oe) ? oe : NULL);
+        resp = punk_deliver(aTHX_ c, handled, hd, aft);
+        SvREFCNT_dec(handled);
+    }
+    else {   /* cancelled: nothing was asked for, so nothing is delivered */
+        pf_settle(aTHX_ pf_of(aTHX_ derived), derived, PF_CANCELLED, NULL);
+        XSRETURN_EMPTY;
+    }
+    {
+        AV *out = newAV();
+        av_push(out, resp);            /* takes the reference punk_deliver made */
+        pf_settle(aTHX_ pf_of(aTHX_ derived), derived, PF_DONE, out);
+    }
+    XSRETURN_EMPTY;
+}
+
 XS_INTERNAL(pc_ff_fail_cb);
 XS_INTERNAL(pc_ff_fail_cb) {
     dXSARGS;

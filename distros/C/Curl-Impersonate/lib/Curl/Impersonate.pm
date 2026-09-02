@@ -1,7 +1,7 @@
 package Curl::Impersonate;
 use v5.10; use strict; use warnings;
 use Carp ();
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 require XSLoader;
 XSLoader::load('Curl::Impersonate', $VERSION);
 
@@ -126,6 +126,21 @@ self-signed endpoints.
 Follow C<3xx> redirects. Default false. libcurl bounds the chain itself, so a
 redirect loop ends with C<Number of redirects hit maximum amount> rather than
 spinning.
+
+=item decode => $bool
+
+Decompress the response body. libcurl decodes whatever it was built with --
+here gzip, deflate, br and zstd -- and C<< $res->{body} >> is the decoded
+bytes. Off by default, so the body arrives exactly as the origin sent it.
+
+This does not change the request on the wire. The C<Accept-Encoding> the
+impersonate target installs is a custom header, and libcurl lets a custom
+header replace the one it would generate itself, so the fingerprint is
+untouched; only the response side differs.
+
+C<< $res->{headers} >> still reports the origin's C<Content-Encoding> and
+C<Content-Length>, which now describe the bytes before decoding. Anything
+forwarding this response onward must drop both.
 
 =item proxy => $url
 

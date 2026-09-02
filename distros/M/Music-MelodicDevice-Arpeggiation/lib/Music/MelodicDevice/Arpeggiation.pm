@@ -3,21 +3,24 @@ our $AUTHORITY = 'cpan:GENE';
 
 # ABSTRACT: Apply arpeggiation patterns to groups of notes
 
-our $VERSION = '0.0302';
+our $VERSION = '0.0401';
 
 use Moo;
 use strictures 2;
 use Array::Circular ();
 use Data::Dumper::Compact qw(ddc);
+use Music::Note ();
 use namespace::clean;
 
 use constant TICKS => 96;
 
 my $DISPATCH = {
-    up     => sub { my ($notes) = @_; return [ 0 .. $#$notes ] },
-    down   => sub { my ($notes) = @_; return [ reverse(0 .. $#$notes) ] },
-    updown => sub { my ($notes) = @_; return [ 0 .. $#$notes, reverse(1 .. $#$notes - 1) ] },
-    random => sub { my ($notes) = @_; return [ map { rand @$notes } @$notes ] },
+    up       => sub { my ($notes) = @_; return [ 0 .. $#$notes ] },
+    down     => sub { my ($notes) = @_; return [ reverse(0 .. $#$notes) ] },
+    updown   => sub { my ($notes) = @_; return [ 0 .. $#$notes, reverse(0 .. $#$notes - 1) ] },
+    random   => sub { my ($notes) = @_; return [ map { rand @$notes } @$notes ] },
+    converge => \&converge,
+    diverge  => \&diverge,
 };
 
 
@@ -58,6 +61,7 @@ sub arp {
     $repeats  ||= $self->repeats;
 
     my $pattern = ref $type eq 'ARRAY' ? $type : $self->_build_pattern($type, $notes);
+    print "Pattern: @$pattern\n" if $self->verbose;
 
     my $pat = Array::Circular->new(@$pattern);
 
@@ -99,6 +103,40 @@ sub arp_type {
     }
 }
 
+
+sub converge {
+    my ($pitches) = @_;
+
+    my @by_pitch = sort { _pitch_value($pitches->[$a]) <=> _pitch_value($pitches->[$b]) } 0 .. $#$pitches;
+
+    my ($lo, $hi) = (0, $#by_pitch);
+    my $take_low = 1;
+    my @pattern;
+
+    while ($lo <= $hi) {
+        if ($lo == $hi) {
+            push @pattern, $by_pitch[$lo];
+            last;
+        }
+        push @pattern, $take_low ? $by_pitch[$lo++] : $by_pitch[$hi--];
+        $take_low = !$take_low;
+    }
+
+    return \@pattern;
+}
+
+
+sub diverge {
+    my ($pitches) = @_;
+    return [ reverse @{ converge($pitches) } ];
+}
+
+sub _pitch_value {
+    my ($pitch) = @_;
+    return $pitch if $pitch =~ /^\d+$/;
+    return Music::Note->new($pitch, 'ISO')->format('midinum');
+}
+
 1;
 
 __END__
@@ -113,7 +151,7 @@ Music::MelodicDevice::Arpeggiation - Apply arpeggiation patterns to groups of no
 
 =head1 VERSION
 
-version 0.0302
+version 0.0401
 
 =head1 SYNOPSIS
 
@@ -121,13 +159,13 @@ version 0.0302
 
   my $arp = Music::MelodicDevice::Arpeggiation->new;
 
-  # set a new pattern type
-  $arp->arp_type('my_type', sub { my ($notes); return [0,2,1] });
-
   # arpeggiate the 'updown' pattern
   my $arped = $arp->arp(['C4','E4','G4'], 1, 'updown');
   # [['d24', 'C4'],['d24', 'E4'],['d24', 'G4'],['d24', 'E4']]
   $arped = $arp->arp([60,64,67], 1, 'updown', 3); # midinums repeated 3 times
+
+  # set a new pattern type
+  $arp->arp_type('my_type', sub { my ($notes); return [0,2,1] });
 
 =head1 DESCRIPTION
 
@@ -151,6 +189,8 @@ Known types:
   down
   updown
   random
+  converge
+  diverge
 
 =head2 duration
 
@@ -201,10 +241,8 @@ Create a new C<Music::MelodicDevice::Arpeggiation> object.
   $notes = $arp->arp(\@pitches, $duration, $type);
   $notes = $arp->arp(\@pitches, $duration, $type, $repeats);
 
-Return a list of lists of C<d#> MIDI-Perl strings with the pitches
-indexed by the arpeggiated pattern built from the given C<type>. These
-MIDI-Perl duration strings are distributed evenly across the given
-C<duration>.
+Return a list of lists of MIDI-Perl notes of the form,
+C<['d16','E4']>.
 
 =head2 arp_type
 
@@ -217,16 +255,17 @@ types. For a single argument, return the code-reference value of that
 type, of known. If two arguments are given, add the named C<type> to
 the known arpeggiation types with its code-reference value.
 
-Known types and their code-ref values are:
+=head2 converge
 
-  up     => sub { my ($notes) = @_; return [ 0 .. $#$notes ] },
-  down   => sub { my ($notes) = @_; return [ reverse(0 .. $#$notes) ] },
-  updown => sub { my ($notes) = @_; return [ 0 .. $#$notes, reverse(1 .. $#$notes - 1) ] },
-  random => sub { my ($notes) = @_; return [ map { rand @$notes } @$notes ] },
+Return a list of notes from the outer extremes to the middle.
+
+=head2 diverge
+
+Return a list of notes from the middle to the outer extremes.
 
 =head1 SEE ALSO
 
-The F<t/01-methods.t> program in this distribution
+The tests, F<t/01-methods.t> and the F<eg/*> programs in this distribution.
 
 L<Array::Circular>
 
@@ -240,7 +279,7 @@ Gene Boggs <gene.boggs@gmail.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by Gene Boggs.
+This software is copyright (c) 2025-2026 by Gene Boggs.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

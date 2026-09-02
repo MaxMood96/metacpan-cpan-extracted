@@ -1,5 +1,9 @@
 Revision history for Alien-curlimpersonate
 
+0.03  2026-09-01
+        - build upstream curl-impersonate v2.2.2 instead of a fork of v2.1.1
+        - impersonation target names are unchanged
+
 0.02  2026-08-25
         - build curl-impersonate v2.1.1 instead of v1.5.6: Chrome 150 era
           BoringSSL and curl 8.21.0. Existing target names such as chrome131

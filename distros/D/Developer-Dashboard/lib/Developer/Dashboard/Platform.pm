@@ -3,7 +3,7 @@ package Developer::Dashboard::Platform;
 use strict;
 use warnings;
 
-our $VERSION = '4.26';
+our $VERSION = '4.29';
 
 use Exporter 'import';
 use File::Basename qw(basename dirname);
@@ -370,6 +370,12 @@ sub _exec_go_source {
 # Output: does not return on success; dies when compilation or exec fails.
 sub _exec_java_source {
     my ( $path, @args ) = @_;
+
+    # DD-597: the javac launch below mutates the caller's global $? as a
+    # side effect; without this guard that stays set in the caller's process
+    # after this sub returns (the die path only - a successful exec below
+    # replaces the process image and never returns).
+    local $?;
     die "Missing Java source path\n" if !defined $path || $path eq '';
 
     my $class = _java_main_class($path);
