@@ -280,8 +280,11 @@ JS
     is($r->{chrome_csi}, 'function', 'window.chrome.csi present');
     is($r->{chrome_load},'function', 'window.chrome.loadTimes present');
     ok(!$r->{chrome_rt},             'window.chrome has no bare runtime:{} (the puppeteer-stealth tell)');
-    is($r->{brands}, 'Google Chrome,Chromium,Not_A Brand',
-       'userAgentData.brands order matches real Chrome 131 (same source as the wire sec-ch-ua)');
+    # Order AND the GREASE entry are curl-impersonate's chrome150 template, not
+    # a constant: 131 sent "Not_A Brand";v="24" last, 150 sends
+    # "Not;A=Brand";v="8" first.
+    is($r->{brands}, 'Not;A=Brand,Chromium,Google Chrome',
+       'userAgentData.brands order matches real Chrome 150 (same source as the wire sec-ch-ua)');
     is($r->{uaPlatform}, 'Windows',  'userAgentData.platform matches the profile');
     ok(!$r->{uaMobile},              'userAgentData.mobile false for a desktop profile');
     is($r->{hevArch}, 'x86',         'getHighEntropyValues resolves the requested architecture');
@@ -630,7 +633,7 @@ SKIP: {
                         network_fingerprint => 1);
     };
     ok($h, 'a hashref profile plus network_fingerprint => 1 constructs') or diag $@;
-    is($h && $h->network_fingerprint, 'chrome131',
+    is($h && $h->network_fingerprint, 'chrome150',
        '...deriving the curl target from the profile inside the hashref');
     $h->quit if $h;
 
@@ -638,7 +641,7 @@ SKIP: {
         EV::WebKit->new(window => [100,80], ephemeral => 1, timeout => 5,
                         fingerprint => 'windows-chrome', network_fingerprint => 1);
     };
-    is($s && $s->network_fingerprint, 'chrome131', '...same target as the string form');
+    is($s && $s->network_fingerprint, 'chrome150', '...same target as the string form');
     $s->quit if $s;
 
     # on_request ALONE takes the same derivation, and this branch is the
@@ -646,7 +649,7 @@ SKIP: {
     # Chrome. So a hashref profile used to present a Safari (or Android Chrome)
     # identity in JS and headers over a Chrome JA3/JA4 -- silently, and
     # network_fingerprint() reported 'chrome131' as if that were the default.
-    for my $case (['macos-safari', 'safari18_0'], ['pixel-chrome', 'chrome131_android']) {
+    for my $case (['macos-safari', 'safari26_0'], ['pixel-chrome', 'chrome131_android']) {
         my ($preset, $want) = @$case;
         my %made;
         for my $form (['string',  $preset],
@@ -661,7 +664,7 @@ SKIP: {
             $r->quit if $r;
         }
         is($made{hashref}, $want,
-           "on_request alone: a hashref $preset derives $want, not a silent chrome131");
+           "on_request alone: a hashref $preset derives $want, not a silent chrome150");
         is($made{hashref}, $made{string}, '...the same target the string form gets');
     }
 }

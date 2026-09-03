@@ -1,0 +1,35 @@
+Catalyst-Seal
+
+After setup_finalize a Catalyst application is frozen: the class tree, the
+configuration, the action table and the attribute layouts all stop changing.
+Catalyst goes on re-deriving those facts from the metaobject protocol on every
+request. Catalyst::Seal makes one pass at the end of setup() and compiles the
+frozen facts into constant form.
+
+    package MyApp;
+
+    use Catalyst::Seal;
+    use Catalyst qw/ ConfigLoader Static::Simple /;
+
+    __PACKAGE__->setup();
+
+No other application change. CATALYST_SEAL=0 turns it off, CATALYST_SEAL_DEBUG=1
+reports what was sealed and what was skipped.
+
+Several patches here are a copy of a Catalyst subroutine with one thing changed,
+so this release is written against the Catalyst named in Changes. Where a patch
+can tell at runtime that what it assumed has stopped holding, it declines and
+records a note; it does not check the Catalyst version for you.
+
+INSTALLATION
+
+    perl Makefile.PL
+    make
+    make test
+    make install
+
+LICENSE AND COPYRIGHT
+
+This software is Copyright (c) 2026 by LNATION <email@lnation.org>.
+
+This is free software, licensed under the Artistic License 2.0.

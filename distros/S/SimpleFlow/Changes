@@ -1,6 +1,79 @@
 Revision history for SimpleFlow
 
 
+0.16 2026-08-28 (Claude Opus 5 helped)
+
+ [Fixed]
+
+ - **`die => 0` never reported a failure.** The `will.do => "FAILED"` assignment
+     sat inside the `if ($r{die})` branch, so it could only run on the path that
+     immediately died. Under `die => 0` — the mode in which the caller is meant
+     to read `will.do` — a command that exited non-zero was reported as `"done"`,
+     and nothing warned. `will.do` is now `"FAILED"` for a non-zero exit, a
+     timeout, or a missing output file regardless of `die`, and `die => 0` emits
+     a warning naming the exit code.
+ - **The log lost the record of the task that killed the run.** The log
+     filehandle was never autoflushed. Measured with a `SIGKILL` part-way through
+     a pipeline (the shape of an OOM kill or a scheduler eviction), a log holding
+     862 bytes on a clean exit held 139 bytes after the kill: everything written
+     after the last command started — its exit code, duration and captured output
+     — was still in stdio's buffer. `task` and `say2` now switch the handle to
+     autoflush.
+ - **An undefined filename still crashed.** 0.14 added a `defined` guard to the
+     0-length check, but the `-f -r` filetest ran first, so an `undef` element of
+     an `input.files` array died as `Use of uninitialized value $_ in -r` under
+     `warnings FATAL => 'all'`. Names are now validated before anything is
+     filetested.
+ - **The 0-length `input.files` check was unreachable.** `''` fails `-f`, so an
+     empty input filename was reported as `"missing or unreadable"` and the
+     0-length check below it could never fire. Both undefined and 0-length names
+     are now reported as what they are, and the message names the offending index.
+ - **`cmd` was not type-checked.** Only definedness was checked, so any reference
+     was stringified straight into the shell: `task(cmd => ['echo','hi'])` ran the
+     literal command `ARRAY(0x5ed9d076e618)`. `cmd` must now be a non-empty string
+     or a non-empty array ref of defined values.
+ - **Skip detection and the post-run check disagreed.** Skipping tested a bare
+     `-f` while the post-run check tested `-f -r`, so an output file that existed
+     but could not be read counted as already done. Both use `-f -r` now.
+ - **The result record changed shape between paths.** `exit`, `signal`, `stdout`
+     and `stderr` were absent after a skip or a dry run, so a caller running under
+     the `warnings FATAL => 'all'` this module recommends died just by reading
+     `$t->{'exit'}`. They are now always present, holding their empty values.
+ - **`string_max` was uncapped**, so a chatty command had its whole capture echoed
+     to the terminal and written to the log — a measured 3 MB stdout wrote
+     3,002,832 bytes to each. It is now capped at 4096 characters; Data::Printer
+     marks what it drops. The full capture is still on the result hash.
+ - **Loading SimpleFlow polluted `main::`.** `use DDP` and `use Cwd 'getcwd'` sat
+     above the `package` statement, so `p`, `np` and `getcwd` were imported into
+     every program that loaded the module. The `package` statement now comes
+     first, and the duplicated `use` lines are gone.
+ - **Unbalanced parenthesis** in the 0-length `output.files` error message.
+
+ [Added]
+
+ - **`stale`**: also re-run when an input file is newer than an output file, the
+     rule `make` and `snakemake` use. Off by default, so existing pipelines are
+     unaffected. The result carries `out.of.date`.
+ - **`timeout`**: a wall-clock budget in whole seconds. The command runs in its
+     own process group and the whole group is killed if the budget is exceeded,
+     so a wedged pipeline does not leave orphans behind. The result carries
+     `timed.out`. POSIX only.
+ - **An array-ref `cmd`** runs the command without a shell, so arguments coming
+     from data need no quoting.
+ - **`quiet`**: suppress the record printed to the terminal without silencing the
+     log or `STDERR`.
+ - **`input.file`**, the single-file convenience form of `input.files`, matching
+     `output.file`.
+
+ [Changed]
+
+ - `$VERSION` is now a quoted string. As a bare number it was stringified through
+     `%g`, so a future `0.20` would have become `"0.2"` and compared as older than
+     `"0.15"` on CPAN.
+ - **Incompatible:** `input.files` on the result is now always an array ref, as
+     `output.files` always was. A scalar argument used to be stored raw.
+ - `POSIX` (core) is now a dependency, for `_exit` in the timeout child.
+
 0.15 2026-07-17 (Claude Opus 4.8 helped)
 
  - addition of `output.file`, a single-file convenience form of `output.files`. It

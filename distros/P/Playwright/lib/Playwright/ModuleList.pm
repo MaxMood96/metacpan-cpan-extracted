@@ -3,65 +3,62 @@
 # You should not use this directly; use Playwright instead.
 
 package Playwright::ModuleList;
-$Playwright::ModuleList::VERSION = '1.551';
+$Playwright::ModuleList::VERSION = '1.621';
 use strict;
 use warnings;
 
-use Playwright::WebSocket;
-use Playwright::Request;
-use Playwright::Worker;
-use Playwright::APIResponseAssertions;
-use Playwright::ConsoleMessage;
-use Playwright::SnapshotAssertions;
-use Playwright::Error;
-use Playwright::PlaywrightException;
-use Playwright::Browser;
-use Playwright::Tracing;
-use Playwright::AndroidWebView;
-use Playwright::AndroidSocket;
-use Playwright::AndroidDevice;
-use Playwright::TimeoutError;
-use Playwright::Android;
-use Playwright::WebSocketFrame;
-use Playwright::PlaywrightAssertions;
-use Playwright::LocatorAssertions;
-use Playwright::Download;
-use Playwright::Response;
-use Playwright::PageAssertions;
-use Playwright::Page;
-use Playwright::GenericAssertions;
-use Playwright::Selectors;
-use Playwright::Locator;
-use Playwright::FileChooser;
-use Playwright::APIResponse;
-use Playwright::APIRequestContext;
-use Playwright::Route;
-use Playwright::BrowserType;
-use Playwright::WebSocketRoute;
-use Playwright::Keyboard;
-use Playwright::Logger;
-use Playwright::BrowserServer;
-use Playwright::RequestOptions;
-use Playwright::CDPSessionEvent;
-use Playwright::Clock;
-use Playwright::FormData;
-use Playwright::Mouse;
-use Playwright::Frame;
-use Playwright::Video;
-use Playwright::Dialog;
-use Playwright::CDPSession;
-use Playwright::JSHandle;
-use Playwright::FrameLocator;
-use Playwright::ElectronApplication;
-use Playwright::Coverage;
-use Playwright::ElementHandle;
-use Playwright::Electron;
-use Playwright::BrowserContext;
-use Playwright::Accessibility;
-use Playwright::APIRequest;
-use Playwright::WebError;
-use Playwright::AndroidInput;
 use Playwright::Touchscreen;
+use Playwright::WebSocketRoute;
+use Playwright::SnapshotAssertions;
+use Playwright::Worker;
+use Playwright::FileChooser;
+use Playwright::BrowserContext;
+use Playwright::GenericAssertions;
+use Playwright::RequestOptions;
+use Playwright::Request;
+use Playwright::Credentials;
+use Playwright::APIRequest;
+use Playwright::FrameLocator;
+use Playwright::Frame;
+use Playwright::PlaywrightException;
+use Playwright::Response;
+use Playwright::FormData;
+use Playwright::Debugger;
+use Playwright::Locator;
+use Playwright::BrowserServer;
+use Playwright::Dialog;
+use Playwright::Video;
+use Playwright::Selectors;
+use Playwright::LocatorAssertions;
+use Playwright::Clock;
+use Playwright::CDPSession;
+use Playwright::WebSocketFrame;
+use Playwright::ConsoleMessage;
+use Playwright::Mouse;
+use Playwright::WebStorage;
+use Playwright::BrowserType;
+use Playwright::Browser;
+use Playwright::APIRequestContext;
+use Playwright::JSHandle;
+use Playwright::Logger;
+use Playwright::Page;
+use Playwright::TimeoutError;
+use Playwright::WebError;
+use Playwright::Screencast;
+use Playwright::ElementHandle;
+use Playwright::Error;
+use Playwright::PlaywrightAssertions;
+use Playwright::APIResponseAssertions;
+use Playwright::Tracing;
+use Playwright::Download;
+use Playwright::CDPSessionEvent;
+use Playwright::Coverage;
+use Playwright::WebSocket;
+use Playwright::Keyboard;
+use Playwright::Route;
+use Playwright::PageAssertions;
+use Playwright::Disposable;
+use Playwright::APIResponse;
 use Playwright::Mouse;
 use Playwright::Keyboard;
 
@@ -79,7 +76,7 @@ Playwright::ModuleList - Playwright sub classes.
 
 =head1 VERSION
 
-version 1.551
+version 1.621
 
 =head1 SEE ALSO
 

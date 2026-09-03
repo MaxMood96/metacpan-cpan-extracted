@@ -4,6 +4,7 @@ use warnings;
 
 use Test::More;
 use Test::Exception;
+use Data::Dumper::Compact qw(ddc);
 
 use_ok 'MIDI::Util', qw(
     midi_dump
@@ -126,7 +127,7 @@ subtest scale_names => sub {
     my $got = scale_names();
     is ref($got), 'ARRAY', 'scale_names';
     is @$got, 46, 'scale_names';
-    is $got->[0], 'ionian', 'scale_names';
+    is $got->[0], '3semitone', 'scale_names';
 };
 
 done_testing();

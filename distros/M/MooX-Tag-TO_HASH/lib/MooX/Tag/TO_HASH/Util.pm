@@ -5,7 +5,7 @@ use v5.10;
 use strict;
 use warnings;
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 use Exporter 'import';
 use Ref::Util qw( is_ref is_blessed_ref is_arrayref is_hashref );
@@ -191,7 +191,7 @@ MooX::Tag::TO_HASH::Util
 
 =head1 VERSION
 
-version 0.07
+version 0.08
 
 =for Pod::Coverage make_tag_handler
  process_value

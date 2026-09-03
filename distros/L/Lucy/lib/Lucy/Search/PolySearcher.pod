@@ -69,6 +69,12 @@ B<searchers> - An array of Searchers.
 
 =head1 METHODS
 
+=head2 get_searchers
+
+    my $arrayref = $poly_searcher->get_searchers();
+
+Accessor for searchers.
+
 =head2 doc_max
 
     my $int = $poly_searcher->doc_max();

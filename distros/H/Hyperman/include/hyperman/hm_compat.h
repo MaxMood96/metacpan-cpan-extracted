@@ -47,15 +47,48 @@ hm_mg_findext(const SV *sv, int type, const MGVTBL *vtbl)
 #endif
 
 /* croak_sv: throw an SV as the exception, preserving objects/refs (a
- * failed Future can carry a blessed error). Stash it in $@ and re-throw
- * with croak(NULL), which raises the current ERRSV verbatim. */
-#ifndef croak_sv
+ * failed Future can carry a blessed error).
+ *
+ * A reference goes through $@ and croak(NULL), which raises the current
+ * ERRSV - the only spelling that keeps a blessed exception blessed.
+ *
+ * A plain string must NOT take that route. croak_sv appends
+ * " at FILE line N.\n" to a message that does not already end in a
+ * newline; on every perl old enough to need this shim croak(NULL)
+ * raises ERRSV verbatim instead, so a string failure came out stripped
+ * of its location (0.41 FAILed t/38 on 5.10.1 and 5.12.5 with a bare
+ * 'Oopsie'). Modern perls route croak(NULL) through mess_sv and DO
+ * append, which is why no current perl can reproduce it. Hand the
+ * string to croak as an argument and croak does the appending itself,
+ * on every perl.
+ *
+ * hm_croak_sv is compiled EVERYWHERE, not only where croak_sv is
+ * missing, so that Hyperman->_croak_sv_selftest can drive it on a
+ * modern perl and t/38 can hold it to the same assertions it holds the
+ * native croak_sv to. A shim that only exists on the perls you cannot
+ * run is a shim nobody ever tests - which is how the bug above shipped. */
+
+/* 5.10.0 only: croak() leaves ERRSV's UTF8 flag alone, so carry it over. */
+#if PERL_REVISION == 5 && PERL_VERSION == 10 && PERL_SUBVERSION == 0
+#  define HM_ERRSV_UTF8_FROM(sv) STMT_START {                   \
+        SV *e_ = ERRSV;                                         \
+        SvFLAGS(e_) = (SvFLAGS(e_) & ~SVf_UTF8)                 \
+                    | (SvFLAGS(sv) & SVf_UTF8);                 \
+    } STMT_END
+#else
+#  define HM_ERRSV_UTF8_FROM(sv) STMT_START { } STMT_END
+#endif
 static void
 hm_croak_sv(pTHX_ SV *sv)
 {
-    sv_setsv(ERRSV, sv);
-    croak(NULL);
+    if (SvROK(sv)) {
+        sv_setsv(ERRSV, sv);
+        croak(NULL);
+    }
+    HM_ERRSV_UTF8_FROM(sv);
+    croak("%" SVf, SVfARG(sv));
 }
+#ifndef croak_sv
 #  define croak_sv(sv) hm_croak_sv(aTHX_ (sv))
 #endif
 

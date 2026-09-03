@@ -7,7 +7,7 @@ use v5.10;
 use strict;
 use warnings;
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 use JSON::MaybeXS ();
 use MooX::Tag::TO_HASH::Util ':all';
@@ -128,7 +128,7 @@ MooX::Tag::TO_JSON - Controlled translation of Moo objects into JSON appropriate
 
 =head1 VERSION
 
-version 0.07
+version 0.08
 
 =head1 SYNOPSIS
 
@@ -159,9 +159,9 @@ version 0.07
 # resulting in
 
  $VAR1 = {
-           'hen' => undef,
-           'barn_door_closed' => bless( do{\(my $o = 0)}, 'JSON::PP::Boolean' ),
            'cow' => 'Daisy',
+           'barn_door_closed' => bless( do{\(my $o = 0)}, 'JSON::PP::Boolean' ),
+           'hen' => undef,
            'goose' => 'Frank'
          };
 
@@ -316,10 +316,10 @@ This method is added to the consuming class or role.
 
  $VAR1 = {
            'HORSE' => 'Ed',
-           'COW' => 'Daisy',
-           'HEN' => 'Ruby',
            'GOOSE' => 'Donald',
-           'BARN_DOOR_CLOSED' => bless( do{\(my $o = 1)}, 'JSON::PP::Boolean' )
+           'HEN' => 'Ruby',
+           'BARN_DOOR_CLOSED' => bless( do{\(my $o = 1)}, 'JSON::PP::Boolean' ),
+           'COW' => 'Daisy'
          };
 
 =head1 DEPRECATED BEHAVIOR

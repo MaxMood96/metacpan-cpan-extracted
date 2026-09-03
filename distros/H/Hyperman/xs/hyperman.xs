@@ -507,3 +507,23 @@ on_worker_start(class, cb)
         RETVAL = hm_worker_hook_add_perl(aTHX_ cb);
     OUTPUT:
         RETVAL
+
+# ---- compat shim selftest -----------------------------------------------
+
+# Hyperman->_croak_sv_selftest($sv): raise $sv through hm_compat.h's own
+# croak_sv shim, whether or not this perl has a native croak_sv to shadow
+# it. Private, and here for one reason: that shim stands in only on perls
+# older than 5.14, so on any perl a developer can actually run, no other
+# line of this distribution reaches it. t/38 drives it through the shapes
+# it has to handle. It cannot prove the version-dependent behaviour - see
+# the note there - only that the shim itself is sound.
+#
+# (Take care rewording this comment: a line beginning "# else" or "# if"
+# is read by xsubpp as a preprocessor directive.)
+void
+_croak_sv_selftest(class, sv)
+        SV *class
+        SV *sv
+    CODE:
+        PERL_UNUSED_VAR(class);
+        hm_croak_sv(aTHX_ sv);

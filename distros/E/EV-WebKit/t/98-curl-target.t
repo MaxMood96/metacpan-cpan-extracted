@@ -2,9 +2,10 @@ use v5.10; use strict; use warnings;
 use Test::More;
 use EV::WebKit::Fingerprint;
 
-is(EV::WebKit::Fingerprint::curl_target('windows-chrome'), 'chrome131',        'windows-chrome -> chrome131');
-is(EV::WebKit::Fingerprint::curl_target('macos-safari'),   'safari18_0',       'macos-safari -> safari18_0');
-is(EV::WebKit::Fingerprint::curl_target('iphone-safari'),  'safari18_0_ios',   'iphone-safari -> safari18_0_ios');
+is(EV::WebKit::Fingerprint::curl_target('windows-chrome'),  'chrome150',        'windows-chrome -> chrome150');
+is(EV::WebKit::Fingerprint::curl_target('windows-firefox'), 'firefox147',       'windows-firefox -> firefox147');
+is(EV::WebKit::Fingerprint::curl_target('macos-safari'),    'safari26_0',       'macos-safari -> safari26_0');
+is(EV::WebKit::Fingerprint::curl_target('iphone-safari'),   'safari26_0_ios',   'iphone-safari -> safari26_0_ios');
 is(EV::WebKit::Fingerprint::curl_target('pixel-chrome'),   'chrome131_android','pixel-chrome -> chrome131_android');
 is(EV::WebKit::Fingerprint::curl_target('nope'), undef, 'unknown profile -> undef');
 is(EV::WebKit::Fingerprint::curl_target(undef),  undef, 'undef profile -> undef');
@@ -15,14 +16,14 @@ ok(EV::WebKit::Fingerprint::curl_target($_), "preset $_ maps to a target")
 
 # refreshed versions
 my $wc = EV::WebKit::Fingerprint::resolve('windows-chrome');
-like($wc->{user_agent}, qr{Chrome/131\.}, 'windows-chrome UA is Chrome 131');
+like($wc->{user_agent}, qr{Chrome/150\.}, 'windows-chrome UA is Chrome 150');
 like($wc->{user_agent}, qr{Windows NT}, 'windows-chrome stays Windows');
-like($wc->{ua_data}{uaFullVersion}, qr{^131\.}, 'windows-chrome uaFullVersion is 131');
+like($wc->{ua_data}{uaFullVersion}, qr{^150\.}, 'windows-chrome uaFullVersion is 150');
 my $ms = EV::WebKit::Fingerprint::resolve('macos-safari');
-like($ms->{user_agent}, qr{Version/18\.}, 'macos-safari UA is Safari 18');
+like($ms->{user_agent}, qr{Version/26\.}, 'macos-safari UA is Safari 26');
 my $is = EV::WebKit::Fingerprint::resolve('iphone-safari');
-like($is->{user_agent}, qr{Version/18\.}, 'iphone-safari UA is Safari 18');
-like($is->{user_agent}, qr{iPhone OS 18}, 'iphone-safari is iOS 18');
+like($is->{user_agent}, qr{Version/26\.}, 'iphone-safari UA is Safari 26');
+like($is->{user_agent}, qr{iPhone OS 26}, 'iphone-safari is iOS 26');
 my $pc = EV::WebKit::Fingerprint::resolve('pixel-chrome');
 like($pc->{user_agent}, qr{Chrome/131\.}, 'pixel-chrome UA is Chrome 131');
 like($pc->{ua_data}{uaFullVersion}, qr{^131\.}, 'pixel-chrome uaFullVersion is 131');
@@ -33,11 +34,15 @@ is($pc->{ua_data}{model}, 'Pixel 8', 'the real device rides in ua_data.model -> 
 # --- identity headers: UA + Chrome-format Accept-Language (+ low-entropy hints) ---
 {
     my $id = EV::WebKit::Fingerprint::identity_headers($wc);
-    like($id->{'user-agent'}, qr{Chrome/131}, 'identity_headers carries the UA');
+    like($id->{'user-agent'}, qr{Chrome/150}, 'identity_headers carries the UA');
     is($id->{'accept-language'}, 'en-US,en;q=0.9',
        'identity Accept-Language is Chrome format (en-US,en;q=0.9), not libsoup-flavored');
-    is($id->{'sec-ch-ua'}, '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-       'sec-ch-ua brand ORDER matches real Chrome 131 (GREASE last), not GREASE-first');
+    # Both the order and the GREASE brand itself are per-release, taken from
+    # curl-impersonate's chrome150 template rather than assumed: 131 put
+    # "Not_A Brand";v="24" last, 150 puts "Not;A=Brand";v="8" first. What must
+    # hold is that this header and navigator.userAgentData come from one list.
+    is($id->{'sec-ch-ua'}, '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
+       'sec-ch-ua is the chrome150 template brand list, in its order');
     is($id->{'sec-ch-ua-mobile'}, '?0', 'sec-ch-ua-mobile ?0 for a desktop profile');
 
     # a Safari profile has no ua_data: UA + Accept-Language, but no sec-ch-ua
@@ -57,11 +62,11 @@ is($pc->{ua_data}{model}, 'Pixel 8', 'the real device rides in ua_data.model -> 
     my $he = EV::WebKit::Fingerprint::high_entropy_headers($wc);
     is($he->{'sec-ch-ua-wow64'}, '?0',
        'high-entropy carries Sec-CH-UA-WoW64: ?0 (matches JS wow64:false)');
-    is($he->{'sec-ch-ua-full-version'}, '"131.0.6778.86"',
+    is($he->{'sec-ch-ua-full-version'}, '"150.0.7871.189"',
        'high-entropy carries the deprecated singular Sec-CH-UA-Full-Version (JS exposes uaFullVersion)');
     is($he->{'sec-ch-ua-full-version-list'},
-       '"Google Chrome";v="131.0.6778.86", "Chromium";v="131.0.6778.86", "Not_A Brand";v="24.0.0.0"',
-       'Sec-CH-UA-Full-Version-List brand order matches real Chrome 131');
+       '"Not;A=Brand";v="8.0.0.0", "Chromium";v="150.0.7871.189", "Google Chrome";v="150.0.7871.189"',
+       'Sec-CH-UA-Full-Version-List uses the same brand list and order');
     is($he->{'sec-ch-ua-platform-version'}, '"10.0.0"', 'and Sec-CH-UA-Platform-Version');
 
     # Safari profiles (no ua_data) expose no client hints on either layer

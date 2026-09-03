@@ -1,9 +1,16 @@
 Revision history for Hyperman
 
+0.42	2026-09-02
+        - A string failure raised out of a future kept its " at FILE line
+          N." on perls before 5.14. The croak_sv shim raised the message
+          verbatim, so ->get and AWAIT_GET reported no location there.
+        - The croak_sv shim is compiled on every perl and driven by
+          t/38-awaitable.t, rather than only on the perls that use it.
+        - t/38-awaitable.t asserts await cancellation only on perl 5.24+
+
 0.41	2026-09-01
         - t/38-awaitable.t asserts await cancellation only on
-          Future::AsyncAwait 0.56+, which is where it chains the cancel into
-          the awaited future.
+          Future::AsyncAwait 0.56+.
         - t/38-awaitable.t reports the Future::AsyncAwait version it ran
           against.
 

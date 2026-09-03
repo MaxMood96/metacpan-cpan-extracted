@@ -1,12 +1,13 @@
 package EV::WebKit;
 use v5.10; use strict; use warnings;
-our $VERSION = '0.01';
+our $VERSION = '0.03';
 
 use Glib::Object::Introspection;
 use Glib::IO;   # Gio bindings: Cancellable, MemoryInputStream
 use EV::WebKit::Element;
 use File::Spec::Functions 'rel2abs';
 use File::Path ();
+use File::Temp ();
 use Scalar::Util qw(weaken refaddr);
 use Carp ();   # Carp::croak -- core, no prereq change
 
@@ -216,8 +217,112 @@ my %KNOWN_NEW = map { $_ => 1 } qw(
     on_file_chooser on_download on_request on_response on_authenticate
     data_dir cache_dir ephemeral cookie_jar jar_format
     proxy user_agent devtools title chrome
-    fingerprint network_fingerprint seed popups
+    fingerprint network_fingerprint seed popups fonts
 );
+
+# fonts => a fontconfig file, or the directories to build one from. Returns
+# undef, or { conf => $abs_file, bind => [ [$path, $read_only], ... ] }.
+#
+# The web process runs under bubblewrap and cannot see a path nobody mounted
+# for it: setting FONTCONFIG_FILE alone changes nothing at all (measured --
+# identical text metrics), because fontconfig inside the sandbox never opens
+# the file. So every path the config names has to be handed to
+# add_path_to_sandbox as well, which is why this returns the list rather than
+# just the filename.
+sub _fonts_arg {
+    my ($fonts, $tmp_ref) = @_;
+    return undef unless defined $fonts;
+
+    my @dirs;
+    my $conf;
+    if (ref $fonts eq 'ARRAY' || ref $fonts eq 'HASH') {
+        my ($list, %generic);
+        if (ref $fonts eq 'HASH') {
+            if (my @bad = sort grep { !/\A(?:dirs|sans_serif|serif|monospace)\z/ } keys %$fonts) {
+                Carp::croak("EV::WebKit: unknown fonts key(s): @bad");
+            }
+            $list = $fonts->{dirs};
+            Carp::croak('EV::WebKit: fonts => { dirs => [...] } is required')
+                unless ref $list eq 'ARRAY';
+            for my $g (qw(sans_serif serif monospace)) {
+                next unless defined $fonts->{$g};
+                Carp::croak("EV::WebKit: fonts => { $g => } must be a family name")
+                    if ref $fonts->{$g} || !length $fonts->{$g};
+                Carp::croak("EV::WebKit: a font family name must not contain markup")
+                    if $fonts->{$g} =~ /[<>&]/;
+                (my $family = $g) =~ tr/_/-/;
+                $generic{$family} = $fonts->{$g};
+            }
+        }
+        else { $list = $fonts }
+
+        Carp::croak('EV::WebKit: fonts needs at least one directory') unless @$list;
+        for my $d (@$list) {
+            Carp::croak('EV::WebKit: each fonts directory must be a plain path')
+                if !defined $d || ref $d || !length $d;
+            my $abs = rel2abs($d);
+            Carp::croak("EV::WebKit: fonts directory '$d' does not exist") unless -d $abs;
+            push @dirs, $abs;
+        }
+        # Its own cachedir, inside the same writable directory: fontconfig
+        # rebuilds the cache per font set, and pointing at the user's normal one
+        # would both fail (read-only in the sandbox) and mix the two.
+        $$tmp_ref = File::Temp::tempdir('evwk-fonts-XXXXXX', TMPDIR => 1, CLEANUP => 1);
+        $conf = "$$tmp_ref/fonts.conf";
+        my $cache = "$$tmp_ref/cache";
+        File::Path::make_path($cache);
+        open my $fh, '>', $conf
+            or Carp::croak("EV::WebKit: cannot write $conf: $!");
+        print $fh qq{<?xml version="1.0"?>\n},
+                  qq{<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n<fontconfig>\n},
+                  map({ "  <dir>$_</dir>\n" } @dirs),
+                  qq{  <cachedir>$cache</cachedir>\n};
+        # Without these the three generic families all resolve to whatever
+        # matches first, so sans-serif, serif and monospace measure IDENTICALLY
+        # -- which is both wrong on the page and a fingerprint of its own. The
+        # system rules that would normally supply them cannot be included:
+        # /etc/fonts/conf.d carries <dir> entries of its own, and pulling those
+        # in would put the host's fonts back.
+        for my $family (sort keys %generic) {
+            print $fh qq{  <match target="pattern"><test qual="any" name="family">},
+                      qq{<string>$family</string></test>},
+                      qq{<edit name="family" mode="prepend" binding="same">},
+                      qq{<string>$generic{$family}</string></edit></match>\n};
+        }
+        print $fh qq{</fontconfig>\n};
+        close $fh or Carp::croak("EV::WebKit: cannot write $conf: $!");
+    }
+    elsif (!ref $fonts) {
+        Carp::croak('EV::WebKit: fonts => must not be empty') unless length $fonts;
+        $conf = rel2abs($fonts);
+        Carp::croak("EV::WebKit: fonts config '$fonts' is not a readable file")
+            unless -f $conf && -r _;
+        open my $fh, '<', $conf
+            or Carp::croak("EV::WebKit: cannot read $conf: $!");
+        my $text = do { local $/; <$fh> };
+        close $fh;
+        # Only absolute existing paths are bound. A <dir prefix="xdg">, or one
+        # naming a directory that is not there, is fontconfig's business, not
+        # ours -- binding it would fail where fontconfig merely skips it.
+        while ($text =~ m{<(dir|cachedir)\b[^>]*>\s*([^<]+?)\s*</\1>}g) {
+            my $p = $2;
+            push @dirs, $p if $p =~ m{^/} && -d $p;
+        }
+    }
+    else {
+        Carp::croak('EV::WebKit: fonts => must be a fontconfig file path, an arrayref of directories, or a hashref');
+    }
+
+    my %seen;
+    my @bind = map { [ $_, 1 ] } grep { !$seen{$_}++ } @dirs;
+    # The config itself, and anything generated beside it, must be reachable
+    # too -- and the cache directory has to be writable, or fontconfig re-scans
+    # every font on every page load.
+    my ($conf_dir) = $conf =~ m{^(.*)/[^/]+$};
+    unshift @bind, [ $conf_dir, ($$tmp_ref && $conf_dir eq $$tmp_ref) ? 0 : 1 ]
+        if defined $conf_dir && length $conf_dir && !$seen{$conf_dir}++;
+    return { conf => $conf, bind => \@bind };
+}
 
 sub new {
     my $class = shift;
@@ -248,6 +353,10 @@ sub new {
             if defined $o{user_agent};
         $fp = EV::WebKit::Fingerprint::resolve($o{fingerprint});
     }
+    # Resolved before anything is built: it validates paths and can write a
+    # generated config, and a croak there should not leave a session behind.
+    my $font_tmp;
+    my $fonts = _fonts_arg($o{fonts}, \$font_tmp);
     if (defined $o{seed}) {
         Carp::croak('EV::WebKit: seed must be a non-negative integer')
             unless !ref $o{seed} && $o{seed} =~ /\A\d+\z/;
@@ -493,6 +602,15 @@ sub new {
     # network-session/user-content-manager as construct props on WebView --
     # so mock_scheme() below has a controllable context to register schemes on.
     my $context = $self->{context} = WebKit::WebContext->new;
+    if ($fonts) {
+        # Before the first load, because the sandbox is assembled when the web
+        # process spawns and fontconfig reads its environment once, at startup.
+        eval { $context->add_path_to_sandbox(@$_); 1 } for @{ $fonts->{bind} };
+        # Process-wide, not per-view: fontconfig has no per-context input. Two
+        # browsers in one process with different font sets is not a thing this
+        # can express -- see the POD.
+        $ENV{FONTCONFIG_FILE} = $fonts->{conf};
+    }
     # The extension directory must be set BEFORE the web process spawns, which
     # is long before anyone asks for a frame -- so load it whichever feature
     # wants it. It carries frame addressing as well as the fingerprint spoof,
@@ -3962,6 +4080,7 @@ sub DESTROY { my $self = shift; $self->{_destroying} = 1; eval { $self->quit } }
 
 {
     package EV::WebKit::UserContent;
+    our $VERSION = '0.03';
     # Handle for one injected user script or stylesheet. Holds a WEAK ref to the
     # browser (so a dangling handle never keeps the instance alive) plus the id
     # of its native in the browser's per-kind registry. remove() is idempotent:
@@ -3988,6 +4107,7 @@ sub DESTROY { my $self = shift; $self->{_destroying} = 1; eval { $self->quit } }
 
 {
     package EV::WebKit::Dialog;
+    our $VERSION = '0.03';
     # lightweight wrapper around a WebKitScriptDialog, valid only for the
     # duration of the script-dialog signal handler that receives it.
     sub _new    { bless { d => $_[1] }, $_[0] }
@@ -4018,6 +4138,7 @@ sub DESTROY { my $self = shift; $self->{_destroying} = 1; eval { $self->quit } }
 
 {
     package EV::WebKit::FileChooser;
+    our $VERSION = '0.03';
     # lightweight wrapper around a WebKitFileChooserRequest, valid only for the
     # duration of the run-file-chooser handler that receives it.
     sub _new { bless { r => $_[1] }, $_[0] }
@@ -4051,6 +4172,7 @@ sub DESTROY { my $self = shift; $self->{_destroying} = 1; eval { $self->quit } }
 
 {
     package EV::WebKit::Auth;
+    our $VERSION = '0.03';
     # A WebKitAuthenticationRequest, valid only for the duration of the
     # on_authenticate handler that receives it.
     sub _new { bless { r => $_[1] }, $_[0] }
@@ -4092,6 +4214,7 @@ sub DESTROY { my $self = shift; $self->{_destroying} = 1; eval { $self->quit } }
 
 {
     package EV::WebKit::Download;
+    our $VERSION = '0.03';
     # A download in progress. Unlike Dialog/FileChooser this OUTLIVES the signal
     # that created it: WebKit reports progress and completion later, so the
     # object is retained by the browser until it finishes or fails.
@@ -4260,6 +4383,7 @@ sub DESTROY { my $self = shift; $self->{_destroying} = 1; eval { $self->quit } }
 
 {
     package EV::WebKit::Policy;
+    our $VERSION = '0.03';
     # lightweight wrapper around a WebKit(Navigation|Response)PolicyDecision,
     # valid only for the duration of the decide-policy signal handler that
     # receives it.
@@ -4583,12 +4707,27 @@ are present; check L</fingerprint_available>. Note: if the extension is present
 but fails to load inside the web process (an arch/symbol mismatch), the profile's
 User-Agent is still applied while the JS-property spoof is not -- an incoherent
 state the module cannot detect from the UI process. B<Coverage:> C<navigator>
-(platform, vendor, languages, hardwareConcurrency, deviceMemory, maxTouchPoints),
-C<screen>, C<devicePixelRatio>, and the WebGL GPU vendor/renderer strings. The
+(platform, vendor, languages, hardwareConcurrency, deviceMemory, maxTouchPoints,
+and for a Gecko profile productSub, oscpu and buildID), C<screen>,
+C<devicePixelRatio>, C<window.mozInnerScreenX>/C<Y>, and the WebGL GPU
+vendor/renderer strings. The
 navigator/screen getters are installed natively, on the prototype and
 enumerable, so they read as the engine's own to everything except
 C<Function.prototype.toString> -- see the Ceiling below, which is where the
 remaining tells are enumerated honestly.
+
+C<windows-firefox> asks more of this than the others. The engine really is
+WebKit, so a Safari profile is a small lie and a Chrome one a larger one, but
+claiming Gecko means supplying a surface no WebKit build has: C<productSub>
+(Gecko reports C<20100101> where WebKit and Chromium report C<20030107>),
+C<oscpu> and C<buildID>, which exist in no other engine and whose ABSENCE
+identifies the engine as surely as a wrong value, and
+C<window.mozInnerScreenX>/C<Y>. Those are supplied. What is not, and cannot be
+without the engine, is CSS: C<CSS.supports('-moz-appearance', 'none')> is false
+here and true in Firefox, and no property override fixes that without breaking
+the styling it claims to support. Use C<windows-firefox> for the network-layer
+identity -- where it is exact -- and expect a determined JS-layer engine probe
+to see through it.
 
 A B<coherence layer> fills the gaps a bare navigator/screen spoof would leave: a
 Chrome profile also gets C<window.chrome> and a working C<navigator.userAgentData>
@@ -4698,6 +4837,52 @@ network-layer fingerprint (TLS JA3/JA4, HTTP/2) is untouched unless you also
 enable C<network_fingerprint> (below). A self-consistent B<custom> profile is
 your responsibility.
 
+=item C<< fonts => \@dirs >>, C<< fonts => \%spec >> or C<< fonts => $conf_file >>
+
+Replace the font set the engine can see. The installed fonts are a platform
+tell in their own right, independent of anything C<fingerprint> spoofs: a
+profile claiming Windows on a box whose only sans-serif faces are DejaVu and
+Noto is answering "Linux" to anything that measures text.
+
+Three spellings, cheapest first:
+
+    fonts => [ '/srv/fonts/win' ]                # only these directories
+
+    fonts => { dirs       => [ '/srv/fonts/win' ],
+               sans_serif => 'Arial',
+               serif      => 'Times New Roman',
+               monospace  => 'Courier New' }     # ...and what the generics mean
+
+    fonts => '/srv/fonts/win.conf'               # your own fontconfig file
+
+The directory forms write a fontconfig file naming exactly those directories
+and nothing else, so the host's fonts are B<not> visible -- this changes what
+the engine B<has>, rather than lying about it in JavaScript, which is why it
+survives being measured rather than merely asked.
+
+Give the generic families if you can. Without them all three resolve to
+whichever face matches first, so C<sans-serif>, C<serif> and C<monospace>
+measure identically -- wrong on the page, and a fingerprint of its own. The
+system rules that normally supply them cannot be reused: F</etc/fonts/conf.d>
+carries C<< <dir> >> entries, and including it would put the host's fonts
+straight back.
+
+The file form is passed to fontconfig untouched; every absolute C<< <dir> >>
+and C<< <cachedir> >> in it that exists is made visible to the web process.
+
+Two things to know. The web process runs inside a sandbox, so the config and
+every directory it names are bound into it explicitly -- pointing
+C<FONTCONFIG_FILE> at a font set without that does nothing at all, silently.
+And fontconfig is configured per B<process>, not per view: this sets an
+environment variable read once by each web process as it starts, so one font
+set per program, not one per browser.
+
+What it cannot do is give you fonts you do not have. Metric-compatible
+substitutes exist for a few faces (Liberation for Arial, Times New Roman and
+Courier New; Carlito and Caladea for Calibri and Cambria), but the ones that
+identify an OS -- Segoe UI, SF Pro -- have none, so a page that measures those
+by name still sees a fallback. This narrows the gap; it does not close it.
+
 =item C<< seed => 12345 >>
 
 Enable seeded B<readback noise> on canvas, C<AudioContext>, and WebGL pixel
@@ -4731,9 +4916,13 @@ layer too. Requires C<fingerprint>. It spins an in-process L<Proxy::Impersonate>
 on this instance's EV loop and routes the browser through it: the proxy
 terminates WebKit's TLS locally and re-originates each request as the matching
 real browser via C<libcurl-impersonate>. The curl target is derived from the
-profile (C<windows-chrome> -> C<chrome131>, C<macos-safari> -> C<safari18_0>,
-C<iphone-safari> -> C<safari18_0_ios>, C<pixel-chrome> -> C<chrome131_android>);
-pass a string to override it.
+profile (C<windows-chrome> -> C<chrome150>, C<macos-safari> -> C<safari26_0>,
+C<iphone-safari> -> C<safari26_0_ios>, C<windows-firefox> -> C<firefox147>,
+C<pixel-chrome> -> C<chrome131_android>); pass a string to override it.
+
+C<pixel-chrome> stays on Chrome 131 where the others track current stable,
+because C<chrome131_android> is the newest Android target C<libcurl-impersonate>
+ships and a profile must not claim a browser its TLS cannot back.
 
 The profile's identity headers (User-Agent + C<Sec-CH-UA>) are forced over the
 curl target's defaults, so even a Windows profile is coherent on the (macOS-built)

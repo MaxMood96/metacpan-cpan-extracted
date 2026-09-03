@@ -10,7 +10,9 @@ use Time::HiRes qw(time usleep);
 
 use Data::HashMap::Shared::SS;
 
-my $m = Data::HashMap::Shared::SS->new_memfd("torn", 1024, 4096);
+# 2048 is the table capacity 1024 entries yields, so LRU is exercised on the
+# write path without anything ever being evicted.
+my $m = Data::HashMap::Shared::SS->new_memfd("torn", 1024, 2048);
 
 # Alternating values of different length — torn write would produce a
 # truncated or mixed-length result.

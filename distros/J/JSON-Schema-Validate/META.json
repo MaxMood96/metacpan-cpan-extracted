@@ -55,13 +55,13 @@
    "release_status" : "stable",
    "resources" : {
       "bugtracker" : {
-         "web" : "https://gitlab.com/jackdeguest/JSON-Schema-Validate/issues"
+         "web" : "https://gitlab.com/deguest/JSON-Schema-Validate/issues"
       },
       "repository" : {
          "type" : "git",
-         "web" : "https://gitlab.com/jackdeguest/JSON-Schema-Validate"
+         "web" : "https://gitlab.com/deguest/JSON-Schema-Validate"
       }
    },
-   "version" : "v0.9.0",
+   "version" : "v0.9.1",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

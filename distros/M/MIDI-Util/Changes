@@ -1,5 +1,11 @@
 Revision history for MIDI-Util
 
+0.1309 2026-09-02 14:23:36
+    - Fix the dependencies!
+
+0.1308 2026-09-02 12:56:57
+    - Fix the `scale_names()` function to honor `%M::U::original_modes`.
+
 0.1307 2026-06-27 11:33:47
     - Remove the embarrassing "use lib" line in eg/dump.
 

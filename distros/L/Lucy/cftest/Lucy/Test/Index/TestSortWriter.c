@@ -38,6 +38,7 @@
 #include "Lucy/Plan/Schema.h"
 #include "Lucy/Plan/StringType.h"
 #include "Lucy/Store/RAMFolder.h"
+#include "Lucy/Test/Index/NoMergeManager.h"
 
 static String *name_str;
 static String *speed_str;
@@ -49,12 +50,12 @@ static String *unused_str;
 static String *nope_str;
 
 TestSortWriter*
-TestSortWriter_new() {
+TestSortWriter_new(void) {
     return (TestSortWriter*)Class_Make_Obj(TESTSORTWRITER);
 }
 
 static void
-S_init_strings() {
+S_init_strings(void) {
     name_str   = Str_newf("name");
     speed_str  = Str_newf("speed");
     weight_str = Str_newf("weight");
@@ -66,7 +67,7 @@ S_init_strings() {
 }
 
 static void
-S_destroy_strings() {
+S_destroy_strings(void) {
     DECREF(name_str);
     DECREF(speed_str);
     DECREF(weight_str);
@@ -78,7 +79,7 @@ S_destroy_strings() {
 }
 
 static Schema*
-S_create_schema() {
+S_create_schema(void) {
     Schema *schema = Schema_new();
 
     StandardTokenizer *tokenizer = StandardTokenizer_new();
@@ -226,7 +227,7 @@ test_sort_writer(TestBatchRunner *runner) {
 
     {
         // Add a second segment.
-        NonMergingIndexManager *manager = NMIxManager_new();
+        NoMergeManager *manager = NoMergeManager_new();
         Indexer *indexer
             = Indexer_new(schema, (Obj*)folder, (IndexManager*)manager, 0);
         // no "wheels" field -- test NULL/undef
@@ -293,31 +294,6 @@ TestSortWriter_Run_IMP(TestSortWriter *self, TestBatchRunner *runner) {
     S_init_strings();
     test_sort_writer(runner);
     S_destroy_strings();
-}
-
-NonMergingIndexManager*
-NMIxManager_new() {
-    NonMergingIndexManager *self
-        = (NonMergingIndexManager*)Class_Make_Obj(NONMERGINGINDEXMANAGER);
-    return NMIxManager_init(self);
-}
-
-NonMergingIndexManager*
-NMIxManager_init(NonMergingIndexManager *self) {
-    IxManager_init((IndexManager*)self, NULL, NULL);
-    return self;
-}
-
-Vector*
-NMIxManager_Recycle_IMP(NonMergingIndexManager *self, PolyReader *reader,
-                        lucy_DeletionsWriter *del_writer, int64_t cutoff,
-                        bool optimize) {
-    UNUSED_VAR(self);
-    UNUSED_VAR(reader);
-    UNUSED_VAR(del_writer);
-    UNUSED_VAR(cutoff);
-    UNUSED_VAR(optimize);
-    return Vec_new(0);
 }
 
 

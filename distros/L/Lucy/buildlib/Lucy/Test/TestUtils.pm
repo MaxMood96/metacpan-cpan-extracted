@@ -18,19 +18,14 @@ use warnings;
 
 package Lucy::Test::TestUtils;
 
-our $VERSION = '0.007000';
+our $VERSION = '0.008000';
 $VERSION = eval $VERSION;
 
 use Exporter 'import';
 our @EXPORT_OK = qw(
-    working_dir
-    create_working_dir
-    remove_working_dir
     uscon_dir
     create_index
     create_uscon_index
-    test_index_loc
-    persistent_test_index_loc
     init_test_index_loc
     get_uscon_docs
     utf8_test_strings
@@ -44,48 +39,12 @@ use Lucy::Test;
 use File::Spec::Functions qw( catdir catfile curdir updir );
 use Encode qw( _utf8_off );
 use File::Path qw( rmtree );
+use File::Temp qw( tempdir );
 use Carp;
 
-my $working_dir = catfile( curdir(), 'lucy_test' );
-
-# Return a directory within the system's temp directory where we will put all
-# testing scratch files.
-sub working_dir {$working_dir}
-
-sub create_working_dir {
-    mkdir( $working_dir, 0700 ) or die "Can't mkdir '$working_dir': $!";
-}
-
-# Verify that this user owns the working dir, then zap it.  Returns true upon
-# success.
-sub remove_working_dir {
-    return unless -d $working_dir;
-    rmtree $working_dir;
-    return 1;
-}
-
-# Return a location for a test index to be used by a single test file.  If
-# the test file crashes it cannot clean up after itself, so we put the cleanup
-# routine in a single test file to be run at or near the end of the test
-# suite.
-sub test_index_loc {
-    return catdir( $working_dir, 'test_index' );
-}
-
-# Return a location for a test index intended to be shared by multiple test
-# files.  It will be cleaned as above.
-sub persistent_test_index_loc {
-    return catdir( $working_dir, 'persistent_test_index' );
-}
-
-# Destroy anything left over in the test_index location, then create the
-# directory.  Finally, return the path.
+# Create a temporary test directory that will be removed at exit.
 sub init_test_index_loc {
-    my $dir = test_index_loc();
-    rmtree $dir;
-    die "Can't clean up '$dir'" if -e $dir;
-    mkdir $dir or die "Can't mkdir '$dir': $!";
-    return $dir;
+    return tempdir( DIR => 't', CLEANUP => 1 );
 }
 
 # Build a RAM index, using the supplied array of strings as source material.
@@ -170,8 +129,8 @@ sub _uscon_schema {
 }
 
 sub create_uscon_index {
-    my $folder
-        = Lucy::Store::FSFolder->new( path => persistent_test_index_loc() );
+    my $dir = tempdir( DIR => 't', CLEANUP => 1 );
+    my $folder = Lucy::Store::FSFolder->new( path => $dir );
     my $indexer = Lucy::Index::Indexer->new(
         schema   => _uscon_schema(),
         index    => $folder,
@@ -204,6 +163,8 @@ sub create_uscon_index {
     }
     $indexer->optimize;
     $indexer->commit;
+
+    return $dir;
 }
 
 # Return 3 strings useful for verifying UTF-8 integrity.

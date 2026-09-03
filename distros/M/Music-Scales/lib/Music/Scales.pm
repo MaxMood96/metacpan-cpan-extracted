@@ -1,5 +1,5 @@
 package Music::Scales;
-$Music::Scales::VERSION = '0.11';
+$Music::Scales::VERSION = '0.13';
 our $AUTHORITY = 'cpan:GENE';
 
 # ABSTRACT: Generate musical scales
@@ -9,10 +9,10 @@ use Text::Abbrev;
 
 BEGIN {
     use Exporter ();
-    use vars qw ($VERSION @ISA @EXPORT);
-    $VERSION     = 0.11;
-    @ISA         = qw (Exporter);
-    @EXPORT      = qw (get_scale_notes get_scale_nums get_scale_offsets is_scale get_scale_PDL get_scale_MIDI %modes %abbrevs @scales);
+    use vars qw($VERSION @ISA @EXPORT);
+    $VERSION = '0.13';
+    @ISA     = qw(Exporter);
+    @EXPORT  = qw(get_scale_notes get_scale_nums get_scale_offsets is_scale get_scale_PDL get_scale_MIDI %modes %original_modes %abbrevs @scales);
 }
 
 
@@ -26,7 +26,7 @@ our %modes = qw(ionian 1 major 1 hypolydian 1 dorian 2 hypomyxolydian 2
     todi 21 marva 22 persian 23 oriental 24 romanian 25 pelog 26
     iwato 27 hirajoshi 28 egyptian 29 pminor 30 pentatonicminor 30
 );
-
+our %original_modes = %modes;
 our %abbrevs = abbrev(keys %modes);
 while (my ($k,$v) = each %abbrevs) {
     $modes{$k} = $modes{$v};
@@ -215,19 +215,25 @@ Music::Scales - Generate musical scales
 
 =head1 VERSION
 
-version 0.11
+version 0.13
 
 =head1 SYNOPSIS
 
-    use Music::Scales;
+    use Music::Scales qw(get_scale_notes get_scale_MIDI get_scale_PDL get_scale_nums get_scale_offsets is_scale);
+
     my @maj = get_scale_notes('Eb');           # defaults to major
     print join(" ",@maj);                      # "Eb F G Ab Bb C D"
+    
     @maj = get_scale_MIDI('C', 4);             # 60, 62, 64, 65, 67, 69, 71
+    
     @maj = get_scale_PDL('Eb', 4);             # ef4, f4, g4, af4, bf4, c5, d5
+    
     my @blues = get_scale_nums('bl');          # 'bl','blu','blue','blues'
     print join(" ",@blues);                    # "0 3 5 6 7 10"
-    my %min = get_scale_offsets ('G','mm',1);  # descending melodic minor
+    
+    my %min = get_scale_offsets('G','mm',1);   # descending melodic minor
     print join " ", map {"$_=$min{$_} "} sort keys %min; # "A=0 B=-1 C=0 D=0 E=-1 F=0 G=0"
+    
     print is_scale('foo') ? 1 : 0;
 
 =head1 DESCRIPTION
@@ -236,7 +242,8 @@ Given a keynote A-G(#/b) and a scale-name, will return the scale,
 either as an array of notenames or as a hash of semitone-offsets for each note.
 
 All functions are exported by default. Also the essential variables,
-C<%modes>, C<%abbrevs>, and C<@scales> are exported. Please see the source for their definitions.
+C<%modes>, C<%original_modes>, C<%abbrevs>, and C<@scales> are exported.
+Please see the source for their definitions.
 
 =head1 METHODS
 

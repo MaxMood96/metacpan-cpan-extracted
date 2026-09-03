@@ -1,6 +1,6 @@
 package EV::WebKit::Fingerprint;
 use v5.10; use strict; use warnings;
-our $VERSION = '0.01';
+our $VERSION = '0.03';
 use File::ShareDir ();
 use Carp ();
 use Glib ();
@@ -218,7 +218,7 @@ my %WEBGL_ADRENO = (
 # Numbers are plain scalars; screen is [w,h] or [w,h,availW,availH,colorDepth].
 my %PRESET = (
     'windows-chrome' => {
-        user_agent => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        user_agent => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
         platform => 'Win32', vendor => 'Google Inc.', languages => ['en-US','en'],
         hardwareConcurrency => 8, deviceMemory => 8, maxTouchPoints => 0,
         screen => [1920,1080,1920,1040,24], devicePixelRatio => 1,
@@ -228,12 +228,20 @@ my %PRESET = (
         # Desktop Chrome's interface set; WebHID/Web Serial are desktop-only.
         features => [qw(connection storage battery usb bluetooth hid serial scheduling rtc)],
         # Chrome-only: drives window.chrome + navigator.userAgentData.
-        ua_data => { platform => 'Windows', platformVersion => '10.0.0', architecture => 'x86', bitness => '64', model => '', uaFullVersion => '131.0.6778.86',
-                     brands          => [ {brand=>'Google Chrome',version=>'131'},          {brand=>'Chromium',version=>'131'},          {brand=>'Not_A Brand',version=>'24'} ],
-                     fullVersionList => [ {brand=>'Google Chrome',version=>'131.0.6778.86'}, {brand=>'Chromium',version=>'131.0.6778.86'}, {brand=>'Not_A Brand',version=>'24.0.0.0'} ] },
+        # Brand list, order and GREASE entry are curl-impersonate's chrome150
+        # template verbatim, so the Sec-CH-UA on the wire and navigator
+        # .userAgentData cannot disagree. The GREASE brand and its version move
+        # every release -- 150 uses "Not;A=Brand";v="8", not 131's "Not_A Brand"
+        # v24 -- so it is not a constant to carry forward.
+        # 150.0.7871.189 is the last stable 150 build (Chrome version history
+        # API), not a plausible-looking invention: it is what a site asking for
+        # high-entropy hints compares against.
+        ua_data => { platform => 'Windows', platformVersion => '10.0.0', architecture => 'x86', bitness => '64', model => '', uaFullVersion => '150.0.7871.189',
+                     brands          => [ {brand=>'Not;A=Brand',version=>'8'},     {brand=>'Chromium',version=>'150'},           {brand=>'Google Chrome',version=>'150'} ],
+                     fullVersionList => [ {brand=>'Not;A=Brand',version=>'8.0.0.0'}, {brand=>'Chromium',version=>'150.0.7871.189'}, {brand=>'Google Chrome',version=>'150.0.7871.189'} ] },
     },
     'macos-safari' => {
-        user_agent => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
+        user_agent => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15',
         platform => 'MacIntel', vendor => 'Apple Computer, Inc.', languages => ['en-US','en'],
         hardwareConcurrency => 10, maxTouchPoints => 0,   # Safari omits deviceMemory
         screen => [1512,982,1512,944,30], devicePixelRatio => 2,
@@ -243,7 +251,7 @@ my %PRESET = (
         features => [qw(storage rtc)],
     },
     'iphone-safari' => {
-        user_agent => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+        user_agent => 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1',
         platform => 'iPhone', vendor => 'Apple Computer, Inc.', languages => ['en-US','en'],
         hardwareConcurrency => 6, maxTouchPoints => 5,
         screen => [390,844,390,844,24], devicePixelRatio => 3,
@@ -251,6 +259,41 @@ my %PRESET = (
         webgl => \%WEBGL_APPLE,
         features => [qw(storage rtc)],
         mobile => 1,   # drives window sizing + touch + pointer/hover/resolution media queries (Safari: no ua_data)
+    },
+    'windows-firefox' => {
+        # Gecko, claimed from a WebKit engine: a bigger lie than the others, and
+        # the residual Gecko-only surface is documented in the POD. What IS
+        # coherent is the whole header + TLS + HTTP/2 stack, which is Firefox's.
+        user_agent => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0',
+        # Firefox reports an EMPTY navigator.vendor, where Chrome says
+        # "Google Inc." and WebKit "Apple Computer, Inc." -- one of the cheapest
+        # engine checks there is, so it has to be the empty string, not absent.
+        platform => 'Win32', vendor => '', languages => ['en-US','en'],
+        # Gecko's own navigator surface. productSub is the cheap engine check --
+        # every Gecko build reports 20100101 where WebKit and Chromium report
+        # 20030107 -- and oscpu/buildID exist in no other engine, so their
+        # ABSENCE is as much a tell as a wrong value. buildID has been frozen at
+        # this constant since Firefox 64 for exactly this reason.
+        productSub => '20100101',
+        oscpu      => 'Windows NT 10.0; Win64; x64',
+        buildID    => '20181001000000',
+        # Viewport origin in screen coordinates: 0 across, and down by the
+        # chrome above it for a maximised window.
+        mozInnerScreenX => 0, mozInnerScreenY => 74,
+        # No deviceMemory: Firefox has never shipped it.
+        hardwareConcurrency => 8, maxTouchPoints => 0,
+        screen => [1920,1080,1920,1040,24], devicePixelRatio => 1,
+        # Firefox on Windows renders through ANGLE too, so the unmasked strings
+        # are the same shape as Chrome's on the same GPU.
+        webgl_vendor => 'Google Inc. (NVIDIA)',
+        webgl_renderer => 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)',
+        webgl => \%WEBGL_ANGLE_NVIDIA,
+        # Same interface set as Safari, by coincidence rather than kinship:
+        # Firefox dropped Battery, never shipped NetworkInformation for content,
+        # and implements none of WebUSB/Bluetooth/HID/Serial.
+        features => [qw(storage rtc)],
+        # No ua_data: client hints are Chromium-only, so identity_headers emits
+        # no Sec-CH-UA for this profile, which is what Firefox does.
     },
     'pixel-chrome' => {
         # Chrome 131's reduced/frozen Android UA (model "K", version "Android 10");
@@ -283,9 +326,11 @@ my %PRESET = (
 # field => validator: 'str'/'num'/'strv'/'screen'/'bool'/'uadata'.
 my %FIELD = (
     user_agent => 'str', platform => 'str', vendor => 'str',
+    productSub => 'str', oscpu => 'str', buildID => 'str',
     webgl_vendor => 'str', webgl_renderer => 'str', languages => 'strv',
     hardwareConcurrency => 'num', deviceMemory => 'num', maxTouchPoints => 'num',
     devicePixelRatio => 'num', screen => 'screen',
+    mozInnerScreenX => 'num', mozInnerScreenY => 'num',
     mobile => 'bool', ua_data => 'uadata', webgl => 'webgl', features => 'features',
     pdf_viewer => 'bool',
 );
@@ -298,10 +343,13 @@ sub profiles { return sort keys %PRESET }
 # windows-chrome also uses chrome131 -- the OS lives in override_headers, not the
 # TLS. Consumed by EV::WebKit's network_fingerprint wiring.
 my %CURL_TARGET = (
-    'windows-chrome' => 'chrome131',
-    'macos-safari'   => 'safari18_0',
-    'iphone-safari'  => 'safari18_0_ios',
-    'pixel-chrome'   => 'chrome131_android',
+    'windows-chrome'  => 'chrome150',
+    'macos-safari'    => 'safari26_0',
+    'iphone-safari'   => 'safari26_0_ios',
+    'windows-firefox' => 'firefox147',
+    # chrome131_android is still the newest Android target upstream ships, so
+    # this one stays at 131 rather than claiming a Chrome the TLS cannot back.
+    'pixel-chrome'    => 'chrome131_android',
 );
 sub curl_target { $CURL_TARGET{ $_[0] // '' } }
 
@@ -462,9 +510,9 @@ sub gvariant {
     my ($p, $seed, $extra) = @_;
     my %d = %{ $extra || {} };   # entries the caller needs regardless of profile
     $p ||= {};
-    $d{$_} = Glib::Variant->new('s', $p->{$_}) for grep { defined $p->{$_} } qw/platform vendor webgl_vendor webgl_renderer/;
+    $d{$_} = Glib::Variant->new('s', $p->{$_}) for grep { defined $p->{$_} } qw/platform vendor webgl_vendor webgl_renderer productSub oscpu buildID/;
     $d{languages} = Glib::Variant->new('as', $p->{languages}) if $p->{languages};
-    $d{$_} = Glib::Variant->new('d', $p->{$_} + 0) for grep { defined $p->{$_} } qw/hardwareConcurrency deviceMemory maxTouchPoints devicePixelRatio/;
+    $d{$_} = Glib::Variant->new('d', $p->{$_} + 0) for grep { defined $p->{$_} } qw/hardwareConcurrency deviceMemory maxTouchPoints devicePixelRatio mozInnerScreenX mozInnerScreenY/;
     if (my $s = $p->{screen}) {
         my ($w,$h,$aw,$ah,$cd) = @$s == 5 ? @$s : ($s->[0],$s->[1],$s->[0],$s->[1],24);
         $d{screen_width}       = Glib::Variant->new('d', $w);

@@ -6,6 +6,6 @@ use Alien::Zstandard;
 my $zstd = Alien::Zstandard->new;
 isa_ok $zstd, ['Alien::Zstandard'],   'isa Alien::Zstandard';
 isa_ok $zstd, ['Alien::Xrepo::Base'], 'isa Alien::Xrepo::Base';
-is $zstd->package_name, 'zstd', 'package_name is zstd';
+is [ $zstd->package_names ], ['zstd'], 'package_names is zstd';
 #
 done_testing;

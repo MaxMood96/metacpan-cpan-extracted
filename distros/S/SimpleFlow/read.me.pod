@@ -1,11 +1,22 @@
 =encoding utf8
 
+=head1 NAME
+
+SimpleFlow - easy, simple workflow manager (and logger); for keeping track of and debugging large and complex shell command workflows
+
+=head1 VERSION
+
+version 0.16
+
+=head1 DESCRIPTION
+
 A tiny workflow manager and logger for Perl, like SnakeMake or NextFlow, but in pure Perl and aimed at making long, error-prone shell pipelines easy to B<debug> and B<reproduce>.
 
 Every step is a single C<task()> call. SimpleFlow checks the inputs before a
 command runs and the outputs after, times the command, captures its C<stdout>,
 C<stderr>, exit code and signal, optionally logs a full structured record, and
-skips work that has already been done.
+skips work that has already been done. It can also bound a step with a
+L<timeout|/"Timeouts"> and rebuild L<out-of-date outputs|/"Out-of-date outputs">.
 
 Two subroutines are exported by default: L</"task"> and L</"say2">.
 
@@ -64,10 +75,10 @@ C<task> returns a hash reference describing exactly what happened:
 
 =head1 C<task>
 
- my $result = task(\%args);
+ my $result = task(%args);      # or task(\%args)
 
-Runs one shell command with checking, timing, capture and logging. Takes a
-B<single hash reference>; the only required key is C<cmd>.
+Runs one command with checking, timing, capture and logging. Takes either a
+flat key/value list or a single hash reference; the only required key is C<cmd>.
 
 =head2 Arguments
 
@@ -87,15 +98,15 @@ B<single hash reference>; the only required key is C<cmd>.
 <tbody>
 <tr>
   <td><code>cmd</code></td>
-  <td>scalar</td>
+  <td>scalar or array</td>
   <td><code>undef</code></td>
-  <td><b>Required.</b> The shell command to run.</td>
+  <td><b>Required.</b> The command to run. A string is handed to the shell; an array ref is run without a shell.</td>
 </tr>
 <tr>
   <td><code>die</code></td>
   <td>bool (<code>0</code>/<code>1</code>)</td>
   <td><code>1</code></td>
-  <td>Die if the command fails (non-zero exit) or an output file is missing. Set to <code>0</code> to warn and continue instead.</td>
+  <td>Die if the command fails (non-zero exit, timeout, or a missing output file). Set to <code>0</code> to warn and continue instead.</td>
 </tr>
 <tr>
   <td><code>dry.run</code></td>
@@ -108,6 +119,12 @@ B<single hash reference>; the only required key is C<cmd>.
   <td>scalar or array</td>
   <td><code>undef</code></td>
   <td>File(s) that must exist and be readable <b>before</b> running; otherwise <code>task</code> dies.</td>
+</tr>
+<tr>
+  <td><code>input.file</code></td>
+  <td>scalar</td>
+  <td><code>undef</code></td>
+  <td>Convenience form of <code>input.files</code> for a <b>single</b> file. Must be a plain filename (not a reference). Cannot be combined with <code>input.files</code>.</td>
 </tr>
 <tr>
   <td><code>output.files</code></td>
@@ -125,7 +142,7 @@ B<single hash reference>; the only required key is C<cmd>.
   <td><code>log.fh</code></td>
   <td>open filehandle</td>
   <td><code>undef</code></td>
-  <td>If given, the full result record is also written here. Must be a real, open filehandle.</td>
+  <td>If given, the full result record is also written here. Must be a real, open filehandle; <code>task</code> switches it to autoflush.</td>
 </tr>
 <tr>
   <td><code>note</code></td>
@@ -139,6 +156,24 @@ B<single hash reference>; the only required key is C<cmd>.
   <td><code>0</code></td>
   <td>If false and all <code>output.files</code> already exist, the command is skipped. Set true to always run.</td>
 </tr>
+<tr>
+  <td><code>quiet</code></td>
+  <td>bool</td>
+  <td><code>0</code></td>
+  <td>Suppress the record printed to the terminal. The log and error messages on <code>STDERR</code> are unaffected. See Quiet runs.</td>
+</tr>
+<tr>
+  <td><code>stale</code></td>
+  <td>bool</td>
+  <td><code>0</code></td>
+  <td>Also re-run when an input file is newer than an output file. See Out-of-date outputs.</td>
+</tr>
+<tr>
+  <td><code>timeout</code></td>
+  <td>whole seconds</td>
+  <td><code>0</code></td>
+  <td>Kill the command if it runs longer than this. <code>0</code> means no limit. See Timeouts.</td>
+</tr>
 </tbody>
 </table>
 
@@ -146,16 +181,20 @@ B<single hash reference>; the only required key is C<cmd>.
 
 
 
-Passing an unrecognised key, an empty filename, or a non-filehandle C<log.fh>
-causes C<task> to die: these are usually mistakes worth catching early. Giving
-both C<output.file> and C<output.files>, or a reference to C<output.file>, dies for
-the same reason.
+Passing an unrecognised key, an undefined or empty filename, a C<cmd> that is
+neither a string nor an array ref, or a non-filehandle C<log.fh> causes C<task>
+to die: these are usually mistakes worth catching early. Giving both
+C<output.file> and C<output.files> (or both C<input.file> and C<input.files>), or a
+reference where a single filename is expected, dies for the same reason.
 
 =head2 Return value
 
-C<task> always returns a hash reference. The fields below are present after a
-normal run; the L<skip|/"Skipping completed work"> and L<dry-run|/"Dry runs"> paths
-omit the execution-only fields (C<exit>, C<signal>, C<stdout>, C<stderr>).
+C<task> always returns a hash reference. Every field below except the two
+C<input.*> ones is present on B<every> path, so a caller running under
+C<< use warnings FATAL =E<gt> 'all' >> can read the record after a skip or a dry run
+without an uninitialized-value warning turning fatal. On those paths the
+execution-only fields simply hold their empty values (C<exit> and C<signal> are
+C<0>, C<stdout> and C<stderr> are C<''>, C<duration> is C<0>).
 
 
 
@@ -171,7 +210,7 @@ omit the execution-only fields (C<exit>, C<signal>, C<stdout>, C<stderr>).
 <tbody>
 <tr>
   <td><code>cmd</code></td>
-  <td>The command that was run.</td>
+  <td>The command that was run. An array-ref <code>cmd</code> is recorded space-joined for readability; that is not a shell-quoted round trip, since it never went near a shell.</td>
 </tr>
 <tr>
   <td><code>dir</code></td>
@@ -183,7 +222,7 @@ omit the execution-only fields (C<exit>, C<signal>, C<stdout>, C<stderr>).
 </tr>
 <tr>
   <td><code>will.do</code></td>
-  <td><code>"done"</code>, <code>"no"</code> (skipped), <code>"no: dry run"</code>, or <code>"FAILED"</code>.</td>
+  <td><code>"done"</code>, <code>"no"</code> (skipped), <code>"no: dry run"</code>, or <code>"FAILED"</code>. <code>"FAILED"</code> is set whenever the command exited non-zero, timed out, or left a declared output file missing — <b>whether or not <code>die</code> is set</b>.</td>
 </tr>
 <tr>
   <td><code>duration</code></td>
@@ -198,11 +237,19 @@ omit the execution-only fields (C<exit>, C<signal>, C<stdout>, C<stderr>).
   <td>Signal number if the command process was killed by a signal, else <code>0</code>. Always <code>0</code> on Windows (no POSIX signals).</td>
 </tr>
 <tr>
+  <td><code>timed.out</code></td>
+  <td><code>1</code> if the command was killed for exceeding its <code>timeout</code>, else <code>0</code>.</td>
+</tr>
+<tr>
+  <td><code>out.of.date</code></td>
+  <td><code>1</code> if <code>stale</code> was set and an input was newer than an output, else <code>0</code>.</td>
+</tr>
+<tr>
   <td><code>stdout</code>, <code>stderr</code></td>
   <td>Captured output, with trailing whitespace stripped.</td>
 </tr>
 <tr>
-  <td><code>die</code>, <code>dry.run</code>, <code>overwrite</code>, <code>note</code></td>
+  <td><code>die</code>, <code>dry.run</code>, <code>overwrite</code>, <code>note</code>, <code>quiet</code>, <code>stale</code>, <code>timeout</code></td>
   <td>The (defaulted) argument values used.</td>
 </tr>
 <tr>
@@ -215,11 +262,11 @@ omit the execution-only fields (C<exit>, C<signal>, C<stdout>, C<stderr>).
 </tr>
 <tr>
   <td><code>input.files</code></td>
-  <td>The input argument, as given (present only if you passed <code>input.files</code>).</td>
+  <td>Array ref of the input files, normalised the same way (present only if you passed <code>input.files</code> or <code>input.file</code>).</td>
 </tr>
 <tr>
   <td><code>input.file.size</code></td>
-  <td>Hash of <code>filename => size in bytes</code> for the inputs (present only if you passed <code>input.files</code>).</td>
+  <td>Hash of <code>filename => size in bytes</code> for the inputs (present only if you passed <code>input.files</code> or <code>input.file</code>).</td>
 </tr>
 <tr>
   <td><code>source.file</code>, <code>source.line</code></td>
@@ -250,6 +297,79 @@ restartable: re-running the script picks up where it left off.
 On the first run C<done> is C<"now">; on a re-run (with C<em.tpr> present) C<done>
 is C<"before"> and C<will.do> is C<"no">. Pass C<< overwrite =E<gt> 1 >> to force it.
 
+An output file that exists but cannot be B<read> does not count as done: it is
+not a usable result, and treating it as one would skip the very step that could
+replace it.
+
+=head2 Out-of-date outputs
+
+Existence alone is a weak test. If an input file has been edited since the
+output was built, the output is stale even though it is present — and by
+default C<task> will still skip the step, exactly as earlier versions did.
+
+Pass C<< stale =E<gt> 1 >> to get the rule C<make> and C<snakemake> use: re-run whenever
+the newest C<input.files> mtime is later than the oldest C<output.files> mtime.
+
+ my $t = task(
+     cmd            => 'gmx grompp -f em.mdp -c box.gro -p topol.top -o em.tpr',
+     'input.files'  => ['em.mdp', 'box.gro', 'topol.top'],
+     'output.files' => 'em.tpr',
+     stale          => 1,
+ );
+
+Editing C<em.mdp> now rebuilds C<em.tpr>; leaving it alone still skips. The
+result's C<out.of.date> field says which of the two happened. This is off by
+default so that upgrading does not silently start re-running steps in pipelines
+written against 0.15 and earlier.
+
+=head2 Timeouts
+
+C<timeout> gives a step a wall-clock budget in whole seconds:
+
+ my $t = task(
+     cmd     => 'a command that sometimes wedges',
+     timeout => 600,
+     die     => 0,
+ );
+
+The command is run in its own process group and, if the budget is exceeded, the
+B<whole group> is killed — a shell command is usually a pipeline, not a single
+process, and killing only the shell would leave its children running. The
+result then has C<< timed.out =E<gt> 1 >> and C<< will.do =E<gt> "FAILED" >>; with the default
+C<< die =E<gt> 1 >> the pipeline stops there instead.
+
+C<timeout> needs C<fork()> and POSIX process groups, so it is refused on
+C<MSWin32>. Leaving it at C<0> (the default) changes nothing anywhere.
+
+=head2 Running without a shell
+
+Giving C<cmd> an array ref runs the command directly, with no shell in between:
+
+ my $t = task(
+     cmd           => ['gzip', '-9', $file],   # $file needs no quoting
+     'output.file' => "$file.gz",
+ );
+
+This is the form to reach for when an argument comes from data — a filename
+with a space, a quote, or a C<$> in it is passed through untouched instead of
+being re-parsed by the shell. You lose shell features (C<< E<gt> >>, C<|>, C<*>, C<&&>) in
+exchange; use the string form when you want them.
+
+=head2 Quiet runs
+
+Every C<task> prints its record to the terminal. Over a hundred-step pipeline
+that is a lot of scrollback, so C<< quiet =E<gt> 1 >> suppresses it:
+
+ my $t = task(
+     cmd      => 'one of very many steps',
+     'log.fh' => $log,
+     quiet    => 1,
+ );
+
+The log filehandle still receives the full record, and error messages still go
+to C<STDERR>: asking for less noise is not the same as asking to be kept in the
+dark about a failure.
+
 =head2 Dry runs
 
 Useful for inspecting a pipeline without executing anything expensive:
@@ -264,10 +384,17 @@ The command is printed (and logged) but not run; C<will.do> is C<"no: dry run">.
 
 =head2 Failure behaviour
 
-By default (C<< die =E<gt> 1 >>) C<task> dies if the command exits non-zero or if any
-declared C<output.files> are missing afterwards, so a broken step stops the
-pipeline immediately. With C<< die =E<gt> 0 >>, C<task> instead warns and returns its
-result hash (with C<< will.do =E<gt> "FAILED" >>), letting you decide what to do.
+By default (C<< die =E<gt> 1 >>) C<task> dies if the command exits non-zero, exceeds its
+C<timeout>, or leaves any declared C<output.files> missing afterwards, so a broken
+step stops the pipeline immediately.
+
+With C<< die =E<gt> 0 >>, C<task> instead warns and returns its result hash with
+C<< will.do =E<gt> "FAILED" >>, letting you decide what to do:
+
+ my $t = task(cmd => 'a step that may fail', die => 0);
+ if ($t->{'will.do'} eq 'FAILED') {
+     ...   # $t->{'exit'}, $t->{stderr} and $t->{'timed.out'} say why
+ }
 
 =head2 C<say2>
 
@@ -293,7 +420,7 @@ Core/runtime modules used by SimpleFlow:
 
 =item * L<Devel::Confess> better backtraces on death
 
-=item * C<List::Util>, C<Scalar::Util>, C<Time::HiRes>, C<Cwd> core utilities
+=item * C<List::Util>, C<Scalar::Util>, C<Time::HiRes>, C<Cwd>, C<POSIX> core utilities
 
 =back
 
@@ -301,6 +428,106 @@ The test suite additionally uses C<Test::More> and
 L<Test::Exception>.
 
 =head1 Changes
+
+=head2 0.16 2026-08-28 (Claude Opus 5 helped)
+
+=head3 Fixed
+
+=over
+
+=item * B<< C<< die =E<gt> 0 >> never reported a failure. >> The C<< will.do =E<gt> "FAILED" >> assignment
+sat inside the C<if ($r{die})> branch, so it could only run on the path that
+immediately died. Under C<< die =E<gt> 0 >> — the mode in which the caller is meant
+to read C<will.do> — a command that exited non-zero was reported as C<"done">,
+and nothing warned. C<will.do> is now C<"FAILED"> for a non-zero exit, a
+timeout, or a missing output file regardless of C<die>, and C<< die =E<gt> 0 >> emits
+a warning naming the exit code.
+
+=item * B<The log lost the record of the task that killed the run.> The log
+filehandle was never autoflushed. Measured with a C<SIGKILL> part-way through
+a pipeline (the shape of an OOM kill or a scheduler eviction), a log holding
+862 bytes on a clean exit held 139 bytes after the kill: everything written
+after the last command started — its exit code, duration and captured output
+— was still in stdio's buffer. C<task> and C<say2> now switch the handle to
+autoflush.
+
+=item * B<An undefined filename still crashed.> 0.14 added a C<defined> guard to the
+0-length check, but the C<-f -r> filetest ran first, so an C<undef> element of
+an C<input.files> array died as C<Use of uninitialized value $_ in -r> under
+C<< warnings FATAL =E<gt> 'all' >>. Names are now validated before anything is
+filetested.
+
+=item * B<< The 0-length C<input.files> check was unreachable. >> C<''> fails C<-f>, so an
+empty input filename was reported as C<"missing or unreadable"> and the
+0-length check below it could never fire. Both undefined and 0-length names
+are now reported as what they are, and the message names the offending index.
+
+=item * B<< C<cmd> was not type-checked. >> Only definedness was checked, so any reference
+was stringified straight into the shell: C<< task(cmd =E<gt> ['echo','hi']) >> ran the
+literal command C<ARRAY(0x5ed9d076e618)>. C<cmd> must now be a non-empty string
+or a non-empty array ref of defined values.
+
+=item * B<Skip detection and the post-run check disagreed.> Skipping tested a bare
+C<-f> while the post-run check tested C<-f -r>, so an output file that existed
+but could not be read counted as already done. Both use C<-f -r> now.
+
+=item * B<The result record changed shape between paths.> C<exit>, C<signal>, C<stdout>
+and C<stderr> were absent after a skip or a dry run, so a caller running under
+the C<< warnings FATAL =E<gt> 'all' >> this module recommends died just by reading
+C<< $t-E<gt>{'exit'} >>. They are now always present, holding their empty values.
+
+=item * B<< C<string_max> was uncapped >>, so a chatty command had its whole capture echoed
+to the terminal and written to the log — a measured 3 MB stdout wrote
+3,002,832 bytes to each. It is now capped at 4096 characters; Data::Printer
+marks what it drops. The full capture is still on the result hash.
+
+=item * B<< Loading SimpleFlow polluted C<main::>. >> C<use DDP> and C<use Cwd 'getcwd'> sat
+above the C<package> statement, so C<p>, C<np> and C<getcwd> were imported into
+every program that loaded the module. The C<package> statement now comes
+first, and the duplicated C<use> lines are gone.
+
+=item * B<Unbalanced parenthesis> in the 0-length C<output.files> error message.
+
+=back
+
+=head3 Added
+
+=over
+
+=item * B<< C<stale> >>: also re-run when an input file is newer than an output file, the
+rule C<make> and C<snakemake> use. Off by default, so existing pipelines are
+unaffected. The result carries C<out.of.date>.
+
+=item * B<< C<timeout> >>: a wall-clock budget in whole seconds. The command runs in its
+own process group and the whole group is killed if the budget is exceeded,
+so a wedged pipeline does not leave orphans behind. The result carries
+C<timed.out>. POSIX only.
+
+=item * B<< An array-ref C<cmd> >> runs the command without a shell, so arguments coming
+from data need no quoting.
+
+=item * B<< C<quiet> >>: suppress the record printed to the terminal without silencing the
+log or C<STDERR>.
+
+=item * B<< C<input.file> >>, the single-file convenience form of C<input.files>, matching
+C<output.file>.
+
+=back
+
+=head3 Changed
+
+=over
+
+=item * C<$VERSION> is now a quoted string. As a bare number it was stringified through
+C<%g>, so a future C<0.20> would have become C<"0.2"> and compared as older than
+C<"0.15"> on CPAN.
+
+=item * B<Incompatible:> C<input.files> on the result is now always an array ref, as
+C<output.files> always was. A scalar argument used to be stored raw.
+
+=item * C<POSIX> (core) is now a dependency, for C<_exit> in the timeout child.
+
+=back
 
 =head2 0.15 2026-07-17 (Claude Opus 4.8 helped)
 

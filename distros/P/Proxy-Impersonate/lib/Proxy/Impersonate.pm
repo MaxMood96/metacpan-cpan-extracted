@@ -9,7 +9,7 @@ use Curl::Impersonate;
 use Proxy::Impersonate::Cert;
 use Proxy::Impersonate::Connection;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 sub new {
     my ($class, %o) = @_;
@@ -121,6 +121,7 @@ sub _accept {
                     impersonate => $self->{target},
                     verify      => $self->{verify},
                     timeout     => $self->{timeout},
+                    decode      => 1,
                     ($self->{follow} ? (follow_redirects => 1) : ()),
                 );
             },

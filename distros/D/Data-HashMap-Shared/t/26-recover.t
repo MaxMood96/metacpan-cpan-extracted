@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use Test::More;
+use POSIX ();
 use File::Temp qw(tempdir);
 use Data::HashMap::Shared::II;
 
@@ -61,6 +62,36 @@ unlink $p;
     my $m = eval { Data::HashMap::Shared::II->new($p, 1000) };
     ok(!$m, "new() refuses a magic==0 file that is not all-zero (no clobber of real data)");
     undef $m; unlink $p;
+}
+
+# Regression (0.19): shm_pid_alive(0) returned "alive", so a lock word holding
+# pid 0 -- corruption, since a real writer always records getpid() -- was waited
+# on forever by the rwlock paths.  kill(0,0) signals our own process group, so
+# it could never answer for a holder anyway.  Every operation must now complete.
+{
+    my $p2 = "$dir/pidzero.hm";
+    { my $m = Data::HashMap::Shared::II->new($p2, 64); $m->put(1, 1); }
+    {
+        open my $f, '+<:raw', $p2 or die $!;
+        seek $f, 128, 0 or die $!;            # ShmHeader.wlock
+        print $f pack('L', 0x80000000);       # WRITER_BIT with pid 0
+        close $f or die $!;
+    }
+    # The operations run in a forked child under alarm: before the fix they
+    # spin forever, and a hung child must show up as a failed test rather than
+    # wedging the whole suite.
+    my $kid = fork // die "fork: $!";
+    unless ($kid) {
+        alarm 20;
+        my $m = Data::HashMap::Shared::II->new($p2, 64);
+        $m->put(2, 2);
+        my @k = $m->keys;
+        POSIX::_exit(($m->stats->{recoveries} >= 1 && @k == 2) ? 0 : 1);
+    }
+    waitpid $kid, 0;
+    is $?, 0, 'a lock word holding pid 0 is recovered, not waited on forever'
+        or diag sprintf('child status 0x%04x (signal %d, exit %d)', $?, $? & 127, $? >> 8);
+    unlink $p2;
 }
 
 done_testing;

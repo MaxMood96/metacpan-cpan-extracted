@@ -299,12 +299,27 @@ CONSTRUCTOR
         while the JS-property spoof is not -- an incoherent state the module
         cannot detect from the UI process. Coverage: "navigator" (platform,
         vendor, languages, hardwareConcurrency, deviceMemory,
-        maxTouchPoints), "screen", "devicePixelRatio", and the WebGL GPU
-        vendor/renderer strings. The navigator/screen getters are installed
-        natively, on the prototype and enumerable, so they read as the
-        engine's own to everything except "Function.prototype.toString" --
-        see the Ceiling below, which is where the remaining tells are
-        enumerated honestly.
+        maxTouchPoints, and for a Gecko profile productSub, oscpu and
+        buildID), "screen", "devicePixelRatio",
+        "window.mozInnerScreenX"/"Y", and the WebGL GPU vendor/renderer
+        strings. The navigator/screen getters are installed natively, on the
+        prototype and enumerable, so they read as the engine's own to
+        everything except "Function.prototype.toString" -- see the Ceiling
+        below, which is where the remaining tells are enumerated honestly.
+
+        "windows-firefox" asks more of this than the others. The engine
+        really is WebKit, so a Safari profile is a small lie and a Chrome
+        one a larger one, but claiming Gecko means supplying a surface no
+        WebKit build has: "productSub" (Gecko reports 20100101 where WebKit
+        and Chromium report 20030107), "oscpu" and "buildID", which exist in
+        no other engine and whose ABSENCE identifies the engine as surely as
+        a wrong value, and "window.mozInnerScreenX"/"Y". Those are supplied.
+        What is not, and cannot be without the engine, is CSS:
+        "CSS.supports('-moz-appearance', 'none')" is false here and true in
+        Firefox, and no property override fixes that without breaking the
+        styling it claims to support. Use "windows-firefox" for the
+        network-layer identity -- where it is exact -- and expect a
+        determined JS-layer engine probe to see through it.
 
         A coherence layer fills the gaps a bare navigator/screen spoof would
         leave: a Chrome profile also gets "window.chrome" and a working
@@ -428,6 +443,56 @@ CONSTRUCTOR
         enable "network_fingerprint" (below). A self-consistent custom
         profile is your responsibility.
 
+    "fonts => \@dirs", "fonts => \%spec" or "fonts => $conf_file"
+        Replace the font set the engine can see. The installed fonts are a
+        platform tell in their own right, independent of anything
+        "fingerprint" spoofs: a profile claiming Windows on a box whose only
+        sans-serif faces are DejaVu and Noto is answering "Linux" to
+        anything that measures text.
+
+        Three spellings, cheapest first:
+
+            fonts => [ '/srv/fonts/win' ]                # only these directories
+
+            fonts => { dirs       => [ '/srv/fonts/win' ],
+                       sans_serif => 'Arial',
+                       serif      => 'Times New Roman',
+                       monospace  => 'Courier New' }     # ...and what the generics mean
+
+            fonts => '/srv/fonts/win.conf'               # your own fontconfig file
+
+        The directory forms write a fontconfig file naming exactly those
+        directories and nothing else, so the host's fonts are not visible --
+        this changes what the engine has, rather than lying about it in
+        JavaScript, which is why it survives being measured rather than
+        merely asked.
+
+        Give the generic families if you can. Without them all three resolve
+        to whichever face matches first, so "sans-serif", "serif" and
+        "monospace" measure identically -- wrong on the page, and a
+        fingerprint of its own. The system rules that normally supply them
+        cannot be reused: /etc/fonts/conf.d carries "<dir>" entries, and
+        including it would put the host's fonts straight back.
+
+        The file form is passed to fontconfig untouched; every absolute
+        "<dir>" and "<cachedir>" in it that exists is made visible to the
+        web process.
+
+        Two things to know. The web process runs inside a sandbox, so the
+        config and every directory it names are bound into it explicitly --
+        pointing "FONTCONFIG_FILE" at a font set without that does nothing
+        at all, silently. And fontconfig is configured per process, not per
+        view: this sets an environment variable read once by each web
+        process as it starts, so one font set per program, not one per
+        browser.
+
+        What it cannot do is give you fonts you do not have.
+        Metric-compatible substitutes exist for a few faces (Liberation for
+        Arial, Times New Roman and Courier New; Carlito and Caladea for
+        Calibri and Cambria), but the ones that identify an OS -- Segoe UI,
+        SF Pro -- have none, so a page that measures those by name still
+        sees a fallback. This narrows the gap; it does not close it.
+
     "seed => 12345"
         Enable seeded readback noise on canvas, "AudioContext", and WebGL
         pixel readback (opt-in; requires "fingerprint"). The seed is a
@@ -463,9 +528,15 @@ CONSTRUCTOR
         the browser through it: the proxy terminates WebKit's TLS locally
         and re-originates each request as the matching real browser via
         "libcurl-impersonate". The curl target is derived from the profile
-        ("windows-chrome" -> "chrome131", "macos-safari" -> "safari18_0",
-        "iphone-safari" -> "safari18_0_ios", "pixel-chrome" ->
-        "chrome131_android"); pass a string to override it.
+        ("windows-chrome" -> "chrome150", "macos-safari" -> "safari26_0",
+        "iphone-safari" -> "safari26_0_ios", "windows-firefox" ->
+        "firefox147", "pixel-chrome" -> "chrome131_android"); pass a string
+        to override it.
+
+        "pixel-chrome" stays on Chrome 131 where the others track current
+        stable, because "chrome131_android" is the newest Android target
+        "libcurl-impersonate" ships and a profile must not claim a browser
+        its TLS cannot back.
 
         The profile's identity headers (User-Agent + "Sec-CH-UA") are forced
         over the curl target's defaults, so even a Windows profile is
@@ -500,11 +571,11 @@ METHODS
 
     Loads $uri. On success $result is true; on failure (or timeout) $err is
     set. If a previous navigation on this instance was still in-flight, its
-    callback is immediately invoked with $err eq 'superseded'. The callback
-    fires just after WebKit's own "load-changed:finished" signal -- once the
-    document "title" has crossed from the web process, which it does a
-    fraction of a millisecond later ("uri" needs no such wait; it is set
-    before "finished"). A page with no "<title>" never sends that
+    callback is immediately invoked with "$err eq 'superseded'". The
+    callback fires just after WebKit's own "load-changed:finished" signal --
+    once the document "title" has crossed from the web process, which it
+    does a fraction of a millisecond later ("uri" needs no such wait; it is
+    set before "finished"). A page with no "<title>" never sends that
     notification, and settles on a 150ms deadline instead. "on_load" (if
     configured) fires right after the callback. Returns $b (chainable).
 

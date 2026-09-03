@@ -111,8 +111,6 @@ xt/valgrind.t
 xt/valgrind_mp.t
 xt/writer_crash_recovery.t
 xxhash.h
-bin/hashmap-shared-upgrade
-t/24-upgrade.t
 t/25-frozen.t
 t/26-recover.t
 t/27-review-fixes.t
@@ -121,5 +119,12 @@ xt/tombstone_free_ordering.t
 xt/value_update_tear.t
 t/29-cursor-map-destroyed.t
 t/30-keyword-context.t
+t/31-sharded-iteration.t
+t/32-attach-validation.t
+t/33-arena-large-reuse.t
+t/34-poisoned-key-offset.t
+t/35-round11.t
+xt/freeze_deferred_seal.t
+t/36-reserve-iterreset.t
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

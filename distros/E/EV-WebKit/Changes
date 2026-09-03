@@ -1,5 +1,14 @@
 Revision history for EV-WebKit
 
+0.03  2026-09-02
+        - windows-chrome is now Chrome 150, macos-safari and iphone-safari
+          Safari 26.0; pixel-chrome stays on Chrome 131
+        - new windows-firefox profile (Firefox 147)
+
+0.02  2026-09-02
+        - fingerprint profiles now apply inside Worker and SharedWorker scopes
+        - new fonts option: choose the font set the page can see
+
 0.01  2026-08-27
     - initial release: asynchronous WebKitGTK 6.0 (GTK4) browser automation on
       EV. Navigation, including waiting for one the page itself starts; element

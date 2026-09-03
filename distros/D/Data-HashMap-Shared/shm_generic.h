@@ -359,6 +359,9 @@ typedef struct ShmHandle_s {
     uint32_t   num_shards;
     uint32_t   shard_mask;     /* num_shards - 1 (power of 2) */
     uint32_t   shard_iter;     /* current shard for each()/cursor iteration */
+    uint32_t   shard_rr;       /* round-robin start for pop/shift/drain: separate
+                                  from shard_iter so draining a sharded map during
+                                  an each() cannot skip its unvisited shards */
 } ShmHandle;
 
 /* ---- Cursor (independent iterator) ---- */
@@ -453,7 +456,9 @@ static inline int shm_pid_is_zombie(uint32_t pid) {
  * recycled PID reports "alive" and the slot is not reclaimed until that
  * process exits.  See "Crash Safety" in the POD. */
 static inline int shm_pid_alive(uint32_t pid) {
-    if (pid == 0) return 1; /* no owner recorded, assume alive */
+    if (pid == 0) return 0; /* no owner recorded: not a live holder.  kill(0,0)
+                               signals our own process group, so it could never
+                               answer for one; the lock paths would spin. */
     if (kill((pid_t)pid, 0) == -1 && errno == ESRCH) return 0; /* definitely dead */
     return !shm_pid_is_zombie(pid); /* kill() also succeeds for a zombie -> treat as dead */
 }
@@ -472,10 +477,9 @@ static inline void shm_recover_stale_lock(ShmHandle *h, uint32_t observed_wlock)
     if (!__atomic_compare_exchange_n(&hdr->wlock, &observed_wlock,
             mypid, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
         return;
-    /* We now hold the write lock as mypid.  Repair shared state -- the
-     * seqlock counter (if dead writer left it odd) and the LRU doubly-
-     * linked list (if dead writer left it one-way-broken) -- while no
-     * other process can mutate them. */
+    /* Clear the dead writer's odd seq first so spinning readers proceed: the
+     * repair below touches only the LRU arrays and the counters, neither of
+     * which a lock-free reader reads. */
     uint32_t seq = __atomic_load_n(&hdr->seq, __ATOMIC_RELAXED);
     if (seq & 1)
         __atomic_store_n(&hdr->seq, seq + 1, __ATOMIC_RELEASE);
@@ -797,11 +801,16 @@ static inline uint32_t shm_seqlock_read_begin(ShmHandle *h) {
         uint32_t val = __atomic_load_n(&hdr->wlock, __ATOMIC_RELAXED);
         if (val >= SHM_RWLOCK_WRITER_BIT) {
             uint32_t pid = val & SHM_RWLOCK_PID_MASK;
-            if (!shm_pid_alive(pid)) {
+            if (pid == 0 || !shm_pid_alive(pid)) {
+                /* A PROT_READ view cannot CAS without faulting, and nobody else
+                 * will finish this section: return stale rather than spin. */
+                if (h->readonly) return s;
                 shm_recover_stale_lock(h, val);
                 spin = 0;
                 continue;
             }
+        } else if (h->readonly) {
+            return s;   /* odd seq with no holder: nothing will ever republish */
         }
         /* Writer is alive, yield CPU */
         struct timespec ts = {0, 1000000}; /* 1ms */
@@ -870,7 +879,10 @@ static inline uint32_t shm_arena_alloc(ShmHeader *hdr, char *arena, uint32_t len
             if ((uint64_t)cur + asize > hdr->arena_cap) break;
             memcpy(&next, arena + cur, sizeof(uint32_t));
             memcpy(&blk, arena + cur + sizeof(uint32_t), sizeof(uint32_t));
-            if (blk >= asize) {
+            /* Exact class match only: every arena size is a power of two, so a
+             * larger block handed to a smaller request would be refiled at the
+             * smaller size on free and its surplus lost for good. */
+            if (blk == asize) {
                 if (prev == 0) hdr->arena_large_free = next;
                 else memcpy(arena + prev, &next, sizeof(uint32_t));
                 return cur;
@@ -989,6 +1001,7 @@ static inline void shm_lru_unlink(ShmHandle *h, uint32_t idx) {
     uint32_t *next = h->lru_next;
     ShmHeader *hdr = h->hdr;
     uint32_t p = prev[idx], n = next[idx];
+    if (p == SHM_LRU_NONE && n == SHM_LRU_NONE && hdr->lru_head != idx) return;
     if (p != SHM_LRU_NONE) next[p] = n;
     else hdr->lru_head = n;
     if (n != SHM_LRU_NONE) prev[n] = p;
@@ -1045,8 +1058,21 @@ static void shm_recount_counters(ShmHandle *h) {
         if (st == SHM_TOMBSTONE) tomb++;
         else if (SHM_IS_LIVE(st)) live++;
     }
-    hdr->size = live;
-    hdr->tombstones = tomb;
+    /* Bracket the stores only: an attach validates size + tombstones together
+     * and would see them torn, but holding the seqlock across the scan above
+     * would stall every reader for O(table_cap). */
+    shm_seqlock_write_begin(&hdr->seq);
+    /* Publish the decreasing counter first: an increase can transiently exceed
+     * table_cap, and a crash there is unrepairable.  Atomic, not plain -- with
+     * plain stores gcc merged both arms into one unconditional sequence. */
+    if (tomb <= hdr->tombstones) {
+        __atomic_store_n(&hdr->tombstones, tomb, __ATOMIC_RELEASE);
+        __atomic_store_n(&hdr->size, live, __ATOMIC_RELEASE);
+    } else {
+        __atomic_store_n(&hdr->size, live, __ATOMIC_RELEASE);
+        __atomic_store_n(&hdr->tombstones, tomb, __ATOMIC_RELEASE);
+    }
+    shm_seqlock_write_end(&hdr->seq);
 }
 
 static void shm_lru_rebuild_if_corrupt(ShmHandle *h) {
@@ -1093,10 +1119,9 @@ static void shm_lru_rebuild_if_corrupt(ShmHandle *h) {
     uint32_t prev = SHM_LRU_NONE;
     uint32_t new_head = SHM_LRU_NONE;
     uint32_t rebuilt_count = 0;
-    uint32_t tomb_count = 0;
     for (uint32_t i = 0; i < cap; i++) {
         uint8_t st = h->states[i];
-        if (st == SHM_TOMBSTONE) { tomb_count++; continue; }
+        if (st == SHM_TOMBSTONE) continue;
         if (!SHM_IS_LIVE(st)) continue;
         h->lru_prev[i] = prev;
         if (prev != SHM_LRU_NONE) h->lru_next[prev] = i;
@@ -1106,14 +1131,8 @@ static void shm_lru_rebuild_if_corrupt(ShmHandle *h) {
     }
     hdr->lru_head = new_head;
     hdr->lru_tail = prev;
-    /* Reconcile hdr->size and hdr->tombstones with actual state[].
-     * A dead writer mid-op may have left these counters out of sync;
-     * resyncing here prevents downstream maybe_grow/maybe_shrink from
-     * deciding based on stale counts. */
-    hdr->size = rebuilt_count;
-    hdr->tombstones = tomb_count;
-    /* No stat_recoveries bump here -- caller (shm_recover_stale_lock) accounts
-     * for the recovery event once, regardless of whether the LRU was rebuilt. */
+    /* Counters are reconciled by shm_recount_counters, and the recovery event
+     * is counted once by shm_recover_stale_lock -- not here. */
 }
 
 /* ---- Create / Open / Close ---- */
@@ -1265,6 +1284,36 @@ static inline int shm_validate_header(const ShmHeader *hdr,
             (!hdr->max_size ||
              ((hdr->lru_head == SHM_LRU_NONE || hdr->lru_head < hdr->max_table_cap) &&
               (hdr->lru_tail == SHM_LRU_NONE || hdr->lru_tail < hdr->max_table_cap))));
+}
+
+/* Attach-time validation of a live mapping.  size + tombstones <= table_cap can
+ * read torn on a healthy saturated map, so reject only when the seqlock shows
+ * no writer was active across the check. */
+static inline int shm_validate_header_live(const ShmHeader *hdr,
+                                            uint32_t variant_id, uint32_t node_size) {
+    for (int attempt = 0; attempt < 4096; attempt++) {
+        uint32_t s1 = __atomic_load_n(&hdr->seq, __ATOMIC_ACQUIRE);
+        int ok = shm_validate_header(hdr, variant_id, node_size);
+        __atomic_thread_fence(__ATOMIC_ACQUIRE);
+        uint32_t s2 = __atomic_load_n(&hdr->seq, __ATOMIC_RELAXED);
+        if (ok) return 1;
+        /* Only a live holder can still republish, and a repair scan runs with
+         * seq even -- so seq stability alone proves nothing.  With no live
+         * holder, stalling would just serialise every opener behind the flock. */
+        uint32_t w = __atomic_load_n(&hdr->wlock, __ATOMIC_RELAXED);
+        /* Our own pid in the lock word means a dead writer whose pid was
+         * recycled to us: we cannot be mid-write and calling attach at the
+         * same time, so waiting for ourselves can never change the verdict. */
+        uint32_t wpid = w & SHM_RWLOCK_PID_MASK;
+        int live_holder = (w >= SHM_RWLOCK_WRITER_BIT) && wpid != 0 &&
+                          wpid != (uint32_t)getpid() &&
+                          shm_pid_alive(wpid);
+        if (!live_holder)
+            return (!(s1 & 1) && s1 == s2)
+                 ? 0 : shm_validate_header(hdr, variant_id, node_size);
+        if (attempt >= 8) { struct timespec ts = { 0, 500000 }; nanosleep(&ts, NULL); }
+    }
+    return shm_validate_header(hdr, variant_id, node_size);
 }
 
 /* Format a header-validation error message into errbuf.  `prefix` is the
@@ -1451,11 +1500,15 @@ static ShmHandle *shm_create_map(const char *path, uint32_t max_entries,
             flock(fd, LOCK_UN); close(fd); return NULL;
         }
 
-        if (is_new && (st.st_uid != geteuid() || fchmod(fd, file_mode) < 0)) {
-            SHM_ERR("%s: refusing to initialize file not owned by us", path);
-            flock(fd, LOCK_UN); close(fd); return NULL;
-        }
         if (is_new) {
+            if (st.st_uid != geteuid()) {
+                SHM_ERR("%s: refusing to initialize file not owned by us", path);
+                flock(fd, LOCK_UN); close(fd); return NULL;
+            }
+            if (fchmod(fd, file_mode) < 0) {
+                SHM_ERR("fchmod(%s): %s", path, strerror(errno));
+                flock(fd, LOCK_UN); close(fd); return NULL;
+            }
             if (ftruncate(fd, (off_t)lo.total_size) < 0) {
                 SHM_ERR("ftruncate(%s, %llu): %s", path, (unsigned long long)lo.total_size, strerror(errno));
                 flock(fd, LOCK_UN); close(fd); return NULL;
@@ -1475,7 +1528,7 @@ static ShmHandle *shm_create_map(const char *path, uint32_t max_entries,
                         has_arena, has_lru, has_ttl, max_size, default_ttl, lru_skip);
     } else {
         int ok = (hdr->total_size == (uint64_t)st.st_size &&
-                  shm_validate_header(hdr, variant_id, node_size));
+                  shm_validate_header_live(hdr, variant_id, node_size));
         if (ok) {
             has_lru = (hdr->max_size > 0);
             has_ttl = (hdr->default_ttl > 0);
@@ -1584,7 +1637,7 @@ static ShmHandle *shm_open_fd_map(int fd, uint32_t variant_id, uint32_t node_siz
 
     ShmHeader *hdr = (ShmHeader *)base;
     if (hdr->total_size != (uint64_t)st.st_size ||
-        !shm_validate_header(hdr, variant_id, node_size)) {
+        !shm_validate_header_live(hdr, variant_id, node_size)) {
         shm_format_header_error(errbuf, "fd", hdr, variant_id);
         munmap(base, ms);
         return NULL;
@@ -1642,14 +1695,15 @@ static ShmHandle *shm_open_readonly_map(const char *path, uint32_t variant_id,
     }
     size_t ms = (size_t)st.st_size;
     void *base = mmap(NULL, ms, PROT_READ, MAP_SHARED, fd, 0);
+    int mmap_errno = errno;
     close(fd);   /* the mapping keeps the file; a read-only view needs no fd (no msync/ftruncate) */
     if (base == MAP_FAILED) {
-        if (errbuf) snprintf(errbuf, SHM_ERR_BUFLEN, "mmap(%s): %s", path, strerror(errno));
+        if (errbuf) snprintf(errbuf, SHM_ERR_BUFLEN, "mmap(%s): %s", path, strerror(mmap_errno));
         return NULL;
     }
     ShmHeader *hdr = (ShmHeader *)base;
     if (hdr->total_size != (uint64_t)st.st_size ||
-        !shm_validate_header(hdr, variant_id, node_size)) {
+        !shm_validate_header_live(hdr, variant_id, node_size)) {
         shm_format_header_error(errbuf, path, hdr, variant_id);
         munmap(base, ms);
         return NULL;
@@ -1657,6 +1711,25 @@ static ShmHandle *shm_open_readonly_map(const char *path, uint32_t variant_id,
     if (!hdr->sealed) {
         if (errbuf) snprintf(errbuf, SHM_ERR_BUFLEN,
                              "%s is not frozen: call ->freeze on the producer before opening read-only", path);
+        munmap(base, ms);
+        return NULL;
+    }
+
+    /* A write in flight on a sealed file can never be repaired -- a read-write
+     * attach refuses a sealed file -- so refuse either way, but say which:
+     * freeze() seals while still holding the lock, so a live holder means the
+     * write will finish, not that anything crashed. */
+    if ((hdr->seq & 1) || hdr->wlock != 0) {
+        uint32_t holder = hdr->wlock & SHM_RWLOCK_PID_MASK;
+        if (errbuf) {
+            if (holder && shm_pid_alive(holder))
+                snprintf(errbuf, SHM_ERR_BUFLEN,
+                    "%s: a write is still in flight on this frozen file (pid %u); retry",
+                    path, holder);
+            else
+                snprintf(errbuf, SHM_ERR_BUFLEN,
+                    "%s: frozen file was left mid-update by a crashed writer; recreate it", path);
+        }
         munmap(base, ms);
         return NULL;
     }
@@ -1712,7 +1785,7 @@ static int shm_freeze(ShmHandle *h) {
         return 0;
     }
     shm_rwlock_wrlock(h);
-    h->hdr->sealed = 1;
+    __atomic_store_n(&h->hdr->sealed, 1, __ATOMIC_RELEASE);
     shm_rwlock_wrunlock(h);
     if (h->path || h->backing_fd >= 0) return shm_msync(h);  /* durability for file/memfd-backed */
     return 0;   /* anonymous: the seal lives in shared memory (visible to forks); nothing to flush */
@@ -1917,132 +1990,6 @@ static inline void shm_cursor_destroy(ShmCursor *c) {
     free(c->copy_buf);
     free(c);
 }
-
-/* ================================================================
- * v9 -> v10 on-disk migration (offline structural upcast).  The v10
- * layout inserts a 128-byte reader-slot occupancy bitmap between the
- * reader-slot table and the arena; a v9 file is byte-identical apart
- * from that missing region, so migration is a pure re-header + shift --
- * no re-hashing and no old library required.  Returns 1 if the file was
- * upgraded, 0 if it is already current (v10), -1 on error (errbuf set).
- * The caller MUST ensure no process has the file mapped.
- * ================================================================ */
-#define SHMUP_ERR(...) do { if (errbuf) snprintf(errbuf, SHM_ERR_BUFLEN, __VA_ARGS__); } while (0)
-#define SHM_UPGRADE_SRC_VERSION 9U   /* the single previous on-disk format this transform upgrades from */
-/* Tripwire: this function implements EXACTLY the v9 -> v10 (occupancy-bitmap
- * insertion) transform and stamps the result as SHM_VERSION.  If the on-disk
- * format is ever bumped again, compilation fails here until the new step is
- * added and this assertion (and SHM_UPGRADE_SRC_VERSION) are updated -- so the
- * tool can never silently apply the wrong transform and mis-stamp a file. */
-SHM_STATIC_ASSERT(SHM_VERSION == 10U,
-    "shm_upgrade_file only knows v9 -> v10; extend it when SHM_VERSION changes");
-static int shm_upgrade_file(const char *path, char *errbuf) {
-    if (errbuf) errbuf[0] = '\0';
-    int fd = open(path, O_RDWR | O_NOFOLLOW | O_CLOEXEC);
-    if (fd < 0) { SHMUP_ERR("open %s: %s", path, strerror(errno)); return -1; }
-    struct stat st;
-    if (fstat(fd, &st) != 0) { SHMUP_ERR("fstat %s: %s", path, strerror(errno)); close(fd); return -1; }
-    if ((uint64_t)st.st_size < sizeof(ShmHeader)) {
-        SHMUP_ERR("%s: too small to be a HashMap file (%lld bytes)", path, (long long)st.st_size);
-        close(fd); return -1;
-    }
-    ShmHeader hdr;
-    if (pread(fd, &hdr, sizeof hdr, 0) != (ssize_t)sizeof hdr) {
-        SHMUP_ERR("read header %s: %s", path, strerror(errno)); close(fd); return -1;
-    }
-    if (hdr.magic != SHM_MAGIC) { SHMUP_ERR("%s: bad magic (not a HashMap::Shared file)", path); close(fd); return -1; }
-    if (hdr.version == SHM_VERSION) { close(fd); return 0; }   /* already current */
-    if (hdr.version != SHM_UPGRADE_SRC_VERSION) {
-        SHMUP_ERR("%s: unsupported source version %u (migrates %u -> %u only)",
-                  path, hdr.version, SHM_UPGRADE_SRC_VERSION, (unsigned)SHM_VERSION);
-        close(fd); return -1;
-    }
-    if (hdr.wlock & 0x80000000U) {
-        /* A crashed writer leaves its pid here forever, so do not assert the
-         * holder is live without asking: reporting a dead pid as "a live
-         * writer" sends the operator hunting a process that does not exist. */
-        uint32_t wpid = hdr.wlock & 0x7FFFFFFFU;
-        if (shm_pid_alive(wpid))
-            SHMUP_ERR("%s: locked by a live writer (pid %u); ensure no process is using it",
-                      path, wpid);
-        else
-            SHMUP_ERR("%s: holds a stale write lock from pid %u, which is gone. "
-                      "If no process is using this file, the lock is a crash "
-                      "residue -- open it once with the library to recover it, "
-                      "then re-run the upgrade", path, wpid);
-        close(fd); return -1;
-    }
-    if ((uint64_t)st.st_size != hdr.total_size) {
-        SHMUP_ERR("%s: size mismatch (file=%lld, header=%llu)",
-                  path, (long long)st.st_size, (unsigned long long)hdr.total_size);
-        close(fd); return -1;
-    }
-    uint64_t rss = (uint64_t)SHM_READER_SLOTS * sizeof(ShmReaderSlot);
-    uint64_t occ_off = hdr.reader_slots_off + rss;   /* v9 arena start == new occ-region start */
-    if (hdr.reader_slots_off < sizeof(ShmHeader) || occ_off > hdr.total_size) {
-        SHMUP_ERR("%s: reader-slot region out of range (corrupt header)", path); close(fd); return -1;
-    }
-    int has_arena = (hdr.arena_off != 0);
-    if (has_arena ? (hdr.arena_off != occ_off) : (hdr.total_size != occ_off)) {
-        SHMUP_ERR("%s: unexpected v9 layout; refusing to migrate", path); close(fd); return -1;
-    }
-    uint64_t old_size = hdr.total_size, new_size = old_size + SHM_OCC_BYTES;
-    uint8_t *old = (uint8_t *)malloc((size_t)old_size);
-    uint8_t *neu = (uint8_t *)malloc((size_t)new_size);
-    if (!old || !neu) { SHMUP_ERR("out of memory"); free(old); free(neu); close(fd); return -1; }
-    if (pread(fd, old, (size_t)old_size, 0) != (ssize_t)old_size) {
-        SHMUP_ERR("read %s: %s", path, strerror(errno)); free(old); free(neu); close(fd); return -1;
-    }
-    close(fd);
-    /* header..reader_slots copied verbatim; insert a zeroed occ region; shift the arena */
-    memcpy(neu, old, (size_t)occ_off);
-    memset(neu + occ_off, 0, (size_t)SHM_OCC_BYTES);
-    memcpy(neu + occ_off + SHM_OCC_BYTES, old + occ_off, (size_t)(old_size - occ_off));
-    free(old);
-    ShmHeader *nh = (ShmHeader *)neu;
-    nh->version    = SHM_VERSION;
-    nh->total_size = new_size;
-    if (has_arena) nh->arena_off += SHM_OCC_BYTES;
-    /* reset transient lock/recovery state so the migrated file opens clean */
-    nh->wlock = 0; nh->rwait = 0; nh->seq = 0; nh->drain_seq = 0; nh->slotless_rdepth = 0;
-    memset(neu + hdr.reader_slots_off, 0, (size_t)rss);   /* drop any stale reader PIDs */
-    /* write to a sibling temp file, fsync, atomic rename; preserve mode */
-    size_t plen = strlen(path);
-    char *tmp = (char *)malloc(plen + 16);
-    if (!tmp) { SHMUP_ERR("out of memory"); free(neu); return -1; }
-    snprintf(tmp, plen + 16, "%s.upgrade-tmp", path);
-    int tfd = open(tmp, O_RDWR | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, st.st_mode & 07777);
-    if (tfd < 0) { SHMUP_ERR("create %s: %s", tmp, strerror(errno)); free(neu); free(tmp); return -1; }
-    (void)fchmod(tfd, st.st_mode & 07777);
-    /* rename() installs a NEW inode, so the group of a group-shared map would
-     * otherwise revert to the caller's primary group and lock out the very
-     * peers the mode was widened for.  Best-effort: an unprivileged caller
-     * cannot always restore an arbitrary owner, and failing for that reason
-     * should not fail the upgrade. */
-    int chown_rc = fchown(tfd, (uid_t)-1, st.st_gid);
-    (void)chown_rc;   /* best-effort; see above */
-    /* write() may transfer less than asked on a large file; loop. */
-    int ok = 1;
-    {
-        const char *p = neu;
-        size_t left = (size_t)new_size;
-        while (left) {
-            ssize_t w = write(tfd, p, left);
-            if (w < 0) { if (errno == EINTR) continue; ok = 0; break; }
-            if (w == 0) { ok = 0; break; }
-            p += w; left -= (size_t)w;
-        }
-        if (ok) ok = (fsync(tfd) == 0);
-    }
-    free(neu);
-    if (!ok)                 { SHMUP_ERR("write %s: %s", tmp, strerror(errno)); close(tfd); unlink(tmp); free(tmp); return -1; }
-    if (close(tfd) != 0)     { SHMUP_ERR("close %s: %s", tmp, strerror(errno)); unlink(tmp); free(tmp); return -1; }
-    if (rename(tmp, path) != 0) { SHMUP_ERR("rename %s: %s", tmp, strerror(errno)); unlink(tmp); free(tmp); return -1; }
-    free(tmp);
-    return 1;
-}
-#undef SHMUP_ERR
-#undef SHM_UPGRADE_SRC_VERSION
 
 #endif /* SHM_DEFS_H */
 
@@ -2332,8 +2279,11 @@ static int SHM_FN(resize)(ShmHandle *h, uint32_t new_cap) {
     }
 
     memset(states, SHM_EMPTY, new_cap);
-    hdr->table_cap = new_cap;
-    hdr->tombstones = 0;
+    /* tombstones first: capacity first leaves size + tombstones > table_cap on
+     * a shrink, and a crash there is unrepairable.  Atomic, not plain -- gcc
+     * reordered these in the string-key, string-value variants. */
+    __atomic_store_n(&hdr->tombstones, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&hdr->table_cap, new_cap, __ATOMIC_RELEASE);
 
     /* Reset LRU arrays */
     if (h->lru_prev) {
@@ -2421,8 +2371,16 @@ static inline void SHM_FN(maybe_shrink)(ShmHandle *h) {
 static inline void SHM_FN(flush_deferred)(ShmHandle *h) {
     if (!h || !h->deferred || h->iterating > 0) return;
     h->deferred = 0;
+    /* A resize deferred while an iterator was live outlives freeze(), and
+     * this is the one write-lock path with no frozen check -- without this
+     * the iterator ending would resize a sealed file. */
+    if (h->readonly || shm_is_sealed(h)) return;
     ShmHeader *hdr = h->hdr;
     shm_rwlock_wrlock(h);
+    /* Re-test under the lock: freeze() seals under this same lock, so a call
+     * parked here would resize a map sealed meanwhile.  Nothing to report, so
+     * drop the deferred work. */
+    if (shm_is_sealed(h)) { shm_rwlock_wrunlock(h); return; }
     shm_seqlock_write_begin(&hdr->seq);
     uint32_t size = hdr->size, tomb = hdr->tombstones, cap = hdr->table_cap;
     if ((uint64_t)(size + tomb) * 4 > (uint64_t)cap * 3) {
@@ -2953,6 +2911,7 @@ static int SHM_FN(exists)(ShmHandle *h,
     uint8_t *states = h->states;
     uint32_t max_mask = h->max_mask;
 #ifndef SHM_KEY_IS_INT
+    uint64_t arena_cap = hdr->arena_cap;  /* immutable after create */
     uint32_t hash = SHM_HASH_KEY_STR(key_str, key_len);
 #else
     uint32_t hash = SHM_HASH_KEY(key);
@@ -2976,7 +2935,22 @@ static int SHM_FN(exists)(ShmHandle *h,
 #ifdef SHM_KEY_IS_INT
             if (SHM_KEY_EQ(&nodes[idx], key)) {
 #else
-            if (!SHM_KEY_EQ_STR(&nodes[idx], h->arena, key_str, key_len, key_utf8)) continue;
+            /* Bounded compare, matching the lock-free get() path: a poisoned
+             * key_off must never reach memcmp (CWE-125). */
+            {
+                uint32_t kl_packed = nodes[idx].key_len;
+                uint32_t koff = nodes[idx].key_off;
+                uint32_t kl = SHM_STR_LEN(kl_packed);
+                if (kl != key_len) continue;
+                if (SHM_IS_INLINE(kl_packed)) {
+                    char ibuf[SHM_INLINE_MAX];
+                    shm_inline_read(koff, kl_packed, ibuf);
+                    if (memcmp(ibuf, key_str, kl) != 0) continue;
+                } else {
+                    if ((uint64_t)koff + kl > arena_cap) break;
+                    if (memcmp(h->arena + koff, key_str, kl) != 0) continue;
+                }
+            }
             {
 #endif
                 found = 1;
@@ -3009,6 +2983,7 @@ static int SHM_FN(remove_inner)(ShmHandle *h,
 #else
     uint32_t hash = SHM_HASH_KEY_STR(key_str, key_len);
 #endif
+    uint32_t now = h->expires_at ? shm_now() : 0;
     uint32_t pos = hash & mask;
     uint8_t tag = SHM_MAKE_TAG(hash);
     for (uint32_t i = 0; i <= mask; i++) {
@@ -3023,6 +2998,11 @@ static int SHM_FN(remove_inner)(ShmHandle *h,
 #else
         if (SHM_KEY_EQ_STR(&nodes[idx], h->arena, key_str, key_len, key_utf8)) {
 #endif
+            /* Expired is absent, as every other operation reports it. */
+            if (SHM_IS_EXPIRED(h, idx, now)) {
+                SHM_FN(expire_at)(h, idx);
+                return 0;
+            }
             SHM_FN(remove_at)(h, idx);
             return 1;
         }
@@ -3735,7 +3715,7 @@ static int SHM_FN(pop)(ShmHandle *h,
 ) {
     if (h->shard_handles) {
         for (uint32_t i = 0; i < h->num_shards; i++) {
-            uint32_t si = (h->shard_iter + i) % h->num_shards;
+            uint32_t si = (h->shard_rr + i) % h->num_shards;
             int rc = SHM_FN(pop)(h->shard_handles[si],
 #ifdef SHM_KEY_IS_INT
                 out_key,
@@ -3748,7 +3728,7 @@ static int SHM_FN(pop)(ShmHandle *h,
                 out_value
 #endif
             );
-            if (rc) { h->shard_iter = (si + 1) % h->num_shards; return 1; }
+            if (rc) { h->shard_rr = (si + 1) % h->num_shards; return 1; }
         }
         return 0;
     }
@@ -3861,7 +3841,7 @@ static int SHM_FN(shift)(ShmHandle *h,
 ) {
     if (h->shard_handles) {
         for (uint32_t i = 0; i < h->num_shards; i++) {
-            uint32_t si = (h->shard_iter + i) % h->num_shards;
+            uint32_t si = (h->shard_rr + i) % h->num_shards;
             int rc = SHM_FN(shift)(h->shard_handles[si],
 #ifdef SHM_KEY_IS_INT
                 out_key,
@@ -3874,7 +3854,7 @@ static int SHM_FN(shift)(ShmHandle *h,
                 out_value
 #endif
             );
-            if (rc) { h->shard_iter = (si + 1) % h->num_shards; return 1; }
+            if (rc) { h->shard_rr = (si + 1) % h->num_shards; return 1; }
         }
         return 0;
     }
@@ -4080,12 +4060,12 @@ static uint32_t SHM_FN(drain)(ShmHandle *h, uint32_t limit,
     if (h->shard_handles) {
         uint32_t total = 0;
         for (uint32_t i = 0; i < h->num_shards && total < limit; i++) {
-            uint32_t si = (h->shard_iter + i) % h->num_shards;
+            uint32_t si = (h->shard_rr + i) % h->num_shards;
             uint32_t got = SHM_FN(drain_inner)(h->shard_handles[si], limit - total,
                                                 out + total, buf, buf_cap, &buf_used);
             total += got;
         }
-        if (total > 0) h->shard_iter = (h->shard_iter + 1) % h->num_shards;
+        if (total > 0) h->shard_rr = (h->shard_rr + 1) % h->num_shards;
         return total;
     }
     return SHM_FN(drain_inner)(h, limit, out, buf, buf_cap, &buf_used);
@@ -5101,13 +5081,18 @@ static int SHM_FN(reserve)(ShmHandle *h, uint32_t target) {
         return ok;
     }
     ShmHeader *hdr = h->hdr;
-    if (target > hdr->max_table_cap) return 0;
+    /* The ceiling is what max_entries() reports -- the 75% design load -- not
+     * the raw slot count, so the two agree: reserve() accepts exactly the
+     * values that accessor names. */
+    if (target > (uint32_t)((uint64_t)hdr->max_table_cap * 3 / 4)) return 0;
     /* compute min capacity for target entries at <75% load */
     uint32_t needed = shm_next_pow2(target + target / 3 + 1);
-    if (needed == 0) return 0;  /* no power of two can hold target at <75% load */
+    /* At the very top of the range that lands one power of two ABOVE
+     * max_table_cap; the target still fits, so grow to the maximum rather than
+     * refusing the ceiling we just accepted. */
+    if (needed == 0 || needed > hdr->max_table_cap) needed = hdr->max_table_cap;
     if (needed < SHM_INITIAL_CAP) needed = SHM_INITIAL_CAP;
     if (needed <= hdr->table_cap) return 1;  /* already big enough */
-    if (needed > hdr->max_table_cap) return 0;  /* exceeds max */
 
     shm_rwlock_wrlock(h);
     shm_seqlock_write_begin(&hdr->seq);
@@ -5177,6 +5162,10 @@ static void SHM_FN(clear)(ShmHandle *h) {
     if (h->shard_handles) {
         for (uint32_t i = 0; i < h->num_shards; i++)
             SHM_FN(clear)(h->shard_handles[i]);
+        /* Clearing invalidates any iteration in progress: without this a
+         * later each() resumes at the shard it had reached and skips the
+         * ones below it. */
+        h->shard_iter = 0;
         return;
     }
     ShmHeader *hdr = h->hdr;
@@ -5238,8 +5227,12 @@ static void SHM_FN(clear)(ShmHandle *h) {
 
 static inline void SHM_FN(iter_reset)(ShmHandle *h) {
     if (h->shard_handles) {
-        for (uint32_t i = 0; i < h->num_shards; i++)
+        for (uint32_t i = 0; i < h->num_shards; i++) {
             SHM_FN(iter_reset)(h->shard_handles[i]);
+            /* the caller flushes the handle it was given, and the dispatcher's
+             * own deferred flag is never set -- the work is on the shards */
+            SHM_FN(flush_deferred)(h->shard_handles[i]);
+        }
         h->shard_iter = 0;
         return;
     }

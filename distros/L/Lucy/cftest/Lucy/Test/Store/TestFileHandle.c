@@ -27,7 +27,7 @@
 #include "Lucy/Store/FileWindow.h"
 
 TestFileHandle*
-TestFH_new() {
+TestFH_new(void) {
     return (TestFileHandle*)Class_Make_Obj(TESTFILEHANDLE);
 }
 
@@ -37,7 +37,7 @@ S_no_op_method(const void *vself) {
 }
 
 static FileHandle*
-S_new_filehandle() {
+S_new_filehandle(void) {
     String *class_name = SSTR_WRAP_C("TestFileHandle");
     FileHandle *fh;
     Class *klass = Class_fetch_class(class_name);
@@ -46,7 +46,7 @@ S_new_filehandle() {
     }
     Class_Override(klass, S_no_op_method, LUCY_FH_Close_OFFSET);
     fh = (FileHandle*)Class_Make_Obj(klass);
-    return FH_do_open(fh, NULL, 0);
+    return FH_do_open(fh, NULL, FH_READ_ONLY);
 }
 
 void

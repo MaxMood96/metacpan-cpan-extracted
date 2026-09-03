@@ -5,7 +5,7 @@ use warnings;
 use Carp qw(croak cluck);
 use File::Spec;
 
-our $VERSION = '5.22.1';
+our $VERSION = '5.23.1';
 my $CREATED = '2018-10-08';
 
 # Constructor
@@ -48,9 +48,11 @@ sub set_index {
     my ( $self, $tableid, @records ) = @_;
     my $adb = $self->{_adb} or return;
 
-    # 1. Table path must be created first to load schema.
-    defined $tableid or return;
     my $table_info = $adb->table_info($tableid) or return;
+    if ( $adb->config('simple') || $table_info->{use_simple} ) {
+        $self->{say} .= "    - Table '$tableid' is in simple mode, skipping index generation.\n";
+        return 1;
+    }
     my $table_path = $adb->table_path($tableid);
     return unless ( -e "$table_path.$adb->{db_ext}" );
 
@@ -108,7 +110,6 @@ sub set_readall {
 
     my $table_info = $adb->table_info($tableid);
     return unless $table_info;
-    $table_info->{id_type} //= "num";
 
     # Read records from table if absent
     if ( !scalar @records ) {
@@ -121,12 +122,7 @@ sub set_readall {
         return;
     }
 
-    if ( $table_info->{id_type} eq "num" ) {
-        @records = grep /^\d+$/, @records;
-    }
-    elsif ( $table_info->{id_type} eq "ascii" ) {
-        @records = grep /^\w+$/, @records;
-    }
+    @records = grep /^\d+$/, @records;
     scalar @records or return;
     @records = $adb->array_nodup(@records);
     @records = $adb->db_sortid( $tableid, @records );
@@ -155,12 +151,9 @@ sub set_readall {
         my $i_path = "$table_path.$ext";
         my $t_path = "$i_path.tmp";
 
-        my $last_id;
-        if ( $table_info->{id_type} eq "num" ) {
-            my $cur_max = (sort { $b <=> $a } @list)[0] // 0;
-            my $old_lastid = $adb->table_lastid($tableid) // 0;
-            $last_id = $cur_max > $old_lastid ? $cur_max : $old_lastid;
-        }
+        my $cur_max = (sort { $b <=> $a } @list)[0] // 0;
+        my $old_lastid = $adb->table_lastid($tableid) // 0;
+        my $last_id = $cur_max > $old_lastid ? $cur_max : $old_lastid;
 
         if ( $adb->table_write($t_path) ) {
             $adb->index_put( $t_path, "keys",   \@list, "ids" );
@@ -181,7 +174,6 @@ sub set_readall {
 }
 
 # Rebuilds search word index.
-# $adb->table_attr('table', 'id_type') (num, ascii)
 # my $ok = $tools->set_search($tableid, @records);
 # ------------------------------------------------
 sub set_search {
@@ -193,7 +185,6 @@ sub set_search {
     my $table_path = $adb->table_path($tableid);
     my $table_info = $adb->table_info($tableid);
     return unless exists( $table_info->{search_block} );
-    $table_info->{id_type} //= "num";
 
     # Read records from table if absent
     if ( !scalar @records ) {
@@ -208,9 +199,7 @@ sub set_search {
         my $is_junk = $table_info->{use_junk} ? $adb->junk_rules( $table_info, @fields ) : 0;
         foreach my $blk ( @{ $table_info->{search_block} } ) {
             my $b_idx = ref($blk) eq "ARRAY" ? $blk->[0] : $blk;
-            if ( $table_info->{id_type} eq "num" ) {
-                $b_idx =~ /^\d+$/ or next;
-            }
+            $b_idx =~ /^\d+$/ or next;
             my %recsearch = $adb->get_words( $fields[$b_idx], "write", $tableid );
 
             foreach my $key ( keys %recsearch ) {
@@ -229,9 +218,7 @@ sub set_search {
         my ( $src_map, $ext ) = @_;
         foreach my $blk ( @{ $table_info->{search_block} } ) {
             my $b_idx = ref($blk) eq "ARRAY" ? $blk->[0] : $blk;
-            if ( $table_info->{id_type} eq "num" ) {
-                $b_idx =~ /^\d+$/ or next;
-            }
+            $b_idx =~ /^\d+$/ or next;
             my $file_path = "${table_path}_$b_idx.$ext";
             my $tmp_path  = "$file_path.tmp";
 
@@ -280,7 +267,6 @@ sub set_fields {
     my $table_info = $adb->table_info($tableid);
     return unless exists( $table_info->{match_block} );
     return unless -e "$table_path.$adb->{db_ext}";
-    $table_info->{id_type} //= "num";
 
     my ( %fields, %junk_fields );
     exists( $table_info->{match_block} ) or return;
@@ -323,9 +309,7 @@ sub set_fields {
     my $write_fld_file = sub {
         my ( $fld_map, $ext ) = @_;
         foreach my $line ( @{ $table_info->{match_block} } ) {
-            if ( $table_info->{id_type} eq "num" ) {
-                $line =~ /^\d+$/ or next;
-            }
+            $line =~ /^\d+$/ or next;
             my $file_path = "${table_path}_$line.$ext";
             my $tmp_path  = "$file_path.tmp";
 
@@ -379,7 +363,6 @@ sub set_filters {
     return unless -e "$table_path.$adb->{db_ext}";
 
     my $table_info = $adb->table_info($tableid);
-    $table_info->{id_type} //= "num";
 
     # Both match_block and use_facet must be defined to create facet index
     return unless exists( $table_info->{match_block} );
@@ -413,9 +396,7 @@ sub set_filters {
         $fields[0] or next;
         my @pairs;
         foreach my $blk (@fblocks) {
-            if ( $table_info->{id_type} eq "num" ) {
-                $blk =~ /^\d+$/ or next;
-            }
+            $blk =~ /^\d+$/ or next;
             next unless $fields[$blk];
             my @vals;
             if    ( ref $fields[$blk] eq "ARRAY" ) { @vals = @{ $fields[$blk] } }
@@ -525,6 +506,60 @@ sub set_rwlnkall {
     return 1;
 }
 
+# Rebuilds sort index (.srt).
+# my $ok = $tools->set_sort($tableid, @records);
+# ------------------------------------------------
+sub set_sort {
+
+    my ( $self, $tableid, @records ) = @_;
+    my $adb = $self->{_adb} or return;
+
+    return unless $tableid;
+    my $table_path = $adb->table_path($tableid);
+    my $table_info = $adb->table_info($tableid);
+    return unless exists $table_info->{sort_block};
+
+    if ( !@records ) {
+        @records = $adb->read_all( $tableid, 0, 0, no_index => 1 );
+    }
+
+    foreach my $cfg ( @{ $table_info->{sort_block} } ) {
+        my ( $blk, $type, $len ) = ref($cfg) eq 'HASH'
+            ? ( $cfg->{blk}, $cfg->{type}, $cfg->{len} // 8 )
+            : ( $cfg, 'string', 8 );
+
+        my $sort_path = "${table_path}_$blk.srt";
+        my $tmp_srt   = "$sort_path.tmp";
+
+        my %map;
+        foreach my $rec (@records) {
+            next unless ref($rec) eq 'ARRAY' && defined $rec->[0];
+            $map{ $rec->[0] } = $adb->normalize_sort_key( $rec->[$blk], $type, $len );
+        }
+
+        # Sort all keys in-memory with deterministic tie-breaker
+        my @sorted_ids = sort {
+            ( ( $map{$a} // '' ) cmp ( $map{$b} // '' ) )
+              || ( $a <=> $b )
+        } keys %map;
+
+        # Map file write (.srt) with bin_encode keys
+        $adb->table_write($tmp_srt);
+        $adb->index_put( $tmp_srt, "count", scalar(@sorted_ids), "raw" );
+        $adb->index_put( $tmp_srt, "keys",  \@sorted_ids, "ids" );
+        foreach my $k ( keys %map ) {
+            $adb->index_put( $tmp_srt, $k, $map{$k}, "raw" );
+        }
+        $adb->table_close($tmp_srt);
+
+        unlink($sort_path);
+        rename( $tmp_srt, $sort_path );
+    }
+
+    $self->{say} .= "    - Sort indexes created for table $tableid.\n";
+    return 1;
+}
+
 # Rebuilds index for all tables
 # my $ok = $tools->index_alltables();
 # print $self->{say};
@@ -571,17 +606,14 @@ sub check_readall {
     return unless $tableid;
     my $table_path = $adb->table_path($tableid);
     my $table_info = $adb->table_info($tableid);
-    $table_info->{id_type} //= "num";
 
     my ( %diff, %recs );
     foreach my $rec (@records) {
         $rec = $rec->[0] if ref $rec eq "ARRAY";
         next unless defined $rec && $rec ne "";
         $recs{keys}->{$rec} = 1;
-        if ( $table_info->{id_type} eq "num" ) {
-            $recs{lastid} ||= $rec;
-            $rec > $recs{lastid} and $recs{lastid} = $rec;
-        }
+        $recs{lastid} ||= $rec;
+        $rec > $recs{lastid} and $recs{lastid} = $rec;
     }
 
     my (%inds);
@@ -590,22 +622,16 @@ sub check_readall {
     $adb->table_close($inx_path);
     foreach my $rec (@keys) {
         $inds{keys}->{$rec} = 1;
-        if ( $table_info->{id_type} eq "num" ) {
-            $inds{lastid} ||= $rec;
-            $rec > $inds{lastid} and $inds{lastid} = $rec;
-        }
+        $inds{lastid} ||= $rec;
+        $rec > $inds{lastid} and $inds{lastid} = $rec;
     }
 
-    if (
-        $table_info->{id_type} eq "num"
-        && ( ( $recs{lastid} // "" ) ne ( $inds{lastid} // "" ) )
-      )
-    {
+    if ( ( $recs{lastid} // "" ) ne ( $inds{lastid} // "" ) ) {
         $diff{lastid}->{recs} = $recs{lastid};
         $diff{lastid}->{inds} = $inds{lastid};
     }
 
-    my $diffs = $self->_hash_diff( $recs{keys}, $inds{keys} );
+    my $diffs = $adb->hash_diff( $recs{keys}, $inds{keys} );
 
     if ( $diffs->{hash1} ) {
         $diff{keys}->{recs} = $diffs->{hash1};
@@ -635,9 +661,7 @@ sub check_search {
     foreach my $line (@records) {
         my @fields = @$line;
         foreach my $src ( @{ $table_info->{search_block} } ) {
-            if ( $table_info->{id_type} ne "ascii" ) {
-                $src =~ /^[0-9]+$/ or next;
-            }
+            $src =~ /^[0-9]+$/ or next;
             my %words = $adb->get_words( $fields[$src], "write" );
 
             foreach my $word ( keys %words ) {
@@ -647,9 +671,7 @@ sub check_search {
     }
 
     foreach my $src ( @{ $table_info->{search_block} } ) {
-        if ( $table_info->{id_type} eq "num" ) {
-            $src =~ /^\d+$/ or next;
-        }
+        $src =~ /^\d+$/ or next;
 
         my $src_path = "${table_path}_$src.src";
         next unless -e $src_path;
@@ -788,12 +810,11 @@ sub dir_tables {
     my $adb = $self->{_adb} or return;
 
     $dir or return;
-    my $dbase_dir = $adb->path('dbase_dir') || ".";
-    my @all_tables =
-      ( glob "$dbase_dir/$dir/*.$adb->{db_ext}" );
+    my $target_dir = File::Spec->catdir( $adb->path('dbase_dir') || ".", $dir );
+    my $ext        = $adb->{db_ext} || "db";
+    my @names      = $adb->dir_files( $target_dir, "*.$ext", full_path => 0 );
 
-    my %all_tables =
-      map { /([^\/]+)\.$adb->{db_ext}$/; $1 => 1 } @all_tables;
+    my %all_tables = map { /^(.+)\.\Q$ext\E$/i ? ( $1 => 1 ) : () } @names;
 
     return sort { $a cmp $b } keys %all_tables;
 }
@@ -884,31 +905,32 @@ sub all_tables {
     # 1. Simple Mode: Single flat directory scan for files matching configured db_ext
     if ( $adb->config('simple') ) {
         my $ext = $adb->{db_ext} || "db";
-        push @all_tables, ( glob "$dbase_dir/*.$ext" );
-        @all_tables = map { /([a-z0-9_]+)\.\Q$ext\E$/i; $1 } @all_tables;
+        my @files = $adb->dir_files( $dbase_dir, "*.$ext", full_path => 0 );
+        @all_tables = map { /^([a-z0-9_]+)\.\Q$ext\E$/i ? $1 : () } @files;
     }
     # 2. Standard Structured Mode: Multi-directory scan (tables/ and year directories) for .db files
     else {
-        push @all_tables, ( glob "$dbase_dir/tables/*.db" );
+        my $tbl_dir = File::Spec->catdir( $dbase_dir, 'tables' );
+        push @all_tables, $adb->dir_files( $tbl_dir, "*.db", full_path => 0 );
 
         my %seen_dirs = ( "tables" => 1, "schema" => 1, "backup" => 1 );
         if ($year_dir) {
-            push @all_tables, ( glob "$dbase_dir/$year_dir/*.db" );
+            my $yd_path = File::Spec->catdir( $dbase_dir, $year_dir );
+            push @all_tables, $adb->dir_files( $yd_path, "*.db", full_path => 0 );
             $seen_dirs{$year_dir} = 1;
         }
 
         # Auto-discover any 4-digit year directories under $dbase_dir (e.g. 2024, 2025, 2026)
         if ( -d $dbase_dir ) {
-            opendir( my $dh, $dbase_dir );
-            my @year_candidates = grep { /^\d{4}$/ && -d "$dbase_dir/$_" && !$seen_dirs{$_} } readdir($dh);
-            closedir $dh;
-
-            foreach my $yd (@year_candidates) {
-                push @all_tables, ( glob "$dbase_dir/$yd/*.db" );
+            my @year_dirs = $adb->dir_files( $dbase_dir, qr/^\d{4}$/, full_path => 0, files_only => 0 );
+            foreach my $yd (@year_dirs) {
+                next if $seen_dirs{$yd} || !-d File::Spec->catdir( $dbase_dir, $yd );
+                my $yd_path = File::Spec->catdir( $dbase_dir, $yd );
+                push @all_tables, $adb->dir_files( $yd_path, "*.db", full_path => 0 );
             }
         }
 
-        @all_tables = map { /([a-z0-9_]+)\.db$/i; $1 } @all_tables;
+        @all_tables = map { /^([a-z0-9_]+)\.db$/i ? $1 : () } @all_tables;
     }
 
     foreach my $record (@all_tables) {
@@ -1082,10 +1104,14 @@ sub del_table {
     my $table_path = $adb->table_path($tableid);
     return unless $table_path && -e "$table_path.$adb->{db_ext}";
 
-    my @files  = glob "$table_path*";
-    my @files1 = grep { /^\Q$table_path\E(?:\.[a-z0-9]+|_[0-9]+\.[a-z0-9]+)$/i } @files;
+    my ($parent_dir, $base_name) = $table_path =~ m{^(.+)[/\\]([^/\\]+)$};
+    $parent_dir //= ".";
+    $base_name  //= $table_path;
+
+    my @files1 = $adb->dir_files( $parent_dir, qr/^\Q$base_name\E(?:\.[a-z0-9]+|_[0-9]+\.[a-z0-9]+)$/i );
 
     foreach my $file (@files1) {
+        $adb->table_close($file);
         unlink($file);
         $self->{say} .= "          * $file deleted.\n";
     }
@@ -1111,84 +1137,6 @@ sub db_simple {
         }
     );
     return $db_obje;
-}
-
-# my $diff = $self->_hash_diff($hash1, $hash2);
-# ------------------------------------------------
-sub _hash_diff {
-
-    my ( $self, $hash1, $hash2 ) = @_;
-
-    foreach my $key ( keys %{$hash1} ) {
-        exists( $hash2->{$key} ) or next;
-        delete( $hash1->{$key} );
-        delete( $hash2->{$key} );
-    }
-
-    my %diff;
-    if ( scalar keys %{$hash1} ) {
-        $diff{hash1} = $hash1;
-    }
-    if ( scalar keys %{$hash2} ) {
-        $diff{hash2} = $hash2;
-    }
-    return \%diff;
-}
-
-# Rebuilds sort index (.srt).
-# my $ok = $tools->set_sort($tableid, @records);
-# ------------------------------------------------
-sub set_sort {
-
-    my ( $self, $tableid, @records ) = @_;
-    my $adb = $self->{_adb} or return;
-
-    return unless $tableid;
-    my $table_path = $adb->table_path($tableid);
-    my $table_info = $adb->table_info($tableid);
-    return unless exists $table_info->{sort_block};
-
-    my $id_type = $table_info->{id_type} // 'num';
-
-    if ( !@records ) {
-        @records = $adb->read_all( $tableid, 0, 0, no_index => 1 );
-    }
-
-    foreach my $cfg ( @{ $table_info->{sort_block} } ) {
-        my ( $blk, $type, $len ) = ref($cfg) eq 'HASH'
-            ? ( $cfg->{blk}, $cfg->{type}, $cfg->{len} // 8 )
-            : ( $cfg, 'string', 8 );
-
-        my $sort_path = "${table_path}_$blk.srt";
-        my $tmp_srt   = "$sort_path.tmp";
-
-        my %map;
-        foreach my $rec (@records) {
-            next unless ref($rec) eq 'ARRAY' && defined $rec->[0];
-            $map{ $rec->[0] } = $adb->normalize_sort_key( $rec->[$blk], $type, $len );
-        }
-
-        # Sort all keys in-memory with deterministic tie-breaker
-        my @sorted_ids = sort {
-            ( ( $map{$a} // '' ) cmp ( $map{$b} // '' ) )
-              || ( $id_type eq 'ascii' ? ( $a cmp $b ) : ( $a <=> $b ) )
-        } keys %map;
-
-        # Map file write (.srt) with bin_encode keys
-        $adb->table_write($tmp_srt);
-        $adb->index_put( $tmp_srt, "count", scalar(@sorted_ids), "raw" );
-        $adb->index_put( $tmp_srt, "keys",  \@sorted_ids, "ids", $id_type );
-        foreach my $k ( keys %map ) {
-            $adb->index_put( $tmp_srt, $k, $map{$k}, "raw" );
-        }
-        $adb->table_close($tmp_srt);
-
-        unlink($sort_path);
-        rename( $tmp_srt, $sort_path );
-    }
-
-    $self->{say} .= "    - Sort indexes created for table $tableid.\n";
-    return 1;
 }
 
 # Rebuilds and converts binary indexes for all tables in database directory.

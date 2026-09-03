@@ -22,7 +22,7 @@ use base qw(
     Clownfish::CFC::Perl::Build::Charmonic
 );
 
-our $VERSION = '0.007000';
+our $VERSION = '0.008000';
 $VERSION = eval $VERSION;
 
 use File::Spec::Functions qw( catdir catfile rel2abs updir );
@@ -45,22 +45,24 @@ else {
 sub new {
     my $self = shift->SUPER::new( recursive_test_files => 1, @_ );
 
+    # These compiler flags are only used to compile Perl-specific files
+    # with ExtUtils::CBuilder.
+    my $extra_cflags = $self->extra_compiler_flags;
+
     # Fix for MSVC: Although the generated XS should be C89-compliant, it
     # must be compiled in C++ mode like the rest of the code due to a
     # mismatch between the sizes of the C++ bool type and the emulated bool
     # type. (The XS code is compiled with Module::Build's extra compiler
     # flags, not the Clownfish cflags.)
     if ($Config{cc} =~ /^cl\b/) {
-        my $extra_cflags = $self->extra_compiler_flags;
         push @$extra_cflags, '/TP';
-        $self->extra_compiler_flags(@$extra_cflags);
     }
 
-    if ( $ENV{LUCY_VALGRIND} ) {
-        my $optimize = $self->config('optimize') || '';
-        $optimize =~ s/\-O\d+/-O1/g;
-        $self->config( optimize => $optimize );
+    if ( $ENV{LUCY_DEBUG} ) {
+        push @$extra_cflags, '-DLUCY_DEBUG';
     }
+
+    $self->extra_compiler_flags(@$extra_cflags);
 
     $self->charmonizer_params( create_makefile => 1 );
     $self->charmonizer_params( charmonizer_c => $CHARMONIZER_C );
@@ -89,8 +91,7 @@ sub _valgrind_base_command {
 
 # Run the entire test suite under Valgrind.
 #
-# For this to work, Lucy must be compiled with the LUCY_VALGRIND environment
-# variable set to a true value, under a debugging Perl.
+# For this to work, the test suite must be run under a debugging Perl.
 #
 # A custom suppressions file will probably be needed -- use your judgment.
 # To pass in one or more local suppressions files, provide a comma separated
@@ -104,9 +105,6 @@ sub ACTION_test_valgrind {
     die "Must be run under a perl that was compiled with -DDEBUGGING"
         unless $self->config('ccflags') =~ /-D?DEBUGGING\b/
                || $^X =~ /\bdebugperl\b/;
-    if ( !$ENV{LUCY_VALGRIND} ) {
-        warn "\$ENV{LUCY_VALGRIND} not true -- possible false positives";
-    }
     $self->depends_on('code');
 
     # Unbuffer STDOUT, grab test file names.

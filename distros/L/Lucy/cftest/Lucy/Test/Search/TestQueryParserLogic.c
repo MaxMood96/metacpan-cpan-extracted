@@ -25,11 +25,8 @@
 #include "Lucy/Test.h"
 #include "Lucy/Test/Search/TestQueryParserLogic.h"
 #include "Lucy/Test/Search/TestQueryParser.h"
-#include "Lucy/Test/TestSchema.h"
 #include "Lucy/Test/TestUtils.h"
 #include "Lucy/Analysis/Analyzer.h"
-#include "Lucy/Document/Doc.h"
-#include "Lucy/Index/Indexer.h"
 #include "Lucy/Search/Hits.h"
 #include "Lucy/Search/IndexSearcher.h"
 #include "Lucy/Search/QueryParser.h"
@@ -42,14 +39,14 @@
 #include "Lucy/Search/NoMatchQuery.h"
 #include "Lucy/Search/ORQuery.h"
 #include "Lucy/Search/RequiredOptionalQuery.h"
-#include "Lucy/Store/RAMFolder.h"
+#include "Lucy/Store/Folder.h"
 
 #define make_leaf_query   (Query*)TestUtils_make_leaf_query
 #define make_not_query    (Query*)TestUtils_make_not_query
 #define make_poly_query   (Query*)TestUtils_make_poly_query
 
 TestQueryParserLogic*
-TestQPLogic_new() {
+TestQPLogic_new(void) {
     return (TestQueryParserLogic*)Class_Make_Obj(TESTQUERYPARSERLOGIC);
 }
 
@@ -703,27 +700,27 @@ logical_test_field_phrase(uint32_t boolop) {
 }
 
 static TestQueryParser*
-prune_test_null_querystring() {
+prune_test_null_querystring(void) {
     Query   *pruned = (Query*)NoMatchQuery_new();
     return TestQP_new(NULL, NULL, pruned, 0);
 }
 
 static TestQueryParser*
-prune_test_matchall() {
+prune_test_matchall(void) {
     Query   *tree   = (Query*)MatchAllQuery_new();
     Query   *pruned = (Query*)NoMatchQuery_new();
     return TestQP_new(NULL, tree, pruned, 0);
 }
 
 static TestQueryParser*
-prune_test_nomatch() {
+prune_test_nomatch(void) {
     Query   *tree   = (Query*)NoMatchQuery_new();
     Query   *pruned = (Query*)NoMatchQuery_new();
     return TestQP_new(NULL, tree, pruned, 0);
 }
 
 static TestQueryParser*
-prune_test_optional_not() {
+prune_test_optional_not(void) {
     Query   *a_leaf  = make_leaf_query(NULL, "a");
     Query   *b_leaf  = make_leaf_query(NULL, "b");
     Query   *not_b   = make_not_query(b_leaf);
@@ -735,7 +732,7 @@ prune_test_optional_not() {
 }
 
 static TestQueryParser*
-prune_test_reqopt_optional_not() {
+prune_test_reqopt_optional_not(void) {
     Query   *a_leaf  = make_leaf_query(NULL, "a");
     Query   *b_leaf  = make_leaf_query(NULL, "b");
     Query   *not_b   = make_not_query(b_leaf);
@@ -749,7 +746,7 @@ prune_test_reqopt_optional_not() {
 }
 
 static TestQueryParser*
-prune_test_reqopt_required_not() {
+prune_test_reqopt_required_not(void) {
     Query   *a_leaf  = make_leaf_query(NULL, "a");
     Query   *b_leaf  = make_leaf_query(NULL, "b");
     Query   *not_a   = make_not_query(a_leaf);
@@ -763,7 +760,7 @@ prune_test_reqopt_required_not() {
 }
 
 static TestQueryParser*
-prune_test_not_and_not() {
+prune_test_not_and_not(void) {
     Query   *a_leaf  = make_leaf_query(NULL, "a");
     Query   *b_leaf  = make_leaf_query(NULL, "b");
     Query   *not_a   = make_not_query(a_leaf);
@@ -844,7 +841,7 @@ static LUCY_TestQPLogic_Logical_Test_t logical_test_funcs[] = {
 };
 
 typedef TestQueryParser*
-(*LUCY_TestQPLogic_Prune_Test_t)();
+(*LUCY_TestQPLogic_Prune_Test_t)(void);
 
 static LUCY_TestQPLogic_Prune_Test_t prune_test_funcs[] = {
     prune_test_null_querystring,
@@ -858,27 +855,12 @@ static LUCY_TestQPLogic_Prune_Test_t prune_test_funcs[] = {
 };
 
 static Folder*
-S_create_index() {
-    Schema     *schema  = (Schema*)TestSchema_new(false);
-    RAMFolder  *folder  = RAMFolder_new(NULL);
-    Vector     *doc_set = TestUtils_doc_set();
-    Indexer    *indexer = Indexer_new(schema, (Obj*)folder, NULL, 0);
-
-    String *field = SSTR_WRAP_C("content");
-    for (size_t i = 0, max = Vec_Get_Size(doc_set); i < max; i++) {
-        Doc *doc = Doc_new(NULL, 0);
-        Doc_Store(doc, field, Vec_Fetch(doc_set, i));
-        Indexer_Add_Doc(indexer, doc, 1.0f);
-        DECREF(doc);
-    }
-
-    Indexer_Commit(indexer);
+S_create_index(void) {
+    Vector *doc_set = TestUtils_doc_set();
+    Folder *folder  = TestUtils_create_index(doc_set);
 
     DECREF(doc_set);
-    DECREF(indexer);
-    DECREF(schema);
-
-    return (Folder*)folder;
+    return folder;
 }
 
 void

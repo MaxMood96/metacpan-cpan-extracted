@@ -26,18 +26,3 @@ class Lucy::Test::Index::TestSortWriter
     Run(TestSortWriter *self, TestBatchRunner *runner);
 }
 
-class Lucy::Test::Index::NonMergingIndexManager nickname NMIxManager
-    inherits Lucy::Index::IndexManager {
-
-    public inert incremented NonMergingIndexManager*
-    new();
-
-    public inert NonMergingIndexManager*
-    init(NonMergingIndexManager *self);
-
-    public incremented Vector*
-    Recycle(NonMergingIndexManager *self, PolyReader *reader,
-            DeletionsWriter *del_writer, int64_t cutoff,
-            bool optimize = false);
-}
-

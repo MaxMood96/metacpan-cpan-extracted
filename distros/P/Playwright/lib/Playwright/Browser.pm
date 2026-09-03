@@ -9,7 +9,7 @@ use strict;
 use warnings;
 
 package Playwright::Browser;
-$Playwright::Browser::VERSION = '1.551';
+$Playwright::Browser::VERSION = '1.621';
 use parent 'Playwright::Base';
 
 sub new {
@@ -22,11 +22,11 @@ sub spec {
     return $Playwright::spec->{'Browser'}{members};
 }
 
-sub isConnected {
+sub newContext {
     my $self = shift;
     return $self->_api_request(
         args    => [@_],
-        command => 'isConnected',
+        command => 'newContext',
         object  => $self->{guid},
         type    => $self->{type}
     );
@@ -42,21 +42,11 @@ sub contexts {
     );
 }
 
-sub newPage {
+sub unbind {
     my $self = shift;
     return $self->_api_request(
         args    => [@_],
-        command => 'newPage',
-        object  => $self->{guid},
-        type    => $self->{type}
-    );
-}
-
-sub close {
-    my $self = shift;
-    return $self->_api_request(
-        args    => [@_],
-        command => 'close',
+        command => 'unbind',
         object  => $self->{guid},
         type    => $self->{type}
     );
@@ -82,11 +72,31 @@ sub stopTracing {
     );
 }
 
-sub disconnected {
+sub context {
     my $self = shift;
     return $self->_api_request(
         args    => [@_],
-        command => 'disconnected',
+        command => 'context',
+        object  => $self->{guid},
+        type    => $self->{type}
+    );
+}
+
+sub bind {
+    my $self = shift;
+    return $self->_api_request(
+        args    => [@_],
+        command => 'bind',
+        object  => $self->{guid},
+        type    => $self->{type}
+    );
+}
+
+sub isConnected {
+    my $self = shift;
+    return $self->_api_request(
+        args    => [@_],
+        command => 'isConnected',
         object  => $self->{guid},
         type    => $self->{type}
     );
@@ -102,6 +112,26 @@ sub removeAllListeners {
     );
 }
 
+sub newBrowserCDPSession {
+    my $self = shift;
+    return $self->_api_request(
+        args    => [@_],
+        command => 'newBrowserCDPSession',
+        object  => $self->{guid},
+        type    => $self->{type}
+    );
+}
+
+sub disconnected {
+    my $self = shift;
+    return $self->_api_request(
+        args    => [@_],
+        command => 'disconnected',
+        object  => $self->{guid},
+        type    => $self->{type}
+    );
+}
+
 sub browserType {
     my $self = shift;
     return $self->_api_request(
@@ -112,11 +142,21 @@ sub browserType {
     );
 }
 
-sub newContext {
+sub newPage {
     my $self = shift;
     return $self->_api_request(
         args    => [@_],
-        command => 'newContext',
+        command => 'newPage',
+        object  => $self->{guid},
+        type    => $self->{type}
+    );
+}
+
+sub close {
+    my $self = shift;
+    return $self->_api_request(
+        args    => [@_],
+        command => 'close',
         object  => $self->{guid},
         type    => $self->{type}
     );
@@ -127,16 +167,6 @@ sub startTracing {
     return $self->_api_request(
         args    => [@_],
         command => 'startTracing',
-        object  => $self->{guid},
-        type    => $self->{type}
-    );
-}
-
-sub newBrowserCDPSession {
-    my $self = shift;
-    return $self->_api_request(
-        args    => [@_],
-        command => 'newBrowserCDPSession',
         object  => $self->{guid},
         type    => $self->{type}
     );
@@ -186,7 +216,7 @@ Playwright::Browser - Automatically generated class for Playwright::Browser
 
 =head1 VERSION
 
-version 1.551
+version 1.621
 
 =head1 CONSTRUCTOR
 
@@ -197,11 +227,11 @@ Instead it should be returned to you as the result of calls on Playwright object
 
 =head1 METHODS
 
-=head2 isConnected(@args)
+=head2 newContext(@args)
 
-Execute the Browser::isConnected playwright routine.
+Execute the Browser::newContext playwright routine.
 
-See L<https://playwright.dev/docs/api/class-Browser#Browser-isConnected> for more information.
+See L<https://playwright.dev/docs/api/class-Browser#Browser-newContext> for more information.
 
 =head2 contexts(@args)
 
@@ -209,17 +239,11 @@ Execute the Browser::contexts playwright routine.
 
 See L<https://playwright.dev/docs/api/class-Browser#Browser-contexts> for more information.
 
-=head2 newPage(@args)
+=head2 unbind(@args)
 
-Execute the Browser::newPage playwright routine.
+Execute the Browser::unbind playwright routine.
 
-See L<https://playwright.dev/docs/api/class-Browser#Browser-newPage> for more information.
-
-=head2 close(@args)
-
-Execute the Browser::close playwright routine.
-
-See L<https://playwright.dev/docs/api/class-Browser#Browser-close> for more information.
+See L<https://playwright.dev/docs/api/class-Browser#Browser-unbind> for more information.
 
 =head2 version(@args)
 
@@ -233,11 +257,23 @@ Execute the Browser::stopTracing playwright routine.
 
 See L<https://playwright.dev/docs/api/class-Browser#Browser-stopTracing> for more information.
 
-=head2 disconnected(@args)
+=head2 context(@args)
 
-Execute the Browser::disconnected playwright routine.
+Execute the Browser::context playwright routine.
 
-See L<https://playwright.dev/docs/api/class-Browser#Browser-disconnected> for more information.
+See L<https://playwright.dev/docs/api/class-Browser#Browser-context> for more information.
+
+=head2 bind(@args)
+
+Execute the Browser::bind playwright routine.
+
+See L<https://playwright.dev/docs/api/class-Browser#Browser-bind> for more information.
+
+=head2 isConnected(@args)
+
+Execute the Browser::isConnected playwright routine.
+
+See L<https://playwright.dev/docs/api/class-Browser#Browser-isConnected> for more information.
 
 =head2 removeAllListeners(@args)
 
@@ -245,29 +281,41 @@ Execute the Browser::removeAllListeners playwright routine.
 
 See L<https://playwright.dev/docs/api/class-Browser#Browser-removeAllListeners> for more information.
 
+=head2 newBrowserCDPSession(@args)
+
+Execute the Browser::newBrowserCDPSession playwright routine.
+
+See L<https://playwright.dev/docs/api/class-Browser#Browser-newBrowserCDPSession> for more information.
+
+=head2 disconnected(@args)
+
+Execute the Browser::disconnected playwright routine.
+
+See L<https://playwright.dev/docs/api/class-Browser#Browser-disconnected> for more information.
+
 =head2 browserType(@args)
 
 Execute the Browser::browserType playwright routine.
 
 See L<https://playwright.dev/docs/api/class-Browser#Browser-browserType> for more information.
 
-=head2 newContext(@args)
+=head2 newPage(@args)
 
-Execute the Browser::newContext playwright routine.
+Execute the Browser::newPage playwright routine.
 
-See L<https://playwright.dev/docs/api/class-Browser#Browser-newContext> for more information.
+See L<https://playwright.dev/docs/api/class-Browser#Browser-newPage> for more information.
+
+=head2 close(@args)
+
+Execute the Browser::close playwright routine.
+
+See L<https://playwright.dev/docs/api/class-Browser#Browser-close> for more information.
 
 =head2 startTracing(@args)
 
 Execute the Browser::startTracing playwright routine.
 
 See L<https://playwright.dev/docs/api/class-Browser#Browser-startTracing> for more information.
-
-=head2 newBrowserCDPSession(@args)
-
-Execute the Browser::newBrowserCDPSession playwright routine.
-
-See L<https://playwright.dev/docs/api/class-Browser#Browser-newBrowserCDPSession> for more information.
 
 =head2 on(@args)
 

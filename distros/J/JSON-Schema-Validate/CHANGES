@@ -1,5 +1,8 @@
 Revision history for Perl module JSON::Schema::Validate
 
+v0.9.1 2026-08-20T11:32:02+0900
+    - Corrected _compile_node
+
 v0.9.0 2026-03-01T13:44:36+0900
     [Format Validation]
     - Fixed the 'iri' format validator, which was far too permissive: its third

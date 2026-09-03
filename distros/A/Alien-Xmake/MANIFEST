@@ -1,10 +1,12 @@
 Build.PL
+CONTRIBUTING.md
 Changes.md
 LICENSE
 MANIFEST
 META.json
 META.yml
 README.md
+SECURITY.md
 builder/Alien/Xmake/Builder.pm
 cpanfile
 eg/alien_xrepo.pl
@@ -13,6 +15,15 @@ eg/examples/Alien-Lsquic/META.json
 eg/examples/Alien-Lsquic/lib/Alien/lsquic.pm
 eg/examples/Alien-Lsquic/t/00_compile.t
 eg/examples/Alien-Lsquic/t/01_delegation.t
+eg/examples/Alien-SDL3/Build.PL
+eg/examples/Alien-SDL3/META.json
+eg/examples/Alien-SDL3/cpanfile
+eg/examples/Alien-SDL3/eg/Affix.pl
+eg/examples/Alien-SDL3/eg/Inline.pl
+eg/examples/Alien-SDL3/eg/Platypus.pl
+eg/examples/Alien-SDL3/lib/Alien/SDL3.pm
+eg/examples/Alien-SDL3/t/00_compile.t
+eg/examples/Alien-SDL3/t/01_delegation.t
 eg/examples/Alien-Zstandard/Build.PL
 eg/examples/Alien-Zstandard/META.json
 eg/examples/Alien-Zstandard/cpanfile
@@ -43,4 +54,6 @@ t/00_compile.t
 t/01_build_cpp.t
 t/02_xrepo.t
 t/03_xmake.t
+t/04_ffi.t
 t/05_xrepo_base.t
+t/06_tools.t

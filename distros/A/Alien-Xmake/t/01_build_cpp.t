@@ -11,7 +11,7 @@ use Alien::Xmake;
 my $xmake = Alien::Xmake->new;
 {
     my $exe = $xmake->exe;
-    qx[$exe g --theme=plain] if $ENV{AUTOMATED_TESTING};
+    qx[$exe g --theme=plain];
     chdir $dir;
     my ( $stdout, $stderr, $exit ) = capture { system $exe, qw[create --quiet --project=test_cpp --language=c++ --template=console] };
     ok( ( -d 'test_cpp' ), 'project created' );

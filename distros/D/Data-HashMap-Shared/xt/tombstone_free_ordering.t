@@ -38,9 +38,9 @@ ok($line, "located the tombstone publish in shm_generic.h (line $line)")
 # Restore the default build even if we die partway: a stale -O0 tree would
 # persist silently, since a later bare `make` sees the objects as up to date.
 my $restore = 0;
-END { `make clean 2>/dev/null; perl Makefile.PL 2>&1 && make 2>&1` if $restore }
+END { `make clean 2>/dev/null; $^X Makefile.PL 2>&1 && make 2>&1` if $restore }
 
-my $build = `make clean 2>/dev/null; perl Makefile.PL 2>&1 && make OPTIMIZE='-g3 -O0' 2>&1`;
+my $build = `make clean 2>/dev/null; $^X Makefile.PL 2>&1 && make OPTIMIZE='-g3 -O0' 2>&1`;
 $restore = 1;
 like $build, qr/Shared\.o/, 'debug build succeeded'
     or BAIL_OUT("debug build failed:\n$build");

@@ -569,11 +569,102 @@ apps, static and shared libraries, macOS bundles, GUI apps based on Qt or wxWidg
 
 See C<xmake create --help> for a full list.
 
+The following examples drive xmake from Perl. These all call the wrapper methods (see L</METHODS>), so output is
+streamed to your terminal and each returns truthy on success.
+
+=head2 Scaffold, configure, build, test and run a target
+
+The whole edit-run-debug lifecycle. C<create> scaffolds a fresh project (C<template> picks the base), C<configure> sets
+the build mode, then C<build>/C<test>/C<run> compile, run the tests (if any) and launch the binary:
+
+    use v5.40;
+    use Alien::Xmake;
+
+    my $x = Alien::Xmake->new;
+    $x->create('demo', template => 'console');   # writes xmake.lua + src/main.cpp
+
+    chdir 'demo';
+    $x->configure(mode => 'release');            # configure the build
+    $x->build;                                   # compile it
+    $x->test;                                    # run target tests (none for a console template)
+    $x->run;                                     # execute the binary
+
+=head2 Generate files for another build system or IDE
+
+C<project> reads your C<xmake.lua> and emits other build systems' project files, so you never maintain a second build
+config by hand. C<kind> selects the generator and C<lsp> asks for IDE-friendly compile data:
+
+    use v5.40;
+    use Alien::Xmake;
+
+    my $x = Alien::Xmake->new;
+    $x->project(kind => 'make');                 # a Makefile
+    $x->project(kind => 'compile_commands', lsp => 1);   # compile_commands.json for clangd/IDEs
+
+=head2 Ask xmake what it can target
+
+C<show> introspects the C<xmake> install and the current project. Hand it a list name and (optionally) C<format =E<gt>
+'json'> to get the parsed result; the L</METHODS> list names are C<platforms>, C<architectures>, C<toolchains>,
+C<buildmodes>, C<targets>, C<packages>, C<rules>, C<themes>, C<envs>, C<apis> and C<policies>. C<config> reflects the
+metadata of this L<Alien::Xmake> install itself (set up at construction; see C<new> under L</METHODS>):
+
+    use v5.40;
+    use Alien::Xmake;
+
+    my $x = Alien::Xmake->new;
+
+    say for $x->show('platforms');                     # windows, linux, macosx, android, ...
+    say for $x->show('architectures');
+
+    my @targets = $x->show('targets', format => 'json');   # inside a project dir
+    say $targets[0]->{name};
+
+    say 'installed: ' . $x->config('install_type');        # share | system
+    say 'version  : ' . $x->config('version');
+
+=head2 Lint the project from Perl
+
+C<check> runs xmake's B<analysis> checkers - C<syntax> validates the source compiles without linking and C<clang.tidy>
+drives clang-tidy. It is a linter, not a compiler probe; C<'c'> and C<'cxx'> are not checkers. C<list =E<gt> 1> returns
+the available checker names:
+
+    use v5.40;
+    use Alien::Xmake;
+
+    my $x = Alien::Xmake->new;
+    my @checkers = $x->check('', list => 1);       # api.*, clang.tidy, cuda.devlink, syntax ...
+    $x->check('syntax');                           # "syntax check ok" if the sources parse
+
+=head2 Fetch pkg-config style flags for a dependency
+
+C<pkg_config> installs a package via xrepo (when missing) and returns its compile/link flags as a hashref. On MSVC the
+library flag is given as C<-libpath:...> rather than C<-L...>:
+
+    use v5.40;
+    use Alien::Xmake;
+
+    my $x    = Alien::Xmake->new;
+    my $zlib = $x->pkg_config('zlib');             # installs zlib on first call
+    say $zlib->{cflags};                           # -IC:\...\zlib\...\include
+    say $zlib->{libs};                             # -libpath:C:\...\lib zlib.lib
+
+=head2 Use the bundled xrepo from the same handle
+
+The dist ships xrepo alongside xmake; C<xrepo> returns its path so you can mix xmake project work with xrepo package
+operations in one script:
+
+    use v5.40;
+    use Alien::Xmake;
+
+    my $x = Alien::Xmake->new;
+    system $x->xrepo, qw[search zlib];             # find a package
+    system $x->xrepo, qw[info libpng];             # package details
+
 =head1 Prerequisites
 
-Windows simply downloads an installer but elsewhere, you gotta have git, make, and a C compiler installed to build and
-install Xmake. If you'd like Alien::Xmake to use a pre-built or system install of Xmake, install it yourself first with
-one of the following:
+Windows simply downloads an installer but elsewhere, you gotta have make and a C compiler installed to build and
+install Xmake. You B<do not need to> (Alien::Xmake will install a local version) but, if you'd like Alien::Xmake to use
+a pre-built or system install of Xmake, install it yourself first with one of the following:
 
 =over
 
@@ -670,6 +761,8 @@ Build from source using gmake instead of make or try this:
     $ pkg install xmake
 
 =back
+
+I strongly suggest you don't do any of that and let Alien::Xmake deal with it.
 
 =head1 See Also
 

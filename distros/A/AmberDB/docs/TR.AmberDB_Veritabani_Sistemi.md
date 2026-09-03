@@ -1,6 +1,10 @@
-# AmberDB — Geliştirici Kılavuzu ve Dokümantasyon
+[🏠 Ana Sayfa](index_tr.html) &nbsp;•&nbsp; [📖 Hakkında](TR.AmberDB-Hakkinda.html) &nbsp;•&nbsp; [🚀 Hızlı Başlangıç](index_tr.html#-hızlı-başlangıç) &nbsp;•&nbsp; [📘 Tutorial](TR.AmberDB_Veritabani_Sistemi.html) &nbsp;•&nbsp; [🌐 Locale](TR.AmberDB-Locale_Kullanim_Rehberi.html) &nbsp;•&nbsp; [📋 Changes](https://github.com/marufcetin/amberdb/blob/main/Changes) &nbsp;•&nbsp; [📚 Wiki](https://github.com/marufcetin/amberdb/wiki) &nbsp;•&nbsp; [🇬🇧 English](EN.AmberDB_User-Guide.html)
 
-> **Sürüm:** 5.22.1 · **İlk Tasarım:** 2005 · **Son Güncelleme:** 2026  
+---
+
+# Geliştirici Kılavuzu ve Dokümantasyon
+
+> **Sürüm:** 5.23.1 · **İlk Tasarım:** 2005 · **Son Güncelleme:** 2026  
 > **Namespace:** `AmberDB`  
 > **Dahili Modüller:** `Base`, `Index`, `Transact`, `Cache`, `Array`, `String`, `Date`, `Locale`, `Tools`
 
@@ -2308,4 +2312,4 @@ Dışarıdan bir kısıtlama gibi algılanabilecek, ancak AmberDB'yi geleneksel 
 
 ---
 
-*Bu doküman `AmberDB` v5.22.1 motorunun güncel kod mimarisi ve geliştirici pratikleri doğrultusunda hazırlanmıştır.*
+*Bu doküman `AmberDB` v5.23.1 motorunun güncel kod mimarisi ve geliştirici pratikleri doğrultusunda hazırlanmıştır.*

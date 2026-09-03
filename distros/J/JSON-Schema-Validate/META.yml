@@ -32,7 +32,7 @@ requires:
   vars: '0'
   warnings: '0'
 resources:
-  bugtracker: https://gitlab.com/jackdeguest/JSON-Schema-Validate/issues
-  repository: https://gitlab.com/jackdeguest/JSON-Schema-Validate
-version: v0.9.0
+  bugtracker: https://gitlab.com/deguest/JSON-Schema-Validate/issues
+  repository: https://gitlab.com/deguest/JSON-Schema-Validate
+version: v0.9.1
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

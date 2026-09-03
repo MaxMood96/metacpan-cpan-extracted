@@ -9,7 +9,7 @@ use strict;
 use warnings;
 
 package Playwright::WebError;
-$Playwright::WebError::VERSION = '1.551';
+$Playwright::WebError::VERSION = '1.621';
 use parent 'Playwright::Base';
 
 sub new {
@@ -37,6 +37,16 @@ sub error {
     return $self->_api_request(
         args    => [@_],
         command => 'error',
+        object  => $self->{guid},
+        type    => $self->{type}
+    );
+}
+
+sub location {
+    my $self = shift;
+    return $self->_api_request(
+        args    => [@_],
+        command => 'location',
         object  => $self->{guid},
         type    => $self->{type}
     );
@@ -86,7 +96,7 @@ Playwright::WebError - Automatically generated class for Playwright::WebError
 
 =head1 VERSION
 
-version 1.551
+version 1.621
 
 =head1 CONSTRUCTOR
 
@@ -108,6 +118,12 @@ See L<https://playwright.dev/docs/api/class-WebError#WebError-page> for more inf
 Execute the WebError::error playwright routine.
 
 See L<https://playwright.dev/docs/api/class-WebError#WebError-error> for more information.
+
+=head2 location(@args)
+
+Execute the WebError::location playwright routine.
+
+See L<https://playwright.dev/docs/api/class-WebError#WebError-location> for more information.
 
 =head2 on(@args)
 

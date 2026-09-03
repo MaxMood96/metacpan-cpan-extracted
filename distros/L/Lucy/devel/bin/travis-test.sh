@@ -25,14 +25,16 @@ build_dir="$(pwd)"
 install_dir="$build_dir/install_dir"
 
 # Fetch Clownfish.
-git clone -q -b 0.6 --depth 1 https://git-wip-us.apache.org/repos/asf/lucy-clownfish.git
+git clone -q --depth 1 https://git-wip-us.apache.org/repos/asf/lucy-clownfish.git
 
 test_c() {
     # Install Clownfish.
-    cd lucy-clownfish/runtime/c
-    ./configure
-    make -j
-    ./install.sh --prefix "$install_dir"
+    cd lucy-clownfish/compiler/c
+    ./configure --prefix="$install_dir"
+    make -j install
+    cd ../../runtime/c
+    ./configure --prefix="$install_dir"
+    make -j install
 
     # Needed to find DLL on Windows.
     export PATH="$install_dir/bin:$PATH"

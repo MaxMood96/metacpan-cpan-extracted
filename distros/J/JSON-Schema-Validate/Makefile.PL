@@ -48,12 +48,12 @@ my %WriteMakefileArgs = (
         resources => {
             # homepage    => undef,
             repository  => {
-                url         => 'git@gitlab.com:jackdeguest/JSON-Schema-Validate.git',
-                web         => 'https://gitlab.com/jackdeguest/JSON-Schema-Validate',
+                url         => 'git@gitlab.com:deguest/JSON-Schema-Validate.git',
+                web         => 'https://gitlab.com/deguest/JSON-Schema-Validate',
                 type        => 'git',
             },
             bugtracker => {
-                web         => 'https://gitlab.com/jackdeguest/JSON-Schema-Validate/issues',
+                web         => 'https://gitlab.com/deguest/JSON-Schema-Validate/issues',
             },
         },
     }) : ()),

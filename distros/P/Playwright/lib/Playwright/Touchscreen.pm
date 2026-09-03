@@ -9,7 +9,7 @@ use strict;
 use warnings;
 
 package Playwright::Touchscreen;
-$Playwright::Touchscreen::VERSION = '1.551';
+$Playwright::Touchscreen::VERSION = '1.621';
 use parent 'Playwright::Base';
 
 sub new {
@@ -76,7 +76,7 @@ Playwright::Touchscreen - Automatically generated class for Playwright::Touchscr
 
 =head1 VERSION
 
-version 1.551
+version 1.621
 
 =head1 CONSTRUCTOR
 

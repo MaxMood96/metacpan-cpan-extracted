@@ -9,7 +9,7 @@ use strict;
 use warnings;
 
 package Playwright::Clock;
-$Playwright::Clock::VERSION = '1.551';
+$Playwright::Clock::VERSION = '1.621';
 use parent 'Playwright::Base';
 
 sub new {
@@ -22,11 +22,11 @@ sub spec {
     return $Playwright::spec->{'Clock'}{members};
 }
 
-sub install {
+sub setSystemTime {
     my $self = shift;
     return $self->_api_request(
         args    => [@_],
-        command => 'install',
+        command => 'setSystemTime',
         object  => $self->{guid},
         type    => $self->{type}
     );
@@ -42,11 +42,11 @@ sub setFixedTime {
     );
 }
 
-sub runFor {
+sub pauseAt {
     my $self = shift;
     return $self->_api_request(
         args    => [@_],
-        command => 'runFor',
+        command => 'pauseAt',
         object  => $self->{guid},
         type    => $self->{type}
     );
@@ -62,21 +62,21 @@ sub fastForward {
     );
 }
 
-sub setSystemTime {
+sub install {
     my $self = shift;
     return $self->_api_request(
         args    => [@_],
-        command => 'setSystemTime',
+        command => 'install',
         object  => $self->{guid},
         type    => $self->{type}
     );
 }
 
-sub pauseAt {
+sub runFor {
     my $self = shift;
     return $self->_api_request(
         args    => [@_],
-        command => 'pauseAt',
+        command => 'runFor',
         object  => $self->{guid},
         type    => $self->{type}
     );
@@ -136,7 +136,7 @@ Playwright::Clock - Automatically generated class for Playwright::Clock
 
 =head1 VERSION
 
-version 1.551
+version 1.621
 
 =head1 CONSTRUCTOR
 
@@ -147,11 +147,11 @@ Instead it should be returned to you as the result of calls on Playwright object
 
 =head1 METHODS
 
-=head2 install(@args)
+=head2 setSystemTime(@args)
 
-Execute the Clock::install playwright routine.
+Execute the Clock::setSystemTime playwright routine.
 
-See L<https://playwright.dev/docs/api/class-Clock#Clock-install> for more information.
+See L<https://playwright.dev/docs/api/class-Clock#Clock-setSystemTime> for more information.
 
 =head2 setFixedTime(@args)
 
@@ -159,11 +159,11 @@ Execute the Clock::setFixedTime playwright routine.
 
 See L<https://playwright.dev/docs/api/class-Clock#Clock-setFixedTime> for more information.
 
-=head2 runFor(@args)
+=head2 pauseAt(@args)
 
-Execute the Clock::runFor playwright routine.
+Execute the Clock::pauseAt playwright routine.
 
-See L<https://playwright.dev/docs/api/class-Clock#Clock-runFor> for more information.
+See L<https://playwright.dev/docs/api/class-Clock#Clock-pauseAt> for more information.
 
 =head2 fastForward(@args)
 
@@ -171,17 +171,17 @@ Execute the Clock::fastForward playwright routine.
 
 See L<https://playwright.dev/docs/api/class-Clock#Clock-fastForward> for more information.
 
-=head2 setSystemTime(@args)
+=head2 install(@args)
 
-Execute the Clock::setSystemTime playwright routine.
+Execute the Clock::install playwright routine.
 
-See L<https://playwright.dev/docs/api/class-Clock#Clock-setSystemTime> for more information.
+See L<https://playwright.dev/docs/api/class-Clock#Clock-install> for more information.
 
-=head2 pauseAt(@args)
+=head2 runFor(@args)
 
-Execute the Clock::pauseAt playwright routine.
+Execute the Clock::runFor playwright routine.
 
-See L<https://playwright.dev/docs/api/class-Clock#Clock-pauseAt> for more information.
+See L<https://playwright.dev/docs/api/class-Clock#Clock-runFor> for more information.
 
 =head2 resume(@args)
 

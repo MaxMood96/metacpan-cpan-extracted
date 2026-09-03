@@ -557,11 +557,11 @@ C
     say versions();
 
 The I<eg/xrepo_inline_c.pl> script is the runnable copy of this example. C<Inline::C> is not installed with this
-distribution - install it once with C<cpanm Inline::C>.
+distribution. Install it once with C<cpanm Inline::C>.
 
 =head2 Install and run a binary tool
 
-C<xrepo> does not build only shared libraries - it also ships ready-to-run B<binaries> (C<ninja>, C<cmake>, C<meson>,
+C<xrepo> does not build only shared libraries, it also ships ready-to-run binaries (C<ninja>, C<cmake>, C<meson>,
 C<node>, C<python>, C<go>, C<rust>, ...). C<install> returns the package C<installdir>, and C<bin_dir> tells you where
 the executables live. Run one directly, or stick C<bin_dir> in front of C<PATH> so all the children you spawn find the
 tool:
@@ -640,6 +640,102 @@ shell) or just prints it with C<show>.
     use Alien::Xrepo;
     Alien::Xrepo->new->env( 'bash', bind => 'zlib' ); # or env( undef, bind => 'zlib' )
     # Alien::Xrepo->new->env( undef, show => 1 );     # just print the environment
+
+=head2 Guard an install against a package that may not exist
+
+C<search> reports what the configured repositories actually provide. Check before you C<install> so a spec that is
+absent (or renamed) in the active repos fails cleanly instead of erroring mid-way:
+
+    use v5.40;
+    use Alien::Xrepo;
+
+    my $repo = Alien::Xrepo->new;
+    if ( grep {/zlib/} $repo->search('zlib') ) {
+        my $zlib = $repo->install('zlib');
+        say 'zlib at ' . $zlib->libpath;
+    }
+    else {
+        warn "zlib is unavailable in the configured repositories\n";
+    }
+
+=head2 Run a binary tool and check it worked
+
+C<env> wraps the given program with the package's environment (PATH already adjusted) and returns its exit status, so
+it doubles as a smoke test that the tool actually runs:
+
+    use v5.40;
+    use Alien::Xrepo;
+
+    my $repo = Alien::Xrepo->new;
+    my $cmake = $repo->install('cmake');            # kind: binary
+    my $rc = $repo->env('cmake', '--version');      # runs cmake with its bin_dir on PATH
+    die "cmake failed to run" unless $rc == 0;
+
+=head2 Bundle a package for offline use
+
+C<download> fetches the source archives without building, C<import_pkg> drops them into the local cache, and a
+subsequent C<install> uses them even on a machine with no network. Handy for air-gapped CI or offline installs:
+
+    use v5.40;
+    use Alien::Xrepo;
+
+    my $repo = Alien::Xrepo->new;
+
+    $repo->download( 'zlib', undef, outputdir => './dl', shallow => 1 );   # fetch sources (no build)
+    $repo->import_pkg( 'zlib', undef, packagedir => './dl' );              # load into the cache
+    my $zlib = $repo->install('zlib');                                     # install offline
+    say 'installed ' . $zlib->version;
+
+=head2 Render the dependency graph
+
+C<info( ... depgraph => 1, format => 'dot')> emits a Graphviz C<DOT> description of a package and everything it pulls
+in. Pipe it to C<dot -Tpng dep.dot -o dep.png> to picture how a library's prerequisites resolve:
+
+    use v5.40;
+    use Alien::Xrepo;
+
+    my $dot = Alien::Xrepo->new->info( 'libpng', depgraph => 1, format => 'dot' );
+    say $dot;    # e.g.  dot -Tpng dep.dot -o dep.png
+
+=head2 Cross-compile a library, then read its compiler/link flags
+
+Install a library for another platform/architecture (the same switches C<xrepo> accepts become named options), then
+C<fetch> the C<-I...> / C<-L.../-l...> flags you would pass to your own compiler:
+
+    use v5.40;
+    use Alien::Xrepo;
+
+    my $repo = Alien::Xrepo->new;
+    $repo->install(
+        'libpng', '1.6.x',
+        plat => 'windows',
+        arch => 'x64',
+        mode => 'debug',
+        kind => 'shared'
+    );
+
+    my $cflags  = $repo->fetch( 'libpng', undef, cflags  => 1 );   # "-Ic:/.../include ..."
+    my $ldflags = $repo->fetch( 'libpng', undef, ldflags => 1 );   # "-Lc:/.../lib -l... .."
+    say "CFLAGS:  $cflags";
+    say "LDFLAGS: $ldflags";
+
+=head2 Remove a package from the cache
+
+C<uninstall> removes a package from the local store (the same one C<install>/C<fetch>/C<scan> use, or an isolated
+C<root> you installed into). It accepts the same options as C<install>; C<all> removes every stored variant, C<force>
+removes a package even when others still depend on it. It returns the underlying exit status, so check C<$?>:
+
+    use v5.40;
+    use Alien::Xrepo;
+
+    my $repo = Alien::Xrepo->new;
+
+    $repo->uninstall('freetype');               # remove one package
+    $repo->uninstall('zl*', all => 1);          # every variant matching the pattern
+    $repo->uninstall('fontconfig', force => 1); # remove even if still depended upon
+
+Note that this edits the shared store unlike a builder's prune, which slims the C<share> dir a distribution ships,
+C<uninstall> frees space in the store you manage yourself.
 
 =head1 SEE ALSO
 

@@ -17,6 +17,8 @@
 \.code-workspace$
 \blogs\b
 \.log$
+\bscratch\b
+^wiki/
 ^bin/run_tests\.pl$
 \b\.DS_Store\b
 \bThumbs\.db\b

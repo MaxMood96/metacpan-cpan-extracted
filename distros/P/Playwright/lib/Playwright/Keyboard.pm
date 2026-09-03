@@ -9,7 +9,7 @@ use strict;
 use warnings;
 
 package Playwright::Keyboard;
-$Playwright::Keyboard::VERSION = '1.551';
+$Playwright::Keyboard::VERSION = '1.621';
 use parent 'Playwright::Base';
 
 sub new {
@@ -22,31 +22,11 @@ sub spec {
     return $Playwright::spec->{'Keyboard'}{members};
 }
 
-sub type {
-    my $self = shift;
-    return $self->_api_request(
-        args    => [@_],
-        command => 'type',
-        object  => $self->{guid},
-        type    => $self->{type}
-    );
-}
-
 sub press {
     my $self = shift;
     return $self->_api_request(
         args    => [@_],
         command => 'press',
-        object  => $self->{guid},
-        type    => $self->{type}
-    );
-}
-
-sub down {
-    my $self = shift;
-    return $self->_api_request(
-        args    => [@_],
-        command => 'down',
         object  => $self->{guid},
         type    => $self->{type}
     );
@@ -62,11 +42,31 @@ sub insertText {
     );
 }
 
+sub type {
+    my $self = shift;
+    return $self->_api_request(
+        args    => [@_],
+        command => 'type',
+        object  => $self->{guid},
+        type    => $self->{type}
+    );
+}
+
 sub up {
     my $self = shift;
     return $self->_api_request(
         args    => [@_],
         command => 'up',
+        object  => $self->{guid},
+        type    => $self->{type}
+    );
+}
+
+sub down {
+    my $self = shift;
+    return $self->_api_request(
+        args    => [@_],
+        command => 'down',
         object  => $self->{guid},
         type    => $self->{type}
     );
@@ -116,7 +116,7 @@ Playwright::Keyboard - Automatically generated class for Playwright::Keyboard
 
 =head1 VERSION
 
-version 1.551
+version 1.621
 
 =head1 CONSTRUCTOR
 
@@ -127,23 +127,11 @@ Instead it should be returned to you as the result of calls on Playwright object
 
 =head1 METHODS
 
-=head2 type(@args)
-
-Execute the Keyboard::type playwright routine.
-
-See L<https://playwright.dev/docs/api/class-Keyboard#Keyboard-type> for more information.
-
 =head2 press(@args)
 
 Execute the Keyboard::press playwright routine.
 
 See L<https://playwright.dev/docs/api/class-Keyboard#Keyboard-press> for more information.
-
-=head2 down(@args)
-
-Execute the Keyboard::down playwright routine.
-
-See L<https://playwright.dev/docs/api/class-Keyboard#Keyboard-down> for more information.
 
 =head2 insertText(@args)
 
@@ -151,11 +139,23 @@ Execute the Keyboard::insertText playwright routine.
 
 See L<https://playwright.dev/docs/api/class-Keyboard#Keyboard-insertText> for more information.
 
+=head2 type(@args)
+
+Execute the Keyboard::type playwright routine.
+
+See L<https://playwright.dev/docs/api/class-Keyboard#Keyboard-type> for more information.
+
 =head2 up(@args)
 
 Execute the Keyboard::up playwright routine.
 
 See L<https://playwright.dev/docs/api/class-Keyboard#Keyboard-up> for more information.
+
+=head2 down(@args)
+
+Execute the Keyboard::down playwright routine.
+
+See L<https://playwright.dev/docs/api/class-Keyboard#Keyboard-down> for more information.
 
 =head2 on(@args)
 

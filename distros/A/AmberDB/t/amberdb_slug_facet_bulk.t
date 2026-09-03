@@ -7,8 +7,8 @@ use strict;
 use warnings;
 use Test::More;
 use File::Temp qw(tempdir);
-
-use lib 'lib';
+use FindBin qw($Bin);
+use lib "$Bin/../lib", 'lib';
 use AmberDB;
 
 my $tmpdir = tempdir( CLEANUP => 1 );
@@ -24,7 +24,6 @@ $adb->table_attr( 'catalog_product', {
     facet_block  => [ 2, 3 ],
     use_facet    => 1,
     slug_block   => [1],
-    id_type      => 'num',
 } );
 
 # ---------------------------------------------------------------------------

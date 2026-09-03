@@ -7,7 +7,7 @@ use v5.10;
 use strict;
 use warnings;
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 use MooX::Tag::TO_HASH::Util ':all';
 
@@ -115,7 +115,7 @@ MooX::Tag::TO_HASH - Controlled translation of Moo objects into Hashes
 
 =head1 VERSION
 
-version 0.07
+version 0.08
 
 =head1 SYNOPSIS
 
@@ -145,8 +145,8 @@ version 0.07
 
  $VAR1 = {
            'cow' => 'Daisy',
-           'hen' => undef,
-           'goose' => 'Frank'
+           'goose' => 'Frank',
+           'hen' => undef
          };
 
 =head1 DESCRIPTION
@@ -278,10 +278,10 @@ This method is added to the consuming class or role.
 # resulting in
 
  $VAR1 = {
-           'COW' => 'Daisy',
-           'HEN' => 'Ruby',
            'HORSE' => 'Ed',
-           'GOOSE' => 'Donald'
+           'HEN' => 'Ruby',
+           'GOOSE' => 'Donald',
+           'COW' => 'Daisy'
          };
 
 =head1 DEPRECATED BEHAVIOR

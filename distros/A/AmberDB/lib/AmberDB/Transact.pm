@@ -6,7 +6,7 @@ use Carp qw(croak cluck);
 use Fcntl qw(:flock);
 use IO::Handle;
 
-our $VERSION = '5.22.1';
+our $VERSION = '5.23.1';
 
 # Journal field separator — ASCII Record Separator (0x1E).
 # Tab cannot be used because raw DB values contain literal tabs.
@@ -242,14 +242,24 @@ sub _txn_log {
 # Clears caches for all affected tables after rollback.
 # ------------------------------------------------
 sub _txn_apply_rollback {
-    my ( $self, $txn_file ) = @_;
+    my ( $self, $txn_source ) = @_;
 
-    open my $fh, "<", $txn_file or do {
-        cluck "[DB_TXN] Cannot read journal for rollback: $txn_file ($!)\n";
-        return;
-    };
-    my @lines = <$fh>;
-    close $fh;
+    my @lines;
+    if ( ref($txn_source) eq 'ARRAY' ) {
+        @lines = @$txn_source;
+    }
+    elsif ( ref($txn_source) && ref($txn_source) =~ /GLOB|IO/ ) {
+        seek( $txn_source, 0, 0 );
+        @lines = <$txn_source>;
+    }
+    else {
+        open my $fh, "<", $txn_source or do {
+            cluck "[DB_TXN] Cannot read journal for rollback: $txn_source ($!)\n";
+            return;
+        };
+        @lines = <$fh>;
+        close $fh;
+    }
 
     my %affected_tables;
 
@@ -438,8 +448,8 @@ sub _txn_auth_rollback {
 sub _txn_raw_delete {
     my ( $self, $tableid, $rid ) = @_;
 
-    my $file_path = $self->table_path($tableid) . ".db";
-    return unless -e $file_path;
+    my $file_path = $self->table_path($tableid, 1);
+    return unless $file_path && -e $file_path;
 
     $self->table_write($file_path) or return;
     $self->recs_del( $file_path, $rid );
@@ -453,8 +463,8 @@ sub _txn_raw_delete {
 sub _txn_raw_restore {
     my ( $self, $tableid, $rid, $raw_value ) = @_;
 
-    my $file_path = $self->table_path($tableid) . ".db";
-    return unless -e $file_path;
+    my $file_path = $self->table_path($tableid, 1);
+    return unless $file_path && -e $file_path;
 
     $self->table_write($file_path) or return;
     $self->recs_put( $file_path, [ $rid, $raw_value ] );
@@ -472,9 +482,7 @@ sub transact_recover {
     my ( $self ) = @_;
 
     my $txn_dir = $self->path('txn_dir') || ( ( $self->path('dbase_dir') || "." ) . "/txn" );
-    return unless -d $txn_dir;
-
-    my @orphans = glob "$txn_dir/txn_*.txn";
+    my @orphans = $self->dir_files( $txn_dir, "txn_*.txn" );
     return unless @orphans;
 
     foreach my $orphan ( sort @orphans ) {
@@ -499,11 +507,14 @@ sub transact_recover {
                 next;
             }
 
-            # Confirmed orphan: process is dead — rollback and remove
+            # Confirmed orphan: process is dead — read journal and rollback
             cluck "[DB_TXN] Orphan transaction rollback: $orphan\n";
-            $self->_txn_apply_rollback($orphan);
+            seek( $ofh, 0, 0 );
+            my @lines = <$ofh>;
             flock( $ofh, LOCK_UN );
             close $ofh;
+
+            $self->_txn_apply_rollback(\@lines);
             unlink $orphan;
         }
         else {

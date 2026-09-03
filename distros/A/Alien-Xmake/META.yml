@@ -16,6 +16,7 @@ build_requires:
   File::Temp: '0'
   Getopt::Long: '2.36'
   HTTP::Tiny: '0'
+  IO::Socket::SSL: '0'
   JSON::PP: '2'
   Path::Tiny: '0'
   Test2::V0: '0'
@@ -34,6 +35,7 @@ configure_requires:
   File::Spec::Functions: '0'
   Getopt::Long: '2.36'
   HTTP::Tiny: '0'
+  IO::Socket::SSL: '0'
   JSON::PP: '2'
   Path::Tiny: '0'
   perl: v5.40.0
@@ -58,24 +60,25 @@ no_index:
 provides:
   Alien::Xmake:
     file: lib/Alien/Xmake.pm
-    version: v0.9.0
+    version: v0.9.2
   Alien::Xrepo:
     file: lib/Alien/Xrepo.pm
-    version: v0.9.0
+    version: v0.9.2
   Alien::Xrepo::Base:
     file: lib/Alien/Xrepo/Base.pm
-    version: v0.0.9
-  Alien::Xrepo::Base::Builder:
-    file: lib/Alien/Xrepo/Base.pm
-    version: v0.0.9
+    version: v0.9.2
 requires:
+  Capture::Tiny: '0'
+  ExtUtils::Helpers: '0.028'
+  ExtUtils::InstallPaths: '0.002'
+  Path::Tiny: '0'
   perl: v5.40.0
 resources:
   bugtracker: https://github.com/sanko/Alien-Xmake/issues
   homepage: https://github.com/sanko/Alien-Xmake
   license: http://www.perlfoundation.org/artistic_license_2_0
   repository: https://github.com/sanko/Alien-Xmake.git
-version: v0.9.0
+version: v0.9.2
 x_authority: cpan:SANKO
 x_ignore:
   - .tidyallrc

@@ -22,19 +22,21 @@ my %WriteMakefileArgs = (
     "List::Util" => 0,
     "MIDI" => 0,
     "MIDI::Simple" => 0,
+    "Music::Scales" => "0.13",
     "Music::Tempo" => 0,
     "constant" => 0,
     "strict" => 0,
     "warnings" => 0
   },
   "TEST_REQUIRES" => {
+    "Data::Dumper::Compact" => 0,
     "File::Spec" => 0,
     "IO::Handle" => 0,
     "IPC::Open3" => 0,
     "Test::Exception" => 0,
-    "Test::More" => 0
+    "Test::More" => "0.88"
   },
-  "VERSION" => "0.1307",
+  "VERSION" => "0.1309",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -42,6 +44,7 @@ my %WriteMakefileArgs = (
 
 
 my %FallbackPrereqs = (
+  "Data::Dumper::Compact" => 0,
   "Exporter" => 0,
   "File::Slurper" => 0,
   "File::Spec" => 0,
@@ -50,9 +53,10 @@ my %FallbackPrereqs = (
   "List::Util" => 0,
   "MIDI" => 0,
   "MIDI::Simple" => 0,
+  "Music::Scales" => "0.13",
   "Music::Tempo" => 0,
   "Test::Exception" => 0,
-  "Test::More" => 0,
+  "Test::More" => "0.88",
   "constant" => 0,
   "strict" => 0,
   "warnings" => 0

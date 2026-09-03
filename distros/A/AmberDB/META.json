@@ -1,5 +1,5 @@
 {
-   "abstract" : "High-performance, schema-driven NoSQL engine with ACID transactions and precomputed inverted indexing for Perl",
+   "abstract" : "High-performance embedded NoSQL database engine for Perl",
    "author" : [
       "Maruf Cetin <marufcetin@gmail.com>"
    ],
@@ -16,7 +16,29 @@
    "no_index" : {
       "directory" : [
          "t",
-         "inc"
+         "inc",
+         "lib/AmberDB/Locale/Lang",
+         "lib/AmberDB/Index"
+      ],
+      "file" : [
+         "lib/AmberDB/Base.pm",
+         "lib/AmberDB/Cache.pm",
+         "lib/AmberDB/Transact.pm",
+         "lib/AmberDB/Index.pm",
+         "lib/AmberDB/Locale/Currency.pm"
+      ],
+      "namespace" : [
+         "AmberDB::Locale::Lang",
+         "AmberDB::Index"
+      ],
+      "package" : [
+         "AmberDB::Base",
+         "AmberDB::Cache",
+         "AmberDB::Transact",
+         "AmberDB::Index",
+         "AmberDB::Index::Facet",
+         "AmberDB::Index::Junk",
+         "AmberDB::Locale::Currency"
       ]
    },
    "prereqs" : {
@@ -73,6 +95,6 @@
          "web" : "https://github.com/marufcetin/amberdb"
       }
    },
-   "version" : "v5.22.1",
+   "version" : "v5.23.1",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

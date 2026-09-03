@@ -37,9 +37,9 @@ ok($line, "located the value publish in shm_str_store (line $line)")
 
 # Restore the default build even if we die partway.
 my $restore = 0;
-END { `make clean 2>/dev/null; perl Makefile.PL 2>&1 && make 2>&1` if $restore }
+END { `make clean 2>/dev/null; $^X Makefile.PL 2>&1 && make 2>&1` if $restore }
 
-my $build = `make clean 2>/dev/null; perl Makefile.PL 2>&1 && make OPTIMIZE='-O2 -g' 2>&1`;
+my $build = `make clean 2>/dev/null; $^X Makefile.PL 2>&1 && make OPTIMIZE='-O2 -g' 2>&1`;
 $restore = 1;
 like $build, qr/Shared\.o/, '-O2 -g build succeeded'
     or BAIL_OUT("build failed:\n$build");

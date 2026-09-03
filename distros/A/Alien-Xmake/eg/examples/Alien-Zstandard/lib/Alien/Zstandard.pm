@@ -5,7 +5,7 @@ use experimental 'class';
 use Alien::Xrepo::Base;
 
 class Alien::Zstandard : isa(Alien::Xrepo::Base) {
-    method package_name {'zstd'}
+    method pkg_name {'zstd'}
 
     method install_opts {
         return (

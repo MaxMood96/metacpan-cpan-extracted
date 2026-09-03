@@ -1188,12 +1188,108 @@ static const char *NAMEFIX_JS =
     "    try{ var C=window[n]; if(C && C.prototype) fix(C.prototype); }catch(e){} });"
     "})();";
 
+/* Worker and SharedWorker global scopes are separate JS contexts, and the web
+ * process extension API has no hook for them: window-object-cleared never fires
+ * for a worker, and the typelib exposes nothing worker-shaped. So the C spoof
+ * above cannot reach WorkerNavigator, and a worker reported the REAL platform
+ * and core count beside a spoofed page -- navigator.platform 'Win32' on the
+ * page and 'Linux x86_64' in its own worker is the clearest contradiction a
+ * detector can ask for, and measurably what the "inconsistent worker values"
+ * checks fire on.
+ *
+ * So the constructor runs the same overrides as a prelude and pulls the real
+ * script in after them. Through a Proxy rather than a JS function, because
+ * Function.prototype.toString on a Proxy still reports [native code] -- see
+ * NAMEFIX_JS on why an own toString costs more than the lie it hides. name,
+ * length, prototype and instanceof all come along for free.
+ *
+ * The values are read from the page at construction, not baked in here, so the
+ * worker cannot disagree with whatever the page is currently showing.
+ *
+ * Cost of the blob: self.location inside the worker is the blob URL, so a
+ * script that resolves its own chunks relatively would break. importScripts and
+ * fetch are re-based onto the original URL to cover that. A module worker
+ * cannot use importScripts, so it gets a dynamic import(), and messages that
+ * arrive before that promise settles are buffered and replayed -- without it a
+ * postMessage racing worker startup is simply lost. */
+static const char *WORKER_JS =
+    "(function(){"
+    "  var W=self.Worker, SW=self.SharedWorker;"
+    "  if(typeof W!=='function'||typeof Proxy!=='function') return;"
+    "  var cache=Object.create(null);"
+    "  function cfg(){"
+    "    var n=navigator,u=n.userAgentData;"
+    "    return { platform:n.platform, hardwareConcurrency:n.hardwareConcurrency,"
+    "             deviceMemory:n.deviceMemory, language:n.language,"
+    /* NavigatorID members: the spec puts them on WorkerNavigator too and both
+     * Chrome and Safari have them there, but WebKitGTK omits all three -- so
+     * they read as an inconsistency even with no profile applied. */
+    "             vendor:n.vendor, vendorSub:n.vendorSub, productSub:n.productSub,"
+    "             languages:n.languages?Array.prototype.slice.call(n.languages):null,"
+    "             ua:u?{brands:(u.brands||[]).map(function(b){return {brand:b.brand,version:b.version}}),"
+    "                   mobile:!!u.mobile, platform:u.platform}:null }; }"
+    "  function prelude(c,b){"
+    "    return '(function(c,b){'+"
+    "      'var np=self.WorkerNavigator?self.WorkerNavigator.prototype:Object.getPrototypeOf(navigator);'+"
+    "      'function d(k,v){if(v===undefined||v===null)return;try{Object.defineProperty(np,k,'+"
+    "        '{get:function(){return v},enumerable:true,configurable:true})}catch(e){}}'+"
+    "      'd(\"platform\",c.platform);d(\"hardwareConcurrency\",c.hardwareConcurrency);'+"
+    "      'd(\"deviceMemory\",c.deviceMemory);d(\"language\",c.language);'+"
+    "      'd(\"vendor\",c.vendor);d(\"vendorSub\",c.vendorSub);d(\"productSub\",c.productSub);'+"
+    "      'if(c.languages)d(\"languages\",Object.freeze(c.languages.slice()));'+"
+    "      'if(c.ua){try{var U=function NavigatorUAData(){};'+"
+    "        '[[\"brands\",function(){return c.ua.brands.slice()}],[\"mobile\",function(){return c.ua.mobile}],'+"
+    "         '[\"platform\",function(){return c.ua.platform}]].forEach(function(kv){'+"
+    "          'Object.defineProperty(U.prototype,kv[0],{get:kv[1],enumerable:true,configurable:true})});'+"
+    "        'd(\"userAgentData\",Object.create(U.prototype))}catch(e){}}'+"
+    "      'var oi=self.importScripts;'+"
+    "      'if(typeof oi===\"function\"){self.importScripts=function(){'+"
+    "        'return oi.apply(self,Array.prototype.map.call(arguments,function(u){'+"
+    "          'try{return new URL(u,b).href}catch(e){return u}}))}}'+"
+    "      'var of=self.fetch;'+"
+    "      'if(typeof of===\"function\"){self.fetch=function(i,o){'+"
+    "        'try{if(typeof i===\"string\")i=new URL(i,b).href}catch(e){}return of.call(self,i,o)}}'+"
+    "    '})('+JSON.stringify(c)+','+JSON.stringify(b)+');'; }"
+    "  function body(abs,mod){"
+    "    var p=prelude(cfg(),abs), u=JSON.stringify(abs);"
+    "    if(!mod) return p+'importScripts('+u+');';"
+    "    return p+'(function(){var q=[],done=false;'+"
+    "      'function cap(e){if(!done)q.push(e)}'+"
+    "      'self.addEventListener(\"message\",cap);'+"
+    "      'import('+u+').then(function(){done=true;self.removeEventListener(\"message\",cap);'+"
+    "        'q.forEach(function(e){self.dispatchEvent(new MessageEvent(\"message\",'+"
+    "          '{data:e.data,origin:e.origin,ports:e.ports}))});q.length=0})})();'; }"
+    "  function url_for(u,opts){"
+    "    var abs=new URL(u,self.location.href).href;"
+    "    var mod=!!(opts&&opts.type==='module');"
+    "    var key=(mod?'m:':'c:')+abs;"
+    /* one blob per script, so a SharedWorker keeps being shared: its identity is
+     * the URL, and a fresh blob each call would silently make N private workers */
+    "    return cache[key]||(cache[key]=URL.createObjectURL("
+    "      new Blob([body(abs,mod)],{type:'text/javascript'}))); }"
+    "  function wrap(B){"
+    "    return new Proxy(B,{ construct:function(t,a,nt){"
+    "      try{ if(typeof a[0]==='string'||a[0]instanceof URL)"
+    "             a=[url_for(String(a[0]),a[1])].concat(Array.prototype.slice.call(a,1)); }"
+    "      catch(e){}"
+    "      return Reflect.construct(t,a,nt); } }); }"
+    "  try{ self.Worker=wrap(W); }catch(e){}"
+    "  try{ if(typeof SW==='function') self.SharedWorker=wrap(SW); }catch(e){}"
+    "})();";
+
 /* The profile, parsed once from the GVariant and read by the getters. */
 typedef struct {
     char *platform, *vendor, *webgl_vendor, *webgl_renderer, *coherence;
+    /* Gecko-only navigator surface. NULL for every non-Firefox profile, and
+     * absent is the correct answer there -- Chrome and Safari expose neither
+     * oscpu nor buildID, and their productSub already IS WebKit's 20030107. */
+    char *product_sub, *oscpu, *build_id;
     char **languages;                                  /* NULL-terminated, or NULL */
     gboolean has_hwc, has_devmem, has_touch, has_dpr;
     double hwc, devmem, touch, dpr;
+    /* Gecko-only window properties; see product_sub above. */
+    gboolean has_misx, has_misy;
+    double misx, misy;
     gboolean has_sw, has_sh, has_aw, has_ah, has_cd, has_pd;
     double sw, sh, aw, ah, cd, pd;
     gboolean has_seed; guint32 seed;
@@ -1203,12 +1299,17 @@ static Profile P;
 /* strings return char* (JSC copies); numbers return gdouble by value. */
 static char *g_platform (void*a,void*b){(void)a;(void)b; return g_strdup(P.platform);}
 static char *g_vendor   (void*a,void*b){(void)a;(void)b; return g_strdup(P.vendor);}
+static char *g_prodsub  (void*a,void*b){(void)a;(void)b; return g_strdup(P.product_sub);}
+static char *g_oscpu    (void*a,void*b){(void)a;(void)b; return g_strdup(P.oscpu);}
+static char *g_buildid  (void*a,void*b){(void)a;(void)b; return g_strdup(P.build_id);}
 /* navigator.language (singular) must equal languages[0] or a real browser mismatch shows. */
 static char *g_language (void*a,void*b){(void)a;(void)b; return g_strdup(P.languages && P.languages[0] ? P.languages[0] : "");}
 static gdouble g_hwc    (void*a,void*b){(void)a;(void)b; return P.hwc;}
 static gdouble g_devmem (void*a,void*b){(void)a;(void)b; return P.devmem;}
 static gdouble g_touch  (void*a,void*b){(void)a;(void)b; return P.touch;}
 static gdouble g_dpr    (void*a,void*b){(void)a;(void)b; return P.dpr;}
+static gdouble g_misx   (void*a,void*b){(void)a;(void)b; return P.misx;}
+static gdouble g_misy   (void*a,void*b){(void)a;(void)b; return P.misy;}
 static gdouble g_sw(void*a,void*b){(void)a;(void)b; return P.sw;}
 static gdouble g_sh(void*a,void*b){(void)a;(void)b; return P.sh;}
 static gdouble g_aw(void*a,void*b){(void)a;(void)b; return P.aw;}
@@ -1279,6 +1380,9 @@ static void on_window_object_cleared (WebKitScriptWorld *world, WebKitWebPage *p
     if (navproto) {
         if (P.platform) def_str (navproto, "platform", G_CALLBACK (g_platform));
         if (P.vendor)   def_str (navproto, "vendor",   G_CALLBACK (g_vendor));
+        if (P.product_sub) def_str (navproto, "productSub", G_CALLBACK (g_prodsub));
+        if (P.oscpu)       def_str (navproto, "oscpu",      G_CALLBACK (g_oscpu));
+        if (P.build_id)    def_str (navproto, "buildID",    G_CALLBACK (g_buildid));
         if (P.has_hwc)    def_num (navproto, "hardwareConcurrency", G_CALLBACK (g_hwc));
         if (P.has_devmem) def_num (navproto, "deviceMemory",        G_CALLBACK (g_devmem));
         if (P.has_touch)  def_num (navproto, "maxTouchPoints",      G_CALLBACK (g_touch));
@@ -1303,6 +1407,10 @@ static void on_window_object_cleared (WebKitScriptWorld *world, WebKitWebPage *p
 
     /* devicePixelRatio is genuinely an own property of window. */
     if (P.has_dpr) def_num (global, "devicePixelRatio", G_CALLBACK (g_dpr));
+    /* A constant, where the real thing tracks the window: only a script that
+     * MOVES the window can tell, and being absent is the louder tell. */
+    if (P.has_misx) def_num (global, "mozInnerScreenX", G_CALLBACK (g_misx));
+    if (P.has_misy) def_num (global, "mozInnerScreenY", G_CALLBACK (g_misy));
 
     if (P.has_seed) {
         /* The format is a LITERAL and the JS body is a %s ARGUMENT, so no edit to
@@ -1347,6 +1455,9 @@ static void on_window_object_cleared (WebKitScriptWorld *world, WebKitWebPage *p
         /* before NAMEFIX, like the others: it renames whatever accessors exist */
         JSCValue *p = jsc_context_evaluate (ctx, PLUGINS_JS, -1);
         if (p) g_object_unref (p);
+        /* reads the spoofed navigator lazily, so order against it does not matter */
+        JSCValue *w = jsc_context_evaluate (ctx, WORKER_JS, -1);
+        if (w) g_object_unref (w);
         /* after every accessor exists, including the native ones above */
         JSCValue *n = jsc_context_evaluate (ctx, NAMEFIX_JS, -1);
         if (n) g_object_unref (n);
@@ -1597,6 +1708,9 @@ void webkit_web_process_extension_initialize_with_user_data (WebKitWebProcessExt
         if (g_variant_lookup (ud, "vendor",         "&s", &s) && s) P.vendor         = g_strdup (s);
         if (g_variant_lookup (ud, "webgl_vendor",   "&s", &s) && s) P.webgl_vendor   = g_strdup (s);
         if (g_variant_lookup (ud, "webgl_renderer", "&s", &s) && s) P.webgl_renderer = g_strdup (s);
+        if (g_variant_lookup (ud, "productSub",     "&s", &s) && s) P.product_sub    = g_strdup (s);
+        if (g_variant_lookup (ud, "oscpu",          "&s", &s) && s) P.oscpu          = g_strdup (s);
+        if (g_variant_lookup (ud, "buildID",        "&s", &s) && s) P.build_id       = g_strdup (s);
         if (g_variant_lookup (ud, "coherence",      "&s", &s) && s) P.coherence      = g_strdup (s);
         if (g_variant_lookup (ud, "boot",           "&s", &s) && s) EVWK_BOOT = g_strdup (s);
         GVariant *langs = g_variant_lookup_value (ud, "languages", G_VARIANT_TYPE ("as"));
@@ -1606,6 +1720,8 @@ void webkit_web_process_extension_initialize_with_user_data (WebKitWebProcessExt
         if (g_variant_lookup (ud, "deviceMemory",        "d", &d)) { P.has_devmem=TRUE; P.devmem=d; }
         if (g_variant_lookup (ud, "maxTouchPoints",      "d", &d)) { P.has_touch=TRUE;  P.touch=d; }
         if (g_variant_lookup (ud, "devicePixelRatio",    "d", &d)) { P.has_dpr=TRUE;    P.dpr=d; }
+        if (g_variant_lookup (ud, "mozInnerScreenX",     "d", &d)) { P.has_misx=TRUE;   P.misx=d; }
+        if (g_variant_lookup (ud, "mozInnerScreenY",     "d", &d)) { P.has_misy=TRUE;   P.misy=d; }
         if (g_variant_lookup (ud, "screen_width",        "d", &d)) { P.has_sw=TRUE; P.sw=d; }
         if (g_variant_lookup (ud, "screen_height",       "d", &d)) { P.has_sh=TRUE; P.sh=d; }
         if (g_variant_lookup (ud, "screen_availWidth",   "d", &d)) { P.has_aw=TRUE; P.aw=d; }

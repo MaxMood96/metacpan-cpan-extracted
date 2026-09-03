@@ -52,6 +52,16 @@ DESCRIPTION
     syntax may be able to use these. One such module is
     Syntax::Keyword::Match; see the SYNOPSIS example given above.
 
+ PPC0030 and Perl 5.45.3
+
+    The behaviour in this module was turned into a Proposed Perl Change
+    document, PPC0030
+    <https://github.com/Perl/PPCs/blob/main/ppcs/ppc0030-undef-aware-equality.md>.
+    This has now been implemented in perl itself, and should become
+    available from version 5.45.3 onwards. It is still possible to use this
+    module on such a version of Perl, but it is unnecessary to do so as
+    core will already provide the same behaviour.
+
 OPERATORS
 
  equ

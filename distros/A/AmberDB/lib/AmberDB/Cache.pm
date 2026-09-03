@@ -4,7 +4,7 @@ use 5.016;
 use warnings;
 use Carp qw(croak cluck);
 
-our $VERSION = '5.22.1';
+our $VERSION = '5.23.1';
 
 # ============================================================================
 # AmberDB Native .db and .inx RAM-Disk (tmpfs) Unified Cache Engine
@@ -121,9 +121,9 @@ sub cache_file_for {
     }
     else {
         my $table_info = $self->table_info($tableid);
-        my $is_ascii   = $table_info && $table_info->{id_type} && $table_info->{id_type} eq 'ascii';
+        my $is_simple  = $self->config('simple') || ( $table_info && $table_info->{use_simple} );
 
-        if ( $is_ascii || ( defined $key && $key =~ /^\d+$/ ) ) {
+        if ( $is_simple || ( defined $key && $key =~ /^\d+$/ ) ) {
             $ext = $self->{db_ext} // 'db';
         }
         else {

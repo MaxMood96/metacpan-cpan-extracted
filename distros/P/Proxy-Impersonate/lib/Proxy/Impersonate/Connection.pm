@@ -244,6 +244,7 @@ sub _forward {
     $self->{wrote_headers} = 0;
     $self->{response_complete} = 0;
     $self->{close_after_flush} = 0;
+    $self->{chunked} = 0;
     # Guarded: add_streaming validates what it is handed and croaks on anything
     # it will not send. Escaping here would unwind out of an EV watcher and take
     # the daemon with it, so answer the client instead.
@@ -267,9 +268,25 @@ sub _forward {
                 }
                 my %h = %$hdrs;
                 delete @h{qw(connection keep-alive transfer-encoding proxy-connection upgrade)};
-                # curl delivers a decoded body; if length is unknown, delimit the
-                # response to WebKit by closing the connection after it.
-                if (!exists $h{'content-length'}) {
+                # The handle is built with decode => 1, so a compressed body
+                # arrives already decompressed while the origin's own
+                # Content-Encoding and Content-Length still describe the bytes
+                # BEFORE decoding. Forwarding either would have the client
+                # inflate an already-inflated body, or cut it at the compressed
+                # length. Both headers go, and the length that replaces them is
+                # chunked framing -- WebKit cannot decode zstd, which real Chrome
+                # advertises, so passing the encoding through renders the page as
+                # binary. Only for a response that can carry one: a HEAD or a
+                # 204/304 has no body to frame.
+                my $bodyless = uc($r->{method}) eq 'HEAD'
+                            || $status == 204 || $status == 304 || $status < 200;
+                if (!$bodyless && defined $h{'content-encoding'}) {
+                    delete @h{qw(content-encoding content-length)};
+                    $h{'transfer-encoding'} = 'chunked';
+                    $self->{chunked} = 1;
+                }
+                elsif (!exists $h{'content-length'}) {
+                    # length unknown and nothing to re-frame: delimit by closing
                     $h{connection} = 'close';
                     $self->{close_after_flush} = 1;
                 }
@@ -283,6 +300,7 @@ sub _forward {
                 if (my $cb = $self->{on_response}) {
                     my $framing_len  = $h{'content-length'};
                     my $framing_conn = $h{connection};
+                    my $framing_te   = $h{'transfer-encoding'};
                     my $res = { status => $status, headers => \%h,
                                 url => $url, method => $r->{method}, host => $host };
                     if (eval { $cb->($res); 1 }) {
@@ -302,6 +320,8 @@ sub _forward {
                                           : delete $h{'content-length'};
                     defined $framing_conn ? ($h{connection} = $framing_conn)
                                           : delete $h{connection};
+                    defined $framing_te   ? ($h{'transfer-encoding'} = $framing_te)
+                                          : delete $h{'transfer-encoding'};
                 }
                 $self->_write_client(response_head($status, \%h));
             },
@@ -315,6 +335,11 @@ sub _forward {
                 # response larger than HIWAT. Resume only fires once wbuf has drained
                 # to empty, so the replayed chunk is appended exactly once.
                 if (length($self->{wbuf}) >= $HIWAT) { $self->{paused} = 1; return 1 }
+                # Framed here, not in on_headers: a paused chunk is re-delivered
+                # on resume, and the pause above returns before consuming it, so
+                # each chunk is wrapped exactly once.
+                $chunk = sprintf("%X\r\n", length $chunk) . $chunk . "\r\n"
+                    if $self->{chunked} && length $chunk;
                 $self->_write_client($chunk);
                 return 2 if $self->{_write_dead};                # write just failed -> abort
                 return 0;
@@ -333,6 +358,13 @@ sub _forward {
                     return $self->_maybe_close_after_flush;
                 }
                 return $self->_close if $err;                    # failed mid-stream -> abort
+                # Close the chunked body. Only on success: a truncated response
+                # must NOT be terminated, or the client accepts a short body as
+                # complete -- the abort above is what tells it something broke.
+                if ($self->{chunked}) {
+                    $self->_write_client("0\r\n\r\n");
+                    return $self->_close if $self->{_write_dead};
+                }
                 $self->{response_complete} = 1;
                 if ($self->{close_after_flush}) { $self->_maybe_close_after_flush }
                 else { $self->_reset_for_next; $self->_process }  # keep-alive
@@ -356,7 +388,7 @@ sub _forward {
 
 sub _reset_for_next {
     my ($self) = @_;
-    delete @{$self}{qw(wrote_headers response_complete close_after_flush _write_dead)};
+    delete @{$self}{qw(wrote_headers response_complete close_after_flush _write_dead chunked)};
 }
 
 sub _maybe_close_after_flush {

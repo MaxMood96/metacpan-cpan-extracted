@@ -22,3 +22,7 @@ build: ## Build app
 .PHONY: setup
 setup: ## Init the build env
 	perl Build.pl
+
+.PHONY: test
+test: ## Run test suite
+	./Build test

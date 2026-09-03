@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2023-2024 -- leonerd@leonerd.org.uk
 
-package Syntax::Operator::Eqr 0.10;
+package Syntax::Operator::Eqr 0.11;
 
 use v5.14;
 use warnings;

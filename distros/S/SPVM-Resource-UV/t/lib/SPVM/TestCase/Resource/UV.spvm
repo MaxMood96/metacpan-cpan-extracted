@@ -1,0 +1,4 @@
+class TestCase::Resource::UV {
+  use Resource::UV;
+  native static method test : int ();
+}

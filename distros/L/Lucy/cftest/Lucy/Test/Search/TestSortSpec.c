@@ -75,12 +75,12 @@ static String *random_int32s_str;
 static String *random_int64s_str;
 
 TestSortSpec*
-TestSortSpec_new() {
+TestSortSpec_new(void) {
     return (TestSortSpec*)Class_Make_Obj(TESTSORTSPEC);
 }
 
 static void
-S_init_strings() {
+S_init_strings(void) {
     air_str      = Str_newf("air");
     airplane_str = Str_newf("airplane");
     bike_str     = Str_newf("bike");
@@ -112,7 +112,7 @@ S_init_strings() {
 }
 
 static void
-S_destroy_strings() {
+S_destroy_strings(void) {
     DECREF(air_str);
     DECREF(airplane_str);
     DECREF(bike_str);
@@ -144,7 +144,7 @@ S_destroy_strings() {
 }
 
 TestReverseType*
-TestReverseType_new() {
+TestReverseType_new(void) {
     TestReverseType *self = (TestReverseType*)Class_Make_Obj(TESTREVERSETYPE);
     return TestReverseType_init(self);
 }
@@ -168,7 +168,7 @@ TestReverseType_Compare_Values_IMP(TestReverseType *self, Obj *a, Obj *b) {
 }
 
 static Schema*
-S_create_schema() {
+S_create_schema(void) {
     Schema *schema = Schema_new();
 
     StandardTokenizer *tokenizer = StandardTokenizer_new();
@@ -267,44 +267,46 @@ S_add_doc(Indexer *indexer, Obj *value, String *cat, String *field_name) {
     DECREF(doc);
 }
 
-typedef Obj* (*random_generator_t)();
+typedef Obj* (*random_generator_t)(void);
 
 static Obj*
-S_random_string() {
+S_random_string(void) {
     size_t length = 1 + rand() % 10;
     CharBuf *buf = CB_new(length);
     while (length--) {
         int32_t code_point = 'a' + rand() % ('z' - 'a' + 1);
         CB_Cat_Char(buf, code_point);
     }
+    // Make sure not to generate "airplane", "bike" or "car" randomly.
+    CB_Cat_Char(buf, '_');
     String *string = CB_Yield_String(buf);
     DECREF(buf);
     return (Obj*)string;
 }
 
 static Obj*
-S_random_int32() {
+S_random_int32(void) {
     uint64_t num = TestUtils_random_u64();
     return (Obj*)Int_new(num & 0x7FFFFFFF);
 }
 
 static Obj*
-S_random_int64() {
+S_random_int64(void) {
     uint64_t num = TestUtils_random_u64();
     return (Obj*)Int_new(num & INT64_C(0x7FFFFFFFFFFFFFFF));
 }
 
 static Obj*
-S_random_float32() {
+S_random_float32(void) {
     uint64_t num = TestUtils_random_u64();
-    double d = CHY_U64_TO_DOUBLE(num) * (10.0 / UINT64_MAX);
+    double d = (double)num * (10.0 / UINT64_MAX);
     return (Obj*)Float_new((float)d);
 }
 
 static Obj*
-S_random_float64() {
+S_random_float64(void) {
     uint64_t num = TestUtils_random_u64();
-    return (Obj*)Float_new(CHY_U64_TO_DOUBLE(num) * (10.0 / UINT64_MAX));
+    return (Obj*)Float_new((double)num * (10.0 / UINT64_MAX));
 }
 
 static Vector*
@@ -456,29 +458,30 @@ test_sort_spec(TestBatchRunner *runner) {
     TEST_TRUE(runner, Vec_Equals(results, (Obj*)wanted), "sort by one criteria");
     DECREF(results);
 
-#ifdef LUCY_VALGRIND
-    SKIP(runner, 2, "known leaks");
-#else
-    Err *error;
-    SortContext sort_ctx;
-    sort_ctx.searcher = searcher;
+    if (getenv("LUCY_VALGRIND")) {
+        SKIP(runner, 2, "known leaks");
+    }
+    else {
+        Err *error;
+        SortContext sort_ctx;
+        sort_ctx.searcher = searcher;
 
-    sort_ctx.sort_field = nope_str;
-    error = Err_trap(S_attempt_sorted_search, &sort_ctx);
-    TEST_TRUE(runner, error != NULL
-              && Err_is_a(error, ERR)
-              && Str_Contains_Utf8(Err_Get_Mess(error), "sortable", 8),
-              "sorting on a non-sortable field throws an error");
-    DECREF(error);
+        sort_ctx.sort_field = nope_str;
+        error = Err_trap(S_attempt_sorted_search, &sort_ctx);
+        TEST_TRUE(runner, error != NULL
+                  && Err_is_a(error, ERR)
+                  && Str_Contains_Utf8(Err_Get_Mess(error), "sortable", 8),
+                  "sorting on a non-sortable field throws an error");
+        DECREF(error);
 
-    sort_ctx.sort_field = unknown_str;
-    error = Err_trap(S_attempt_sorted_search, &sort_ctx);
-    TEST_TRUE(runner, error != NULL
-              && Err_is_a(error, ERR)
-              && Str_Contains_Utf8(Err_Get_Mess(error), "sortable", 8),
-              "sorting on an unknown field throws an error");
-    DECREF(error);
-#endif
+        sort_ctx.sort_field = unknown_str;
+        error = Err_trap(S_attempt_sorted_search, &sort_ctx);
+        TEST_TRUE(runner, error != NULL
+                  && Err_is_a(error, ERR)
+                  && Str_Contains_Utf8(Err_Get_Mess(error), "sortable", 8),
+                  "sorting on an unknown field throws an error");
+        DECREF(error);
+    }
 
     results = S_test_sorted_search(searcher, vehicle_str, 100,
                                    weight_str, false, NULL);

@@ -9,7 +9,7 @@ use strict;
 use warnings;
 
 package Playwright::TimeoutError;
-$Playwright::TimeoutError::VERSION = '1.551';
+$Playwright::TimeoutError::VERSION = '1.621';
 use parent 'Playwright::Base';
 
 sub new {
@@ -66,7 +66,7 @@ Playwright::TimeoutError - Automatically generated class for Playwright::Timeout
 
 =head1 VERSION
 
-version 1.551
+version 1.621
 
 =head1 CONSTRUCTOR
 

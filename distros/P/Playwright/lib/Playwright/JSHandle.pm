@@ -9,7 +9,7 @@ use strict;
 use warnings;
 
 package Playwright::JSHandle;
-$Playwright::JSHandle::VERSION = '1.551';
+$Playwright::JSHandle::VERSION = '1.621';
 use parent 'Playwright::Base';
 
 sub new {
@@ -27,26 +27,6 @@ sub evaluateHandle {
     return $self->_api_request(
         args    => [@_],
         command => 'evaluateHandle',
-        object  => $self->{guid},
-        type    => $self->{type}
-    );
-}
-
-sub getProperty {
-    my $self = shift;
-    return $self->_api_request(
-        args    => [@_],
-        command => 'getProperty',
-        object  => $self->{guid},
-        type    => $self->{type}
-    );
-}
-
-sub asElement {
-    my $self = shift;
-    return $self->_api_request(
-        args    => [@_],
-        command => 'asElement',
         object  => $self->{guid},
         type    => $self->{type}
     );
@@ -92,6 +72,26 @@ sub evaluate {
     );
 }
 
+sub getProperty {
+    my $self = shift;
+    return $self->_api_request(
+        args    => [@_],
+        command => 'getProperty',
+        object  => $self->{guid},
+        type    => $self->{type}
+    );
+}
+
+sub asElement {
+    my $self = shift;
+    return $self->_api_request(
+        args    => [@_],
+        command => 'asElement',
+        object  => $self->{guid},
+        type    => $self->{type}
+    );
+}
+
 sub on {
     my $self = shift;
     return $self->_api_request(
@@ -116,7 +116,7 @@ Playwright::JSHandle - Automatically generated class for Playwright::JSHandle
 
 =head1 VERSION
 
-version 1.551
+version 1.621
 
 =head1 CONSTRUCTOR
 
@@ -132,18 +132,6 @@ Instead it should be returned to you as the result of calls on Playwright object
 Execute the JSHandle::evaluateHandle playwright routine.
 
 See L<https://playwright.dev/docs/api/class-JSHandle#JSHandle-evaluateHandle> for more information.
-
-=head2 getProperty(@args)
-
-Execute the JSHandle::getProperty playwright routine.
-
-See L<https://playwright.dev/docs/api/class-JSHandle#JSHandle-getProperty> for more information.
-
-=head2 asElement(@args)
-
-Execute the JSHandle::asElement playwright routine.
-
-See L<https://playwright.dev/docs/api/class-JSHandle#JSHandle-asElement> for more information.
 
 =head2 getProperties(@args)
 
@@ -168,6 +156,18 @@ See L<https://playwright.dev/docs/api/class-JSHandle#JSHandle-dispose> for more 
 Execute the JSHandle::evaluate playwright routine.
 
 See L<https://playwright.dev/docs/api/class-JSHandle#JSHandle-evaluate> for more information.
+
+=head2 getProperty(@args)
+
+Execute the JSHandle::getProperty playwright routine.
+
+See L<https://playwright.dev/docs/api/class-JSHandle#JSHandle-getProperty> for more information.
+
+=head2 asElement(@args)
+
+Execute the JSHandle::asElement playwright routine.
+
+See L<https://playwright.dev/docs/api/class-JSHandle#JSHandle-asElement> for more information.
 
 =head2 on(@args)
 

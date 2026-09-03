@@ -156,4 +156,30 @@ sub tmpfile { File::Temp::tempnam(File::Spec->tmpdir, 'shm_addttl') . '.shm' }
     unlink $path;
 }
 
+# Regression (0.19): the per-key TTL arguments were cast straight to uint32,
+# so a value at or above 2**32 wrapped -- put_ttl($k,$v,2**32) silently made the
+# entry PERMANENT rather than failing.  The constructor's ttl and reserve()
+# already rejected out-of-range values; these four now match.
+{
+    my $path = tmpfile();
+    my $map  = Data::HashMap::Shared::II->new($path, 100, 0, 30);
+    $map->put(1, 1);
+
+    for my $method (qw(put_ttl add_ttl update_ttl)) {
+        my $ok = eval { $map->$method(2, 2, 2**32); 1 };
+        ok !$ok, "$method rejects a ttl of 2**32 instead of truncating it";
+        like $@, qr/ttl .* exceeds the maximum/, "  ...with a range error";
+    }
+    my $ok = eval { $map->set_ttl(1, 2**32); 1 };
+    ok !$ok, 'set_ttl rejects a ttl of 2**32';
+
+    ok !eval { $map->flush_expired_partial(2**32); 1 },
+        'flush_expired_partial rejects a limit of 2**32 instead of scanning one slot';
+
+    ok eval { $map->put_ttl(3, 3, 120); 1 }, 'an in-range ttl still works';
+    cmp_ok $map->ttl_remaining(3), '>=', 119, '  ...and is stored (allowing one coarse-clock tick)';
+    cmp_ok $map->ttl_remaining(3), '<=', 120, '  ...and not rounded up';
+    unlink $path;
+}
+
 done_testing;

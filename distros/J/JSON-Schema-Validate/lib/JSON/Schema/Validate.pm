@@ -1,16 +1,16 @@
 ##----------------------------------------------------------------------------
-## JSON Schema Validator - ~/lib/JSON/Schema/Validate.pm
-## Version v0.9.0
+## JSON Schema Validator - ~/lib/m
+## Version v0.9.1
 ## Copyright(c) 2026 DEGUEST Pte. Ltd.
 ## Author: Jacques Deguest <jack@deguest.jp>
 ## Created 2025/11/07
-## Modified 2026/03/01
+## Modified 2026/08/20
 ## All rights reserved
 ## 
 ## 
 ## This program is free software; you can redistribute  it  and/or  modify  it
-## under the same terms as Perl itself.
-##----------------------------------------------------------------------------
+## under the same terms as Perl itself.##
+##----------------------------------------------------------------------------##
 package JSON::Schema::Validate;
 BEGIN
 {
@@ -23,7 +23,7 @@ BEGIN
     use Scalar::Util qw( blessed looks_like_number reftype refaddr );
     use List::Util qw( first any all );
     use Encode ();
-    our $VERSION = 'v0.9.0';
+    our $VERSION = 'v0.9.1';
 };
 
 use v5.16.0;
@@ -437,7 +437,7 @@ sub register_builtin_formats
         return(0) unless( $s =~ /\A(\d{4})-(\d{2})-(\d{2})\z/ );
         my( $y, $m, $d ) = ( $1, $2, $3 );
 
-        # Time::Piece is core — prefer it
+        # Time::Piece is core - prefer it
         if( $has_tp )
         {
             return( eval{ Time::Piece->strptime( $s, '%Y-%m-%d' ); 1 } ? 1 : 0 );
@@ -501,7 +501,7 @@ sub register_builtin_formats
     };
 
     # Email / IDN email
-    # Plain email (ASCII) — unchanged
+    # Plain email (ASCII) - unchanged
     $F{'email'} = sub
     {
         my( $s ) = @_;
@@ -1278,7 +1278,7 @@ JS_RUNTIME
 
                 push( @body, <<JS_RUNTIME );
     // $sub_sp
-    $sub_fn(inst, path + '/allOf/$i', ctx);
+    $sub_fn(inst, path, ctx);
     if(ctx.maxErrors && ctx.errors.length >= ctx.maxErrors) return;
 JS_RUNTIME
             }
@@ -1309,7 +1309,7 @@ JS_RUNTIME
         if(matched) return;
         ctx.errors = [];
         // $sub_sp
-        $sub_fn(inst, path + '/anyOf/$i', ctx);
+        $sub_fn(inst, path, ctx);
         if(ctx.errors.length === 0)
         {
             matched = true;
@@ -1352,7 +1352,7 @@ JS_RUNTIME
                 push( @body, <<JS_RUNTIME );
         ctx.errors = [];
         // $sub_sp
-        $sub_fn(inst, path + '/oneOf/$i', ctx);
+        $sub_fn(inst, path, ctx);
         if(ctx.errors.length === 0)
         {
             hits++;
@@ -1417,7 +1417,7 @@ JS_RUNTIME
         var baseErrors = ctx.errors;
         ctx.errors = [];
         // $sub_sp
-        $sub_fn(inst, path + '/not', ctx);
+        $sub_fn(inst, path, ctx);
         var failed = (ctx.errors.length > 0);
         ctx.errors = baseErrors;
         if(!failed)
@@ -1451,7 +1451,7 @@ JS_RUNTIME
         var tmp = [];
         ctx.errors = tmp;
         // $if_sp
-        $if_fn(inst, path + '/if', ctx);
+        $if_fn(inst, path, ctx);
         var failed = (tmp.length > 0);
         ctx.errors = baseErrors;
 JS_RUNTIME
@@ -1463,7 +1463,7 @@ JS_RUNTIME
                 push( @body, <<JS_RUNTIME );
         if(!failed)
         {
-            $then_fn(inst, path + '/then', ctx);
+            $then_fn(inst, path, ctx);
         }
 JS_RUNTIME
             }
@@ -1474,7 +1474,7 @@ JS_RUNTIME
                 push( @body, <<JS_RUNTIME );
         else
         {
-            $else_fn(inst, path + '/else', ctx);
+            $else_fn(inst, path, ctx);
         }
 JS_RUNTIME
             }
@@ -1993,7 +1993,7 @@ JS_RUNTIME
             my $child_ptr = _join_ptr( $sp, 'definitions', $name );
             my $child_fn  = $self->_compile_js_node( $child, $child_ptr, $seen, $funcs, $counter_ref, $root, $opts );
 
-            # No runtime call needed here — definitions don't validate by themselves.
+            # No runtime call needed here - definitions don't validate by themselves.
             # We just need them compiled so pointer-based lookup can see them.
         }
     }
@@ -2090,6 +2090,23 @@ sub _compile_node
         my( $ctx, $inst ) = @_;
         return( { ok => 1, props => {}, items => {} } );
     } unless( ref( $S ) eq 'HASH' );
+
+    # NOTE: $ref / $dynamicRef must not be compiled inline
+    # A child node carrying a reference has no local keywords of its own, so
+    # compiling it would produce a closure that trivially succeeds and the
+    # referenced schema would never be applied. Referenced nodes are therefore
+    # delegated back to _v_node(), which resolves the reference before it
+    # considers the compiled path. There is no recursion risk here, because
+    # _v_node() handles the reference before it looks up the compiled index.
+    if( exists( $S->{'$ref'} ) ||
+        exists( $S->{'$dynamicRef'} ) )
+    {
+        return sub
+        {
+            my( $ctx, $inst ) = @_;
+            return( _v_node( $ctx, $ptr, $S, $inst ) );
+        };
+    }
 
     # Capture presence and values so runtime avoids hash lookups
     my $has_type    = exists( $S->{type} );
@@ -2445,7 +2462,17 @@ sub _compile_node
         # Conditionals
         if( exists( $S->{if} ) && ref( $S->{if} ) )
         {
-            my $cond = $child{ "if" }->( $ctx, $inst );
+            # NOTE: the if branch is evaluated in a shadow context
+            # Parity with the interpreted path and with the documented behaviour: 'if' is a
+            # selector, never an assertion, so the errors it produces while probing the
+            # instance must not leak into the caller's error list. Only 'then' and 'else'
+            # report against the main context.
+            my %if_shadow = %$ctx;
+            my @if_errs;
+            $if_shadow{errors}      = \@if_errs;
+            $if_shadow{error_count} = 0;
+
+            my $cond = $child{ "if" }->( \%if_shadow, $inst );
             if( $cond->{ok} )
             {
                 if( exists( $child{ "then" } ) )
@@ -2755,7 +2782,7 @@ sub _is_number
 
     local $@;
     # SVf_IOK = 0x02000000, SVf_NOK = 0x04000000 on most builds;
-    # we do not hardcode constants—B::SV’s FLAGS is stable to test with these bitmasks.
+    # we do not hardcode constants-B::SV’s FLAGS is stable to test with these bitmasks.
     # Use string eval to avoid importing platform-specific constants.
     my $SVf_IOK = eval{ B::SVf_IOK() } || 0x02000000;
     my $SVf_NOK = eval{ B::SVf_NOK() } || 0x04000000;
@@ -2876,6 +2903,21 @@ sub _jsv_resolve_internal_ref
 }
 
 # Keyword groups
+# NOTE: instance pointer base
+# The pointer stack tracks the location of the failing value inside the *instance*,
+# which is what a user interface needs in order to highlight the offending field.
+# It must therefore be built from the current instance pointer, never from the
+# schema pointer, otherwise the reported path drifts into the schema as soon as
+# validation descends through a $ref or a combinator.
+sub _inst_ptr
+{
+    my( $ctx, $token ) = @_;
+    my $base = ( $ctx->{ptr_stack} && @{$ctx->{ptr_stack}} )
+             ? ( $ctx->{ptr_stack}->[-1] // '#' )
+             : '#';
+    return( _join_ptr( $base, $token ) );
+}
+
 sub _k_array_all
 {
     my( $ctx, $sp, $S, $A ) = @_;
@@ -2909,12 +2951,16 @@ sub _k_array_all
         my $tuple = $S->{prefixItems};
         for my $i ( 0 .. $#$A )
         {
-            push( @{$ctx->{ptr_stack}}, _join_ptr( $sp, $i ) );
+            push( @{$ctx->{ptr_stack}}, _inst_ptr( $ctx, $i ) );
 
             if( $i <= $#$tuple )
             {
                 my $r = _v( $ctx, _join_ptr( $sp, "prefixItems/$i" ), $tuple->[$i], $A->[$i] );
-                return( $r ) unless( $r->{ok} );
+                unless( $r->{ok} )
+                {
+                    pop( @{$ctx->{ptr_stack}} );
+                    return( $r );
+                }
                 $items_ann{ $i } = 1;
             }
             elsif( exists( $S->{items} ) && ref( $S->{items} ) eq 'HASH' )
@@ -2931,9 +2977,16 @@ sub _k_array_all
     {
         for my $i ( 0 .. $#$A )
         {
-            push( @{$ctx->{ptr_stack}}, _join_ptr( $sp, $i ) );
+            push( @{$ctx->{ptr_stack}}, _inst_ptr( $ctx, $i ) );
             my $r = _v( $ctx, _join_ptr( $sp, "items" ), $S->{items}, $A->[$i] );
-            return( $r ) unless( $r->{ok} );
+            # NOTE: the instance pointer must be popped on every exit path
+            # Returning early without popping leaves the failing item's pointer on the
+            # stack, and every later error in the same document inherits it as a prefix.
+            unless( $r->{ok} )
+            {
+                pop( @{$ctx->{ptr_stack}} );
+                return( $r );
+            }
             $items_ann{ $i } = 1;
             pop( @{$ctx->{ptr_stack}} );
         }
@@ -3324,7 +3377,7 @@ sub _k_object_all
         my $v = $H->{ $k };
         my $matched = 0;
 
-        my $child_path = _join_ptr( $sp, $k );
+        my $child_path = _inst_ptr( $ctx, $k );
         push( @{$ctx->{ptr_stack}}, $child_path );
 
         if( exists( $props->{ $k } ) )
@@ -3552,7 +3605,7 @@ sub _k_unique_keys
             {
                 my $prev_i = $seen{ $composite };
                 my $keys   = join( ', ', map { "'$_'" } @$key_set );
-                push( @{$ctx->{ptr_stack}}, _join_ptr( $sp, $i ) );
+                push( @{$ctx->{ptr_stack}}, _inst_ptr( $ctx, $i ) );
                 my $res = _err_res(
                     $ctx,
                     $sp,
@@ -4495,7 +4548,7 @@ and the original announcement on Reddit: L<https://www.reddit.com/r/perl/comment
 
 =head1 VERSION
 
-v0.9.0
+v0.9.1
 
 =head1 DESCRIPTION
 
@@ -4657,7 +4710,7 @@ If you set separately an extension boolean value, it will not be overriden by th
 
 Will globally disable extension, but will enable C<uniqueKeys>
 
-Enabling extensions does not affect core Draft 2020-12 compliance — unknown keywords are still ignored unless explicitly supported.
+Enabling extensions does not affect core Draft 2020-12 compliance - unknown keywords are still ignored unless explicitly supported.
 
 =item C<format =E<gt> \%callbacks>
 
@@ -5252,13 +5305,13 @@ It may return one of:
 
 =over 4
 
-=item * C<( $ok, $msg, $decoded )> — canonical form. On success C<$ok> is true, C<$msg> is optional, and C<$decoded> can be either a Perl structure or a new octet/string value.
+=item * C<( $ok, $msg, $decoded )> - canonical form. On success C<$ok> is true, C<$msg> is optional, and C<$decoded> can be either a Perl structure or a new octet/string value.
 
-=item * a reference — treated as success with that reference as C<$decoded>.
+=item * a reference - treated as success with that reference as C<$decoded>.
 
-=item * a defined scalar — treated as success with that scalar as C<$decoded>.
+=item * a defined scalar - treated as success with that scalar as C<$decoded>.
 
-=item * C<undef> or empty list — treated as failure.
+=item * C<undef> or empty list - treated as failure.
 
 =back
 

@@ -1,9 +1,9 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2021-2024 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2021-2026 -- leonerd@leonerd.org.uk
 
-package Syntax::Operator::Equ 0.10;
+package Syntax::Operator::Equ 0.11;
 
 use v5.14;
 use warnings;
@@ -69,6 +69,15 @@ can still be used via C<XS::Parse::Infix> and hence L<XS::Parse::Keyword>.
 Custom keywords which attempt to parse operator syntax may be able to use
 these. One such module is L<Syntax::Keyword::Match>; see the SYNOPSIS example
 given above.
+
+=head2 PPC0030 and Perl 5.45.3
+
+The behaviour in this module was turned into a I<Proposed Perl Change>
+document, L<PPC0030|https://github.com/Perl/PPCs/blob/main/ppcs/ppc0030-undef-aware-equality.md>.
+This has now been implemented in F<perl> itself, and should become available
+from version 5.45.3 onwards. It is still possible to use this module on such a
+version of Perl, but it is unnecessary to do so as core will already provide
+the same behaviour.
 
 =cut
 

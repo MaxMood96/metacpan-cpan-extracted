@@ -3,6 +3,7 @@ Changes
 LICENSE
 MANIFEST
 MANIFEST.SKIP
+META.json
 META.yml
 Makefile.PL
 README
@@ -34,4 +35,5 @@ dzil.sh
 lib/SimpleFlow.pm
 read.me.pod
 t/01.t
+t/02.fixes.t
 t/more.coverage.t

@@ -1,9 +1,16 @@
 Revision history for Perl module Music::Scales
 
+0.13 2026-09-02 12:37:46
+	- Improve documentation.
+
+0.12 2026-09-02 12:27:52
+	- Retain the original, non-abbreviated `%modes` as `%original_modes`.
+	- Fix the variables test.
+
 0.11 2026-08-12 12:19:46
 	- Update the SYNOPSIS again.
 
-0.1 2026-08-12 12:08:32
+0.10 2026-08-12 12:08:32
 	- Use spaces instead of sporadic tabs.
 
 0.09 2026-08-12 11:58:06
@@ -12,6 +19,8 @@ Revision history for Perl module Music::Scales
 0.08 2026-08-12 10:22:15
 	- Cleaned up POD.
 	- Exported scale lists.
+
+~
 
 0.07	Bugfixes :(
 

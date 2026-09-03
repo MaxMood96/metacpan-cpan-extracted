@@ -27,14 +27,14 @@
 #include "Lucy/Store/RAMFolder.h"
 
 TestJson*
-TestJson_new() {
+TestJson_new(void) {
     return (TestJson*)Class_Make_Obj(TESTJSON);
 }
 
 // Create a test data structure including at least one each of Hash, Vector,
 // and String.
 static Obj*
-S_make_dump() {
+S_make_dump(void) {
     Hash *dump = Hash_new(0);
     Hash_Store_Utf8(dump, "foo", 3, (Obj*)Str_newf("foo"));
     Hash_Store_Utf8(dump, "stuff", 5, (Obj*)Vec_new(0));
@@ -276,6 +276,8 @@ test_syntax_errors(TestBatchRunner *runner) {
     S_verify_bad_syntax(runner, "\"\\g\"", "invalid char escape");
     S_verify_bad_syntax(runner, "\"\\uAAAZ\"", "invalid \\u escape");
     S_verify_bad_syntax(runner, "\"\\uAAA\"", "invalid \\u escape");
+    S_verify_bad_syntax(runner, "]\xFF\xBF\xBF\xBF\xBF\xBC\x9F",
+                        "invalid UTF-8 after syntax error");
 }
 
 static void
@@ -341,10 +343,10 @@ test_max_depth(TestBatchRunner *runner) {
 
 void
 TestJson_Run_IMP(TestJson *self, TestBatchRunner *runner) {
-    uint32_t num_tests = 105;
-#ifndef LUCY_VALGRIND
-    num_tests += 30; // FIXME: syntax errors leak memory.
-#endif
+    uint32_t num_tests = 107;
+    if (!getenv("LUCY_VALGRIND")) {
+        num_tests += 30; // FIXME: syntax errors leak memory.
+    }
     TestBatchRunner_Plan(runner, (TestBatch*)self, num_tests);
 
     // Test tolerance, then liberalize for testing.
@@ -359,8 +361,8 @@ TestJson_Run_IMP(TestJson *self, TestBatchRunner *runner) {
     test_floats(runner);
     test_max_depth(runner);
 
-#ifndef LUCY_VALGRIND
-    test_syntax_errors(runner);
-#endif
+    if (!getenv("LUCY_VALGRIND")) {
+        test_syntax_errors(runner);
+    }
 }
 

@@ -1,0 +1,65 @@
+# ===============================================================
+# Common
+# ===============================================================
+
+# Perl build
+^blib/
+^Makefile$
+^.*\.old$
+\.bs$
+^MYMETA\.yml$
+^MYMETA\.json$
+^pm_to_blib$
+^_build/
+^Build$
+^Build\.bat$
+^Build\.com$
+
+# C/C++
+\.o$
+\.a$
+\.out$
+^core(\..*)?$
+
+# Temp & archives
+^SPVM-
+\.spvm_build/
+(^|/)\.tmp/
+\.[bB][aA][kK]$
+\.tmp$
+\.swp$
+~$
+\.log$
+
+# Version control
+(^|/)\.git/
+
+# ===============================================================
+# OS specific
+# ===============================================================
+
+# Windows
+\.def$
+\.obj$
+\.exe$
+\.dll$
+\.lib$
+\.exp$
+\.pdb$
+\.ilk$
+\.manifest$
+^Thumbs\.db$
+^desktop\.ini$
+^\$RECYCLE\.BIN/
+
+# macOS / iOS
+\.dylib$
+(^|/)\.DS_Store$
+^\.AppleDouble$
+^\.LSOverride$
+^\._
+
+# Linux / Android / UNIX
+\.so$
+^\.thumbnails/
+^\.cache/

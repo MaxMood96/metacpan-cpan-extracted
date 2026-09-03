@@ -9,7 +9,7 @@ use strict;
 use warnings;
 
 package Playwright::WebSocketRoute;
-$Playwright::WebSocketRoute::VERSION = '1.551';
+$Playwright::WebSocketRoute::VERSION = '1.621';
 use parent 'Playwright::Base';
 
 sub new {
@@ -20,6 +20,26 @@ sub new {
 
 sub spec {
     return $Playwright::spec->{'WebSocketRoute'}{members};
+}
+
+sub close {
+    my $self = shift;
+    return $self->_api_request(
+        args    => [@_],
+        command => 'close',
+        object  => $self->{guid},
+        type    => $self->{type}
+    );
+}
+
+sub onClose {
+    my $self = shift;
+    return $self->_api_request(
+        args    => [@_],
+        command => 'onClose',
+        object  => $self->{guid},
+        type    => $self->{type}
+    );
 }
 
 sub send {
@@ -42,6 +62,16 @@ sub connectToServer {
     );
 }
 
+sub onMessage {
+    my $self = shift;
+    return $self->_api_request(
+        args    => [@_],
+        command => 'onMessage',
+        object  => $self->{guid},
+        type    => $self->{type}
+    );
+}
+
 sub url {
     my $self = shift;
     return $self->_api_request(
@@ -52,31 +82,11 @@ sub url {
     );
 }
 
-sub onClose {
+sub protocols {
     my $self = shift;
     return $self->_api_request(
         args    => [@_],
-        command => 'onClose',
-        object  => $self->{guid},
-        type    => $self->{type}
-    );
-}
-
-sub close {
-    my $self = shift;
-    return $self->_api_request(
-        args    => [@_],
-        command => 'close',
-        object  => $self->{guid},
-        type    => $self->{type}
-    );
-}
-
-sub onMessage {
-    my $self = shift;
-    return $self->_api_request(
-        args    => [@_],
-        command => 'onMessage',
+        command => 'protocols',
         object  => $self->{guid},
         type    => $self->{type}
     );
@@ -126,7 +136,7 @@ Playwright::WebSocketRoute - Automatically generated class for Playwright::WebSo
 
 =head1 VERSION
 
-version 1.551
+version 1.621
 
 =head1 CONSTRUCTOR
 
@@ -136,6 +146,18 @@ You shouldn't have to call this directly.
 Instead it should be returned to you as the result of calls on Playwright objects, or objects it returns.
 
 =head1 METHODS
+
+=head2 close(@args)
+
+Execute the WebSocketRoute::close playwright routine.
+
+See L<https://playwright.dev/docs/api/class-WebSocketRoute#WebSocketRoute-close> for more information.
+
+=head2 onClose(@args)
+
+Execute the WebSocketRoute::onClose playwright routine.
+
+See L<https://playwright.dev/docs/api/class-WebSocketRoute#WebSocketRoute-onClose> for more information.
 
 =head2 send(@args)
 
@@ -149,29 +171,23 @@ Execute the WebSocketRoute::connectToServer playwright routine.
 
 See L<https://playwright.dev/docs/api/class-WebSocketRoute#WebSocketRoute-connectToServer> for more information.
 
+=head2 onMessage(@args)
+
+Execute the WebSocketRoute::onMessage playwright routine.
+
+See L<https://playwright.dev/docs/api/class-WebSocketRoute#WebSocketRoute-onMessage> for more information.
+
 =head2 url(@args)
 
 Execute the WebSocketRoute::url playwright routine.
 
 See L<https://playwright.dev/docs/api/class-WebSocketRoute#WebSocketRoute-url> for more information.
 
-=head2 onClose(@args)
+=head2 protocols(@args)
 
-Execute the WebSocketRoute::onClose playwright routine.
+Execute the WebSocketRoute::protocols playwright routine.
 
-See L<https://playwright.dev/docs/api/class-WebSocketRoute#WebSocketRoute-onClose> for more information.
-
-=head2 close(@args)
-
-Execute the WebSocketRoute::close playwright routine.
-
-See L<https://playwright.dev/docs/api/class-WebSocketRoute#WebSocketRoute-close> for more information.
-
-=head2 onMessage(@args)
-
-Execute the WebSocketRoute::onMessage playwright routine.
-
-See L<https://playwright.dev/docs/api/class-WebSocketRoute#WebSocketRoute-onMessage> for more information.
+See L<https://playwright.dev/docs/api/class-WebSocketRoute#WebSocketRoute-protocols> for more information.
 
 =head2 on(@args)
 

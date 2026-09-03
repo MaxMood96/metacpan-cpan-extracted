@@ -26,11 +26,12 @@ sub tmpfile { File::Temp::tempnam(File::Spec->tmpdir, 'shm_resize') . '.shm' }
     for (1..$N) { $ok = 0, last if $map->get($_) != $_ * 7 }
     ok($ok, "II resize: all values intact after grow");
 
-    # Drain everything; capacity should shrink back down (or at least not stay at max)
+    # Drain everything; the table halves back to its initial capacity.  Asserting
+    # only "did not grow" passed just as happily when shrink never ran at all.
     for (1..$N) { $map->remove($_) }
     is($map->size, 0, "II resize: emptied");
     my $cap_final = $map->capacity;
-    ok($cap_final <= $cap_after, "II resize: capacity didn't grow on drain ($cap_after → $cap_final)");
+    is($cap_final, $cap_before, "II resize: capacity shrank back to $cap_before on drain (from $cap_after)");
     unlink $path;
 }
 

@@ -11,7 +11,7 @@ ok $Alien::Xrepo::VERSION, 'Alien::Xrepo::VERSION';
 my $repo  = Alien::Xrepo->new( verbose => 0 );
 my $xmake = Alien::Xmake->new;
 my $exe   = $xmake->exe;
-diag `$exe g --theme=plain` if $ENV{AUTOMATED_TESTING};
+qx[$exe g --theme=plain];
 diag `$exe --help`;
 diag $exe;
 

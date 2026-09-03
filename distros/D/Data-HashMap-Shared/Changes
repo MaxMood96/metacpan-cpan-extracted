@@ -1,5 +1,13 @@
 Revision history for Data-HashMap-Shared
 
+0.19      2026-09-03
+          - Fix LRU accounting, reserve()'s ceiling, sharded iteration, writes
+            to frozen maps and NUL bytes in paths; remove the v9 upgrader.
+          - Incompatible: upgrade_file() and hashmap-shared-upgrade are gone and
+            v9 files no longer open; a TTL or limit argument of 2**32 or more
+            croaks instead of wrapping; an unreachable $max_size warns.
+          - Correct the benchmark units and many API and crash-safety notes.
+
 0.18      2026-09-01
           - Fix three crash windows that could corrupt a map when a writer was
             killed mid-operation: a removed entry's key, the entry count that

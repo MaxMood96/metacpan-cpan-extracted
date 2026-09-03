@@ -32,6 +32,7 @@
 #include "Lucy/Test/Analysis/TestStandardTokenizer.h"
 #include "Lucy/Test/Highlight/TestHeatMap.h"
 #include "Lucy/Test/Highlight/TestHighlighter.h"
+#include "Lucy/Test/Index/TestBackgroundMerger.h"
 #include "Lucy/Test/Index/TestDocWriter.h"
 #include "Lucy/Test/Index/TestHighlightWriter.h"
 #include "Lucy/Test/Index/TestIndexManager.h"
@@ -55,6 +56,7 @@
 #include "Lucy/Test/Search/TestNoMatchQuery.h"
 #include "Lucy/Test/Search/TestPhraseQuery.h"
 #include "Lucy/Test/Search/TestPolyQuery.h"
+#include "Lucy/Test/Search/TestPolySearcher.h"
 #include "Lucy/Test/Search/TestQueryParserLogic.h"
 #include "Lucy/Test/Search/TestQueryParserSyntax.h"
 #include "Lucy/Test/Search/TestRangeQuery.h"
@@ -73,6 +75,7 @@
 #include "Lucy/Test/Store/TestIOChunks.h"
 #include "Lucy/Test/Store/TestIOPrimitives.h"
 #include "Lucy/Test/Store/TestInStream.h"
+#include "Lucy/Test/Store/TestLock.h"
 #include "Lucy/Test/Store/TestRAMDirHandle.h"
 #include "Lucy/Test/Store/TestRAMFileHandle.h"
 #include "Lucy/Test/Store/TestRAMFolder.h"
@@ -88,7 +91,7 @@
 #include "Lucy/Test/Util/TestStringHelper.h"
 
 TestSuite*
-Test_create_test_suite() {
+Test_create_test_suite(void) {
     TestSuite *suite = TestSuite_new();
 
     TestSuite_Add_Batch(suite, (TestBatch*)TestPriQ_new());
@@ -112,6 +115,7 @@ Test_create_test_suite() {
     TestSuite_Add_Batch(suite, (TestBatch*)TestFSFolder_new());
     TestSuite_Add_Batch(suite, (TestBatch*)TestRAMFolder_new());
     TestSuite_Add_Batch(suite, (TestBatch*)TestFolder_new());
+    TestSuite_Add_Batch(suite, (TestBatch*)TestLFLock_new());
     TestSuite_Add_Batch(suite, (TestBatch*)TestIxManager_new());
     TestSuite_Add_Batch(suite, (TestBatch*)TestCFWriter_new());
     TestSuite_Add_Batch(suite, (TestBatch*)TestCFReader_new());
@@ -137,6 +141,7 @@ Test_create_test_suite() {
     TestSuite_Add_Batch(suite, (TestBatch*)TestBlobType_new());
     TestSuite_Add_Batch(suite, (TestBatch*)TestNumericType_new());
     TestSuite_Add_Batch(suite, (TestBatch*)TestFType_new());
+    TestSuite_Add_Batch(suite, (TestBatch*)TestBGMerger_new());
     TestSuite_Add_Batch(suite, (TestBatch*)TestSeg_new());
     TestSuite_Add_Batch(suite, (TestBatch*)TestHighlighter_new());
     TestSuite_Add_Batch(suite, (TestBatch*)TestSimple_new());
@@ -144,6 +149,7 @@ Test_create_test_suite() {
     TestSuite_Add_Batch(suite, (TestBatch*)TestHeatMap_new());
     TestSuite_Add_Batch(suite, (TestBatch*)TestTermQuery_new());
     TestSuite_Add_Batch(suite, (TestBatch*)TestPhraseQuery_new());
+    TestSuite_Add_Batch(suite, (TestBatch*)TestPolySearcher_new());
     TestSuite_Add_Batch(suite, (TestBatch*)TestSortSpec_new());
     TestSuite_Add_Batch(suite, (TestBatch*)TestRangeQuery_new());
     TestSuite_Add_Batch(suite, (TestBatch*)TestANDQuery_new());

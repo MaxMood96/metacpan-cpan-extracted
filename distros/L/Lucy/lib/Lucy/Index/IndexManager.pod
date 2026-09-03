@@ -74,10 +74,6 @@ Create a new IndexManager.
 
 B<host> - An identifier which should be unique per-machine.
 
-=item *
-
-B<lock_factory> - A LockFactory.
-
 =back
 
 =head1 METHODS
@@ -138,13 +134,6 @@ B<optimize> - A boolean indicating whether to spend extra time
 optimizing the index for search-time performance.
 
 =back
-
-=head2 make_write_lock
-
-    my $lock = $index_manager->make_write_lock();
-
-Create the Lock which controls access to modifying the logical content
-of the index.
 
 =head2 set_write_lock_timeout
 

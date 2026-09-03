@@ -274,7 +274,9 @@ subtest 'input.files and input.file.size' => sub {
 
 	my $scalar = task({ cmd => perl_cmd('exit 0'), 'input.files' => $i1 });
 	is($scalar->{'input.file.size'}{$i1}, 3,   'input.file.size (scalar form) reports size');
-	is($scalar->{'input.files'},          $i1, 'input.files (scalar) is preserved on the result');
+	# 0.16: input.files is normalised to an array ref on the result, exactly as
+	# output.files always was. Before 0.16 a scalar argument was stored raw.
+	is_deeply($scalar->{'input.files'}, [$i1], 'scalar input.files is normalised to an arrayref');
 
 	my $array = task({ cmd => perl_cmd('exit 0'), 'input.files' => [$i1, $i2] });
 	is($array->{'input.file.size'}{$i1}, 3, 'input.file.size (array form) reports first size');

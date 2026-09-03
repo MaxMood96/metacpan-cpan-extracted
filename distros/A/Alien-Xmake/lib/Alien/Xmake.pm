@@ -1,7 +1,7 @@
 use v5.40;
 use experimental 'class';
 #
-class Alien::Xmake v0.9.0 {
+class Alien::Xmake v0.9.2 {
     use File::Spec;
     use File::Basename qw[dirname];
     use JSON::PP       qw[decode_json];

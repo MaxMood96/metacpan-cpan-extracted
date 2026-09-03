@@ -7,20 +7,22 @@ build_requires:
   Config::Std: '0'
   DBD::SQLite: '0'
   DBI: '0'
+  DateTime: '0'
   ExtUtils::MakeMaker: '6.59'
+  Feature::Compat::Try: '0'
   IO::Socket::SSL: '0'
   JSON: '0'
   LWP::Protocol::https: '0'
   LWP::UserAgent: '0'
+  Path::Class: '0'
   Proc::SafeExec: '0'
-  Syntax::Keyword::Try: '0'
   Template: '0'
   Test::More: '0'
   YAML: '0'
 configure_requires:
   Module::Build::Tiny: '0.035'
 dynamic_config: 0
-generated_by: 'Minilla/v3.1.26, CPAN::Meta::Converter version 2.150010'
+generated_by: 'Minilla/v3.1.29, CPAN::Meta::Converter version 2.150013'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -39,7 +41,7 @@ no_index:
 provides:
   Connector:
     file: lib/Connector.pm
-    version: '1.55'
+    version: '1.56'
   Connector::Builtin:
     file: lib/Connector/Builtin.pm
   Connector::Builtin::Authentication::LDAP:
@@ -117,6 +119,8 @@ provides:
 recommends:
   Config::Std: '0'
   DBI: '0'
+  DateTime: '0'
+  Feature::Compat::Try: '0'
   IO::Socket::SSL: '0'
   JSON: '0'
   LWP::Protocol::https: '0'
@@ -129,12 +133,12 @@ recommends:
 requires:
   Log::Log4perl: '0'
   Moose: '0'
-  perl: '5.010001'
+  perl: '5.014'
 resources:
   bugtracker: https://github.com/whiterabbitsecurity/connector/issues
   homepage: https://github.com/whiterabbitsecurity/connector
   repository: https://github.com/whiterabbitsecurity/connector.git
-version: '1.55'
+version: '1.56'
 x_contributors:
   - 'Martin Bartosch <m.bartosch@cynops.de>'
   - 'Martin Bartosch <mbartosch@whiterabbitsecurity.com>'
@@ -146,5 +150,5 @@ x_contributors:
   - 'Scott Hardin <shardin@whiterabbitsecurity.com>'
   - 'Scott T. Hardin <scott-1@hnsc.de>'
   - 'Scott T. Hardin <scott.hardin@hnsc.de>'
-x_serialization_backend: 'CPAN::Meta::YAML version 0.018'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'
 x_static_install: 1

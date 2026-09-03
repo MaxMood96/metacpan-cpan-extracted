@@ -4,7 +4,7 @@ no warnings 'experimental::class';
 use Alien::Xrepo::Base;
 #
 class Alien::lsquic : isa(Alien::Xrepo::Base) {
-    method package_name {'lsquic'}
+    method pkg_name {'lsquic'}
 }
 #
 1;

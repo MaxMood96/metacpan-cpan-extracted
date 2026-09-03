@@ -109,11 +109,6 @@ say qq|cp -p CHANGES apache-lucy-$full_rc_version/CHANGES-$x_y_z_version.txt|;
 say qq|cd apache-lucy-$full_rc_version\n|;
 
 say qq|# Generate checksums.|;
-say qq|perl -MDigest -e '\$d = Digest->new("MD5"); open \$fh, |
-    . qq|"<apache-lucy-$x_y_z_version.tar.gz" or die; |
-    . qq|\$d->addfile(\$fh); print \$d->hexdigest; |
-    . qq|print "  apache-lucy-$x_y_z_version.tar.gz\\n"' > |
-    . qq| apache-lucy-$x_y_z_version.tar.gz.md5|;
 say qq|perl -MDigest -e '\$d = Digest->new("SHA-512"); open \$fh, |
     . qq|"<apache-lucy-$x_y_z_version.tar.gz" or die; |
     . qq|\$d->addfile(\$fh); print \$d->hexdigest; |

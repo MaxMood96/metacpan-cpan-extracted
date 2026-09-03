@@ -9,7 +9,7 @@ use strict;
 use warnings;
 
 package Playwright::CDPSessionEvent;
-$Playwright::CDPSessionEvent::VERSION = '1.551';
+$Playwright::CDPSessionEvent::VERSION = '1.621';
 use parent 'Playwright::Base';
 
 sub new {
@@ -86,7 +86,7 @@ Playwright::CDPSessionEvent - Automatically generated class for Playwright::CDPS
 
 =head1 VERSION
 
-version 1.551
+version 1.621
 
 =head1 CONSTRUCTOR
 

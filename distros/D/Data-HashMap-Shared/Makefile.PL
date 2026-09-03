@@ -14,7 +14,7 @@ if ($Config{byteorder} !~ /^1234/) {
     exit 0;
 }
 
-use Devel::PPPort;
+require Devel::PPPort;   # not use: it would load before the NA checks above
 Devel::PPPort::WriteFile();
 
 my @xpk_flags;
@@ -42,7 +42,6 @@ WriteMakefile(
     AUTHOR            => 'vividsnow',
     LICENSE           => 'perl_5',
     MIN_PERL_VERSION  => '5.022',
-    EXE_FILES         => ['bin/hashmap-shared-upgrade'],
     LIBS              => [''],
     DEFINE            => '-D_GNU_SOURCE',
     INC               => '-I. ' . join(' ', @xpk_flags),

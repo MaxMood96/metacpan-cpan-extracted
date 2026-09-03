@@ -1,6 +1,10 @@
-# AmberDB — Developer Guide and Comprehensive Documentation
+[🏠 Home](index.html) &nbsp;•&nbsp; [📖 About](EN.About_AmberDB.html) &nbsp;•&nbsp; [🚀 Quick Start](index.html#-quick-start) &nbsp;•&nbsp; [📘 Tutorial](EN.AmberDB_User-Guide.html) &nbsp;•&nbsp; [🌐 Locale](EN.AmberDB-Locale_User-Guide.html) &nbsp;•&nbsp; [📋 Changes](https://github.com/marufcetin/amberdb/blob/main/Changes) &nbsp;•&nbsp; [📚 Wiki](https://github.com/marufcetin/amberdb/wiki) &nbsp;•&nbsp; [🇹🇷 Türkçe](TR.AmberDB_Veritabani_Sistemi.html)
 
-> **Version:** 5.22.1 · **Initial Design:** 2005 · **Last Updated:** 2026  
+---
+
+# Developer Guide and Comprehensive Documentation
+
+> **Version:** 5.23.1 · **Initial Design:** 2005 · **Last Updated:** 2026  
 > **Namespace:** `AmberDB`  
 > **Built-in Modules:** `Base`, `Index`, `Transact`, `Cache`, `Array`, `String`, `Date`, `Locale`, `Tools`
 
@@ -2312,5 +2316,5 @@ The following architectural choices might appear restrictive from an ad-hoc SQL 
 
 ---
 
-*This documentation is maintained for `AmberDB` v5.22.1 and aligns with active codebase architecture and developer practices.*
+*This documentation is maintained for `AmberDB` v5.23.1 and aligns with active codebase architecture and developer practices.*
 

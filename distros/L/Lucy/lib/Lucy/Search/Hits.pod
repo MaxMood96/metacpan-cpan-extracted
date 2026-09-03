@@ -48,7 +48,8 @@ Hits objects are iterators used to access the results of a search.
 
     my $hit_doc = $hits->next();
 
-Return the next hit, or undef when the iterator is exhausted.
+Return the L<HitDoc|Lucy::Document::HitDoc> for the next hit, or undef when the iterator
+is exhausted.
 
 =head2 total_hits
 

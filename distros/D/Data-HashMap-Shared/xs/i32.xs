@@ -5,8 +5,9 @@ SV*
 new(char* class, SV* path_sv, UV max_entries, UV lru_max = 0, UV ttl_default = 0, UV lru_skip = 0, UV arena_cap = 0, UV file_mode = 0600)
     CODE:
         CK_U32(max_entries, "max_entries", "Data::HashMap::Shared::I32"); CK_U32(lru_max, "lru_max", "Data::HashMap::Shared::I32"); CK_U32(ttl_default, "ttl_default", "Data::HashMap::Shared::I32"); CK_U32(lru_skip, "lru_skip", "Data::HashMap::Shared::I32");
-        char errbuf[SHM_ERR_BUFLEN]; const char* path = (SvGETMAGIC(path_sv), SvOK(path_sv)) ? SvPV_nolen(path_sv) : NULL; ShmHandle* map = shm_i32_create(path, (uint32_t)max_entries, (uint32_t)lru_max, (uint32_t)ttl_default, (uint32_t)lru_skip, (uint64_t)arena_cap, (mode_t)file_mode, errbuf);
+        char errbuf[SHM_ERR_BUFLEN]; const char* path = SHM_PATH_ARG(path_sv, "path", "Data::HashMap::Shared::I32"); ShmHandle* map = shm_i32_create(path, (uint32_t)max_entries, (uint32_t)lru_max, (uint32_t)ttl_default, (uint32_t)lru_skip, (uint64_t)arena_cap, (mode_t)file_mode, errbuf);
         if (!map) croak("Data::HashMap::Shared::I32: %s", errbuf[0] ? errbuf : "unknown error");
+        CK_MAX_SIZE(map, "Data::HashMap::Shared::I32");
         RETVAL = sv_setref_pv(newSV(0), class, (void*)map);
     OUTPUT:
         RETVAL
@@ -14,11 +15,12 @@ new(char* class, SV* path_sv, UV max_entries, UV lru_max = 0, UV ttl_default = 0
 SV*
 new_sharded(char* class, SV* path_prefix_sv, UV num_shards, UV max_entries, UV lru_max = 0, UV ttl_default = 0, UV lru_skip = 0, UV arena_cap = 0, UV file_mode = 0600)
     CODE:
-        const char* path_prefix = (SvGETMAGIC(path_prefix_sv), SvOK(path_prefix_sv)) ? SvPV_nolen(path_prefix_sv) : NULL;
+        const char* path_prefix = SHM_PATH_ARG(path_prefix_sv, "path prefix", "Data::HashMap::Shared::I32");
         CK_U32(max_entries, "max_entries", "Data::HashMap::Shared::I32"); CK_U32(lru_max, "lru_max", "Data::HashMap::Shared::I32"); CK_U32(ttl_default, "ttl_default", "Data::HashMap::Shared::I32"); CK_U32(lru_skip, "lru_skip", "Data::HashMap::Shared::I32");
         CK_U32(num_shards, "num_shards", "Data::HashMap::Shared::I32");
         char errbuf[SHM_ERR_BUFLEN]; ShmHandle* map = shm_i32_create_sharded(path_prefix, (uint32_t)num_shards, (uint32_t)max_entries, (uint32_t)lru_max, (uint32_t)ttl_default, (uint32_t)lru_skip, (uint64_t)arena_cap, (mode_t)file_mode, errbuf);
         if (!map) croak("Data::HashMap::Shared::I32: %s", errbuf[0] ? errbuf : "unknown error");
+        CK_MAX_SIZE(map, "Data::HashMap::Shared::I32");
         RETVAL = sv_setref_pv(newSV(0), class, (void*)map);
     OUTPUT:
         RETVAL
@@ -28,10 +30,11 @@ SV*
 new_memfd(char* class, SV* name_sv, UV max_entries, UV lru_max = 0, UV ttl_default = 0, UV lru_skip = 0, UV arena_cap = 0)
     CODE:
         char errbuf[SHM_ERR_BUFLEN];
-        const char* name = (SvGETMAGIC(name_sv), SvOK(name_sv)) ? SvPV_nolen(name_sv) : NULL;
+        const char* name = SHM_PATH_ARG(name_sv, "name", "Data::HashMap::Shared::I32");
         CK_U32(max_entries, "max_entries", "Data::HashMap::Shared::I32"); CK_U32(lru_max, "lru_max", "Data::HashMap::Shared::I32"); CK_U32(ttl_default, "ttl_default", "Data::HashMap::Shared::I32"); CK_U32(lru_skip, "lru_skip", "Data::HashMap::Shared::I32");
         ShmHandle* map = shm_i32_create_memfd(name, (uint32_t)max_entries, (uint32_t)lru_max, (uint32_t)ttl_default, (uint32_t)lru_skip, (uint64_t)arena_cap, errbuf);
         if (!map) croak("Data::HashMap::Shared::I32: %s", errbuf[0] ? errbuf : "unknown error");
+        CK_MAX_SIZE(map, "Data::HashMap::Shared::I32");
         RETVAL = sv_setref_pv(newSV(0), class, (void*)map);
     OUTPUT:
         RETVAL
@@ -42,6 +45,7 @@ new_from_fd(char* class, int fd)
         char errbuf[SHM_ERR_BUFLEN];
         ShmHandle* map = shm_i32_open_fd(fd, errbuf);
         if (!map) croak("Data::HashMap::Shared::I32: %s", errbuf[0] ? errbuf : "unknown error");
+        CK_MAX_SIZE(map, "Data::HashMap::Shared::I32");
         RETVAL = sv_setref_pv(newSV(0), class, (void*)map);
     OUTPUT:
         RETVAL
@@ -50,7 +54,7 @@ SV*
 new_readonly(char* class, SV* path_sv)
     CODE:
         char errbuf[SHM_ERR_BUFLEN];
-        const char* path = (SvGETMAGIC(path_sv), SvOK(path_sv)) ? SvPV_nolen(path_sv) : NULL;
+        const char* path = SHM_PATH_ARG(path_sv, "path", "Data::HashMap::Shared::I32");
         if (!path) croak("Data::HashMap::Shared::I32->new_readonly: path is required");
         ShmHandle* map = shm_i32_open_readonly(path, errbuf);
         if (!map) croak("Data::HashMap::Shared::I32: %s", errbuf[0] ? errbuf : "unknown error");
@@ -208,6 +212,7 @@ get_multi(SV* self_sv, ...)
                 uint32_t pos = hash & mask;
                 uint8_t tag = SHM_MAKE_TAG(hash);
                 int found = 0;
+                uint32_t fidx = 0;
                 int32_t val = 0;
                 for (uint32_t j = 0; j <= mask; j++) {
                     uint32_t idx = (pos + j) & mask;
@@ -217,12 +222,17 @@ get_multi(SV* self_sv, ...)
                     if (nodes[idx].key == key) {
                         if (h->expires_at && h->expires_at[idx] && now >= h->expires_at[idx]) break;
                         val = __atomic_load_n(&nodes[idx].value, __ATOMIC_RELAXED);
+                        fidx = idx;
                         found = 1;
                         break;
                     }
                 }
-                if (found) mPUSHi(val);
-                else PUSHs(&PL_sv_undef);
+                if (found) {
+                    /* count as an access for LRU second-chance, like get() does */
+                    if (h->lru_accessed && !h->readonly)
+                        __atomic_store_n(&h->lru_accessed[fidx], 1, __ATOMIC_RELAXED);
+                    mPUSHi(val);
+                } else PUSHs(&PL_sv_undef);
                 /* Prefetch next key's probe position */
                 if (i + 1 < nkeys) {
                     uint32_t npos = hashes[i + 1] & mask;
@@ -301,6 +311,7 @@ set_ttl(SV* self_sv, int32_t key, UV ttl_sec)
     CODE:
         EXTRACT_MAP("Data::HashMap::Shared::I32", self_sv);
         if (h->readonly || shm_is_sealed(h)) croak("Data::HashMap::Shared::I32: map is frozen (read-only)");
+        CK_U32(ttl_sec, "ttl", "Data::HashMap::Shared::I32");
         RETVAL = shm_i32_set_ttl(h, key, (uint32_t)ttl_sec);
     OUTPUT:
         RETVAL
@@ -536,6 +547,7 @@ put_ttl(SV* self_sv, int32_t key, int32_t value, UV ttl_sec)
     CODE:
         EXTRACT_MAP("Data::HashMap::Shared::I32", self_sv);
         if (h->readonly || shm_is_sealed(h)) croak("Data::HashMap::Shared::I32: map is frozen (read-only)");
+        CK_U32(ttl_sec, "ttl", "Data::HashMap::Shared::I32");
         REQUIRE_TTL(h);
         RETVAL = shm_i32_put_ttl(h, key, value, (uint32_t)ttl_sec);
     OUTPUT:
@@ -633,6 +645,7 @@ flush_expired_partial(SV* self_sv, UV limit)
     PPCODE:
         EXTRACT_MAP("Data::HashMap::Shared::I32", self_sv);
         if (h->readonly || shm_is_sealed(h)) croak("Data::HashMap::Shared::I32: map is frozen (read-only)");
+        CK_U32(limit, "limit", "Data::HashMap::Shared::I32");
         int done = 0;
         uint32_t flushed = shm_i32_flush_expired_partial(h, (uint32_t)limit, &done);
         EXTEND(SP, 2);
@@ -720,6 +733,7 @@ add_ttl(SV* self_sv, int32_t key, int32_t value, UV ttl_sec)
     CODE:
         EXTRACT_MAP("Data::HashMap::Shared::I32", self_sv);
         if (h->readonly || shm_is_sealed(h)) croak("Data::HashMap::Shared::I32: map is frozen (read-only)");
+        CK_U32(ttl_sec, "ttl", "Data::HashMap::Shared::I32");
         REQUIRE_TTL(h);
         RETVAL = shm_i32_add_ttl(h, key, value, (uint32_t)ttl_sec);
     OUTPUT:
@@ -739,6 +753,7 @@ update_ttl(SV* self_sv, int32_t key, int32_t value, UV ttl_sec)
     CODE:
         EXTRACT_MAP("Data::HashMap::Shared::I32", self_sv);
         if (h->readonly || shm_is_sealed(h)) croak("Data::HashMap::Shared::I32: map is frozen (read-only)");
+        CK_U32(ttl_sec, "ttl", "Data::HashMap::Shared::I32");
         REQUIRE_TTL(h);
         RETVAL = shm_i32_update_ttl(h, key, value, (uint32_t)ttl_sec);
     OUTPUT:
@@ -773,7 +788,7 @@ unlink(SV* self_or_class, ...)
             RETVAL = shm_unlink_sharded(h);
         } else {
             if (items < 2) croak("Usage: Data::HashMap::Shared::I32->unlink($path)");
-            RETVAL = shm_unlink_path(SvPV_nolen(ST(1)));
+            RETVAL = shm_unlink_path(shm_path_arg(aTHX_ ST(1), "path", "Data::HashMap::Shared::I32"));
         }
     OUTPUT:
         RETVAL

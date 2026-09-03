@@ -2,10 +2,20 @@
 
 # t/006_variables.t - check that variables are exported
 
-use Test::Simple tests => 3;
-use Music::Scales qw(%modes %abbrevs @scales);
+use Test::More tests => 9;
 
-ok(keys %modes);
-ok(keys %abbrevs);
-ok(@scales);
+use_ok 'Music::Scales', qw(%original_modes %modes %abbrevs @scales);
+
+my @got = keys %original_modes;
+ok(@got);
+is scalar(@got), 46, '%original_modes';
+@got = keys %modes;
+ok(@got);
+is scalar(@got), 268, '%modes';
+@got = keys %abbrevs;
+ok(@got);
+is scalar(@got), 268, '%abbrevs';
+@got = @scales;
+ok(@got);
+is scalar(@got), 30, '@scales';
 

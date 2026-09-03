@@ -288,8 +288,8 @@ cfcore/Lucy/Store/InStream.c
 cfcore/Lucy/Store/InStream.cfh
 cfcore/Lucy/Store/Lock.c
 cfcore/Lucy/Store/Lock.cfh
-cfcore/Lucy/Store/LockFactory.c
-cfcore/Lucy/Store/LockFactory.cfh
+cfcore/Lucy/Store/LockFileLock.c
+cfcore/Lucy/Store/LockFileLock.cfh
 cfcore/Lucy/Store/OutStream.c
 cfcore/Lucy/Store/OutStream.cfh
 cfcore/Lucy/Store/RAMDirHandle.c
@@ -300,8 +300,6 @@ cfcore/Lucy/Store/RAMFileHandle.c
 cfcore/Lucy/Store/RAMFileHandle.cfh
 cfcore/Lucy/Store/RAMFolder.c
 cfcore/Lucy/Store/RAMFolder.cfh
-cfcore/Lucy/Store/SharedLock.c
-cfcore/Lucy/Store/SharedLock.cfh
 cfcore/Lucy/Util/BlobSortEx.c
 cfcore/Lucy/Util/BlobSortEx.cfh
 cfcore/Lucy/Util/Debug.c
@@ -359,6 +357,10 @@ cftest/Lucy/Test/Highlight/TestHeatMap.c
 cftest/Lucy/Test/Highlight/TestHeatMap.cfh
 cftest/Lucy/Test/Highlight/TestHighlighter.c
 cftest/Lucy/Test/Highlight/TestHighlighter.cfh
+cftest/Lucy/Test/Index/NoMergeManager.c
+cftest/Lucy/Test/Index/NoMergeManager.cfh
+cftest/Lucy/Test/Index/TestBackgroundMerger.c
+cftest/Lucy/Test/Index/TestBackgroundMerger.cfh
 cftest/Lucy/Test/Index/TestDocWriter.c
 cftest/Lucy/Test/Index/TestDocWriter.cfh
 cftest/Lucy/Test/Index/TestHighlightWriter.c
@@ -407,6 +409,8 @@ cftest/Lucy/Test/Search/TestPhraseQuery.c
 cftest/Lucy/Test/Search/TestPhraseQuery.cfh
 cftest/Lucy/Test/Search/TestPolyQuery.c
 cftest/Lucy/Test/Search/TestPolyQuery.cfh
+cftest/Lucy/Test/Search/TestPolySearcher.c
+cftest/Lucy/Test/Search/TestPolySearcher.cfh
 cftest/Lucy/Test/Search/TestQueryParser.c
 cftest/Lucy/Test/Search/TestQueryParser.cfh
 cftest/Lucy/Test/Search/TestQueryParserLogic.c
@@ -449,6 +453,8 @@ cftest/Lucy/Test/Store/TestIOChunks.c
 cftest/Lucy/Test/Store/TestIOChunks.cfh
 cftest/Lucy/Test/Store/TestIOPrimitives.c
 cftest/Lucy/Test/Store/TestIOPrimitives.cfh
+cftest/Lucy/Test/Store/TestLock.c
+cftest/Lucy/Test/Store/TestLock.cfh
 cftest/Lucy/Test/Store/TestRAMDirHandle.c
 cftest/Lucy/Test/Store/TestRAMDirHandle.cfh
 cftest/Lucy/Test/Store/TestRAMFileHandle.c
@@ -503,6 +509,7 @@ devel/bin/update_version
 devel/bin/valgrind_triggers.pl
 devel/conf/astylerc
 devel/conf/clownfish.vim
+devel/conf/LSan.supp
 devel/conf/lucyperl.supp
 devel/conf/perltidyrc
 devel/conf/rat-excludes
@@ -705,12 +712,8 @@ lib/Lucy/Store/FSFileHandle.pm
 lib/Lucy/Store/FSFolder.pm
 lib/Lucy/Store/FSFolder.pod
 lib/Lucy/Store/InStream.pm
-lib/Lucy/Store/Lock.pm
-lib/Lucy/Store/Lock.pod
 lib/Lucy/Store/LockErr.pm
 lib/Lucy/Store/LockErr.pod
-lib/Lucy/Store/LockFactory.pm
-lib/Lucy/Store/LockFactory.pod
 lib/Lucy/Store/OutStream.pm
 lib/Lucy/Store/RAMFile.pm
 lib/Lucy/Store/RAMFileHandle.pm
@@ -730,9 +733,6 @@ lib/LucyX/Index/ByteBufDocWriter.pm
 lib/LucyX/Index/LongFieldSim.pm
 lib/LucyX/Index/ZlibDocReader.pm
 lib/LucyX/Index/ZlibDocWriter.pm
-lib/LucyX/Remote/ClusterSearcher.pm
-lib/LucyX/Remote/SearchClient.pm
-lib/LucyX/Remote/SearchServer.pm
 lib/LucyX/Search/Filter.pm
 lib/LucyX/Search/MockMatcher.pm
 lib/LucyX/Search/ProximityQuery.pm
@@ -852,7 +852,6 @@ sample/us_constitution/art7.txt
 sample/us_constitution/index.html
 sample/us_constitution/preamble.txt
 sample/us_constitution/uscon.css
-t/001-build_indexes.t
 t/002-lucy.t
 t/015-sort_external.t
 t/023-stepper.t
@@ -862,9 +861,7 @@ t/050-ramfile.t
 t/051-fsfile.t
 t/102-strings_io.t
 t/105-folder.t
-t/106-locking.t
 t/109-read_locking.t
-t/110-shared_lock.t
 t/111-index_manager.t
 t/152-inversion.t
 t/154-regex_tokenizer.t
@@ -885,6 +882,7 @@ t/219-byte_buf_doc.t
 t/220-zlib_doc.t
 t/224-lex_reader.t
 t/233-background_merger.t
+t/240-custom-analyzer.t
 t/304-verify_utf8.t
 t/305-indexer.t
 t/306-dynamic_schema.t
@@ -898,7 +896,6 @@ t/506-collector.t
 t/507-filter.t
 t/508-hits.t
 t/509-poly_searcher.t
-t/510-remote_search.t
 t/513-matcher.t
 t/514-and_matcher.t
 t/515-range_query.t
@@ -913,7 +910,6 @@ t/527-req_opt_query.t
 t/528-leaf_query.t
 t/529-no_match_query.t
 t/532-sort_collector.t
-t/550-cluster_searcher.t
 t/601-queryparser.t
 t/602-boosts.t
 t/603-query_boosts.t
@@ -922,7 +918,6 @@ t/605-store_pos_boost.t
 t/607-queryparser_multi_field.t
 t/613-proximityquery.t
 t/701-uscon.t
-t/999-remove_indexes.t
 t/binding/101-simple_io.t
 t/binding/150-polyanalyzer.t
 t/binding/151-analyzer.t
@@ -960,6 +955,7 @@ t/core/062-fs_dir_handle.t
 t/core/103-fs_folder.t
 t/core/104-ram_folder.t
 t/core/105-folder.t
+t/core/106-lf_lock.t
 t/core/111-index_manager.t
 t/core/112-cf_writer.t
 t/core/113-cf_reader.t
@@ -984,6 +980,7 @@ t/core/225-polyreader.t
 t/core/230-full_text_type.t
 t/core/231-blob_type.t
 t/core/232-numeric_type.t
+t/core/233-background_merger.t
 t/core/234-field_type.t
 t/core/301-segment.t
 t/core/303-highlighter.t
@@ -992,6 +989,7 @@ t/core/309-span.t
 t/core/310-heat_map.t
 t/core/501-termquery.t
 t/core/502-phrasequery.t
+t/core/509-poly_searcher.t
 t/core/511-sort_spec.t
 t/core/515-range_query.t
 t/core/523-and_query.t

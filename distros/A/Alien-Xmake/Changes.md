@@ -5,6 +5,32 @@ All notable changes to Alien::Xmake will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.9.2] - 2026-09-02
+
+Aliens based on `xrepo` install only what end users need (libs, binaries, etc.) and not all the tools installed along the way (compilers, cmake, python, etc.).
+
+### Added
+
+- Just a bunch of examples in the docs.
+
+### Changed
+
+- `::Base::Builder::_resolve_alien` now re-exports installed packages with (`xrepo export -k shared --shallow`) to avoid extra toolchain clutter in the sharedir install. This might not be the *best* place to do it but it's the current place.
+- `::Base` avoids reinstalling everything when running unit tests
+
+## [v0.9.1] - 2026-09-02
+
+More polish as I inch towards v1.0.0.
+
+### Added
+
+- Multi-package support in `Alien::Xrepo::Base` (borrowing from `Alien::Build`:
+  - New `alt( [$pkg] )` accessor, modeled on `Alien::Base->alt`: without an argument (or with the primary name) it returns `$self`; with a non-primary name it returns a delegate whose `cflags`, `libs`, `libpath`, `bin_dir`, `kind`, `dynamic_libs`, `dist_dir`, `install_type`, `version`, and related accessors are pinned to that package. The delegate is the new `Alien::Xrepo::Base::Alt` class.
+  - New `Alien::Base`-style accessors: `cflags_static`, `libs_static`, `dynamic_libs`, `dist_dir`, `install_type`, and `split_flags`.
+  - `package_names` returns the bound package names, and `install` returns the list of package infos in list context.
+  - This will allow me to merge Alien::SDL3_mixer, Alien::SDL3_image, Alien::SDL3_ttf into Alien::SDL3
+- Security and Contributing policy files
+
 ## [v0.9.0] - 2026-09-01
 
 The docs have been greatly expanded since January but the stars of this release are Alien::Xrepo and Alien::Xrepo::Base, an Alien::Base stand-in for installing tools and libraries from [xrepo](https://packages.xmake.io/), [vcpkg](https://vcpkg.io/en/packages), [conan](https://conan.io/center), [brew](https://brew.sh/) (homebrew/linuxbrew), [conda](https://anaconda.org/), [dub](https://dub.pm/) (Dlang libs), [pacman](https://wiki.archlinux.org/title/Pacman#Installing_packages) (if you use arch, btw) [clib](https://github.com/clibs/clib/), [apt](https://www.debian.org/distrib/packages) on Debian/Ubuntu, [Cargo](https://crates.io/) for Rust crates, [Portage](https://packages.gentoo.org/) on Gentoo, [Nimble](https://nimpackages.com/) for nimlang, [NuGet](https://www.nuget.org/) for .NET, [Zypper](https://documentation.suse.com/smart/systems-management/html/concept-zypper/index.html) on openSUSE, and even your own custom repositories with smart prerequisite management in just a few lines of Perl.
@@ -116,7 +142,9 @@ The docs have been greatly expanded since January but the stars of this release 
 
 - It exists.
 
-[Unreleased]: https://github.com/sanko/Alien-Xmake/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/sanko/Alien-Xmake/compare/v0.9.2...HEAD
+[v0.9.2]: https://github.com/sanko/Alien-Xmake/compare/v0.9.1...v0.9.2
+[v0.9.1]: https://github.com/sanko/Alien-Xmake/compare/v0.9.0...v0.9.1
 [v0.9.0]: https://github.com/sanko/Alien-Xmake/compare/0.08...v0.9.0
 [0.08]: https://github.com/sanko/Alien-Xmake/compare/0.07...0.08
 [0.07]: https://github.com/sanko/Alien-Xmake/compare/0.06...0.07

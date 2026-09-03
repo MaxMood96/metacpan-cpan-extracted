@@ -2,6 +2,7 @@ use strict;
 use warnings;
 use Test::More;
 use File::Temp qw(tempdir);
+use POSIX ();
 use Data::HashMap::Shared::II;
 use Data::HashMap::Shared::SS;
 
@@ -242,6 +243,89 @@ like exception(sub { Data::HashMap::Shared::SS->new_readonly($path) }),
     like exception(sub { $ro->put("x", "y") }),    qr/frozen|read-only/, 'SS put croaks on read-only view';
     like exception(sub { $ro->remove("key-1") }),  qr/frozen|read-only/, 'SS remove croaks on read-only view';
     like exception(sub { $ro->clear }),            qr/frozen|read-only/, 'SS clear croaks on read-only view';
+}
+
+# Regression (0.19): a sealed file has no writers, so an odd seq or a held lock
+# word is residue from a writer that raced the freeze and then died.  A PROT_READ
+# view cannot repair it (the CAS would fault the mapping) and nothing else can
+# either -- a read-write attach refuses a sealed file -- so every reader used to
+# block in the seqlock forever.  It must be refused at open instead.  (An earlier
+# 0.19 build SIGSEGV'd in this state; the one after it hung.)
+{
+    my $p = "$dir/residue.hm";
+    { my $m = Data::HashMap::Shared::II->new($p, 64);
+      $m->put($_, $_) for 1 .. 10;
+      $m->freeze; }
+
+    ok( Data::HashMap::Shared::II->new_readonly($p), 'sealed file opens read-only when clean' );
+
+    my $poke = sub {
+        my ($off, $v) = @_;
+        open my $f, '+<:raw', $p or die $!;
+        seek $f, $off, 0 or die $!;
+        print $f pack('L', $v);
+        close $f or die $!;
+    };
+    my $dead = fork // die "fork: $!";
+    POSIX::_exit(0) unless $dead;
+    waitpid $dead, 0;
+
+    $poke->(64, 21);                                  # ShmHeader.seq, left odd
+    like exception(sub { Data::HashMap::Shared::II->new_readonly($p) }),
+         qr/mid-update|crashed writer/,
+         'sealed file with an odd seq is refused, not opened into a hang';
+    $poke->(64, 20);
+
+    $poke->(128, 0x80000000 | $dead);                 # ShmHeader.wlock, dead holder
+    like exception(sub { Data::HashMap::Shared::II->new_readonly($p) }),
+         qr/mid-update|crashed writer/,
+         'sealed file with a held lock word is refused';
+    $poke->(128, 0);
+
+    ok( Data::HashMap::Shared::II->new_readonly($p),
+        'and opens again once the residue is cleared' );
+}
+
+# Regression (0.19): a resize deferred while an iterator was live outlives
+# freeze(), and flush_deferred was the one write-lock path with no frozen check
+# -- so ending the iterator resized a SEALED file (capacity and table_gen both
+# changed).  No race is needed; it is deterministic.  A crash inside that resize
+# left residue on a frozen file that no API could then open at all.
+{
+    my $read_hdr = sub {
+        open my $f, '<:raw', $_[0] or die $!;
+        my $b = do { local $/; <$f> };
+        close $f;
+        return {
+            table_cap => unpack('L', substr($b, 20, 4)),
+            table_gen => unpack('L', substr($b, 156, 4)),
+            sealed    => unpack('C', substr($b, 96, 1)),
+        };
+    };
+
+    for my $case (
+        ['cursor DESTROY', sub { my ($m) = @_; my $c = $m->cursor; $c->next; sub { undef $c } }],
+        ['each exhausted', sub { my ($m) = @_; my @kv = $m->each;      sub { 1 while my @x = $m->each } }],
+    ) {
+        my ($label, $start) = @$case;
+        my $p = "$dir/deferred-$label.hm";
+        $p =~ s/\s+/-/g;
+        my $m = Data::HashMap::Shared::II->new($p, 4096);
+        $m->put($_, $_) for 1 .. 3000;
+        my $finish = $start->($m);          # iteration in flight
+        $m->remove($_) for 1 .. 2950;       # shrink wanted, but deferred
+        $m->freeze;
+
+        my $before = $read_hdr->($p);
+        is $before->{sealed}, 1, "$label: file is sealed before the iterator ends";
+        $finish->();                        # would run the deferred resize
+        my $after = $read_hdr->($p);
+
+        is $after->{table_cap}, $before->{table_cap},
+            "$label: sealed file keeps its capacity";
+        is $after->{table_gen}, $before->{table_gen},
+            "$label: sealed file is not resized when the iterator ends";
+    }
 }
 
 done_testing;

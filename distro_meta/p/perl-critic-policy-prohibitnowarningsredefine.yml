@@ -1,0 +1,4 @@
+---
+distro: perl-critic-policy-prohibitnowarningsredefine
+version: 1.000
+author_path: T/TE/TEODESIAN/perl-critic-policy-prohibitnowarningsredefine-1.000.tar.gz

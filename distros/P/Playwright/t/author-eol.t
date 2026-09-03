@@ -23,12 +23,6 @@ my @files = (
     'lib/Playwright/APIRequestContext.pm',
     'lib/Playwright/APIResponse.pm',
     'lib/Playwright/APIResponseAssertions.pm',
-    'lib/Playwright/Accessibility.pm',
-    'lib/Playwright/Android.pm',
-    'lib/Playwright/AndroidDevice.pm',
-    'lib/Playwright/AndroidInput.pm',
-    'lib/Playwright/AndroidSocket.pm',
-    'lib/Playwright/AndroidWebView.pm',
     'lib/Playwright/Base.pm',
     'lib/Playwright/Browser.pm',
     'lib/Playwright/BrowserContext.pm',
@@ -39,10 +33,11 @@ my @files = (
     'lib/Playwright/Clock.pm',
     'lib/Playwright/ConsoleMessage.pm',
     'lib/Playwright/Coverage.pm',
+    'lib/Playwright/Credentials.pm',
+    'lib/Playwright/Debugger.pm',
     'lib/Playwright/Dialog.pm',
+    'lib/Playwright/Disposable.pm',
     'lib/Playwright/Download.pm',
-    'lib/Playwright/Electron.pm',
-    'lib/Playwright/ElectronApplication.pm',
     'lib/Playwright/ElementHandle.pm',
     'lib/Playwright/Error.pm',
     'lib/Playwright/FileChooser.pm',
@@ -65,6 +60,7 @@ my @files = (
     'lib/Playwright/RequestOptions.pm',
     'lib/Playwright/Response.pm',
     'lib/Playwright/Route.pm',
+    'lib/Playwright/Screencast.pm',
     'lib/Playwright/Selectors.pm',
     'lib/Playwright/SnapshotAssertions.pm',
     'lib/Playwright/TimeoutError.pm',
@@ -76,6 +72,7 @@ my @files = (
     'lib/Playwright/WebSocket.pm',
     'lib/Playwright/WebSocketFrame.pm',
     'lib/Playwright/WebSocketRoute.pm',
+    'lib/Playwright/WebStorage.pm',
     'lib/Playwright/Worker.pm',
     't/Playwright-Base.t',
     't/Playwright-Util.t',
@@ -98,8 +95,7 @@ my @files = (
     't/release-cpan-changes.t',
     't/release-dist-manifest.t',
     't/release-kwalitee.t',
-    't/release-meta-json.t',
-    't/release-unused-vars.t'
+    't/release-meta-json.t'
 );
 
 eol_unix_ok($_, { trailing_whitespace => 1 }) foreach @files;

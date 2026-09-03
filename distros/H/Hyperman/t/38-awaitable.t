@@ -2,6 +2,7 @@
 use strict;
 use warnings;
 use Test::More;
+use Hyperman;
 use Hyperman::Future;
 
 # The protocol methods are always present; the async sub syntax that uses
@@ -36,6 +37,46 @@ for my $m (qw(
     ok(!eval { $f->AWAIT_GET; 1 }, 'AWAIT_GET on a failure dies');
     is($@, "Oopsie at " . __FILE__ . " line $line.\n",
        'the exception is reported at the caller');
+}
+{
+    # A blessed failure must arrive blessed, not stringified.
+    my $err = bless {}, 'Hyperman::Test::Err';
+    my $f = Hyperman::Future->AWAIT_NEW_FAIL($err);
+    ok(!eval { $f->AWAIT_GET; 1 }, 'AWAIT_GET on a blessed failure dies');
+    is(ref($@), 'Hyperman::Test::Err', 'the blessed exception is not flattened');
+}
+
+# ---- the croak_sv compat shim -------------------------------------------
+# hm_compat.h's croak_sv shim stands in only on perls before 5.14, so on a
+# perl anyone develops on, nothing else here reaches it. It is compiled
+# unconditionally and driven through _croak_sv_selftest so that its code
+# runs somewhere a failure is visible before a smoker finds it.
+#
+# BE CLEAR ABOUT WHAT THIS CANNOT DO. It cannot catch the bug it was
+# written after: 0.41's shim raised the message through croak(NULL), which
+# on old perls takes ERRSV verbatim and dropped the " at FILE line N.",
+# but on a modern perl routes through mess_sv and appends it like croak_sv
+# does. Both shims pass every assertion below on 5.42 - measured, by
+# building the old one and running this file. The version-dependent half
+# is only ever provable on a smoker; what is checked here is the half that
+# holds on every perl - the shapes it must handle and the blessed error it
+# must not flatten.
+{
+    my @cases = (
+        ['a plain string',       'Oopsie',    "Oopsie\@LINE"     ],
+        ['a trailing newline',   "Oopsie\n",  "Oopsie\n"         ],
+        ['an empty string',      '',          "\@LINE"           ],
+    );
+    for my $c (@cases) {
+        my ($name, $in, $want) = @$c;
+        my $line = __LINE__ + 1;
+        ok(!eval { Hyperman->_croak_sv_selftest($in); 1 }, "the shim raises $name");
+        (my $expect = $want) =~ s/\@LINE/ at ${\ __FILE__ } line $line.\n/;
+        is($@, $expect, "the shim reports $name like croak_sv");
+    }
+    my $err = bless {}, 'Hyperman::Test::Err';
+    ok(!eval { Hyperman->_croak_sv_selftest($err); 1 }, 'the shim raises a blessed error');
+    is(ref($@), 'Hyperman::Test::Err', 'the shim keeps a blessed error blessed');
 }
 
 # ---- clone ---------------------------------------------------------------
@@ -153,20 +194,28 @@ SKIP: {
     # nothing in the report to pin it to.
     diag("Future::AsyncAwait $Future::AsyncAwait::VERSION");
 
-    # Cancellation is the one behaviour here that the async sub machinery
-    # drives rather than this class: F::AA calls
-    # $outer->AWAIT_CHAIN_CANCEL($inner) when it suspends, and that call is
-    # what a later $outer->cancel rides into $inner. This class implements
-    # both that method and the older AWAIT_ON_CANCEL spelling, and t/39
-    # proves the whole Awaitable API against F::AA's own conformance suite -
-    # but if F::AA never makes the call, nothing this class does can make
-    # the inner future cancel.
+    # Cancellation across an await is the one thing here that Future::
+    # AsyncAwait drives rather than this class, and BEFORE PERL 5.24 IT DOES
+    # NOT DRIVE IT.
     #
-    # F::AA renamed AWAIT_ON_CANCEL to AWAIT_CHAIN_CANCEL in 0.45 and its
-    # 0.56 Changes says "Actually use AWAIT_ON_CANCEL properly (RT137723)",
-    # so below 0.56 the call is not something to rely on. A 5.22.1 smoker
-    # FAILed exactly this one assertion out of 539 while t/39 passed.
-    my $chains = eval { Future::AsyncAwait->VERSION('0.56'); 1 } ? 1 : 0;
+    # Measured, not inferred, with a logging Awaitable class that records
+    # every call it receives (same F::AA 0.71 throughout):
+    #
+    #   perl 5.24+  inner.ON_READY, inner.CLONE->outer,
+    #               outer.CHAIN_CANCEL(inner)   -> cancel reaches inner
+    #   perl 5.22   inner.ON_READY, inner.CLONE->outer,
+    #               outer.ON_CANCEL(CODE)       -> the code runs on cancel
+    #                                              and does not touch inner
+    #
+    # So on an older perl F::AA never says which future to chain, and no
+    # implementation of this protocol can pass the assertion - a pure-Perl
+    # class fails it identically. This class implements both spellings and
+    # t/39 proves the whole API against F::AA's own conformance suite.
+    #
+    # The gate is the PERL version, not the F::AA version: Punk 0.41 FAILed
+    # the same assertion on a 5.18.0 smoker carrying F::AA 0.66, which is
+    # well past every rename in F::AA's own changelog.
+    my $chains = $] >= 5.024;
 
     # async sub is syntax, so the whole block has to be compiled late.
     my $ok = eval <<'ASYNC';
@@ -195,8 +244,8 @@ SKIP: {
 
         {   # cancelling the outer future cancels what it is awaiting
             SKIP: {
-                skip 'Future::AsyncAwait 0.56+ chains cancellation into the '
-                   . 'awaited future', 1 unless $chains;
+                skip 'Future::AsyncAwait chains cancellation into the '
+                   . 'awaited future only on perl 5.24+', 1 unless $chains;
                 my $inner = Hyperman::Future->new;
                 async sub t_cancel { await $inner; return 1 }
                 my $outer = t_cancel();

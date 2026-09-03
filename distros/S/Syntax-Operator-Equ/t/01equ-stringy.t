@@ -34,12 +34,17 @@ ok(!(""    equ undef), 'undef is not empty string');
 }
 
 # unimport
-{
+SKIP: {
    no Syntax::Operator::Equ;
 
    sub equ { return "normal function" }
 
-   is( equ, "normal function", 'equ() parses as a normal function call' );
+   # `equ` is a native infix operator in Perl 5.45.3 onwards
+   skip "equ is a real operator on this perl", 1 if $^V ge v5.45.3;
+
+   # We have to string-eval the 'equ' call because otherwise it won't even
+   # compile >= 5.45.3
+   is( eval 'equ', "normal function", 'equ() parses as a normal function call' );
 }
 
 ok(!$warnings, 'no warnings');

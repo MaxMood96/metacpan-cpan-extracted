@@ -1,5 +1,5 @@
 package Playwright;
-$Playwright::VERSION = '1.551';
+$Playwright::VERSION = '1.621';
 use strict;
 use warnings;
 
@@ -67,7 +67,7 @@ sub _check_node {
     warn $output if $output;
 
     confess(
-        "playwright_server could not run successfully.
+        qq{playwright_server could not run successfully.
     See the above error message for why.
     It's likely to be unmet dependencies, or a NODE_PATH issue.
 
@@ -76,14 +76,14 @@ sub _check_node {
 
     npm i express playwright uuid
     sudo npx playwright install-deps
-    export NODE_PATH=\"\$(pwd)/node_modules\".
+    export NODE_PATH="\$(npm root):\$(npm root -g)"
 
     If you still experience issues, run the following:
 
     NODE_DEBUG=module playwright_server --check
 
     This should tell you why node can't find the deps you have installed.
-    "
+    }
     );
 
 }
@@ -198,7 +198,7 @@ sub await ( $self, $promise ) {
     );
 }
 
-sub pusht ( $object, $timeout, $navigation = 0 ) {
+sub pusht( $object, $timeout, $navigation = 0 ) {
     $object->{timeouts} //= [];
     push( @{ $object->{timeouts} }, $timeout );
     return $object->setDefaultNavigationTimeout($timeout) if $navigation;
@@ -281,7 +281,7 @@ sub DESTROY ($self) {
     $self->quit();
 }
 
-sub _wait_port ( $port, $timeout, $debug ) {
+sub _wait_port( $port, $timeout, $debug ) {
 
     #XXX unusedvars is wigging
     $debug = $debug;
@@ -357,9 +357,6 @@ sub _start_server_windows ( $port, $timeout, $debug, $cleanup, @args ) {
     my $pid       = qq/playwright-server:$port/;
     my @cmdprefix = ( "start /MIN", qq{"$pid"} );
 
-    # Test::UnusedVars hack
-    $cleanup = '';
-
     my $cmdstring = join( ' ', @cmdprefix, @args );
     print "$cmdstring\n" if $debug;
     system($cmdstring);
@@ -388,7 +385,7 @@ Playwright - Perl client for Playwright
 
 =head1 VERSION
 
-version 1.551
+version 1.621
 
 =head1 SYNOPSIS
 
@@ -448,6 +445,8 @@ It should provide you with instructions which will get you working right away.
 
 However, depending on your node installation this may not work due to dependencies for node.js not being in the expected location.
 To fix this, you will need to update your NODE_PATH environment variable to point to the correct location.
+
+This location is usually going to be the output of `npm root -g`.
 
 =head3 Node Versions
 

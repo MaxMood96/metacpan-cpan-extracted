@@ -32,7 +32,7 @@
 #include "Lucy/Store/RAMFileHandle.h"
 
 TestInStream*
-TestInStream_new() {
+TestInStream_new(void) {
     return (TestInStream*)Class_Make_Obj(TESTINSTREAM);
 }
 
@@ -218,7 +218,11 @@ TestInStream_Run_IMP(TestInStream *self, TestBatchRunner *runner) {
     test_refill(runner);
     test_Clone_and_Reopen(runner);
     test_Close(runner);
+#ifdef LUCY_UBSAN
+    SKIP(runner, 16, "Skipping tests with UB under UBSan");
+#else
     test_Seek_and_Tell(runner);
+#endif
 }
 
 

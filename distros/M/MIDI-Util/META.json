@@ -39,6 +39,7 @@
             "List::Util" : "0",
             "MIDI" : "0",
             "MIDI::Simple" : "0",
+            "Music::Scales" : "0.13",
             "Music::Tempo" : "0",
             "constant" : "0",
             "perl" : "5.010",
@@ -48,11 +49,12 @@
       },
       "test" : {
          "requires" : {
+            "Data::Dumper::Compact" : "0",
             "File::Spec" : "0",
             "IO::Handle" : "0",
             "IPC::Open3" : "0",
             "Test::Exception" : "0",
-            "Test::More" : "0",
+            "Test::More" : "0.88",
             "perl" : "5.010"
          }
       }
@@ -66,7 +68,7 @@
          "web" : "https://github.com/ology/MIDI-Util"
       }
    },
-   "version" : "0.1307",
+   "version" : "0.1309",
    "x_Dist_Zilla" : {
       "perl" : {
          "version" : "5.042000"
@@ -305,6 +307,28 @@
             },
             "name" : "Test::PodSpelling",
             "version" : "2.007006"
+         },
+         {
+            "class" : "Dist::Zilla::Plugin::Prereqs",
+            "config" : {
+               "Dist::Zilla::Plugin::Prereqs" : {
+                  "phase" : "test",
+                  "type" : "requires"
+               }
+            },
+            "name" : "TestRequires",
+            "version" : "6.037"
+         },
+         {
+            "class" : "Dist::Zilla::Plugin::Prereqs",
+            "config" : {
+               "Dist::Zilla::Plugin::Prereqs" : {
+                  "phase" : "runtime",
+                  "type" : "requires"
+               }
+            },
+            "name" : "RuntimeRequires",
+            "version" : "6.037"
          },
          {
             "class" : "Dist::Zilla::Plugin::GatherDir",

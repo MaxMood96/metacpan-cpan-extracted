@@ -9,7 +9,7 @@ use strict;
 use warnings;
 
 package Playwright::Tracing;
-$Playwright::Tracing::VERSION = '1.551';
+$Playwright::Tracing::VERSION = '1.621';
 use parent 'Playwright::Base';
 
 sub new {
@@ -22,31 +22,31 @@ sub spec {
     return $Playwright::spec->{'Tracing'}{members};
 }
 
+sub startChunk {
+    my $self = shift;
+    return $self->_api_request(
+        args    => [@_],
+        command => 'startChunk',
+        object  => $self->{guid},
+        type    => $self->{type}
+    );
+}
+
+sub stopHar {
+    my $self = shift;
+    return $self->_api_request(
+        args    => [@_],
+        command => 'stopHar',
+        object  => $self->{guid},
+        type    => $self->{type}
+    );
+}
+
 sub stopChunk {
     my $self = shift;
     return $self->_api_request(
         args    => [@_],
         command => 'stopChunk',
-        object  => $self->{guid},
-        type    => $self->{type}
-    );
-}
-
-sub start {
-    my $self = shift;
-    return $self->_api_request(
-        args    => [@_],
-        command => 'start',
-        object  => $self->{guid},
-        type    => $self->{type}
-    );
-}
-
-sub groupEnd {
-    my $self = shift;
-    return $self->_api_request(
-        args    => [@_],
-        command => 'groupEnd',
         object  => $self->{guid},
         type    => $self->{type}
     );
@@ -62,21 +62,41 @@ sub stop {
     );
 }
 
-sub group {
+sub startHar {
     my $self = shift;
     return $self->_api_request(
         args    => [@_],
-        command => 'group',
+        command => 'startHar',
         object  => $self->{guid},
         type    => $self->{type}
     );
 }
 
-sub startChunk {
+sub groupEnd {
     my $self = shift;
     return $self->_api_request(
         args    => [@_],
-        command => 'startChunk',
+        command => 'groupEnd',
+        object  => $self->{guid},
+        type    => $self->{type}
+    );
+}
+
+sub start {
+    my $self = shift;
+    return $self->_api_request(
+        args    => [@_],
+        command => 'start',
+        object  => $self->{guid},
+        type    => $self->{type}
+    );
+}
+
+sub group {
+    my $self = shift;
+    return $self->_api_request(
+        args    => [@_],
+        command => 'group',
         object  => $self->{guid},
         type    => $self->{type}
     );
@@ -126,7 +146,7 @@ Playwright::Tracing - Automatically generated class for Playwright::Tracing
 
 =head1 VERSION
 
-version 1.551
+version 1.621
 
 =head1 CONSTRUCTOR
 
@@ -137,23 +157,23 @@ Instead it should be returned to you as the result of calls on Playwright object
 
 =head1 METHODS
 
+=head2 startChunk(@args)
+
+Execute the Tracing::startChunk playwright routine.
+
+See L<https://playwright.dev/docs/api/class-Tracing#Tracing-startChunk> for more information.
+
+=head2 stopHar(@args)
+
+Execute the Tracing::stopHar playwright routine.
+
+See L<https://playwright.dev/docs/api/class-Tracing#Tracing-stopHar> for more information.
+
 =head2 stopChunk(@args)
 
 Execute the Tracing::stopChunk playwright routine.
 
 See L<https://playwright.dev/docs/api/class-Tracing#Tracing-stopChunk> for more information.
-
-=head2 start(@args)
-
-Execute the Tracing::start playwright routine.
-
-See L<https://playwright.dev/docs/api/class-Tracing#Tracing-start> for more information.
-
-=head2 groupEnd(@args)
-
-Execute the Tracing::groupEnd playwright routine.
-
-See L<https://playwright.dev/docs/api/class-Tracing#Tracing-groupEnd> for more information.
 
 =head2 stop(@args)
 
@@ -161,17 +181,29 @@ Execute the Tracing::stop playwright routine.
 
 See L<https://playwright.dev/docs/api/class-Tracing#Tracing-stop> for more information.
 
+=head2 startHar(@args)
+
+Execute the Tracing::startHar playwright routine.
+
+See L<https://playwright.dev/docs/api/class-Tracing#Tracing-startHar> for more information.
+
+=head2 groupEnd(@args)
+
+Execute the Tracing::groupEnd playwright routine.
+
+See L<https://playwright.dev/docs/api/class-Tracing#Tracing-groupEnd> for more information.
+
+=head2 start(@args)
+
+Execute the Tracing::start playwright routine.
+
+See L<https://playwright.dev/docs/api/class-Tracing#Tracing-start> for more information.
+
 =head2 group(@args)
 
 Execute the Tracing::group playwright routine.
 
 See L<https://playwright.dev/docs/api/class-Tracing#Tracing-group> for more information.
-
-=head2 startChunk(@args)
-
-Execute the Tracing::startChunk playwright routine.
-
-See L<https://playwright.dev/docs/api/class-Tracing#Tracing-startChunk> for more information.
 
 =head2 on(@args)
 

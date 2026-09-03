@@ -1,5 +1,5 @@
 package Playwright::Util;
-$Playwright::Util::VERSION = '1.551';
+$Playwright::Util::VERSION = '1.621';
 use strict;
 use warnings;
 
@@ -129,7 +129,7 @@ Playwright::Util - Common utility functions for the Playwright module
 
 =head1 VERSION
 
-version 1.551
+version 1.621
 
 =head2 request(STRING method, STRING url, STRING host, INTEGER port, LWP::UserAgent ua, HASH args) = HASH
 

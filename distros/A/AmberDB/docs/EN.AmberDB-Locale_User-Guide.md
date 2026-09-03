@@ -1,6 +1,8 @@
-# AmberDB::Locale — Comprehensive Guide
+[🏠 Home](index.html) &nbsp;•&nbsp; [📖 About](EN.About_AmberDB.html) &nbsp;•&nbsp; [🚀 Quick Start](index.html#-quick-start) &nbsp;•&nbsp; [📘 Tutorial](EN.AmberDB_User-Guide.html) &nbsp;•&nbsp; [🌐 Locale](EN.AmberDB-Locale_User-Guide.html) &nbsp;•&nbsp; [📋 Changes](https://github.com/marufcetin/amberdb/blob/main/Changes) &nbsp;•&nbsp; [📚 Wiki](https://github.com/marufcetin/amberdb/wiki) &nbsp;•&nbsp; [🇹🇷 Türkçe](TR.AmberDB-Locale_Kullanim_Rehberi.html)
 
 ---
+
+# AmberDB::Locale — Comprehensive Guide
 
 ## 1. Overview
 

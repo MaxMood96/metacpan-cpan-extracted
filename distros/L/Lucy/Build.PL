@@ -20,16 +20,6 @@ use lib 'buildlib';
 use File::Spec::Functions qw( catdir updir );
 use Lucy::Build;
 
-# Don't create FAIL reports from CPAN Testers that force parallel tests.
-# See LUCY-260.
-if ( $ENV{AUTOMATED_TESTING}
-     && $ENV{HARNESS_OPTIONS} =~ /(?:^|:)j(\d*)/
-     && ($1 || 9) > 1
-   ) {
-    print STDERR "Parallel testing is known to fail.\n";
-    exit;
-}
-
 my $IS_CPAN_DIST = -e 'cfcore';
 my $CORE_SOURCE_DIR;
 my $TEST_SOURCE_DIR;
@@ -46,23 +36,23 @@ my $builder = Lucy::Build->new(
     module_name => 'Lucy',
     license     => 'apache',
     dist_author => 'Lucy search project',
-    dist_version       => '0.7.0',
+    dist_version       => '0.8.0',
     requires           => {
         'perl'      => '5.8.3',
-        'Clownfish' => 0.007000,
+        'Clownfish' => 0.008000,
     },
     configure_requires => {
         'Module::Build'               => 0.280801,
-        'Clownfish'                   => 0.007000,
-        'Clownfish::CFC::Perl::Build' => 0.007000,
+        'Clownfish'                   => 0.008000,
+        'Clownfish::CFC::Perl::Build' => 0.008000,
     },
     build_requires     => {
         'Module::Build'      => 0.280801,
         'ExtUtils::CBuilder' => 0.21,
         'ExtUtils::ParseXS'  => 3.00,
         'Devel::PPPort'      => 3.14,
-        'Clownfish'          => 0.007000,
-        'Clownfish::CFC'     => 0.007000,
+        'Clownfish'          => 0.008000,
+        'Clownfish::CFC'     => 0.008000,
     },
     no_index => {
         directory => [qw( buildlib devel sample )],

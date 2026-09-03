@@ -11,7 +11,7 @@ diag 'Xmake version: ' . $xmake->version;
 use Capture::Tiny qw[capture];
 my $exe = $xmake->exe;
 diag 'Path to exe:  ' . $exe;
-diag qx[$exe g --theme=plain] if $ENV{AUTOMATED_TESTING};
+qx[$exe g --theme=plain];
 #
 subtest xmake => sub {
     diag 'Path to exe:  ' . $exe;

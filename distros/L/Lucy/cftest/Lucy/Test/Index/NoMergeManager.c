@@ -1,0 +1,42 @@
+/* Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define TESTLUCY_USE_SHORT_NAMES
+#include "Lucy/Util/ToolSet.h"
+
+#include "Lucy/Test/Index/NoMergeManager.h"
+#include "Lucy/Index/DeletionsWriter.h"
+#include "Lucy/Index/IndexManager.h"
+#include "Lucy/Index/PolyReader.h"
+
+NoMergeManager*
+NoMergeManager_new(void) {
+    NoMergeManager *self = (NoMergeManager*)Class_Make_Obj(NOMERGEMANAGER);
+    return (NoMergeManager*)IxManager_init((IndexManager*)self, NULL);
+}
+
+Vector*
+NoMergeManager_Recycle_IMP(NoMergeManager *self, PolyReader *reader,
+                           DeletionsWriter *del_writer, int64_t cutoff,
+                           bool optimize) {
+    UNUSED_VAR(self);
+    UNUSED_VAR(reader);
+    UNUSED_VAR(del_writer);
+    UNUSED_VAR(cutoff);
+    UNUSED_VAR(optimize);
+    return Vec_new(0);
+}
+

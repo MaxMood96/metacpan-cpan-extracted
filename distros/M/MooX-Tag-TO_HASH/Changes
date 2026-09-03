@@ -1,11 +1,18 @@
 Revision history for MooX-Tag-TO_HASH
 
+0.08      2026-09-02 13:08:22 EDT
+
+  [BUILD]
+
+   * Missing test dependency ++BBLACKM (CPAN Testers)
+
+
 0.07      2026-08-28 11:33:02 EDT
 
   [BUILD]
 
     * some JSON bool tests did not use the
-      correct expected JSON bool value. ++SREZIC
+      correct expected JSON bool value. ++SREZIC (CPAN Testers)
 
 0.06      2026-08-27 18:19:02 EDT
 

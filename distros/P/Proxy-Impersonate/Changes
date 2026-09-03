@@ -1,5 +1,10 @@
 Revision history for Proxy-Impersonate
 
+0.02  2026-09-02
+        - upstream responses are decompressed before being forwarded, so a page
+          served with an encoding the client cannot decode (zstd) now renders
+        - requires Curl::Impersonate 0.02
+
 0.01  2026-08-25
     - initial release: an EV-driven MITM proxy that re-originates each request
       through Curl::Impersonate, so the origin sees a chosen browser's TLS and

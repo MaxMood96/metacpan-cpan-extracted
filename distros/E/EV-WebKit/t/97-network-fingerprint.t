@@ -32,7 +32,7 @@ for my $bad (2, 42, 0.5, '007') {
 # enabled: derives the target, spins an in-process proxy, reports the port
 my $b = EV::WebKit->new(window => [400,300],
     fingerprint => 'windows-chrome', network_fingerprint => 1);
-is($b->network_fingerprint, 'chrome131', 'derived curl target from the profile');
+is($b->network_fingerprint, 'chrome150', 'derived curl target from the profile');
 ok($b->proxy_port, 'proxy_port is set (in-process proxy bound)');
 
 # explicit override

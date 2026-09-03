@@ -67,6 +67,17 @@ static void shm_free_cleanup(pTHX_ void *ptr) {
     free(ptr);
 }
 
+/* perl core refuses a filename holding an embedded NUL; the C API would stop at
+ * it and act on a shorter path than the caller named -- so unlink($tainted)
+ * could remove a different file. */
+static const char *shm_path_arg(pTHX_ SV *sv, const char *what, const char *classname) {
+    STRLEN len;
+    const char *p = SvPV(sv, len);
+    if (memchr(p, '\0', len))
+        croak("%s: %s contains an embedded NUL byte", classname, what);
+    return p;
+}
+
 /* ---- Helper macros ---- */
 
 /* Constructor sizes arrive as UV and are handed to the C layer as uint32_t.
@@ -77,6 +88,19 @@ static void shm_free_cleanup(pTHX_ void *ptr) {
     do { if ((UV)(val) > (UV)0xFFFFFFFF) \
             croak("%s: %s %" UVuf " exceeds the maximum of %u", \
                   classname, what, (UV)(val), 0xFFFFFFFFU); } while (0)
+
+#define SHM_PATH_ARG(sv, what, classname) \
+    (SvGETMAGIC(sv), SvOK(sv) ? shm_path_arg(aTHX_ (sv), (what), (classname)) : NULL)
+
+/* An unreachable LRU bound never evicts: the map fills and then refuses every
+ * insert.  Read it off the map, not the arguments -- attaching ignores those. */
+#define CK_MAX_SIZE(map, classname) \
+    do { ShmHeader *_mh = (map)->shard_handles ? (map)->shard_handles[0]->hdr : (map)->hdr; \
+         if (_mh->max_size >= _mh->max_table_cap) \
+            Perl_ck_warner(aTHX_ packWARN(WARN_MISC), \
+                  "%s: max_size %" UVuf " needs all %" UVuf " slots the map holds; " \
+                  "LRU eviction will never trigger", \
+                  classname, (UV)_mh->max_size, (UV)_mh->max_table_cap); } while (0)
 
 #define EXTRACT_MAP(classname, sv) \
     if (!sv_isobject(sv) || !sv_derived_from(sv, classname)) \
@@ -143,7 +167,12 @@ static void shm_free_cleanup(pTHX_ void *ptr) {
     if (!SvROK(sv)) \
         croak("%s cursor was replaced during the call", classname); \
     c = INT2PTR(ShmCursor*, SvIV(SvRV(sv))); \
-    if (c != c0) croak("%s cursor replaced or destroyed during the call", classname)
+    if (c != c0) croak("%s cursor replaced or destroyed during the call", classname); \
+    /* The owner is checked in EXTRACT_CURSOR, before argument magic runs;
+     * magic that destroys the map would otherwise leave us dereferencing
+     * a freed handle. */ \
+    if (c->owner && !SvIV(c->owner)) \
+        croak("%s cursor whose map was destroyed during the call", classname)
 
 /* An explicit $map->DESTROY frees the handle while a live cursor still points
  * at it, zeroing the owner's IV.  Detach first so neither shm_cursor_destroy
@@ -1301,23 +1330,3 @@ INCLUDE: xs/ss.xs
 
 MODULE = Data::HashMap::Shared    PACKAGE = Data::HashMap::Shared
 
-# Offline migration of a backing file written by the previous release (on-disk
-# format v9) to the current format (v10).  Variant-agnostic (a byte-level
-# structural upcast).  Returns 1 if upgraded, 0 if already current; croaks on a
-# bad/locked/unsupported file.  No process may have the file mapped.
-IV
-upgrade_file(class, path_sv)
-    char *class
-    SV *path_sv
-  CODE:
-    char errbuf[SHM_ERR_BUFLEN];
-    const char *path;
-    int r;
-    PERL_UNUSED_VAR(class);
-    path = (SvGETMAGIC(path_sv), SvOK(path_sv)) ? SvPV_nolen(path_sv) : NULL;
-    if (!path) croak("Data::HashMap::Shared->upgrade_file: path is required");
-    r = shm_upgrade_file(path, errbuf);
-    if (r < 0) croak("Data::HashMap::Shared->upgrade_file: %s", errbuf);
-    RETVAL = r;
-  OUTPUT:
-    RETVAL

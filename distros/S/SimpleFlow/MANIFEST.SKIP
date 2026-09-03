@@ -8,3 +8,6 @@
 
 # Release archives
 ^SimpleFlow.*\.tar\.gz$
+
+# Not part of the distribution
+^CLAUDE\.md$
