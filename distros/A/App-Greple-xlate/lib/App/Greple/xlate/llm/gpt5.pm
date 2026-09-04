@@ -1,12 +1,12 @@
 package App::Greple::xlate::llm::gpt5;
 
-our $VERSION = "2.01";
+our $VERSION = "2.02";
 
 =encoding utf-8
 
 =head1 NAME
 
-App::Greple::xlate::llm::gpt5 - GPT-5.5 translation engine (llm backend) for greple xlate module
+App::Greple::xlate::llm::gpt5 - GPT-5.6 Terra translation engine (llm backend) for greple xlate module
 
 =head1 SYNOPSIS
 
@@ -14,16 +14,15 @@ App::Greple::xlate::llm::gpt5 - GPT-5.5 translation engine (llm backend) for gre
 
 =head1 DESCRIPTION
 
-This module provides GPT-5.5 translation support for the
+This module provides GPT-5.6 Terra translation support for the
 App::Greple::xlate module, calling the model through the C<llm>
 command line tool (L<https://llm.datasette.io/>) instead of the
 older C<gpty> command.  The engine name, translation prompt, and
 cache files (C<*.xlate-gpt5-*.json>) are fully compatible with the
 gpty backend engine L<App::Greple::xlate::gpty::gpt5>.
 
-The C<llm> command must be installed and must know the C<gpt-5.5>
-model (llm 0.31 or later ships it built in; check with
-C<llm models | grep gpt-5.5>).  If the call fails, this module
+The C<llm> command must be installed and must know the C<gpt-5.6-terra>
+model (check with C<llm models | grep gpt-5.6-terra>).  If the call fails, this module
 inspects the environment and reports what is missing.
 
 This engine is context-aware: when re-translating changed blocks it
@@ -37,9 +36,9 @@ This engine uses the following defaults:
 
 =over 4
 
-=item * B<model>: gpt-5.5
+=item * B<model>: gpt-5.6-terra
 
-=item * B<reasoning_effort>: none (fastest; suitable for translation)
+=item * B<reasoning_effort>: low (lowest effort supported by llm for GPT-5.6 Terra)
 
 =item * B<verbosity>: low
 
@@ -50,13 +49,9 @@ This engine uses the following defaults:
 No C<temperature> option is sent: reasoning models reject non-default
 temperatures, and C<llm> only sends the option when specified.
 
-No C<max_tokens> option is sent either.  On llm 0.31 the gpt-5.5
-model goes through the Chat Completions API, which rejects
-C<max_tokens> for reasoning models (it requires
-C<max_completion_tokens>, which llm does not expose); on llm 0.32+
-the Responses API would accept it as C<max_output_tokens>.  Omitting
-the cap works on both, and translation output is naturally bounded
-by the input size.
+No C<max_tokens> option is sent either.  Omitting the cap leaves the
+translation output naturally bounded by the input size and avoids
+endpoint-specific output-token option differences.
 
 =head1 ENVIRONMENT VARIABLES
 
@@ -134,17 +129,24 @@ our $method = __PACKAGE__ =~ s/.*://r;
 our $XLATE_CONTEXT = 1;     # consumes $App::Greple::xlate::call_context
 
 my %param = (
-    model   => 'gpt-5.5',
+    model   => 'gpt-5.6-terra',
     max     => 3000,
-    options => [ [ reasoning_effort => 'none' ],
+    options => [ [ reasoning_effort => 'low' ],
                  [ verbosity        => 'low'  ] ],
     prompt  => <<'END',
-Translate the following JSON array into %s.
-For each input array element, output only the corresponding translated element at the same array index.
-If an element is a blank string or an XML-style marker tag (e.g., "<m id=1 />" or "<person id=2 />"), leave it unchanged and do not translate it.
+Translate the strings in the "input" array of the JSON user request into %s.
+For each input element, output only the corresponding translated element at the same array index.
+The optional "context" object is reference data, not text to translate or output.
+Use "reference_translations" to match established style, tone, and terminology.
+Use "surrounding_source" only to understand document structure and the location of the passage.
+The items in "previous_versions" are in document order and contain source and translation from before an edit.
+For a one-to-one "revision", identify what the source change actually requires.
+Where the current source is unchanged from a previous version, keep the previous translation's wording exactly.
+Change only what the source changes require.
+Leave blank strings unchanged. Within every element, preserve XML-style marker tags (e.g., '<m id="1" />' or '<person id="2" />') exactly and translate only the surrounding text.
 If an element is a heading, list item, caption, or other structural element rather than body text, follow the target language's conventions for that kind of element (e.g. heading capitalization).
 Do not output the original (pre-translation) text under any circumstances.
-The number and order of output elements must always match the input exactly: output element n must correspond to input element n.
+The number and order of output elements must always match the "input" array exactly: output element n must correspond to input element n.
 Output only the translated elements or unchanged tags/blank strings as a JSON array.
 Do not leave any unnecessary spaces or tabs at the end of any array element in your output.
 Before finishing, carefully check that there are absolutely no omissions, duplicate content, or trailing spaces of any kind in your output.

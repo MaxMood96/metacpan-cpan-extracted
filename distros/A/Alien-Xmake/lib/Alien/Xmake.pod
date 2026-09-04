@@ -75,6 +75,21 @@ Constructor option. Supplies an explicit answer (C<yes>, C<no>, or C<def>) to an
 C<--confirm=...>. Takes precedence over C<yes =E<gt> 1>. May be terse: C<Alien::Xmake-E<gt>new( confirm =E<gt> 'yes'
 )>.
 
+=item B<file>
+
+Constructor option. A path to the C<xmake.lua> (or any Lua build file) that operations should read. Passed to every
+action as C<-F/--file>, so you can drive a project whose build description lives at a non-default path or is generated
+at runtime from Perl. Works for C<configure>, C<build>, C<run>, C<install>, C<project>, C<clean>, C<test> and the query
+methods alike:
+
+    use v5.40;
+    use Alien::Xmake;
+
+    my $x = Alien::Xmake->new( file => 'path/to/mybuild.lua' );
+    $x->configure( mode => 'release' );   # xmake configure -F path/to/mybuild.lua
+    $x->build;
+    $x->run;
+
 =back
 
 =head2 C<build( [$target], %options )>
@@ -388,10 +403,27 @@ errors (C<-e>), C<files> limits formatting to the given files, and C<all>/C<grou
 =head2 C<lua( [$script], %options )>
 
     my @scripts = $xmake->lua( list => 1 );
-    $xmake->lua('print(\"hello\")');
+    $xmake->lua('print(os.host())');            # inline code -> "windows"
+    $xmake->lua('./myscript.lua');              # or a script file on disk
 
-Runs a C<xmake> Lua script. C<list> lists the built-in scripts (captured), C<command> runs the C<script> argument as a
-command, C<deserialize> records the output in the given format and C<stdin> reads the script from standard input.
+Runs a C<xmake> Lua script. Pass inline Lua code, or the path to a C<.lua> file on disk. Inline code is written to a
+temporary script file and executed, which sidesteps the MSWin32 argv-mangling and STDIN-piping problems that break
+passing code as a command-line argument. C<list> lists the built-in scripts (captured) and C<deserialize> records the
+output in the given format. C<command> and C<stdin> are accepted and treated as inline code.
+
+=head2 C<lua_json( [$code], %options )>
+
+    my $host = $xmake->lua_json('os.host()', return => 1);              # "windows"
+    my $info = $xmake->lua_json(q{import("core.base.json"); print(json.encode({arch=os.arch()}))});
+
+Runs inline Lua and returns the decoded JSON it produced. In the simplest form the code prints one JSON value itself
+via C<import>ing C<core.base.json> and passing C<print(json.encode(...))>. With C<return =E<gt> 1> just give the value,
+e.g. a string, a number, a table (C<{1,2,3}>), or a nested structure (C<{name='z', libs={'z','m'}}>), and the wrapper
+prints the encoded JSON for you.
+
+xmake's C<lua> runner appends a stray C<{ }> chunk even on success, so the wrapper locates and decodes the emitted JSON
+value and returns an empty list if none is found. C<lua_json> is the general escape hatch when a specific method (like
+C<< target_info >>) does not yet exist for a structured query.
 
 =head2 C<macro( [$name], %options )>
 
@@ -454,11 +486,24 @@ What to show (C<depgraph>, ...). Combine with C<format>.
 
 Filter targets by group.
 
-=item B<json>, B<pretty>
+=item B<pretty>
 
-Legacy flags (C<--json>) and pretty formatting.
+C<--format=json> output (and the other formats) is already decoded/structured; C<pretty> only adds pretty-printed
+formatting to the raw listing output.
 
 =back
+
+=head2 C<target_info( $name, %options )>
+
+    my $t = $xmake->target_info('hello');   # decoded HASH
+    say $t->{targetfile};                   # build\windows\x64\release\hello.exe
+
+Shows the rich, per-target detail that C<xmake show -t E<lt>targetE<gt>> produces: C<name>, C<kind>, C<files>,
+C<compilers>, C<linker>, C<rules>, C<at> and C<targetfile>.
+
+Returns the decoded JSON structure (a HASH) by default. Pass C<plain =E<gt> 1> (or C<format =E<gt> 'plain'>) to get the
+human-readable output instead. C<group> filters by target group. An empty list is returned if the target does not
+exist.
 
 =head2 C<watch( %options )>
 
@@ -622,6 +667,25 @@ metadata of this L<Alien::Xmake> install itself (set up at construction; see C<n
     say 'installed: ' . $x->config('install_type');        # share | system
     say 'version  : ' . $x->config('version');
 
+The list queries also work from a bare C<show> (no project needed) for the global catalogs. Several return rich JSON:
+the C<apis> value is a big HASH of the built-in module APIs, while C<buildmodes>, C<platforms>, C<rules>, C<themes> and
+C<targets> come back as ARRAY refs. C<architectures>, C<envs>, C<policies> and C<toolchains> still print aligned table
+text (xmake does not JSON-serialize them), so those come back as a plain listing:
+
+    use v5.40;
+    use Alien::Xmake;
+
+    my $x = Alien::Xmake->new;
+
+    my $apis = $x->show( 'apis', format => 'json' );          # HASH of built-in module APIs
+    say for @{ $apis->{description_builtin_module_apis} };     # hash.md5, hash.uuid, ...
+
+    my $platforms = $x->show( 'platforms', format => 'json' ); # ['windows', 'linux', ...]
+    say for @$platforms;
+
+    my $env = $x->show( undef, format => 'json' );             # environment object
+    say $env->{xmake}{version};                                # xmake's own version string
+
 =head2 Lint the project from Perl
 
 C<check> runs xmake's B<analysis> checkers - C<syntax> validates the source compiles without linking and C<clang.tidy>
@@ -659,6 +723,81 @@ operations in one script:
     my $x = Alien::Xmake->new;
     system $x->xrepo, qw[search zlib];             # find a package
     system $x->xrepo, qw[info libpng];             # package details
+
+=head2 Query structured target info and arbitrary Lua as JSON
+
+Capture methods return decoded Perl data instead of streaming. C<target_info> gives the rich per-target detail, and
+C<lua_json> is the escape hatch for any other structured query:
+
+    use v5.40;
+    use Alien::Xmake;
+
+    my $x = Alien::Xmake->new;
+    $x->create('demo', template => 'console');
+    chdir 'demo';
+    $x->configure(mode => 'release');
+
+    # decoded target HASH (name, kind, files, compilers, linker, targetfile ...)
+    my $target = $x->target_info('demo');
+    say $target->{targetfile};                      # build\windows\x64\release\demo.exe
+
+    # arbitrary Lua, decoded back to Perl
+    my $host = $x->lua_json('os.host()', return => 1);   # "windows"
+    my $env  = $x->lua_json(q{return { host = os.host(), arch = os.arch() }}, return => 1);
+    say $env->{arch};                                    # "x64"
+
+=head2 Emit the build file from Perl and drive it
+
+The C<xmake.lua> is just a Lua file. Because every action accepts C<-F/--file>, you can write that description directly
+from Perl (no interactive scaffolding), point the handle at it with the C<file> constructor option, and run the whole
+lifecycle. The Perl DSL below composes the same statements you would type in a build file:
+
+    use v5.40;
+    use Alien::Xmake;
+    use File::Slurper qw[write_text];
+
+    my $dir = 'build-dir';
+    mkdir $dir or die $!;
+    mkdir "$dir/src" or die $!;
+    write_text "$dir/src/main.cpp", "int main() { return 42; }\n";
+
+    my $lua = qq{
+    set_project("hello")
+    target("app")
+        set_kind("binary")
+        add_files("src/*.cpp")
+    };
+
+    write_text "$dir/mybuild.lua", $lua;
+
+    my $x = Alien::Xmake->new( file => "$dir/mybuild.lua" );   # every action uses -F mybuild.lua
+    chdir $dir;
+    $x->configure( mode => 'release' );
+    $x->build;                            # compiles src/main.cpp
+    say for @{ $x->show( 'targets', format => 'json' ) };  # app
+
+=head2 Compose a project from Perl instead of writing Lua
+
+Hand-writing the build-file string works, but for authoring at runtime prefer L<Alien::Xmake::Project>: a fluent Perl
+DSL that accumulates the C<xmake.lua> statements for you, writes the file on C<save>, and returns an L<Alien::Xmake>
+handle already bound to it. Targets are built with chains like C<< set_kind('binary')->add_files('src/*.cpp') >>:
+
+    use v5.40;
+    use Alien::Xmake::Project;
+
+    my $p = Alien::Xmake::Project->new( file => 'build/xmake.lua' );
+    $p->set_project('myapp')->set_version('0.1.0');
+    $p->add_requires('zlib');
+    $p->target('cli')
+        ->set_kind('binary')
+        ->add_files('src/*.cpp')
+        ->add_packages('zlib');
+    $p->save;
+
+    $p->xmake->configure(mode => 'release');   # xmake configure -F build/xmake.lua
+    $p->xmake->build;
+    $p->xmake->run;
+    $p->xmake->project(kind => 'compile_commands');   # reuse any IDE generator
 
 =head1 Prerequisites
 

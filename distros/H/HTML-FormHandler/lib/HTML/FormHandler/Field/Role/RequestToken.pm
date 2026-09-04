@@ -1,7 +1,7 @@
 package HTML::FormHandler::Field::Role::RequestToken;
-$HTML::FormHandler::Field::Role::RequestToken::VERSION = '0.40068';
+# ABSTRACT: Role with Moose attributes necessary for the RequestToken field
+$HTML::FormHandler::Field::Role::RequestToken::VERSION = '0.410001';
 use Moose::Role;
-
 
 has 'token_prefix' => (
   is => 'rw',
@@ -30,19 +30,11 @@ __END__
 
 =head1 NAME
 
-HTML::FormHandler::Field::Role::RequestToken
+HTML::FormHandler::Field::Role::RequestToken - Role with Moose attributes necessary for the RequestToken field
 
 =head1 VERSION
 
-version 0.40068
-
-=head1 SYNOPSIS
-
-Role with Moose attributes necessary for the RequestToken field
-
-=head1 NAME
-
-HTML::FormHandler::Field::Role::RequestToken
+version 0.410001
 
 =head1 AUTHOR
 

@@ -68,9 +68,10 @@ static SV *pmail_capture_deliver(pTHX_ SV *self_sv, SV *spec_sv, SV *env_sv)
         SV *path;
         int fd;
         pmail_sink s;
+        char tb[PMAIL_U64_LEN];
         pmail_mkdir_p2(aTHX_ d);
-        path = sv_2mortal(newSVpvf("%s/new/%llu.%" IVdf ".%lu.eml", d,
-                                   (unsigned long long)time(NULL), seq,
+        path = sv_2mortal(newSVpvf("%s/new/%s.%" IVdf ".%lu.eml", d,
+                                   pmail_u64_str(tb, (pmail_u64)time(NULL)), seq,
                                    (unsigned long)getpid()));
         fd = open(SvPV_nolen(path), O_WRONLY | O_CREAT | O_EXCL, 0600);
         if (fd < 0)

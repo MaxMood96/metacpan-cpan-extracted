@@ -1,11 +1,17 @@
 package File::SOPS::Backend::Age;
 # ABSTRACT: age encryption backend for SOPS
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 use Moo;
 use Carp qw(croak);
 use Crypt::Age;
 use MIME::Base64 qw(encode_base64 decode_base64);
 use namespace::clean;
+
+# Same reason as in the two format handlers (k71): every frame between a
+# caller and this backend is File::SOPS's own, so "could not decrypt the data
+# key" named a line in SOPS.pm rather than the line the caller wrote decrypt()
+# on. The house rule is that an error reports the caller's line, not ours.
+our @CARP_NOT = qw( File::SOPS );
 
 
 sub encrypt_data_key {
@@ -45,6 +51,17 @@ sub decrypt_data_key {
     croak "age_keys must be an array ref" unless ref($age_keys) eq 'ARRAY';
     croak "identities must be an array ref" unless ref($identities) eq 'ARRAY';
 
+    # The data key the SOPS data path consumes is exactly 32 bytes -- the
+    # AES-256 key every value in the document is encrypted under. A short
+    # return is silently accepted by CryptX as a working AES-128/192 key
+    # (k52, the same defect class as the data-key / IV checks in
+    # Encrypted::_random_bytes); a long return is not a valid AES key and
+    # dies inside CryptX, attributed to gcm and naming neither the CSPRNG
+    # nor the age layer. Crypt::Age 0.001 happens to return 32 bytes; we
+    # cannot rely on that, and we cannot see the inner values (file key,
+    # nonce, ephemeral key) that produced the result.
+    my $EXPECTED_DATA_KEY_LEN = 32;
+
     for my $key_info (@$age_keys) {
         my $encrypted = $key_info->{enc};
         next unless defined $encrypted;
@@ -59,7 +76,15 @@ sub decrypt_data_key {
             );
         };
 
-        return $data_key if defined $data_key;
+        next unless defined $data_key;
+
+        croak sprintf(
+            "Crypt::Age returned a data key of %d bytes, expected %d",
+            length($data_key),
+            $EXPECTED_DATA_KEY_LEN,
+        ) if length($data_key) != $EXPECTED_DATA_KEY_LEN;
+
+        return $data_key;
     }
 
     croak "Could not decrypt data key with any of the provided identities";
@@ -130,7 +155,7 @@ File::SOPS::Backend::Age - age encryption backend for SOPS
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -252,7 +277,7 @@ Contributions are welcome! Please fork the repository and submit a pull request.
 
 =head1 AUTHOR
 
-Torsten Raudssus <torsten@raudssus.de>
+Torsten Raudssus <getty@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 

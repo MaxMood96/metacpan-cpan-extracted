@@ -1,6 +1,6 @@
 package Net::NATS2::Client;
 
-our $VERSION = '0.3.4';
+our $VERSION = '0.3.5';
 
 use IO::Select;
 use Time::HiRes qw(time sleep);

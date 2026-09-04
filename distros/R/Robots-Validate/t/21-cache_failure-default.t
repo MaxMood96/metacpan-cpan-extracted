@@ -60,7 +60,7 @@ my $ua = "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/
 my $time = time;
 ok $rv->bad_robot( '1.2.3.4', $ua ), 'identify a fake bot';
 
-ok !!%store && scalar($store{Default}->%*) == 1, 'failure is cached';
+ok !!%store && scalar(keys $store{Default}->%*) == 1, 'failure is cached';
 
 ok my $obj = $store{Default}{ join $;, '1.2.3.4', $ua }, 'CHI::CachedObject';
 
@@ -75,7 +75,7 @@ is
   [ "google" => "googlebot" ],
   'validate';
 
-ok !!%store && scalar($store{Default}->%*) == 2, 'non-empty cache';
+ok !!%store && scalar(keys $store{Default}->%*) == 2, 'non-empty cache';
 
 $time = time;
 
@@ -84,7 +84,7 @@ is
   [ "google" => "googlebot" ],
   'validate';
 
-ok !!%store && scalar($store{Default}->%*) == 2, 'non-empty cache';
+ok !!%store && scalar(keys $store{Default}->%*) == 2, 'non-empty cache';
 
 ok $obj = $store{Default}{ join $;, '66.249.66.67', $ua }, 'CHI::CachedObject';
 

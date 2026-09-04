@@ -1,6 +1,6 @@
 package HTML::FormHandler::Field::DateMDY;
 # ABSTRACT: m/d/y date field
-$HTML::FormHandler::Field::DateMDY::VERSION = '0.40068';
+$HTML::FormHandler::Field::DateMDY::VERSION = '0.410001';
 use HTML::FormHandler::Moose;
 extends 'HTML::FormHandler::Field::Date';
 
@@ -23,7 +23,7 @@ HTML::FormHandler::Field::DateMDY - m/d/y date field
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

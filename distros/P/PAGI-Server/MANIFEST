@@ -41,6 +41,10 @@ examples/11-job-runner/public/index.html
 examples/11-job-runner/public/js/app.js
 examples/12-utf8/README.md
 examples/12-utf8/app.pl
+examples/13-custom-logging/README.md
+examples/13-custom-logging/app.pl
+examples/13-custom-logging/run.pl
+examples/13-custom-logging/server.log
 examples/README.md
 examples/backpressure-test/README.md
 examples/backpressure-test/app.pl
@@ -111,6 +115,13 @@ t/58-h1-connection-header-ownership.t
 t/59-ws-disconnect-exactly-once.t
 t/60-multi-server-coexistence.t
 t/61-pending-io-at-disconnect.t
+t/62-error-log.t
+t/63-log-level-only.t
+t/64-server-log-sink.t
+t/65-runner-log-level.t
+t/66-startup-banner.t
+t/67-connection-log-routing.t
+t/68-startup-summary.t
 t/certs/ca.crt
 t/certs/ca.key
 t/certs/ca.srl

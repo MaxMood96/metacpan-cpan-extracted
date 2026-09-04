@@ -9,7 +9,7 @@ use Data::Dumper ();
 use FFI::C::Util qw( c_to_perl );
 
 # ABSTRACT: Test2 plugin for WebAssembly extensions
-our $VERSION = '0.23'; # VERSION
+our $VERSION = '0.24'; # VERSION
 
 
 sub get_virtual_memory_limit
@@ -19,7 +19,7 @@ sub get_virtual_memory_limit
   {
     require FFI::Platypus;
     require FFI::C::StructDef;
-    my $ffi = FFI::Platypus->new( api => 1, lib => [undef] );
+    my $ffi = FFI::Platypus->new( api => 2, lib => [undef] );
     my $rlimit;
     if($ffi->find_symbol('getrlimit'))
     {
@@ -71,9 +71,8 @@ sub import
           my $self = shift->$orig(@_);
           my $ctx = context();
           $ctx->note("virtual memory address limit detected, try to set limits to zero");
-          $self->static_memory_maximum_size(0);
-          $self->static_memory_guard_size(0);
-          $self->dynamic_memory_guard_size(0);
+          $self->memory_reservation(0);
+          $self->memory_guard_size(0);
           $ctx->release;
           $self;
         },
@@ -97,7 +96,7 @@ Test2::Plugin::Wasm - Test2 plugin for WebAssembly extensions
 
 =head1 VERSION
 
-version 0.23
+version 0.24
 
 =head1 SYNOPSIS
 
@@ -125,7 +124,7 @@ Graham Ollis <plicease@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2020-2022 by Graham Ollis.
+This software is copyright (c) 2020-2026 by Graham Ollis.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

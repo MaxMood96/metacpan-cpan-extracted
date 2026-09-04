@@ -22,10 +22,9 @@ use Wasm::Wasmtime::TableType;
 use Wasm::Wasmtime::Trap;
 use Wasm::Wasmtime::ValType;
 use Wasm::Wasmtime::WasiConfig;
-use Wasm::Wasmtime::WasiInstance;
 
 # ABSTRACT: Perl interface to Wasmtime
-our $VERSION = '0.23'; # VERSION
+our $VERSION = '0.24'; # VERSION
 
 
 1;
@@ -42,7 +41,7 @@ Wasm::Wasmtime - Perl interface to Wasmtime
 
 =head1 VERSION
 
-version 0.23
+version 0.24
 
 =head1 SYNOPSIS
 
@@ -130,11 +129,17 @@ from Wasm space into Perl space.
 
 =head1 ENVIRONMENT
 
+=head2 WASM_WASMTIME_FFI
+
+The full path to the C<wasmtime> shared library (F<libwasmtime.so>,
+F<libwasmtime.dylib> or F<wasmtime.dll>).  This must currently be set; a modern
+C<wasmtime> (developed against 48.0.1) is required.
+
 =head2 PERL_WASM_WASMTIME_MEMORY
 
-This environment variable, if set, should be a colon separated list of values for
-C<static_memory_maximum_size>, C<static_memory_guard_size> and C<dynamic_memory_guard_size>.
-See L<Wasm::Wasmtime::Config> for more details on these limits.
+This environment variable, if set, should be a colon separated pair of values for
+C<memory_reservation> and C<memory_guard_size>.  See L<Wasm::Wasmtime::Config>
+for more details on these limits.
 
 =head1 SEE ALSO
 
@@ -164,9 +169,9 @@ Link together multiple WebAssembly modules into one program.
 
 Tool to convert WebAssembly Text (WAT) to WebAssembly binary (Wasm).
 
-=item L<Wasm::Wasmtime::WasiInstance>
+=item L<Wasm::Wasmtime::WasiConfig>
 
-WebAssembly System Interface (WASI).
+WebAssembly System Interface (WASI) configuration.
 
 =item L<https://github.com/bytecodealliance/wasmtime>
 
@@ -184,7 +189,7 @@ Graham Ollis <plicease@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2020-2022 by Graham Ollis.
+This software is copyright (c) 2020-2026 by Graham Ollis.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

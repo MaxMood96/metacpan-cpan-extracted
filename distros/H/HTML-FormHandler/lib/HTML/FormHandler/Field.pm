@@ -1,6 +1,6 @@
 package HTML::FormHandler::Field;
 # ABSTRACT: base class for fields
-$HTML::FormHandler::Field::VERSION = '0.40068';
+$HTML::FormHandler::Field::VERSION = '0.410001';
 use HTML::FormHandler::Moose;
 use HTML::FormHandler::Field::Result;
 use Try::Tiny;
@@ -35,7 +35,7 @@ has 'result' => (
     is        => 'ro',
     weak_ref  => 1,
     clearer   => 'clear_result',
-    predicate => 'has_result',
+    predicate => 'has_result',  # warning: will still return true if value has been garbage-collected
     writer    => '_set_result',
     handles   => [
         '_set_input',   '_clear_input', '_set_value', '_clear_value',
@@ -48,13 +48,13 @@ has '_pin_result' => ( is => 'ro', reader => '_get_pin_result', writer => '_set_
 
 sub has_input {
     my $self = shift;
-    return unless $self->has_result;
+    return unless $self->has_result and $self->result;
     return $self->result->has_input;
 }
 
 sub has_value {
     my $self = shift;
-    return unless $self->has_result;
+    return unless $self->has_result and $self->result;
     return $self->result->has_value;
 }
 
@@ -66,7 +66,8 @@ sub reset_result {
 }
 sub build_result {
     my $self = shift;
-    my @parent = ( 'parent' => $self->parent->result )
+    my @parent;
+    @parent = ( 'parent' => $self->parent->result )
         if ( $self->parent && $self->parent->result );
     my $result = HTML::FormHandler::Field::Result->new(
         name      => $self->name,
@@ -83,6 +84,7 @@ sub input {
     # allow testing fields individually by creating result if no form
     return undef unless $self->has_result || !$self->form;
     my $result = $self->result;
+    return undef unless $result;
     return $result->_set_input(@_) if @_;
     return $result->input;
 }
@@ -125,6 +127,7 @@ sub fif {
     return '' if $self->password;
     return unless $result || $self->has_result;
     my $lresult = $result || $self->result;
+    return unless $lresult;
     if ( ( $self->has_result && $self->has_input && !$self->fif_from_value ) ||
         ( $self->fif_from_value && !defined $lresult->value ) )
     {
@@ -395,7 +398,8 @@ sub element_wrapper_attributes {
     $self->add_standard_element_wrapper_classes( $result, $class );
     $attr->{class} = $class if @$class;
     # call form hook
-    my $mod_attr = $self->form->html_attributes($self, 'element_wrapper', $attr, $result) if $self->form;
+    my $mod_attr;
+    $mod_attr = $self->form->html_attributes($self, 'element_wrapper', $attr, $result) if $self->form;
     return ref($mod_attr) eq 'HASH' ? $mod_attr : $attr;
 }
 sub add_standard_element_wrapper_classes {
@@ -409,7 +413,7 @@ sub element_attributes {
     my $attr = {};
     # handle html5 attributes
     if ($self->form && $self->form->has_flag('is_html5')) {
-        $attr->{required} = 'required' if $self->required;
+        $attr->{required} = 'required' if $self->required && $self->html5_type_attr ne 'hidden';
         $attr->{min} = $self->range_start if defined $self->range_start;
         $attr->{max} = $self->range_end if defined $self->range_end;
     }
@@ -425,7 +429,8 @@ sub element_attributes {
     $self->add_standard_element_classes($result, $class);
     $attr->{class} = $class if @$class;
     # call form hook
-    my $mod_attr = $self->form->html_attributes($self, 'element', $attr, $result) if $self->form;
+    my $mod_attr;
+    $mod_attr = $self->form->html_attributes($self, 'element', $attr, $result) if $self->form;
     return ref($mod_attr) eq 'HASH' ? $mod_attr : $attr;
 }
 
@@ -445,7 +450,8 @@ sub label_attributes {
     $self->add_standard_label_classes($result, $class);
     $attr->{class} = $class if @$class;
     # call form hook
-    my $mod_attr = $self->form->html_attributes($self, 'label', $attr, $result) if $self->form;
+    my $mod_attr;
+    $mod_attr = $self->form->html_attributes($self, 'label', $attr, $result) if $self->form;
     return ref($mod_attr) eq 'HASH' ? $mod_attr : $attr;
 }
 
@@ -466,7 +472,8 @@ sub wrapper_attributes {
     $attr->{id} = $self->id
         if ( $self->has_flag('is_compound') && not exists $attr->{id} && ! $self->get_tag('no_wrapper_id') );
     # call form hook
-    my $mod_attr = $self->form->html_attributes($self, 'wrapper', $attr, $result) if $self->form;
+    my $mod_attr;
+    $mod_attr = $self->form->html_attributes($self, 'wrapper', $attr, $result) if $self->form;
     return ref($mod_attr) eq 'HASH' ? $mod_attr : $attr;
 }
 
@@ -519,7 +526,7 @@ sub build_validate_method {
     my $set_validate = $self->set_validate;
     $set_validate ||= "validate_" . convert_full_name($self->full_name);
     return sub { my $self = shift; $self->form->$set_validate($self); }
-        if ( $self->form && $self->form->can($set_validate) );
+        if ( $set_validate ne 'validate_model' && $self->form && $self->form->can($set_validate) );
     return sub { };
 }
 
@@ -864,7 +871,26 @@ sub add_error {
     unless ( defined $message[0] ) {
         @message = ( $class_messages->{field_invalid});
     }
-    @message = @{$message[0]} if ref $message[0] eq 'ARRAY';
+    if ( ref $message[0] eq 'ARRAY' ) {
+        # The list-or-arrayref spelling here is the same convenience idiom as
+        # add_element_class and friends. It is not documented for add_error,
+        # nothing in the distribution reaches it, and what does reach it is
+        # request data: $field->add_error($field->value), where the request
+        # parser folded a duplicate parameter into an arrayref, puts submitted
+        # text in element 0 -- which _localize hands to Locale::Maketext as the
+        # FORMAT. Dereference as before, but if element 0 could be parsed as a
+        # bracket group, pass it as an inert argument instead of as the format.
+        # A caller who really wants a compiled template passes it as a plain
+        # list, $field->add_error($template, @args), which is the documented
+        # spelling and is unchanged.
+        my @args = @{ $message[0] };
+        # Interpolate explicitly: '[_1]' alone returns its argument unchanged
+        # (see the note in Validate.pm's _needs_inert_format caller), and the
+        # errors attribute holds strings.
+        @message = $self->_needs_inert_format( $args[0] )
+            ? ( '[_1]', "$args[0]" )
+            : @args;
+    }
     my $out;
     try {
         $out = $self->_localize(@message);
@@ -1037,7 +1063,7 @@ HTML::FormHandler::Field - base class for fields
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 
@@ -1197,6 +1223,23 @@ using '_localize' method.
 See also L<HTML::FormHandler::TraitFor::I18N>.
 
     return $field->add_error( 'bad data' ) if $bad;
+
+The first argument is the localization FORMAT, which for a
+L<Locale::Maketext> handle means bracket notation in it is compiled and
+executed. Do not build that argument out of submitted data: a value
+containing a C<[...]> group would be run as a method call rather than
+shown. Pass the value as an argument instead, where it is inert:
+
+    # wrong -- the submitted value becomes part of the format
+    $field->add_error( "The value '" . $field->value . "' is not allowed" );
+
+    # right -- the format is yours, the value is just an argument
+    $field->add_error( "The value '[_1]' is not allowed", $field->value );
+
+Also note that the first argument is cached by L<Locale::Maketext>,
+without any size limits or purging of data.  Passing error messages in
+the first argument that contain text submitted over the network opens
+up a system to memory consumption attacks.
 
 =item error_fields
 

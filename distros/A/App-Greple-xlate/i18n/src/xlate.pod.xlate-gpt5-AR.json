@@ -4,8 +4,8 @@
       "App::Greple::xlate - وحدة دعم الترجمة لأداة greple\n"
    ],
    [
-      "B<Greple> B<xlate> module find desired text blocks and replace them by the translated text. The primary engine is GPT-5.5 (F<llm/gpt5.pm>), which calls the L<llm|https://llm.datasette.io/> command; DeepL (F<deepl.pm>) and legacy B<gpty>-based engines are also included.\n",
-      "B<Greple> B<xlate> تعثر الوحدة على كتل النص المطلوبة وتستبدلها بالنص المترجم. المحرك الأساسي هو GPT-5.5 (F<llm/gpt5.pm>)، والذي يستدعي الأمر L<llm|https://llm.datasette.io/>؛ كما يتم تضمين DeepL (F<deepl.pm>) والمحركات القديمة المستندة إلى B<gpty>.\n"
+      "B<Greple> B<xlate> module find desired text blocks and replace them by the translated text. The primary engine is GPT-5.6 Terra (F<llm/gpt5.pm>), which calls the L<llm|https://llm.datasette.io/> command; DeepL (F<deepl.pm>) and legacy B<gpty>-based engines are also included.\n",
+      "B<Greple> B<xlate> تعثر الوحدة على كتل النص المطلوبة وتستبدلها بالنص المترجم. المحرك الأساسي هو GPT-5.6 Terra (F<llm/gpt5.pm>)، والذي يستدعي الأمر L<llm|https://llm.datasette.io/>؛ كما يتم تضمين DeepL (F<deepl.pm>>) والمحركات القديمة المستندة إلى B<gpty>.\n"
    ],
    [
       "Translations are cached per file, so re-running a command costs nothing for unchanged text. When a document is edited, only the changed paragraphs are sent to the API again; a context-aware engine also receives the surrounding translations, the raw source text around the change, and the previous version of the edited paragraph, so the new translation keeps the established wording (see B<--xlate-context-window>). Sensitive strings can be concealed before transmission (see L</ANONYMIZATION AND TEMPLATES>).\n",
@@ -84,6 +84,10 @@
       "يمكن رؤية كيفية تحويل النص بواسطة الحجب عبر خيار B<--xlate-mask>.\n"
    ],
    [
+      "Mask placeholders are well-formed self-closing XML tags such as C<< <m id=\"1\" /> >>. JSON-based LLM engines receive the tags in their input arrays. For DeepL, a request containing marker tags is escaped and enclosed in a temporary C<< <xlate> >> root, with XML tag handling enabled and each marker category registered as a non-splitting tag. The wrapper is removed before the placeholders are validated and restored.\n",
+      "العناصر النائبة للحجب هي وسوم XML ذاتية الإغلاق ومشكّلة جيدًا مثل C<< <m id=\"1\" /> >>. تتلقى محركات LLM القائمة على JSON الوسوم في مصفوفات الإدخال الخاصة بها. بالنسبة إلى DeepL، يُهَرَّب الطلب المحتوي على وسوم العلامات ويُغلَّف بجذر مؤقت C<< <xlate> >>، مع تمكين التعامل مع وسوم XML وتسجيل كل فئة من العلامات كوسم غير قابل للتقسيم. يُزال الغلاف قبل التحقق من العناصر النائبة واستعادتها.\n"
+   ],
+   [
       "Masking protects markup from being translated. To conceal sensitive strings from the translation service itself, see L</ANONYMIZATION AND TEMPLATES>; both can be used together.\n",
       "يحمي الحجب العلامات من الترجمة. لإخفاء السلاسل الحساسة عن خدمة الترجمة نفسها، راجع L</ANONYMIZATION AND TEMPLATES>؛ ويمكن استخدامهما معًا.\n"
    ],
@@ -92,8 +96,8 @@
       "هذا الواجهة تجريبية وقابلة للتغيير في المستقبل.\n"
    ],
    [
-      "Sensitive strings can be concealed before they are sent to the translation API and restored in the output. Three sources of anonymization rules are available: a dictionary file (B<--xlate-anonymize>), inline marks in the document itself (B<--xlate-anonymize-mark>), and YAML front matter values (B<--xlate-frontmatter>). Each string is replaced by a category tag such as C<< <person id=1 /> >> during transmission. The concealment target is API transmission only: local cache files store restored plain text. Use B<--xlate-dryrun> to inspect exactly what would be transmitted.\n",
-      "يمكن إخفاء السلاسل الحساسة قبل إرسالها إلى واجهة API للترجمة ثم استعادتها في المخرجات. تتوفر ثلاثة مصادر لقواعد إخفاء الهوية: ملف قاموس (B<--xlate-anonymize>)، وعلامات مضمنة في المستند نفسه (B<--xlate-anonymize-mark>)، وقيم YAML front matter (B<--xlate-frontmatter>). تُستبدل كل سلسلة بوسم فئة مثل C<< <person id=1 /> >> أثناء الإرسال. هدف الإخفاء هو إرسال واجهة API فقط: تخزن ملفات التخزين المؤقت المحلية النص العادي المستعاد. استخدم B<--xlate-dryrun> لفحص ما سيُرسل بالضبط.\n"
+      "Sensitive strings can be concealed before they are sent to the translation API and restored in the output. Three sources of anonymization rules are available: a dictionary file (B<--xlate-anonymize>), inline marks in the document itself (B<--xlate-anonymize-mark>), and YAML front matter values (B<--xlate-frontmatter>). Each string is replaced by a category tag such as C<< <person id=\"1\" /> >> during transmission. The concealment target is API transmission only: local cache files store restored plain text. Use B<--xlate-dryrun> to inspect exactly what would be transmitted.\n",
+      "يمكن إخفاء السلاسل الحساسة قبل إرسالها إلى واجهة API للترجمة ثم استعادتها في المخرجات. تتوفر ثلاثة مصادر لقواعد إخفاء الهوية: ملف قاموس (B<--xlate-anonymize>)، وعلامات مضمنة في المستند نفسه (B<--xlate-anonymize-mark>)، وقيم YAML front matter (B<--xlate-frontmatter>). تُستبدل كل سلسلة بوسم فئة مثل C<< <person id=\"1\" /> >> أثناء الإرسال. هدف الإخفاء هو إرسال واجهة API فقط: تخزن ملفات التخزين المؤقت المحلية النص العادي المستعاد. استخدم B<--xlate-dryrun> لفحص ما سيُرسل بالضبط.\n"
    ],
    [
       "For form documents (quarterly reports and the like), define the actors up front and reference them in the body:\n",
@@ -212,16 +216,16 @@
       "عيّن هذه القيمة إلى 1 إذا كنت تريد ترجمة سطر واحد في كل مرة. لهذا الخيار أولوية على خيار C<--xlate-maxlen>.\n"
    ],
    [
-      "Specify a custom prompt to be sent to the translation engine. This option is available for the LLM engines (C<gpt3>, C<gpt4o>, C<gpt5>) but not for DeepL. You can customize the translation behavior by providing specific instructions to the AI model. If the prompt contains C<%s>, it will be replaced with the target language name.\n",
-      "حدّد موجّهًا مخصصًا ليتم إرساله إلى محرك الترجمة. يتوفر هذا الخيار لمحركات LLM (C<gpt3>، C<gpt4o>، C<gpt5>) لكنه لا يتوفر لـ DeepL. يمكنك تخصيص سلوك الترجمة من خلال تقديم تعليمات محددة إلى نموذج الذكاء الاصطناعي. إذا كان الموجّه يحتوي على C<%s>، فسيُستبدل باسم اللغة الهدف.\n"
+      "Specify a custom prompt to be sent to the translation engine. This option is available for the LLM engines (C<gpt3>, C<gpt4o>, C<gpt5>) but not for DeepL. You can customize the translation behavior by providing specific instructions to the AI model. If the prompt contains C<%s>, it will be replaced with the target language name. For the llm-backed C<gpt5> engine, the document is supplied separately as a JSON request whose C<input> member is the array to translate and whose optional C<context> member contains reference data. A fixed instruction that treats those members as document data, not commands, is appended even when a custom prompt is used.\n",
+      "حدّد موجّهًا مخصصًا ليتم إرساله إلى محرك الترجمة. يتوفر هذا الخيار لمحركات LLM (C<gpt3>، C<gpt4o>، C<gpt5>) لكنه لا يتوفر لـ DeepL. يمكنك تخصيص سلوك الترجمة من خلال تقديم تعليمات محددة إلى نموذج الذكاء الاصطناعي. إذا كان الموجّه يحتوي على C<%s>، فسيُستبدل باسم اللغة الهدف. بالنسبة إلى محرك C<gpt5> المدعوم بـ llm، يُقدَّم المستند بصورة منفصلة كطلب JSON يكون العضو C<input> فيه هو المصفوفة المراد ترجمتها، ويحتوي العضو الاختياري C<context> على بيانات مرجعية. تُلحق تعليمات ثابتة تتعامل مع هذين العضوين بوصفهما بيانات مستند، لا أوامر، حتى عند استخدام موجّه مخصص.\n"
    ],
    [
       "Specify additional context information to be sent to the translation engine. This option can be used multiple times to provide multiple context strings. The context information helps the translation engine understand the background and produce more accurate translations.\n",
       "حدد معلومات سياقية إضافية تُرسل إلى محرك الترجمة. يمكن استخدام هذا الخيار عدة مرات لتقديم عدة سلاسل سياقية. تساعد المعلومات السياقية محرك الترجمة على فهم الخلفية وإنتاج ترجمات أكثر دقة.\n"
    ],
    [
-      "Number of surrounding translated blocks passed as reference context when re-translating changed blocks (default 2). The context also includes the raw source text around the changed region (headings, list structure, captions) and, when available, the previous version of the changed text recovered from the cache, so that unchanged wording is preserved. Set to 0 to disable context-aware translation entirely. Note that each changed region is translated in its own API call and the context can add up to about 8000 characters to the system prompt, so context-aware translation trades some extra cost for consistency.\n",
-      "عدد الكتل المترجمة المحيطة التي تُمرَّر كسياق مرجعي عند إعادة ترجمة الكتل المتغيرة (الافتراضي 2). يتضمن السياق أيضًا نص المصدر الخام حول المنطقة المتغيرة (العناوين، بنية القوائم، التعليقات التوضيحية)، وعند توفره، الإصدار السابق من النص المتغير المستعاد من ذاكرة التخزين المؤقت، بحيث تُحفظ الصياغة غير المتغيرة. اضبطه على 0 لتعطيل الترجمة الواعية بالسياق بالكامل. لاحظ أن كل منطقة متغيرة تُترجم في استدعاء API خاص بها، ويمكن للسياق أن يضيف ما يصل إلى نحو 8000 محرف إلى موجّه النظام، لذلك تستبدل الترجمة الواعية بالسياق بعض التكلفة الإضافية بالاتساق.\n"
+      "Number of surrounding translated blocks passed as reference context when re-translating changed blocks (default 2). The context also includes the raw source text around the changed region (headings, list structure, captions) and, when available, the previous version of the changed text recovered from the cache, so that unchanged wording is preserved. Set to 0 to disable context-aware translation entirely. Note that each changed region is translated in its own API call and the context can add up to about 8000 characters to the JSON user request, so context-aware translation trades some extra cost for consistency. Document-derived context is kept out of the system prompt.\n",
+      "عدد الكتل المترجمة المحيطة التي تُمرَّر كسياق مرجعي عند إعادة ترجمة الكتل المتغيرة (الافتراضي 2). يتضمن السياق أيضًا نص المصدر الخام حول المنطقة المتغيرة (العناوين، بنية القوائم، التعليقات التوضيحية)، وعند توفره، الإصدار السابق من النص المتغير المستعاد من ذاكرة التخزين المؤقت، بحيث تُحفظ الصياغة غير المتغيرة. اضبطه على 0 لتعطيل الترجمة الواعية بالسياق بالكامل. لاحظ أن كل منطقة متغيرة تُترجم في استدعاء API خاص بها، ويمكن للسياق أن يضيف ما يصل إلى نحو 8000 محرف إلى طلب مستخدم JSON، لذلك تستبدل الترجمة الواعية بالسياق بعض التكلفة الإضافية بالاتساق. يُحتفظ بالسياق المستمد من المستند خارج موجّه النظام.\n"
    ],
    [
       "Initialize a new document's cache from another document's cache file. Useful for periodic reports: seed the new issue's cache with the previous issue's, so unchanged paragraphs are not re-translated and edited paragraphs keep the previous issue's wording. The seed is used only when the target cache is empty; otherwise it is ignored with a warning. With the default C<--xlate-cache=auto>, specifying a seed also implies creating the new document's cache file.\n",
@@ -232,8 +236,8 @@
       "أخفِ هوية السلاسل الحساسة قبل إرسالها إلى API الترجمة، واستعدها في المخرجات. يعطي ملف القاموس إدخالًا واحدًا لكل عنصر: بصيغة JSON (قياسية، قابلة للتوليد آليًا)\n"
    ],
    [
-      "or in a simple line format (C<category pattern>, C</.../> for regex). Each item is replaced by a category tag such as C<< <person id=1 /> >>; the same string always gets the same tag, so the model can keep track of who is who. Unknown JSON fields are ignored, so generators (e.g. a local LLM extracting entities) may add their own annotations. Category C<lit> is reserved. Local cache files still store restored plain text: the concealment target is API transmission only.\n",
-      "أو بتنسيق أسطر بسيط (C<category pattern>، C</.../> للتعبير النمطي). يُستبدل كل عنصر بوسم فئة مثل C<< <person id=1 /> >>؛ وتحصل السلسلة نفسها دائمًا على الوسم نفسه، بحيث يمكن للنموذج تتبع من هو من. تُتجاهل حقول JSON غير المعروفة، لذا يمكن للمولّدات (مثل LLM محلي يستخرج الكيانات) إضافة تعليقاتها التوضيحية الخاصة. الفئة C<lit> محجوزة. لا تزال ملفات ذاكرة التخزين المؤقت المحلية تخزن النص العادي المستعاد: هدف الإخفاء هو إرسال API فقط.\n"
+      "or in a simple line format (C<category pattern>, C</.../> for regex). Each item is replaced by a category tag such as C<< <person id=\"1\" /> >>; the same string always gets the same tag, so the model can keep track of who is who. Unknown JSON fields are ignored, so generators (e.g. a local LLM extracting entities) may add their own annotations. Category C<lit> is reserved. Local cache files still store restored plain text: the concealment target is API transmission only.\n",
+      "أو بتنسيق أسطر بسيط (C<category pattern>، C</.../> للتعبير النمطي). يُستبدل كل عنصر بوسم فئة مثل C<< <person id=\"1\" /> >>؛ وتحصل السلسلة نفسها دائمًا على الوسم نفسه، بحيث يمكن للنموذج تتبع من هو من. تُتجاهل حقول JSON غير المعروفة، لذا يمكن للمولّدات (مثل LLM محلي يستخرج الكيانات) إضافة تعليقاتها التوضيحية الخاصة. الفئة C<lit> محجوزة. لا تزال ملفات ذاكرة التخزين المؤقت المحلية تخزن النص العادي المستعاد: هدف الإخفاء هو إرسال API فقط.\n"
    ],
    [
       "A dictionary can be generated by an external tool -- for example a local model extracting sensitive entities:\n",
@@ -282,6 +286,10 @@
    [
       "See the translation result in real time in the STDERR output. The C<From> payload is shown as transmitted, after anonymization and masking.\n",
       "اعرض نتيجة الترجمة في الوقت الحقيقي في مخرجات STDERR. تُعرض حمولة C<From> كما أُرسلت، بعد إخفاء الهوية والتقنيع.\n"
+   ],
+   [
+      "For a one-to-one changed block, show the smallest contiguous changed span in the old and new source, followed by the corresponding span in the old and new translation. The report is written to STDERR, makes no additional API call, and is omitted when old and new blocks cannot be paired unambiguously.\n",
+      "بالنسبة إلى كتلة متغيرة واحدًا لواحد، اعرض أصغر نطاق متصل متغير في المصدر القديم والجديد، يتبعه النطاق المقابل في الترجمة القديمة والجديدة. يُكتب التقرير إلى STDERR، ولا يجري أي استدعاء إضافي لواجهة برمجة التطبيقات، ويُحذف عندما يتعذر إقران الكتل القديمة والجديدة بصورة غير ملتبسة.\n"
    ],
    [
       "Use L<App::Greple::stripe> module to show the matched part by zebra striping fashion. This is useful when the matched parts are connected back-to-back.\n",

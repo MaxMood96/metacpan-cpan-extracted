@@ -53,6 +53,7 @@ do { my $x = {
                       'requires' => {
                                       'Catalyst::View' => '0',
                                       'File::Spec' => '0',
+                                      'Heap::Fibonacci' => '0',
                                       'IO::File::WithPath' => '0',
                                       'Moose' => '0',
                                       'MooseX::Aliases' => '0',

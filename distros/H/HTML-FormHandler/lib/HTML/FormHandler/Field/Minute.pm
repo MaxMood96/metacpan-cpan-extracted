@@ -1,6 +1,6 @@
 package HTML::FormHandler::Field::Minute;
 # ABSTRACT: input range from 0 to 59
-$HTML::FormHandler::Field::Minute::VERSION = '0.40068';
+$HTML::FormHandler::Field::Minute::VERSION = '0.410001';
 use Moose;
 extends 'HTML::FormHandler::Field::IntRange';
 
@@ -25,7 +25,7 @@ HTML::FormHandler::Field::Minute - input range from 0 to 59
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 DESCRIPTION
 

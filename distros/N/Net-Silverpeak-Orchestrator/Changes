@@ -1,5 +1,8 @@
 Revision history for Net-Silverpeak-Orchestrator
 
+0.018000  2026-09-03 17:50:12+02:00 Europe/Vienna
+    - add compound application support
+
 0.017000  2026-05-04 17:13:21+02:00 Europe/Vienna
     - update tests for Orchestrator version 9.5.7.40081
       which added icmpCodes to service groups

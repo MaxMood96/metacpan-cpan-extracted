@@ -3,143 +3,121 @@ package Wasm::Wasmtime::Instance;
 use strict;
 use warnings;
 use 5.008004;
+use FFI::C::Util qw( addressof );
+use FFI::Platypus::Buffer ();
 use Wasm::Wasmtime::FFI;
 use Wasm::Wasmtime::Module;
 use Wasm::Wasmtime::Extern;
 use Wasm::Wasmtime::Func;
+use Wasm::Wasmtime::Memory;
 use Wasm::Wasmtime::Trap;
 use Wasm::Wasmtime::Instance::Exports;
 use Ref::Util qw( is_ref is_blessed_ref is_plain_coderef is_plain_scalarref );
 use Carp ();
 
 # ABSTRACT: Wasmtime instance class
-our $VERSION = '0.23'; # VERSION
+our $VERSION = '0.24'; # VERSION
 
 
-$ffi_prefix = 'wasm_instance_';
-$ffi->load_custom_type('::PtrObject' => 'wasm_instance_t' => __PACKAGE__);
+$ffi_prefix = 'wasmtime_instance_';
 
 
 sub _cast_import
 {
-  my($ii, $mi, $store, $keep) = @_;
-  if(ref($ii) eq 'Wasm::Wasmtime::Extern')
+  my($ii, $mi, $store, $keep, $slot) = @_;
+
+  if(is_blessed_ref($ii) && $ii->isa('Wasm::Wasmtime::Extern'))
   {
-    return $ii->{ptr};
-  }
-  elsif(is_blessed_ref($ii) && $ii->isa('Wasm::Wasmtime::Extern'))
-  {
-    return $ii->{ptr};
+    return $ii->_fill_extern($slot);
   }
   elsif(is_plain_coderef($ii))
   {
     if($mi->type->kind eq 'functype')
     {
-      my $f = Wasm::Wasmtime::Func->new(
-        $store,
-        $mi->type,
-        $ii,
-      );
+      my $f = Wasm::Wasmtime::Func->new($store, $mi->type, $ii);
       push @$keep, $f;
-      return $f->{ptr};
+      return $f->_fill_extern($slot);
     }
   }
   elsif(is_plain_scalarref($ii) || !defined $ii)
   {
     if($mi->type->kind eq 'memorytype')
     {
-      my $m = Wasm::Wasmtime::Memory->new(
-        $store,
-        $mi->type,
-      );
-      $$ii = $m if defined $ii;
+      my $m = Wasm::Wasmtime::Memory->new($store, $mi->type);
+      $$ii = $m if is_plain_scalarref($ii);
       push @$keep, $m;
-      return $m->{ptr};
+      return $m->_fill_extern($slot);
     }
   }
   Carp::croak("Non-extern object as import");
 }
 
-require FFI::Platypus::Memory;
-
-$ffi->attach( [ wasmtime_instance_new => 'new' ] => ['wasm_store_t','wasm_module_t','record(Wasm::Wasmtime::Vec)*','opaque*','opaque*'] => 'wasmtime_error_t' => sub {
+$ffi->attach( [ wasmtime_instance_new => 'new' ] => ['opaque','wasmtime_module_t','opaque','size_t','wasmtime_instance_t','opaque*'] => 'wasmtime_error_t' => sub {
   my $xsub = shift;
   my $class = shift;
   my $module = shift;
   my $store = is_blessed_ref($_[0]) && $_[0]->isa('Wasm::Wasmtime::Store')
     ? shift
-    : Carp::croak('Creating a Wasm::Wasmtime::Instance instance without a Wasm::Wasmtime::Store object is no longer allowed');
+    : Carp::croak('Wasm::Wasmtime::Instance->new requires a Wasm::Wasmtime::Store object');
 
-  my $ptr;
+  my($imports) = @_;
+  $imports ||= [];
+  Carp::confess("imports is not an array reference") unless ref($imports) eq 'ARRAY';
+
+  my @mi = @{ $module->imports };
+  Carp::croak("Got @{[ scalar @$imports ]} imports, but expected @{[ scalar @mi ]}")
+    if @$imports != @mi;
+
   my @keep;
-
-  if(defined $_[0] && !is_ref($_[0]))
+  my $array;
+  if(@$imports)
   {
-    ($ptr) = @_;
-    return bless {
-      ptr    => $ptr,
-      module => $module,
-      keep   => \@keep,
-    }, $class;
-  }
-  else
-  {
-    my($imports) = @_;
-
-    $imports ||= [];
-    Carp::confess("imports is not an array reference") unless ref($imports) eq 'ARRAY';
-    my @imports = @$imports;
-    my $trap;
-
+    $array = Wasm::Wasmtime::ExternArray->new(scalar @$imports);
+    foreach my $i (0..$#$imports)
     {
-      my @mi = @{ $module->imports };
-      if(@mi != @imports)
-      {
-        Carp::croak("Got @{[ scalar @imports ]} imports, but expected @{[ scalar @mi ]}");
-      }
-
-      @imports = map { _cast_import($_, shift @mi, $store, \@keep) } @imports;
-    }
-
-    my $imports_vec = Wasm::Wasmtime::Vec->new(
-      size => scalar @imports,
-      data => scalar(@imports) > 0 ? do {
-        my $count = scalar @imports;
-        my $ptr = FFI::Platypus::Memory::malloc($ffi->sizeof('opaque') * $count);
-        # void *memcpy(void *dest, const void *src, size_t n)
-        FFI::Platypus->new( lib => [undef] )->function( 'memcpy' => [ 'opaque', "opaque[$count]", 'size_t' ] => 'opaque' )->call($ptr, \@imports, $ffi->sizeof('opaque') * $count);
-      } : undef,
-    );
-
-    my $ptr;
-    if(my $error = $xsub->($store, $module, $imports_vec, \$ptr, \$trap))
-    {
-      FFI::Platypus::Memory::free($imports_vec->data) if defined $imports_vec->data;
-      Carp::croak("error creating module: " . $error->message);
-    }
-    else
-    {
-      FFI::Platypus::Memory::free($imports_vec->data) if defined $imports_vec->data;
-      if($trap)
-      {
-        $trap = Wasm::Wasmtime::Trap->new($trap);
-        die $trap;
-      }
-      else
-      {
-        return bless {
-          ptr    => $ptr,
-          module => $module,
-          keep   => \@keep,
-        }, $class;
-      }
+      _cast_import($imports->[$i], $mi[$i], $store, \@keep, $array->[$i]);
     }
   }
 
+  my $data = Wasm::Wasmtime::InstanceData->new;
+  my $trap;
+  if(my $error = $xsub->($store->context, $module, $array ? addressof($array) : undef, scalar @$imports, $data, \$trap))
+  {
+    Carp::croak("error creating instance: " . $error->message);
+  }
+  if($trap)
+  {
+    die Wasm::Wasmtime::Trap->new($trap);
+  }
+
+  bless {
+    data   => $data,
+    store  => $store,
+    module => $module,
+    keep   => \@keep,
+  }, $class;
 });
+
+# used internally by Wasm::Wasmtime::Linker->instantiate
+sub _new_from_data
+{
+  my($class, $data, $store, $module) = @_;
+  bless {
+    data   => $data,
+    store  => $store,
+    module => $module,
+    keep   => [],
+  }, $class;
+}
 
 
 sub module { shift->{module} }
+
+
+sub store { shift->{store} }
+
+
+sub context { shift->{store}->context }
 
 
 sub exports
@@ -147,14 +125,24 @@ sub exports
   Wasm::Wasmtime::Instance::Exports->new(shift);
 }
 
-$ffi->attach( [ exports => '_exports' ] => ['wasm_instance_t','wasm_extern_vec_t*'] => sub {
-  my($xsub, $self) = @_;
-  my $externs = Wasm::Wasmtime::ExternVec->new;
-  $xsub->($self, $externs);
-  $externs->to_list;
-});
+$ffi->attach( [ wasmtime_instance_export_nth => '_export_nth' ] => ['opaque','wasmtime_instance_t','size_t','opaque*','size_t*','wasmtime_extern_t'] => 'bool' );
 
-_generate_destroy();
+sub _exports
+{
+  my($self) = @_;
+  my @exports;
+  for(my $i = 0; ; $i++)
+  {
+    my $extern = Wasm::Wasmtime::ExternData->new;
+    my $name_ptr;
+    my $name_len = 0;
+    last unless _export_nth($self->context, $self->{data}, $i, \$name_ptr, \$name_len, $extern);
+    my $obj = Wasm::Wasmtime::Extern->from_extern($extern, $self->{store});
+    $extern->free;
+    push @exports, $obj;
+  }
+  @exports;
+}
 
 1;
 
@@ -170,7 +158,7 @@ Wasm::Wasmtime::Instance - Wasmtime instance class
 
 =head1 VERSION
 
-version 0.23
+version 0.24
 
 =head1 SYNOPSIS
 
@@ -198,31 +186,12 @@ This class represents an instance of a WebAssembly module L<Wasm::Wasmtime::Modu
  my $instance = Wasm::Wasmtime::Instance->new(
    $module,    # Wasm::Wasmtime::Module
    $store,     # Wasm::Wasmtime::Store
-   \@imports,  # array reference of Wasm::Wasmtime::Extern
+   \@imports,  # array reference of Wasm::Wasmtime::Extern (or shortcuts)
  );
 
-Create a new instance of the instance class.  C<@imports> should match the
-imports specified by C<$module>.  You can use a few shortcuts when specifying
-imports:
-
-=over 4
-
-=item code reference
-
-For a function import, you can provide a plan Perl subroutine, since we can
-determine the function signature from the C<$module>.
-
-=item scalar reference
-
-For a memory import, a memory object will be created and the referred scalar
-will be set to it.
-
-=item C<undef>
-
-For a memory import, a memory object will be created.  You won't be able to
-access it from Perl space, but at least it won't die.
-
-=back
+Create a new instance.  C<@imports> should match the imports specified by
+C<$module>.  Shortcuts: a plain code reference for a function import, a scalar
+reference or C<undef> for a memory import.
 
 =head1 METHODS
 
@@ -232,12 +201,23 @@ access it from Perl space, but at least it won't die.
 
 Returns the L<Wasm::Wasmtime::Module> for this instance.
 
+=head2 store
+
+ my $store = $instance->store;
+
+Returns the L<Wasm::Wasmtime::Store> for this instance.
+
+=head2 context
+
+ my $context = $instance->context;
+
+Returns the C<wasmtime_context_t> pointer for this instance's store (internal use).
+
 =head2 exports
 
  my $exports = $instance->exports;
 
-Returns the L<Wasm:Wasmtime::Instance::Exports> object for this instance.
-This can be used to query and call exports from the instance.
+Returns the L<Wasm::Wasmtime::Instance::Exports> object for this instance.
 
 =head1 SEE ALSO
 
@@ -255,7 +235,7 @@ Graham Ollis <plicease@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2020-2022 by Graham Ollis.
+This software is copyright (c) 2020-2026 by Graham Ollis.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

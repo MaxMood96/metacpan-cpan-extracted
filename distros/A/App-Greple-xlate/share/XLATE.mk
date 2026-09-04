@@ -11,6 +11,7 @@
 # XLATE_FRONTMATTER:    Exclude/anonymize YAML front matter
 # XLATE_SEED:           Seed cache from another cache file
 # XLATE_CONTEXT_WINDOW: Context blocks for re-translation
+# XLATE_REVIEW:         Show minimal source/translation revision spans
 #
 # XOPT single-quotes XLATE_ANONYMIZE/XLATE_MARK/XLATE_TEMPLATE/XLATE_SEED/
 # XLATE_CONTEXT_WINDOW (and FILE.ANONYMIZE) so a value such as a custom
@@ -107,7 +108,8 @@ XLATE = xlate \
 	$(if $(XLATE_DEBUG),-d) \
 	$(if $(XLATE_MAXLEN),-m$(XLATE_MAXLEN)) \
 	$(if $(XLATE_USEAPI),-a) \
-	$(if $(XLATE_UPDATE),-u)
+	$(if $(XLATE_UPDATE),-u) \
+	$(if $(XLATE_REVIEW),--review)
 
 XOPT = $(if $(wildcard $1.ANONYMIZE),--anonymize='$1.ANONYMIZE',\
 	$(if $(XLATE_ANONYMIZE),--anonymize='$(XLATE_ANONYMIZE)')) \

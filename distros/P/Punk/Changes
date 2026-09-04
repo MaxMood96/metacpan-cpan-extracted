@@ -1,6 +1,30 @@
 Revision history for Punk
 
+0.43    2026-09-03
+        - SECURITY: a websocket upgrade is refused with 403 unless its
+          Origin is one the application answers as 
+        - ADDS: the `origin` websocket route option - a hostname, an
+          arrayref of them in `host allow` syntax, a coderef, or 0 to
+          serve any origin.
+        - ADDS: $c->req->body_each($cb) and $c->req->body_to($dest) - the
+          request body a window at a time, and straight to a file, for the
+          bodies that are not multipart. A body is read once: after either
+          of these, body/json/form croak rather than answer with nothing,
+          and a body already read whole is replayed from the copy.
+        - ADDS: the after_response phase - `hook after_response` and
+          $c->after_response($code), for work a request generates that the
+          client is not waiting for. 
+        - ADDS: the `rate_limit` route option - a budget for one route,
+          compiled into a guard at to_app and enforced by the same C the
+          keyword installs. Takes limit/window/by/tag, or a bare count.
+          The counter is namespaced to the route unless a tag shares one
+          between several, and the guard runs before `validate`, so a
+          refused request never parses a body.
+
 0.42    2026-09-02
+        - A blessed error raised from a future, a view or a websocket
+          handler arrived as a plain string on perls before 5.14. The
+          croak_sv shim had no branch for a reference.
         - t/1002-awaitable.t and t/1050-asyncawait.t assert cancellation
           across an await only on perl 5.24+, which is where
           Future::AsyncAwait chains the awaited future rather than

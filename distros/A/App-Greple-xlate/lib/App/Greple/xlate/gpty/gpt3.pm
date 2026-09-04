@@ -1,6 +1,6 @@
 package App::Greple::xlate::gpty::gpt3;
 
-our $VERSION = "2.01";
+our $VERSION = "2.02";
 
 use v5.14;
 use warnings;

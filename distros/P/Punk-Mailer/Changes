@@ -1,5 +1,10 @@
 Revision history for Punk-Mailer
 
+0.06    2026-09-03
+	- Sizes and the Message-ID epoch print as strings, not %llu:
+	  perl's formatter drops "ll" when IVSIZE < 8, taking the
+	  argument with it
+
 0.05    2026-08-30
 	- Add XS_INTERNAL and mg_findext shims
 	- s///r left t/03-headers.t

@@ -8,13 +8,14 @@ package Data::URIID::Colour;
 
 use strict;
 use warnings;
+use v5.16;
 
 use overload '""' => \&rgb;
 
 use Carp;
 use Scalar::Util qw(weaken blessed);
 
-our $VERSION = v0.23;
+our $VERSION = v0.24;
 
 use parent qw(Data::URIID::Base Data::Identifier::Interface::Known);
 
@@ -43,6 +44,8 @@ sub new {
                     }
                 }
                 $from = $from->ise;
+            } elsif ($from->isa('Convert::Color::RGB8')) {
+                $opts{rgb} //= '#'.$from->hex;
             } else {
                 $from = $from->ise;
             }
@@ -104,6 +107,34 @@ sub _known_provider {
 
 # ---- Private helpers ----
 
+sub as {
+    my ($self, $as, @opts) = @_;
+
+    if (scalar(@opts) == 0) {
+        if ($as eq 'Convert::Color' || $as eq 'Convert::Color::RGB8') {
+            require Convert::Color::RGB8;
+            return Convert::Color::RGB8->new(substr($self->rgb, 1));
+        } elsif ($as eq 'Convert::Color::RGB16') {
+            require Convert::Color::RGB16;
+            return Convert::Color::RGB16->new($self->rgb =~ s/^#(..)(..)(..)\z/$1$1$2$2$3$3/r);
+        } elsif ($as eq 'Convert::Color::X11' || $as eq 'Convert::Color::VGA') {
+            require Convert::Color::RGB8;
+            my $rgb8 = Convert::Color::RGB8->new(substr($self->rgb, 1));
+            my $res = $rgb8->convert_to(lc(($as =~ /::([^:]+)\z/)[0]));
+
+            if (fc($res->convert_to('rgb8')->hex) ne fc(substr($self->rgb, 1))) {
+                croak 'Convertion to '.$as.' would not be lossless';
+            }
+
+            return $res;
+        } elsif ($as =~ /^Convert::Color::/) {
+            croak 'Convertion to '.$as.' would not be lossless';
+        }
+    }
+
+    return $self->SUPER::as($as, @opts);
+}
+
 # Private for now.
 sub displaycolour {
     my ($self) = @_;
@@ -139,7 +170,7 @@ Data::URIID::Colour - Extractor for identifiers from URIs
 
 =head1 VERSION
 
-version v0.23
+version v0.24
 
 =head1 SYNOPSIS
 

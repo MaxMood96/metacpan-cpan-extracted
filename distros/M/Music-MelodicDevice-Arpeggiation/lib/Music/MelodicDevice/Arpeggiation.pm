@@ -3,7 +3,7 @@ our $AUTHORITY = 'cpan:GENE';
 
 # ABSTRACT: Apply arpeggiation patterns to groups of notes
 
-our $VERSION = '0.0401';
+our $VERSION = '0.0501';
 
 use Moo;
 use strictures 2;
@@ -15,12 +15,15 @@ use namespace::clean;
 use constant TICKS => 96;
 
 my $DISPATCH = {
-    up       => sub { my ($notes) = @_; return [ 0 .. $#$notes ] },
-    down     => sub { my ($notes) = @_; return [ reverse(0 .. $#$notes) ] },
-    updown   => sub { my ($notes) = @_; return [ 0 .. $#$notes, reverse(0 .. $#$notes - 1) ] },
-    random   => sub { my ($notes) = @_; return [ map { rand @$notes } @$notes ] },
-    converge => \&converge,
-    diverge  => \&diverge,
+    up            => sub { my ($notes) = @_; return [ 0 .. $#$notes ] },
+    down          => sub { my ($notes) = @_; return [ reverse(0 .. $#$notes) ] },
+    updown        => sub { my ($notes) = @_; return [ 0 .. $#$notes, reverse(0 .. $#$notes - 1) ] },
+    random        => sub { my ($notes) = @_; return [ map { rand @$notes } @$notes ] },
+    converge      => \&converge,
+    diverge       => \&diverge,
+    pedal_up      => \&pedal_up,
+    pedal_down    => \&pedal_down,
+    pedal_updown  => \&pedal_updown,
 };
 
 
@@ -131,6 +134,42 @@ sub diverge {
     return [ reverse @{ converge($pitches) } ];
 }
 
+
+sub pedal_up {
+    my ($pitches) = @_;
+
+    return [ 0 ] if @$pitches <= 1;
+
+    my @pattern;
+    push @pattern, 0, $_ for 1 .. $#$pitches;
+
+    return \@pattern;
+}
+
+
+sub pedal_down {
+    my ($pitches) = @_;
+
+    return [ 0 ] if @$pitches <= 1;
+
+    my $top = $#$pitches;
+    my @pattern;
+    push @pattern, $top, $_ for reverse 0 .. $top - 1;
+
+    return \@pattern;
+}
+
+
+sub pedal_updown {
+    my ($pitches) = @_;
+
+    my $up = pedal_up($pitches);
+    return $up if @$up <= 1;
+
+    my $down = pedal_down($pitches);
+    return [ @$up, @{$down}[ 1 .. $#$down ] ];
+}
+
 sub _pitch_value {
     my ($pitch) = @_;
     return $pitch if $pitch =~ /^\d+$/;
@@ -151,7 +190,7 @@ Music::MelodicDevice::Arpeggiation - Apply arpeggiation patterns to groups of no
 
 =head1 VERSION
 
-version 0.0401
+version 0.0501
 
 =head1 SYNOPSIS
 
@@ -191,6 +230,9 @@ Known types:
   random
   converge
   diverge
+  pedal_up
+  pedal_down
+  pedal_updown
 
 =head2 duration
 
@@ -262,6 +304,25 @@ Return a list of notes from the outer extremes to the middle.
 =head2 diverge
 
 Return a list of notes from the middle to the outer extremes.
+
+=head2 pedal_up
+
+Return a list of notes that climb by repeatedly returning to the
+lowest note between each successive, higher note. For example, given
+four notes C<(0,1,2,3)>, the returned pattern is C<(0,1,0,2,0,3)>.
+
+=head2 pedal_down
+
+Return a list of notes that descend by repeatedly returning to the
+highest note between each successive, lower note. For example, given
+four notes C<(0,1,2,3)>, the returned pattern is C<(3,2,3,1,3,0)>.
+
+=head2 pedal_updown
+
+Return a list of notes that climb to the highest note through the
+lowest ("pedal") note, then descend back down to the lowest note
+through the highest note as the new pedal. For example, given four
+notes C<(0,1,2,3)>, the returned pattern is C<(0,1,0,2,0,3,2,3,1,3,0)>.
 
 =head1 SEE ALSO
 

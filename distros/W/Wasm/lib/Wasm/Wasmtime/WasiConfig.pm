@@ -4,9 +4,10 @@ use strict;
 use warnings;
 use 5.008004;
 use Wasm::Wasmtime::FFI;
+use Carp ();
 
 # ABSTRACT: WASI Configuration
-our $VERSION = '0.23'; # VERSION
+our $VERSION = '0.24'; # VERSION
 
 
 $ffi_prefix = 'wasi_config_';
@@ -21,24 +22,31 @@ sub _wrapper
   $self;
 }
 
-$ffi->attach( new             => []                                  => 'wasi_config_t' );
-$ffi->attach( set_stdin_file  => ['wasi_config_t','string']          => 'void', \&_wrapper );
-$ffi->attach( set_stdout_file => ['wasi_config_t','string']          => 'void', \&_wrapper );
-$ffi->attach( set_stderr_file => ['wasi_config_t','string']          => 'void', \&_wrapper );
-$ffi->attach( preopen_dir     => ['wasi_config_t','string','string'] => 'void', \&_wrapper );
+$ffi->attach( new             => []                                       => 'wasi_config_t' );
+$ffi->attach( set_stdin_file  => ['wasi_config_t','string']               => 'bool', \&_wrapper );
+$ffi->attach( set_stdout_file => ['wasi_config_t','string']               => 'bool', \&_wrapper );
+$ffi->attach( set_stderr_file => ['wasi_config_t','string']               => 'bool', \&_wrapper );
+$ffi->attach( preopen_dir     => ['wasi_config_t','string','string','bool'] => 'bool' => sub {
+  my $xsub = shift;
+  my $self = shift;
+  my($host, $guest, $fs_mutable) = @_;
+  $fs_mutable = 1 unless defined $fs_mutable;
+  $xsub->($self, $host, $guest, $fs_mutable);
+  $self;
+});
 
 foreach my $name (qw( argv env stdin stdout stderr ))
 {
-  $ffi->attach( "inherit_$name" => ['wasi_config_t'], \&_wrapper );
+  $ffi->attach( "inherit_$name" => ['wasi_config_t'] => 'void', \&_wrapper );
 }
 
-$ffi->attach( set_argv => ['wasi_config_t', 'int', 'string[]'] => sub {
+$ffi->attach( set_argv => ['wasi_config_t', 'size_t', 'string[]'] => 'bool' => sub {
   my($xsub, $self, @argv) = @_;
   $xsub->($self, scalar(@argv), \@argv);
   $self;
 });
 
-$ffi->attach( set_env => ['wasi_config_t','int','string[]','string[]'] => sub {
+$ffi->attach( set_env => ['wasi_config_t','size_t','string[]','string[]'] => 'bool' => sub {
   my($xsub, $self, %env) = @_;
   my @names;
   my @values;
@@ -51,7 +59,7 @@ $ffi->attach( set_env => ['wasi_config_t','int','string[]','string[]'] => sub {
   $self;
 });
 
-_generate_destroy();
+_generate_destroy('wasi_config_delete');
 
 1;
 
@@ -67,7 +75,7 @@ Wasm::Wasmtime::WasiConfig - WASI Configuration
 
 =head1 VERSION
 
-version 0.23
+version 0.24
 
 =head1 SYNOPSIS
 
@@ -85,21 +93,19 @@ version 0.23
         ->inherit_stderr
         ->preopen_dir("/", "/host");
  
- my $wasi = Wasm::Wasmtime::WasiInstance->new(
-   $store,
-   "wasi_snapshot_preview1",
-   $config,
- );
+ # Apply the WASI configuration to the store (this consumes $config).
+ $store->set_wasi($config);
 
 =head1 DESCRIPTION
 
 B<WARNING>: WebAssembly and Wasmtime are a moving target and the interface for these modules
 is under active development.  Use with caution.
 
-This class represents the WebAssembly System Interface (WASI) configuration.  For WebAssembly WASI
-is the equivalent to the part of libc that interfaces with the system.  As such it allows you to
-configure if and how the WebAssembly program has access to program arguments, environment,
-standard streams and file system directories.
+This class represents the WebAssembly System Interface (WASI) configuration.
+
+To apply a WASI configuration, pass it to C<< $store->set_wasi($config) >>
+(which consumes it) and define the WASI imports on a linker with
+C<< $linker->define_wasi >>.
 
 =head1 CONSTRUCTOR
 
@@ -115,67 +121,43 @@ Creates a new WASI config object.
 
  $config->set_argv(@argv);
 
-Sets the program arguments.
-
 =head2 inherit_argv
 
  $config->inherit_argv;
 
-Configures WASI to use the host program's arguments.
-
 =head2 set_env
 
  $config->set_env(\%env);
-
-Sets the program environment variables.
+ $config->set_env(%env);
 
 =head2 inherit_env
-
- $config->inherit_env;
-
-Configures WASI to use the host program's environment variables.
 
 =head2 set_stdin_file
 
  $config->set_stdin_file($path);
 
-Sets the program standard input to use the given file path.
-
 =head2 inherit_stdin
-
- $config->inherit_stdin;
-
-Configures WASI to use the host program's standard input.
 
 =head2 set_stdout_file
 
  $config->set_stdout_file($path);
 
-Sets the program standard output to use the given file path.
-
 =head2 inherit_stdout
-
- $config->inherit_stdout;
-
-Configures WASI to use the host program's standard output.
 
 =head2 set_stderr_file
 
  $config->set_stderr_file($path);
 
-Sets the program standard error to use the given file path.
-
 =head2 inherit_stderr
-
- $config->inherit_stderr;
-
-Configures WASI to use the host program's standard error.
 
 =head2 preopen_dir
 
  $config->preopen_dir($host_path, $guest_path);
+ $config->preopen_dir($host_path, $guest_path, $fs_mutable);
 
-Pre-open the given directory from the host's C<$host_path> to the guest's C<$guest_path>.
+Pre-open C<$host_path> from the host, visible to the guest as C<$guest_path>.
+C<$fs_mutable> (default true) controls whether the guest may modify the
+filesystem under that path.
 
 =head1 SEE ALSO
 
@@ -193,7 +175,7 @@ Graham Ollis <plicease@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2020-2022 by Graham Ollis.
+This software is copyright (c) 2020-2026 by Graham Ollis.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

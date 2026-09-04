@@ -1,6 +1,6 @@
 package HTML::FormHandler::I18N::ja_jp;
 # ABSTRACT: Japanese message file
-$HTML::FormHandler::I18N::ja_jp::VERSION = '0.40068';
+$HTML::FormHandler::I18N::ja_jp::VERSION = '0.410001';
 use strict;
 use warnings;
 use utf8;
@@ -109,7 +109,7 @@ HTML::FormHandler::I18N::ja_jp - Japanese message file
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 AUTHOR
 

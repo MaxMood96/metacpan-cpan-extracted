@@ -1,0 +1,24 @@
+# Copyright (c) 2026 Yuki Kimoto
+# MIT License
+
+class UV::Handle::Stream extends UV::Handle {
+  
+  use UV::Callback::Write;
+  use UV::Request::Write;
+  use UV::Callback::Read;
+  use Resource::UV;
+  use UV::Resource::UV;
+  
+  # Fields
+  has read_cb : rw UV::Callback::Read;
+  
+  has read_buffer : rw mutable string;
+  
+  has read_buffer_length : rw int;
+  
+  has read_buffer_offset : rw int;
+  
+  # Instance Methods
+  native method read_start : void ($buffer : mutable string, $buffer_length : int, $cb : UV::Callback::Read, $buffer_offset : int = 0);
+  
+}

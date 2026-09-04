@@ -1,5 +1,9 @@
 Revision history for URI
 
+5.37      2026-09-03 22:49:36Z
+    - Preserve leading and trailing whitespace in file:// URI paths instead
+      of silently stripping it (GH#95) (Jacques Deguest)
+
 5.36      2026-08-19 19:37:22Z
     - Apply Unicode NFC normalization in URI::_idna nameprep so IDNA host
       encoding matches other clients instead of emitting a non-standard,

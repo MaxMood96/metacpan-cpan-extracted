@@ -1,5 +1,10 @@
 Revision history for Cavil::Matcher
 
+1.05   2026-09-03
+        - Removed the on-disk fingerprint index (fp_build/fp_open, the Cavil::Matcher::Fingerprints
+          package, and Cavil::Matcher::FpIndex); consumers now keep the searchable index in their own
+          database. The fingerprint_file and content_hash primitives are unchanged.
+
 1.04   2026-08-27
         - FpIndex now caches opened segments and reuses them across searches instead of reopening every
           segment on every query. Opening a segment is a fixed per-query cost that otherwise dominated search

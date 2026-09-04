@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.5 - 2026-09-01
+
+### Added
+- AGENTS.md
+
+### Changed
+
+- Removed the `URI` dependency. `Net::NATS2::URI` now parses NATS endpoints
+  directly, avoiding the retired `URI::nats` scheme module.
+
 ## 0.3.4 - 2026-08-03
 
 ### Added

@@ -9,15 +9,7 @@ my %WriteMakefileArgs = (
     VERSION_FROM     => 'lib/Catalyst/Seal.pm',
     ABSTRACT_FROM    => 'lib/Catalyst/Seal.pm',
     LICENSE          => 'artistic_2',
-    # Inherited from Catalyst::Runtime, which is what actually sets the floor
-    # here. This release is pure perl and uses nothing newer, but it has only
-    # been run on 5.42 so far, so the floor is Catalyst's claim and not yet an
-    # independent one. See plan_catalyst_seal/phase_0_TODO.md.
-    MIN_PERL_VERSION => '5.008003',
-    # The XS lives at the top of the distribution rather than under lib/.
-    # XSMULTI-style placement makes MakeMaker write lib/Seal.def on Windows
-    # while dlltool goes looking for $(BASEEXT).def, and the build fails there
-    # and nowhere else.
+    MIN_PERL_VERSION => '5.014',
     XS               => { 'Seal.xs' => 'Seal.c' },
     OBJECT           => 'Seal$(OBJ_EXT)',
     INC              => '-I.',
@@ -35,8 +27,6 @@ my %WriteMakefileArgs = (
         'Moose'             => '0',
         'Carp'              => '0',
         'Scalar::Util'      => '0',
-        # set_subname, the name the wrapped-method trampoline was attaching on
-        # every call. Class::MOP requires the same version.
         'Sub::Util'         => '1.40',
     },
     META_MERGE => {
@@ -49,6 +39,7 @@ my %WriteMakefileArgs = (
             },
         },
     },
+    macro => { TARFLAGS   => "--format=ustar -c -v -f" },
     dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean => { FILES => 'Catalyst-Seal-*' },
 );

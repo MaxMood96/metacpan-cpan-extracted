@@ -7,7 +7,7 @@ use Punk::Request;
 use Punk::Response;
 use Punk ();
 
-our $VERSION = '0.42';
+our $VERSION = '0.43';
 
 1;
 
@@ -490,6 +490,26 @@ The request L<Punk::Logger> (cached for the request): C<< $c->log->info(...) >>,
 C<debug>, C<warn>, C<error>, C<fatal>. Its lines carry the request's method and
 path, and are delivered to the server's C<psgix.logger> when one is present.
 Configure with the C<logging> keyword. See L<Punk::Logger>.
+
+=head2 after_response($code)
+
+    $c->after_response(sub {
+        my ($c, $resp) = @_;
+        $c->model('Audit')->create({ status => $resp->[0] });
+    });
+
+Run C<$code> once this response has been handed to the server - the work the
+request generates but the client is not waiting for. It is given the context
+and the response that was sent; a return value is discarded, and a die is
+logged while any callbacks after it still run.
+
+Queue as many as you like; they run in registration order, after the
+application's own C<after_response> hooks. Chainable.
+
+On a L<Hyperman> worker this runs on the next pass of the event loop, and on
+a C<psgix.cleanup> server the server runs it; anywhere else it runs inline,
+just before the response is returned. See L<Punk/after_response> for what
+that means and for why this is not a job queue.
 
 =head2 match
 

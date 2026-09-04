@@ -12,11 +12,11 @@ App::Greple::xlate - greple için çeviri destek modülü
 
 =head1 VERSION
 
-Version 2.01
+Version 2.02
 
 =head1 DESCRIPTION
 
-B<Greple> B<xlate> modülü istenen metin bloklarını bulur ve bunları çevrilmiş metinle değiştirir. Birincil motor, L<llm|https://llm.datasette.io/> komutunu çağıran GPT-5.5 (F<llm/gpt5.pm>)'tir; DeepL (F<deepl.pm>) ve eski B<gpty> tabanlı motorlar da dahildir.
+B<Greple> B<xlate> modülü istenen metin bloklarını bulur ve bunları çevrilmiş metinle değiştirir. Birincil motor, L<llm|https://llm.datasette.io/> komutunu çağıran GPT-5.6 Terra'dır (F<llm/gpt5.pm>); DeepL (F<deepl.pm>) ve eski B<gpty> tabanlı motorlar da dahildir.
 
 Çeviriler dosya başına önbelleğe alınır, bu nedenle bir komutu yeniden çalıştırmak değişmemiş metin için hiçbir maliyet getirmez. Bir belge düzenlendiğinde, yalnızca değiştirilen paragraflar API'ye yeniden gönderilir; bağlamdan haberdar bir motor ayrıca çevredeki çevirileri, değişikliğin etrafındaki ham kaynak metni ve düzenlenen paragrafın önceki sürümünü de alır, böylece yeni çeviri yerleşik ifadeleri korur (bkz. B<--xlate-context-window>). Hassas dizgeler iletimden önce gizlenebilir (bkz. L</ANONYMIZATION AND TEMPLATES>).
 
@@ -92,13 +92,15 @@ Karmaşık desen, ters eğik çizgi ile kaçışlı satır sonları kullanılara
 
 Metnin maskeleme ile nasıl dönüştürüldüğü B<--xlate-mask> seçeneğiyle görülebilir.
 
+Maske yer tutucuları, C<< <m id="1" /> >> gibi düzgün biçimlendirilmiş kendini kapatan XML etiketleridir. JSON tabanlı LLM motorları etiketleri giriş dizilerinde alır. DeepL için, işaretçi etiketleri içeren bir istek kaçışlanır ve geçici bir C<< <xlate> >> kökü içine alınır; XML etiket işleme etkinleştirilir ve her işaretçi kategorisi bölünmeyen etiket olarak kaydedilir. Sarmalayıcı, yer tutucular doğrulanıp geri yüklenmeden önce kaldırılır.
+
 Maskeleme, işaretlemenin çevrilmesini önler. Hassas dizeleri çeviri hizmetinin kendisinden gizlemek için bkz. L</ANONYMIZATION AND TEMPLATES>; ikisi birlikte kullanılabilir.
 
 Bu arayüz deneyseldir ve gelecekte değişime tabidir.
 
 =head1 ANONYMIZATION AND TEMPLATES
 
-Hassas dizgeler çeviri API'sine gönderilmeden önce gizlenebilir ve çıktıda geri yüklenebilir. Üç anonimleştirme kuralı kaynağı kullanılabilir: sözlük dosyası (B<--xlate-anonymize>), belgenin içindeki satır içi işaretler (B<--xlate-anonymize-mark>) ve YAML front matter değerleri (B<--xlate-frontmatter>). Her dizge iletim sırasında C<< <person id=1 /> >> gibi bir kategori etiketiyle değiştirilir. Gizleme hedefi yalnızca API iletimidir: yerel önbellek dosyaları geri yüklenmiş düz metni saklar. Tam olarak neyin iletileceğini incelemek için B<--xlate-dryrun> kullanın.
+Hassas dizgeler çeviri API'sine gönderilmeden önce gizlenebilir ve çıktıda geri yüklenebilir. Üç anonimleştirme kuralı kaynağı kullanılabilir: sözlük dosyası (B<--xlate-anonymize>), belgenin içindeki satır içi işaretler (B<--xlate-anonymize-mark>) ve YAML front matter değerleri (B<--xlate-frontmatter>). Her dizge iletim sırasında C<< <person id="1" /> >> gibi bir kategori etiketiyle değiştirilir. Gizleme hedefi yalnızca API iletimidir: yerel önbellek dosyaları geri yüklenmiş düz metni saklar. Tam olarak neyin iletileceğini incelemek için B<--xlate-dryrun> kullanın.
 
 Form belgeleri (üç aylık raporlar ve benzerleri) için, aktörleri baştan tanımlayın ve gövdede onlara başvurun:
 
@@ -158,7 +160,7 @@ Kullanılacak çeviri motorunu belirtir.
 
 =over 2
 
-=item * B<gpt5>: gpt-5.5 (via the C<llm> command)
+=item * B<gpt5>: gpt-5.6-terra (via the C<llm> command)
 
 =item * B<deepl>: DeepL API (via the C<deepl> command)
 
@@ -267,7 +269,7 @@ Her seferinde tek bir satırı çevirmek istiyorsanız bu değeri 1 olarak ayarl
 
 =item B<--xlate-prompt>=I<text>
 
-Çeviri motoruna gönderilecek özel bir istem belirtin. Bu seçenek LLM motorları (C<gpt3>, C<gpt4o>, C<gpt5>) için kullanılabilir, ancak DeepL için kullanılamaz. AI modeline belirli talimatlar sağlayarak çeviri davranışını özelleştirebilirsiniz. İstem C<%s> içeriyorsa, hedef dil adıyla değiştirilecektir.
+Çeviri motoruna gönderilecek özel bir istem belirtin. Bu seçenek LLM motorları (C<gpt3>, C<gpt4o>, C<gpt5>) için kullanılabilir, ancak DeepL için kullanılamaz. AI modeline belirli talimatlar sağlayarak çeviri davranışını özelleştirebilirsiniz. İstem C<%s> içeriyorsa, hedef dil adıyla değiştirilecektir. llm destekli C<gpt5> motoru için belge, C<input> üyesi çevrilecek dizi olan ve isteğe bağlı C<context> üyesi referans verilerini içeren bir JSON isteği olarak ayrı ayrı sağlanır. Bu üyeleri komutlar değil belge verileri olarak ele alan sabit bir talimat, özel bir istem kullanıldığında bile eklenir.
 
 =item B<--xlate-context>=I<text>
 
@@ -276,7 +278,7 @@ Her seferinde tek bir satırı çevirmek istiyorsanız bu değeri 1 olarak ayarl
 =item B<--xlate-context-window>=I<n>
 
 (Context-aware engines only, e.g. C<gpt5> on the llm backend)
-Değişen bloklar yeniden çevrilirken referans bağlam olarak geçirilen çevredeki çevrilmiş blok sayısı (varsayılan 2). Bağlam ayrıca değişen bölgenin etrafındaki ham kaynak metni (başlıklar, liste yapısı, açıklamalar) ve kullanılabilir olduğunda, değişmemiş ifadelerin korunması için önbellekten kurtarılan değişen metnin önceki sürümünü içerir. Bağlama duyarlı çeviriyi tamamen devre dışı bırakmak için 0 olarak ayarlayın. Her değişen bölgenin kendi API çağrısında çevrildiğini ve bağlamın sistem istemine yaklaşık 8000 karaktere kadar ekleyebileceğini unutmayın; bu nedenle bağlama duyarlı çeviri, tutarlılık için bir miktar ek maliyeti göze alır.
+Değişen bloklar yeniden çevrilirken referans bağlam olarak geçirilen çevredeki çevrilmiş blok sayısı (varsayılan 2). Bağlam ayrıca değişen bölgenin etrafındaki ham kaynak metni (başlıklar, liste yapısı, açıklamalar) ve kullanılabilir olduğunda, değişmemiş ifadelerin korunması için önbellekten kurtarılan değişen metnin önceki sürümünü içerir. Bağlama duyarlı çeviriyi tamamen devre dışı bırakmak için 0 olarak ayarlayın. Her değişen bölgenin kendi API çağrısında çevrildiğini ve bağlamın JSON kullanıcı isteğine yaklaşık 8000 karaktere kadar ekleyebileceğini unutmayın; bu nedenle bağlama duyarlı çeviri, tutarlılık için bir miktar ek maliyeti göze alır. Belgeden türetilen bağlam sistem isteminden ayrı tutulur.
 
 =item B<--xlate-cache-seed>=I<file>
 
@@ -289,7 +291,7 @@ Hassas dizeleri çeviri API'sine gönderilmeden önce anonimleştirin ve çıkt�
     [ { "category": "person",  "text": "山田太郎" },
       { "category": "company", "regex": "アクメ(株式会社)?" } ]
 
-veya basit bir satır biçiminde (C<category pattern>, regex için C</.../>). Her öğe C<< <person id=1 /> >> gibi bir kategori etiketiyle değiştirilir; aynı dize her zaman aynı etiketi alır, böylece model kimin kim olduğunu takip edebilir. Bilinmeyen JSON alanları yok sayılır; bu nedenle üreteçler (örn. varlıkları çıkaran yerel bir LLM) kendi ek açıklamalarını ekleyebilir. C<lit> kategorisi ayrılmıştır. Yerel önbellek dosyaları hâlâ geri yüklenmiş düz metni saklar: gizleme hedefi yalnızca API iletimidir.
+veya basit bir satır biçiminde (C<category pattern>, regex için C</.../>). Her öğe C<< <person id="1" /> >> gibi bir kategori etiketiyle değiştirilir; aynı dize her zaman aynı etiketi alır, böylece model kimin kim olduğunu takip edebilir. Bilinmeyen JSON alanları yok sayılır; bu nedenle üreteçler (örn. varlıkları çıkaran yerel bir LLM) kendi ek açıklamalarını ekleyebilir. C<lit> kategorisi ayrılmıştır. Yerel önbellek dosyaları hâlâ geri yüklenmiş düz metni saklar: gizleme hedefi yalnızca API iletimidir.
 
 Bir sözlük harici bir araç tarafından üretilebilir -- örneğin hassas varlıkları çıkaran yerel bir model:
 
@@ -332,6 +334,10 @@ Kapanış C<---> sonrasında her zaman boş bir satır bırakın. Paragraf tarz�
 =item B<-->[B<no->]B<xlate-progress> (Default: True)
 
 Çeviri sonucunu gerçek zamanlı olarak STDERR çıktısında görün. C<From> payload'u, anonimleştirme ve maskelemeden sonra iletildiği gibi gösterilir.
+
+=item B<--xlate-review>
+
+Bire bir değiştirilmiş bir blok için, eski ve yeni kaynakta değişen en küçük bitişik aralığı, ardından eski ve yeni çevirideki karşılık gelen aralığı gösterin. Rapor STDERR'e yazılır, ek API çağrısı yapmaz ve eski ile yeni bloklar açıkça eşleştirilemediğinde atlanır.
 
 =item B<--xlate-stripe>
 

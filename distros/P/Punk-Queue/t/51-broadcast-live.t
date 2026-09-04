@@ -22,7 +22,7 @@ plan skip_all => 'DBI and DBD::SQLite required' unless has_dbd();
     my $h = pq_start(['worker', '--app', $app, '-j', '1'],
                      env => { PUNK_QUEUE_NO_HM_ABI => 1 });
 
-    my $deadline = time + 15;
+    my $deadline = time + 60;
     my @child;
     while (time < $deadline) {
         @child = grep { $_->{role} eq 'child' }
@@ -40,7 +40,10 @@ plan skip_all => 'DBI and DBD::SQLite required' unless has_dbd();
     # happens promptly rather than at the heartbeat interval
     $q->enqueue(add => [1, 1]);
 
-    $deadline = time + 30;
+    # the old row goes away first and the replacement registers second,
+    # so a window that ends between the two sees nothing running: it is
+    # drawn wide enough that a loaded box still lands after the spawn.
+    $deadline = time + 60;
     my @after;
     while (time < $deadline) {
         @after = grep { $_->{role} eq 'child' }

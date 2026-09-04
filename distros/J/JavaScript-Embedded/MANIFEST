@@ -83,6 +83,7 @@ t/sandbox/01-memory.t
 t/sandbox/02-memory.t
 t/sandbox/bubble-timeout.t
 t/sandbox/check.t
+t/sandbox/rearm-timeout.t
 t/sandbox/timeout.t
 t/trycatch.t
 t/typescript.t

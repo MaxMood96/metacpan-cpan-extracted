@@ -1,6 +1,6 @@
 package HTML::FormHandler::Widget::Field::Repeatable;
 # ABSTRACT: repeatable field widget
-$HTML::FormHandler::Widget::Field::Repeatable::VERSION = '0.40068';
+$HTML::FormHandler::Widget::Field::Repeatable::VERSION = '0.410001';
 use Moose::Role;
 with 'HTML::FormHandler::Widget::Field::Compound';
 
@@ -44,7 +44,7 @@ HTML::FormHandler::Widget::Field::Repeatable - repeatable field widget
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

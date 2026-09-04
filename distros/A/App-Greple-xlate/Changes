@@ -1,5 +1,23 @@
 Revision history for Perl extension App-Greple-xlate
 
+2.02 2026-09-03T11:44:49Z
+
+    - Update the llm-backed gpt5 engine to use gpt-5.6-terra with low
+      reasoning effort by default.  The engine name and existing cache file
+      names remain unchanged.
+    - Strengthen translation response validation: require exact element
+      counts and string elements from LLM engines, and verify the complete
+      masked-placeholder multiset before restoring translated text.
+    - Make one-to-one source revisions explicit in the translation context,
+      and add --xlate-review / --review to show minimal source and target
+      revision spans without another API call.
+    - Keep fixed translation policy in the system prompt and send source,
+      previous translations, and surrounding references as structured,
+      explicitly untrusted document data in the JSON user request.
+    - Emit well-formed XML-style mask tags with quoted IDs and enable
+      DeepL XML tag handling for masked payloads, so numbered placeholders
+      retain their tag names and IDs during translation.
+
 2.01 2026-07-09T05:59:30Z
 
     - Renew the `xlate` command-line front-end for the 2.0 module.
@@ -504,4 +522,3 @@ Revision history for Perl extension App-Greple-xlate
 0.01 2023-01-29T15:04:13Z
 
     - original version
-

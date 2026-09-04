@@ -10,11 +10,11 @@ App::Greple::xlate - greple için çeviri destek modülü
 
 # VERSION
 
-Version 2.01
+Version 2.02
 
 # DESCRIPTION
 
-**Greple** **xlate** modülü, istenen metin bloklarını bulur ve bunları çevrilmiş metinle değiştirir. Ana motor, [llm](https://llm.datasette.io/) komutunu çağıran GPT-5.5'tir (`llm/gpt5.pm`); DeepL (`deepl.pm`) ve eski **gpty** tabanlı motorlar da dahildir.
+**Greple** **xlate**  Modül, istenen metin bloklarını bulur ve bunları çevrilmiş metinle değiştirir. Ana motor,  [llm](https://llm.datasette.io/)komutunu çağıran GPT-5.6 Terra (`llm/gpt5.pm`)'dır; DeepL (`deepl.pm`) ve eski **gpty**-tabanlı motorlar da dahildir.
 
 Çeviriler dosya başına önbelleğe alınır, bu nedenle değişmemiş metinler için komutu yeniden çalıştırmanın maliyeti yoktur. Bir belge düzenlendiğinde, yalnızca değiştirilen paragraflar API’ye yeniden gönderilir; bağlam farkında bir motor, çevredeki çevirileri, değişikliğin etrafındaki ham kaynak metni ve düzenlenmiş paragrafın önceki sürümünü de alır, böylece yeni çeviri yerleşik ifade biçimini korur (bkz. **--xlate-context-window**). Hassas dizeler, aktarımdan önce gizlenebilir (bkz. ["ANONYMIZATION AND TEMPLATES"](#anonymization-and-templates)).
 
@@ -81,13 +81,15 @@ Karmaşık desenler, ters eğik çizgi ile kaçış işareti eklenmiş satır so
 
 Maskeleme ile metnin nasıl dönüştürüldüğü **--xlate-mask** seçeneği ile görülebilir.
 
+Maske yer tutucuları, gibi düzgün biçimlendirilmiş, kendiliğinden kapanan XML etiketleridir`<m id="1" />`. JSON tabanlı LLM motorları, bu etiketleri girdi dizilerinde alır. DeepL için, işaretleyici etiketleri içeren bir istek kaçış karakterleriyle işlenir ve geçici bir  `<xlate>`kök etiketi içine alınır; bu işlemde XML etiket işleme etkinleştirilir ve her işaretleyici kategorisi bölünmeyen etiket olarak kaydedilir. Yer tutucular doğrulanıp geri yüklenmeden önce sarmalayıcı kaldırılır.
+
 Maskeleme, işaretlemeyi çeviriden korur. Hassas dizeleri çeviri hizmetinden gizlemek için ["ANONYMIZATION AND TEMPLATES"](#anonymization-and-templates)'e bakın; her ikisi de birlikte kullanılabilir.
 
 Bu arayüz deneyseldir ve gelecekte değiştirilebilir.
 
 # ANONYMIZATION AND TEMPLATES
 
-Hassas dizeler, çeviri API'sına gönderilmeden önce gizlenebilir ve çıktıda geri yüklenebilir. Anonimleştirme kuralları için üç kaynak mevcuttur: bir sözlük dosyası (**--xlate-anonymize**), belgenin içindeki satır içi işaretler (**--xlate-anonymize-mark**) ve YAML ön metin değerleri (**--xlate-frontmatter**). Her dize, aktarım sırasında `<person id=1 />` gibi bir kategori etiketiyle değiştirilir. Gizleme, yalnızca API aktarımını hedefler: yerel önbellek dosyaları, geri yüklenen düz metni saklar. Tam olarak neyin aktarılacağını incelemek için **--xlate-dryrun** kullanın.
+Hassas dizeler, çeviri API'sine gönderilmeden önce gizlenebilir ve çıktıda geri yüklenebilir. Anonimleştirme kuralları için üç kaynak mevcuttur: bir sözlük dosyası (**--xlate-anonymize**), belgenin içindeki satır içi işaretler (**--xlate-anonymize-mark**) ve YAML ön metin değerleri (**--xlate-frontmatter**). Her dize, aktarım sırasında`<person id="1" />`  gibi bir kategori etiketiyle değiştirilir. Gizleme hedefi yalnızca API iletimidir: yerel önbellek dosyaları, geri yüklenen düz metni saklar. Tam olarak neyin iletileceğini incelemek **--xlate-dryrun**için  kullanın.
 
 Form belgeleri (üç aylık raporlar ve benzeri) için, aktörleri önceden tanımlayın ve metin gövdesinde bunlara atıfta bulunun:
 
@@ -140,7 +142,7 @@ Bir belge embedz blokları içeriyorsa, bunları çeviriden hariç tutun:
 
     Şu anda, aşağıdaki motorlar mevcuttur
 
-    - **gpt5**: gpt-5.5 (via the `llm` command)
+    - **gpt5**: gpt-5.6-terra (via the `llm` command)
     - **deepl**: DeepL API (via the `deepl` command)
     - **gpt3**: gpt-3.5-turbo (legacy, via the `gpty` command)
     - **gpt4o**: gpt-4o-mini (legacy, via the `gpty` command)
@@ -238,7 +240,7 @@ Bir belge embedz blokları içeriyorsa, bunları çeviriden hariç tutun:
 
 - **--xlate-prompt**=_text_
 
-    Çeviri motoruna gönderilecek özel bir komut belirtin. Bu seçenek LLM motorları (`gpt3`, `gpt4o`, `gpt5`) için kullanılabilir, ancak DeepL için kullanılamaz. AI modeline belirli talimatlar vererek çeviri davranışını özelleştirebilirsiniz. Komut, `%s` içeriyorsa, hedef dil adıyla değiştirilecektir.
+    Çeviri motoruna gönderilecek özel bir komut satırı belirtin. Bu seçenek LLM motorları (`gpt3`, `gpt4o`, `gpt5`) için kullanılabilir, ancak DeepL için geçerli değildir. AI modeline belirli talimatlar vererek çeviri davranışını özelleştirebilirsiniz. Komut satırı  içeriyorsa`%s`, bu hedef dil adıyla değiştirilecektir. LLM destekli motor`gpt5` için belge, ayrı olarak bir JSON isteği olarak sağlanır; bu isteğin \`text`input`\` öğesi çevrilecek diziyi, isteğe bağlı \`reference`context`\` öğesi ise referans verilerini içerir. Özel bir komut satırı kullanıldığında bile, bu öğeleri komut olarak değil belge verisi olarak değerlendiren sabit bir talimat eklenir.
 
 - **--xlate-context**=_text_
 
@@ -247,7 +249,7 @@ Bir belge embedz blokları içeriyorsa, bunları çeviriden hariç tutun:
 - **--xlate-context-window**=_n_
 
     (Context-aware engines only, e.g. `gpt5` on the llm backend)
-    Değiştirilen bloklar yeniden çevrilirken referans bağlam olarak geçirilen çevrilmiş çevre blokların sayısı (varsayılan 2). Bağlam, değiştirilen bölgenin etrafındaki ham kaynak metni (başlıklar, liste yapısı, alt yazılar) ve varsa önbellekten kurtarılan değiştirilen metnin önceki sürümünü de içerir; böylece değiştirilmemiş ifadeler korunur. Bağlam duyarlı çeviriyi tamamen devre dışı bırakmak için 0 olarak ayarlayın. Her değiştirilen bölgenin kendi API çağrısında çevrildiğini ve bağlamın sistem komut satırına yaklaşık 8000 karakter ekleyebileceğini unutmayın; bu nedenle bağlam duyarlı çeviri, tutarlılık karşılığında biraz ekstra maliyet gerektirir.
+    Değiştirilen bloklar yeniden çevrilirken referans bağlamı olarak iletilen çevrilmiş çevre blokların sayısı (varsayılan 2). Bağlam, değiştirilen bölgenin etrafındaki ham kaynak metni (başlıklar, liste yapısı, alt yazılar) ve varsa önbellekten kurtarılan değiştirilen metnin önceki sürümünü de içerir; böylece değiştirilmemiş ifadeler korunur. Bağlam duyarlı çeviriyi tamamen devre dışı bırakmak için 0 olarak ayarlayın. Her değiştirilen bölgenin kendi API çağrısında çevrildiğini ve bağlamın JSON kullanıcı isteğine yaklaşık 8000 karaktere kadar ekleyebileceğini unutmayın; bu nedenle bağlam duyarlı çeviri, tutarlılık karşılığında biraz ekstra maliyet gerektirir. Belgeden türetilen bağlam, sistem isteminden dışarıda tutulur.
 
 - **--xlate-cache-seed**=_file_
 
@@ -260,7 +262,7 @@ Bir belge embedz blokları içeriyorsa, bunları çeviriden hariç tutun:
         [ { "category": "person",  "text": "山田太郎" },
           { "category": "company", "regex": "アクメ(株式会社)?" } ]
 
-    veya basit satır biçiminde (`category pattern`, `/.../` düzenli ifade için). Her öğe, `<person id=1 />` gibi bir kategori etiketiyle değiştirilir; aynı dize her zaman aynı etiketi alır, böylece model kimin kim olduğunu takip edebilir. Bilinmeyen JSON alanları göz ardı edilir, bu sayede oluşturucular (ör. varlıkları çıkaran yerel bir LLM) kendi açıklamalarını ekleyebilir. `lit` kategorisi ayrılmıştır. Yerel önbellek dosyaları, geri yüklenen düz metni hâlâ saklar: gizleme hedefi yalnızca API iletimidir.
+    veya basit satır biçiminde (`category pattern`,  düzenli ifade için`/.../`). Her öğe,  gibi bir kategori etiketiyle değiştirilir`<person id="1" />`; aynı dize her zaman aynı etiketi alır, böylece model kimin kim olduğunu takip edebilir. Bilinmeyen JSON alanları yok sayılır; bu sayede oluşturucular (örneğin, varlıkları ayıran yerel bir LLM) kendi açıklamalarını ekleyebilir. Kategori  `lit`ayrılmıştır. Yerel önbellek dosyaları yine de geri yüklenen düz metni saklar: gizleme hedefi yalnızca API iletimidir.
 
     Bir sözlük, harici bir araç tarafından oluşturulabilir — örneğin, hassas varlıklarını ayıklayan yerel bir model:
 
@@ -303,6 +305,10 @@ Bir belge embedz blokları içeriyorsa, bunları çeviriden hariç tutun:
 - **--**\[**no-**\]**xlate-progress** (Default: True)
 
     Çeviri sonucunu STDERR çıktısında gerçek zamanlı olarak görüntüleyin. `From` yükü, anonimleştirme ve maskeleme işlemlerinden sonra iletildiği haliyle gösterilir.
+
+- **--xlate-review**
+
+    Bire bir değiştirilmiş bloklar için, eski ve yeni kaynak metinlerdeki en küçük bitişik değiştirilmiş aralığı gösterin; ardından eski ve yeni çevirilerdeki karşılık gelen aralığı ekleyin. Rapor STDERR'a yazılır, ek API çağrısı yapmaz ve eski ile yeni bloklar kesin olarak eşleştirilemediğinde atlanır.
 
 - **--xlate-stripe**
 

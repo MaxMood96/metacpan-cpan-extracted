@@ -6,7 +6,7 @@ use 5.008001;
 use base qw( Alien::Base );
 
 # ABSTRACT: Find or download wasmtime for use by other Perl modules
-our $VERSION = '0.18'; # VERSION
+our $VERSION = '0.19'; # VERSION
 
 
 1;
@@ -23,7 +23,7 @@ Alien::wasmtime - Find or download wasmtime for use by other Perl modules
 
 =head1 VERSION
 
-version 0.18
+version 0.19
 
 =head1 SYNOPSIS
 

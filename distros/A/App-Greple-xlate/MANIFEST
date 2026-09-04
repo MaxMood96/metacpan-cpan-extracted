@@ -169,6 +169,7 @@ t/02_run.t
 t/04_xlate_script.t
 t/05_translate.t
 t/06_llm_stub.t
+t/07_deepl_unit.t
 t/07_llm_unit.t
 t/08_llm_gpt5.t
 t/09_llm_loader.t

@@ -137,7 +137,7 @@ HTML::FormHandler::Params - params handling
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 AUTHOR
 

@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk ();
 
-our $VERSION = '0.42';
+our $VERSION = '0.43';
 
 1;
 
@@ -46,6 +46,13 @@ been validated and answered; it wires the events it cares about and
 returns. Reading, framing, ping/pong and the closing handshake then run
 on the worker's event loop with no further Perl involvement until a
 message completes.
+
+The upgrade is refused before any of that when its C<Origin> is not one
+the application answers as - see L<Punk/Which origins may open a socket>,
+which is also where the C<origin> route option is described. The rule
+matters more here than anywhere else in an application: the same-origin
+policy does not cover this request, so nothing but this check stands
+between a page on another site and an authenticated socket.
 
 Frames are decoded in C to RFC 6455, strictly: unmasked client frames,
 fragmented or over-long control frames and reserved opcodes are protocol

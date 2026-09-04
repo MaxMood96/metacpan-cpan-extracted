@@ -9,7 +9,7 @@ use File::Spec ();
 use File::Raw::JSON ();
 use Punk::Queue ();
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 my %STATE;
 

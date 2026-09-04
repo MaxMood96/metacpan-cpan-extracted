@@ -4,69 +4,59 @@ use strict;
 use warnings;
 use 5.008004;
 use base qw( Wasm::Wasmtime::Extern );
-use Ref::Util qw( is_ref );
+use Ref::Util qw( is_blessed_ref );
 use Wasm::Wasmtime::FFI;
 use Wasm::Wasmtime::Store;
 use Wasm::Wasmtime::GlobalType;
+use Carp ();
 use constant is_global => 1;
 use constant kind => 'global';
 
 # ABSTRACT: Wasmtime global class
-our $VERSION = '0.23'; # VERSION
+our $VERSION = '0.24'; # VERSION
 
 
-$ffi_prefix = 'wasm_global_';
-$ffi->load_custom_type('::PtrObject' => 'wasm_global_t' => __PACKAGE__);
+$ffi_prefix = 'wasmtime_global_';
 
 
-$ffi->attach( new => ['wasm_store_t', 'wasm_globaltype_t', 'wasm_val_t'] => 'wasm_global_t' => sub {
+$ffi->attach( [ wasmtime_global_new => 'new' ] => ['opaque', 'wasm_globaltype_t', 'wasmtime_val_t', 'wasmtime_global_t'] => 'wasmtime_error_t' => sub {
   my $xsub = shift;
   my $class = shift;
-  if(is_ref $_[0])
+  my($store, $globaltype, $value) = @_;
+  Carp::croak("Wasm::Wasmtime::Global->new requires a Wasm::Wasmtime::Store")
+    unless is_blessed_ref($store) && $store->isa('Wasm::Wasmtime::Store');
+  my $val = Wasm::Wasmtime::Val->from_perl($globaltype->content->kind, $value);
+  my $data = Wasm::Wasmtime::GlobalData->new;
+  if(my $error = $xsub->($store->context, $globaltype, $val, $data))
   {
-    my($store, $globaltype, $value) = @_;
-    $value = Wasm::Wasmtime::Val->new({
-      kind => $globaltype->content->kind_num,
-      of => { $globaltype->content->kind => $value },
-    });
-    my $self = $xsub->($store, $globaltype, $value);
-    $self->{store} = $store;
-    return $self;
+    Carp::croak($error->message);
   }
-  else
-  {
-    my($ptr, $owner) = @_;
-    bless {
-      ptr   => $ptr,
-      owner => $owner,
-    }, $class;
-  }
+  bless { data => $data, store => $store }, $class;
 });
 
 
-$ffi->attach( type => ['wasm_global_t'] => 'wasm_globaltype_t' => sub {
+$ffi->attach( [ wasmtime_global_type => 'type' ] => ['opaque', 'wasmtime_global_t'] => 'wasm_globaltype_t' => sub {
   my($xsub, $self) = @_;
-  my $type = $xsub->($self);
-  $type->{owner} = $self->{owner} || $self;
-  $type;
+  $xsub->($self->context, $self->{data});
 });
 
 
-$ffi->attach( get => ['wasm_global_t', 'wasm_val_t'] => sub {
+$ffi->attach( [ wasmtime_global_get => 'get' ] => ['opaque', 'wasmtime_global_t', 'wasmtime_val_t'] => 'void' => sub {
   my($xsub, $self) = @_;
   my $value = Wasm::Wasmtime::Val->new;
-  $xsub->($self, $value);
+  $xsub->($self->context, $self->{data}, $value);
   $value->to_perl;
 });
 
 
-$ffi->attach( set => ['wasm_global_t','wasm_val_t'] => sub {
+$ffi->attach( [ wasmtime_global_set => 'set' ] => ['opaque', 'wasmtime_global_t', 'wasmtime_val_t'] => 'wasmtime_error_t' => sub {
   my($xsub, $self, $value) = @_;
-    $value = Wasm::Wasmtime::Val->new({
-      kind => $self->type->content->kind_num,
-      of => { $self->type->content->kind => $value },
-    });
-  $xsub->($self, $value);
+  my $val = Wasm::Wasmtime::Val->from_perl($self->type->content->kind, $value);
+  if(my $error = $xsub->($self->context, $self->{data}, $val))
+  {
+    Carp::croak($error->message);
+  }
+  return;
 });
 
 
@@ -82,9 +72,6 @@ sub TIESCALAR { $_[1] }
 *FETCH = \&get;
 *STORE = \&set;
 
-__PACKAGE__->_cast(1);
-_generate_destroy();
-
 1;
 
 __END__
@@ -99,7 +86,7 @@ Wasm::Wasmtime::Global - Wasmtime global class
 
 =head1 VERSION
 
-version 0.23
+version 0.24
 
 =head1 SYNOPSIS
 
@@ -130,6 +117,7 @@ This class represents a WebAssembly global object.
  my $global = Wasm::Wasmtime::Global->new(
    $store,      # Wasm::Wasmtime::Store
    $globaltype, # Wasm::Wasmtime::GlobalType
+   $value,      # initial value
  );
 
 Creates a new global object.
@@ -150,7 +138,7 @@ Gets the global value.
 
 =head2 set
 
- my $global->set($value);
+ $global->set($value);
 
 Sets the global to the given value.
 
@@ -176,7 +164,7 @@ Graham Ollis <plicease@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2020-2022 by Graham Ollis.
+This software is copyright (c) 2020-2026 by Graham Ollis.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

@@ -1,5 +1,12 @@
 Revision history for Punk::Queue
 
+0.09    2026-09-03
+        - t/42 enqueued the delayed job before the worker existed, so a
+          slow box's worker boot counted as horizon-clamp lag.
+        - t/82 waits for the supervisor heartbeat to advance instead of
+          bounding its age against the cadence that produces it.
+        - t/33 measures the alarm layer against a 60s sleep, not a 30s one.
+
 0.08    2026-08-30
         - The admin UI navigates as ordinary page loads. Funky's SPA layer
           is no longer vendored.

@@ -409,6 +409,12 @@ Dolly Parton Memorial release. Adds her name to the overhead keep-alive client b
 
 This version is fully backwards compatible to Version 34.
 
+=head2 VERSION 38
+
+This version squashes some long standing bugs server sleep and noping handling.
+
+While this version is fully backwards compatible to Version 34, it is very much recommended to upgrade to Version 38.
+
 =head1 AUTHOR
 
 Rene Schickbauer, E<lt>cavac@cpan.orgE<gt>

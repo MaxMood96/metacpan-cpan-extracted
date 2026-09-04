@@ -1,7 +1,8 @@
 package HTML::FormHandler::Widget::Wrapper::Fieldset;
 # ABSTRACT: fieldset field wrapper
-$HTML::FormHandler::Widget::Wrapper::Fieldset::VERSION = '0.40068';
+$HTML::FormHandler::Widget::Wrapper::Fieldset::VERSION = '0.410001';
 use Moose::Role;
+use HTML::Entities qw( encode_entities );
 use namespace::autoclean;
 
 with 'HTML::FormHandler::Widget::Wrapper::Base';
@@ -12,13 +13,13 @@ sub wrap_field {
     my ( $self, $result, $rendered_widget ) = @_;
 
     my $wattrs = process_attrs($self->wrapper_attributes);
-    my $output .= qq{\n<fieldset$wattrs>};
+    my $output = qq{\n<fieldset$wattrs>};
     $output .= qq{\n<legend>} . $self->loc_label . '</legend>';
 
     $output .= "\n$rendered_widget";
 
     $output .= qq{\n<span class="error_message">$_</span>}
-        for $result->all_errors;
+        for map { encode_entities($_) } $result->all_errors;
     $output .= "\n</fieldset>";
 
     return $output;
@@ -38,7 +39,7 @@ HTML::FormHandler::Widget::Wrapper::Fieldset - fieldset field wrapper
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

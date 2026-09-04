@@ -1,6 +1,6 @@
 package HTML::FormHandler::Field::BoolSelect;
 # ABSTRACT: Boolean select field
-$HTML::FormHandler::Field::BoolSelect::VERSION = '0.40068';
+$HTML::FormHandler::Field::BoolSelect::VERSION = '0.410001';
 
 use Moose;
 extends 'HTML::FormHandler::Field::Select';
@@ -29,7 +29,7 @@ HTML::FormHandler::Field::BoolSelect - Boolean select field
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

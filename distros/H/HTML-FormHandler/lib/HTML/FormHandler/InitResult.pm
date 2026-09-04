@@ -1,6 +1,6 @@
 package HTML::FormHandler::InitResult;
 # ABSTRACT: internal code
-$HTML::FormHandler::InitResult::VERSION = '0.40068';
+$HTML::FormHandler::InitResult::VERSION = '0.410001';
 use Moose::Role;
 
 
@@ -97,7 +97,8 @@ sub _result_from_object {
             $result = $field->_result_from_fields($result) unless $found;
         }
         else {
-           my $value = $self->_get_value( $field, $item ) unless $field->writeonly;
+           my $value;
+           $value = $self->_get_value( $field, $item ) unless $field->writeonly;
            $result = $field->_result_from_object( $result, $value );
         }
         $self_result->add_result($result) if $result;
@@ -182,7 +183,7 @@ HTML::FormHandler::InitResult - internal code
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

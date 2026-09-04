@@ -1,3 +1,7 @@
+v0.24  2026-09-03Z
+    - Added support to convert to and from Convert::Color
+    - Improved handling of unknown types in lookups
+
 v0.23  2026-08-08Z
     - Improved documentation
     - Added basic ibb.co support

@@ -1,11 +1,12 @@
 package HTML::FormHandler::Render::Table;
 # ABSTRACT: render a form with a table layout
-$HTML::FormHandler::Render::Table::VERSION = '0.40068';
+$HTML::FormHandler::Render::Table::VERSION = '0.410001';
 use Moose::Role;
 
 with 'HTML::FormHandler::Render::Simple' =>
     { -excludes => [ 'render', 'wrap_field', 'render_end', 'render_start' ] };
 use HTML::FormHandler::Render::Util ('process_attrs');
+use HTML::Entities qw( encode_entities );
 
 
 sub render {
@@ -33,14 +34,14 @@ sub render_form_errors {
     return '' unless $self->has_form_errors;
     my $output = "\n<tr class=\"form_errors\"><td colspan=\"2\">";
     $output .= qq{\n<span class="error_message">$_</span>}
-        for $self->all_form_errors;
+        for map { encode_entities($_) } $self->all_form_errors;
     $output .= "\n</td></tr>";
     return $output;
 }
 
 sub render_end {
     my $self = shift;
-    my $output .= "</table>\n";
+    my $output = "</table>\n";
     $output .= "</form>\n";
     return $output;
 }
@@ -61,7 +62,8 @@ sub wrap_field {
         $output .= '<td>';
     }
     $output .= $rendered_field;
-    $output .= qq{\n<span class="error_message">$_</span>} for $field->all_errors;
+    $output .= qq{\n<span class="error_message">$_</span>}
+        for map { encode_entities($_) } $field->all_errors;
     if ( $l_type ne 'legend' ) {
         $output .= "</td></tr>\n";
     }
@@ -83,7 +85,7 @@ HTML::FormHandler::Render::Table - render a form with a table layout
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

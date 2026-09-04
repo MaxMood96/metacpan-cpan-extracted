@@ -7,7 +7,7 @@ use warnings;
 # The smallest honest Catalyst application: no plugins, no views, one
 # controller. Catalyst wants a real class tree on disk, so this lives
 # beside the .psgi files that boot it (cat-hello, cat-dyn, cat-json).
-
+use Catalyst::Seal;
 use Catalyst::Runtime 5.80;
 use Catalyst;   # no plugins
 

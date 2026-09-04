@@ -218,6 +218,44 @@ static SV *punk_ws_dispatch(pTHX_ SV *c, SV *rec, SV *env) {
         return pw_err(aTHX_ 426, "unsupported websocket version\n",
                       "Sec-WebSocket-Version", "13");
 
+    /* Origin. The upgrade carries the user's cookies and the same-origin
+     * policy does not cover it, so a page anywhere could otherwise open an
+     * authenticated socket - see pk_origin_ok for what counts as this
+     * application's own origin.
+     *
+     * A browser always sends Origin on an upgrade. A client that is not a
+     * browser - Punk::Test, a mobile app, a daemon - sends none, has no
+     * ambient cookies to be used against it, and is not the attack this
+     * stops: an absent header passes. */
+    {
+        SV **ov = opts ? hv_fetchs(opts, "origin", 0) : NULL;
+        int off = ov && *ov && !SvROK(*ov) && !SvTRUE(*ov);
+        if (!off) {
+            STRLEN ol;
+            const char *o = pw_env(aTHX_ envh, "HTTP_ORIGIN", &ol);
+            if (ol) {
+                int ok;
+                if (ov && *ov && SvROK(*ov) && SvTYPE(SvRV(*ov)) == SVt_PVCV) {
+                    SV *osv = sv_2mortal(newSVpvn(o, ol));
+                    int died = 0;
+                    SV *r = pcx_call2(aTHX_ *ov, c, osv, &died);
+                    ok = (!died && r && SvTRUE(r));
+                    if (r) SvREFCNT_dec(r);
+                    if (died) croak_sv(sv_2mortal(newSVsv(ERRSV)));
+                }
+                else {
+                    AV *extra = (ov && *ov && SvROK(*ov)
+                                 && SvTYPE(SvRV(*ov)) == SVt_PVAV)
+                                ? (AV *)SvRV(*ov) : NULL;
+                    ok = pk_origin_ok(aTHX_ c, o, ol, extra);
+                }
+                if (!ok)
+                    return pw_err(aTHX_ 403, "origin not allowed\n",
+                                  NULL, NULL);
+            }
+        }
+    }
+
     /* subprotocol: only when the route declares a list. First offered value
      * that the route accepts wins; a declared list with no match is a 400. */
     if (opts && (x = hv_fetchs(opts, "protocols", 0))
@@ -274,8 +312,9 @@ static SV *punk_ws_dispatch(pTHX_ SV *c, SV *rec, SV *env) {
     }
     sv_catpvs(hs, "\r\n");
 
-    /* the attach options: the route opts minus `protocols`, plus the
-     * negotiated `protocol` (the connection object reads these). */
+    /* the attach options: the route opts minus the two the handshake has
+     * already spent (`protocols`, `origin`), plus the negotiated `protocol`
+     * (the connection object reads these). */
     attach = newHV();
     if (opts) {
         HE *he;
@@ -283,6 +322,7 @@ static SV *punk_ws_dispatch(pTHX_ SV *c, SV *rec, SV *env) {
         while ((he = hv_iternext(opts))) {
             STRLEN hkl; const char *hk = HePV(he, hkl);
             if (hkl == 9 && memEQ(hk, "protocols", 9)) continue;
+            if (hkl == 6 && memEQ(hk, "origin", 6)) continue;
             (void)hv_store(attach, hk, (I32)hkl, newSVsv(hv_iterval(opts, he)), 0);
         }
     }

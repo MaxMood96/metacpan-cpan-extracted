@@ -12,11 +12,11 @@ App::Greple::xlate - module d’assistance à la traduction pour greple
 
 =head1 VERSION
 
-Version 2.01
+Version 2.02
 
 =head1 DESCRIPTION
 
-B<Greple> B<xlate> module recherche les blocs de texte souhaités et les remplace par le texte traduit. Le moteur principal est GPT-5.5 (F<llm/gpt5.pm>), qui appelle la commande L<llm|https://llm.datasette.io/> ; DeepL (F<deepl.pm>) et les moteurs hérités basés sur B<gpty> sont également inclus.
+B<Greple> B<xlate> module recherche les blocs de texte souhaités et les remplace par le texte traduit. Le moteur principal est GPT-5.6 Terra (F<llm/gpt5.pm>), qui appelle la commande L<llm|https://llm.datasette.io/> ; DeepL (F<deepl.pm>) et les moteurs hérités basés sur B<gpty> sont également inclus.
 
 Les traductions sont mises en cache par fichier, de sorte que réexécuter une commande ne coûte rien pour le texte inchangé. Lorsqu’un document est modifié, seuls les paragraphes modifiés sont de nouveau envoyés à l’API ; un moteur sensible au contexte reçoit également les traductions environnantes, le texte source brut autour de la modification et la version précédente du paragraphe modifié, afin que la nouvelle traduction conserve la terminologie établie (voir B<--xlate-context-window>). Les chaînes sensibles peuvent être masquées avant la transmission (voir L</ANONYMIZATION AND TEMPLATES>).
 
@@ -92,13 +92,15 @@ Un motif complexe peut être écrit sur plusieurs lignes avec un retour à la li
 
 La manière dont le texte est transformé par le masquage peut être visualisée avec l’option B<--xlate-mask>.
 
+Les espaces réservés de masquage sont des balises XML autofermantes bien formées, telles que C<< <m id="1" /> >>. Les moteurs LLM basés sur JSON reçoivent les balises dans leurs tableaux d’entrée. Pour DeepL, une requête contenant des balises de marqueur est échappée et entourée d’une racine temporaire C<< <xlate> >>, avec la gestion des balises XML activée et chaque catégorie de marqueur enregistrée comme balise ne provoquant pas de découpage. L’enveloppe est supprimée avant que les espaces réservés soient validés et restaurés.
+
 Le masquage protège le balisage contre la traduction. Pour dissimuler les chaînes sensibles au service de traduction lui-même, voir L</ANONYMIZATION AND TEMPLATES> ; les deux peuvent être utilisés ensemble.
 
 Cette interface est expérimentale et susceptible d’évoluer à l’avenir.
 
 =head1 ANONYMIZATION AND TEMPLATES
 
-Les chaînes sensibles peuvent être dissimulées avant d’être envoyées à l’API de traduction et restaurées dans la sortie. Trois sources de règles d’anonymisation sont disponibles : un fichier dictionnaire (B<--xlate-anonymize>), des marques inline dans le document lui-même (B<--xlate-anonymize-mark>) et des valeurs de front matter YAML (B<--xlate-frontmatter>). Chaque chaîne est remplacée par une balise de catégorie telle que C<< <person id=1 /> >> pendant la transmission. La cible de la dissimulation est uniquement la transmission à l’API : les fichiers de cache locaux stockent le texte brut restauré. Utilisez B<--xlate-dryrun> pour examiner exactement ce qui serait transmis.
+Les chaînes sensibles peuvent être dissimulées avant d’être envoyées à l’API de traduction et restaurées dans la sortie. Trois sources de règles d’anonymisation sont disponibles : un fichier dictionnaire (B<--xlate-anonymize>), des marques inline dans le document lui-même (B<--xlate-anonymize-mark>) et des valeurs de front matter YAML (B<--xlate-frontmatter>). Chaque chaîne est remplacée par une balise de catégorie telle que C<< <person id="1" /> >> pendant la transmission. La cible de la dissimulation est uniquement la transmission à l’API : les fichiers de cache locaux stockent le texte brut restauré. Utilisez B<--xlate-dryrun> pour examiner exactement ce qui serait transmis.
 
 Pour les documents de formulaire (rapports trimestriels et similaires), définissez les acteurs en amont et référencez-les dans le corps :
 
@@ -158,7 +160,7 @@ Spécifie le moteur de traduction à utiliser.
 
 =over 2
 
-=item * B<gpt5>: gpt-5.5 (via the C<llm> command)
+=item * B<gpt5>: gpt-5.6-terra (via the C<llm> command)
 
 =item * B<deepl>: DeepL API (via the C<deepl> command)
 
@@ -267,7 +269,7 @@ Définissez cette valeur à 1 si vous souhaitez traduire une ligne à la fois. C
 
 =item B<--xlate-prompt>=I<text>
 
-Spécifiez une invite personnalisée à envoyer au moteur de traduction. Cette option est disponible pour les moteurs LLM (C<gpt3>, C<gpt4o>, C<gpt5>), mais pas pour DeepL. Vous pouvez personnaliser le comportement de traduction en fournissant des instructions spécifiques au modèle d’IA. Si l’invite contient C<%s>, elle sera remplacée par le nom de la langue cible.
+Spécifiez une invite personnalisée à envoyer au moteur de traduction. Cette option est disponible pour les moteurs LLM (C<gpt3>, C<gpt4o>, C<gpt5>), mais pas pour DeepL. Vous pouvez personnaliser le comportement de traduction en fournissant des instructions spécifiques au modèle d’IA. Si l’invite contient C<%s>, elle sera remplacée par le nom de la langue cible. Pour le moteur C<gpt5> reposant sur un LLM, le document est fourni séparément sous forme de requête JSON dont le membre C<input> est le tableau à traduire et dont le membre facultatif C<context> contient des données de référence. Une instruction fixe qui traite ces membres comme des données de document, et non comme des commandes, est ajoutée même lorsqu’une invite personnalisée est utilisée.
 
 =item B<--xlate-context>=I<text>
 
@@ -276,7 +278,7 @@ Spécifiez des informations de contexte supplémentaires à envoyer au moteur de
 =item B<--xlate-context-window>=I<n>
 
 (Context-aware engines only, e.g. C<gpt5> on the llm backend)
-Nombre de blocs traduits environnants transmis comme contexte de référence lors de la retraduction de blocs modifiés (par défaut 2). Le contexte inclut également le texte source brut autour de la région modifiée (titres, structure de liste, légendes) et, lorsqu’elle est disponible, la version précédente du texte modifié récupérée depuis le cache, afin que les formulations inchangées soient préservées. Définissez à 0 pour désactiver entièrement la traduction tenant compte du contexte. Notez que chaque région modifiée est traduite dans son propre appel API et que le contexte peut ajouter jusqu’à environ 8000 caractères à l’invite système, de sorte que la traduction tenant compte du contexte échange un coût supplémentaire contre de la cohérence.
+Nombre de blocs traduits environnants transmis comme contexte de référence lors de la retraduction de blocs modifiés (par défaut 2). Le contexte inclut également le texte source brut autour de la région modifiée (titres, structure de liste, légendes) et, lorsqu’elle est disponible, la version précédente du texte modifié récupérée depuis le cache, afin que les formulations inchangées soient préservées. Définissez à 0 pour désactiver entièrement la traduction tenant compte du contexte. Notez que chaque région modifiée est traduite dans son propre appel API et que le contexte peut ajouter jusqu’à environ 8000 caractères à la requête utilisateur JSON, de sorte que la traduction tenant compte du contexte échange un coût supplémentaire contre de la cohérence. Le contexte dérivé du document est exclu de l’invite système.
 
 =item B<--xlate-cache-seed>=I<file>
 
@@ -289,7 +291,7 @@ Anonymisez les chaînes sensibles avant qu’elles ne soient envoyées à l’AP
     [ { "category": "person",  "text": "山田太郎" },
       { "category": "company", "regex": "アクメ(株式会社)?" } ]
 
-ou dans un format simple par ligne (C<category pattern>, C</.../> pour les regex). Chaque élément est remplacé par une étiquette de catégorie telle que C<< <person id=1 /> >> ; la même chaîne reçoit toujours la même étiquette, de sorte que le modèle peut suivre qui est qui. Les champs JSON inconnus sont ignorés, de sorte que les générateurs (par exemple un LLM local extrayant des entités) peuvent ajouter leurs propres annotations. La catégorie C<lit> est réservée. Les fichiers de cache locaux stockent toujours le texte brut restauré : la cible de la dissimulation est uniquement la transmission à l’API.
+ou dans un format simple par ligne (C<category pattern>, C</.../> pour les regex). Chaque élément est remplacé par une étiquette de catégorie telle que C<< <person id="1" /> >> ; la même chaîne reçoit toujours la même étiquette, de sorte que le modèle peut suivre qui est qui. Les champs JSON inconnus sont ignorés, de sorte que les générateurs (par exemple un LLM local extrayant des entités) peuvent ajouter leurs propres annotations. La catégorie C<lit> est réservée. Les fichiers de cache locaux stockent toujours le texte brut restauré : la cible de la dissimulation est uniquement la transmission à l’API.
 
 Un dictionnaire peut être généré par un outil externe — par exemple un modèle local extrayant des entités sensibles :
 
@@ -332,6 +334,10 @@ N’appelez pas l’API de traduction ; affichez plutôt, via l’affichage de p
 =item B<-->[B<no->]B<xlate-progress> (Default: True)
 
 Voir le résultat de la traduction en temps réel dans la sortie STDERR. La charge utile C<From> est affichée telle qu’elle est transmise, après anonymisation et masquage.
+
+=item B<--xlate-review>
+
+Pour un bloc modifié en correspondance un-à-un, affichez la plus petite plage contiguë modifiée dans l’ancienne et la nouvelle source, suivie de la plage correspondante dans l’ancienne et la nouvelle traduction. Le rapport est écrit sur STDERR, n’effectue aucun appel API supplémentaire et est omis lorsque les anciens et nouveaux blocs ne peuvent pas être appariés sans ambiguïté.
 
 =item B<--xlate-stripe>
 

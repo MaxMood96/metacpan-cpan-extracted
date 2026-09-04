@@ -4,8 +4,8 @@
       "App::Greple::xlate - greple 用の翻訳サポートモジュール\n"
    ],
    [
-      "B<Greple> B<xlate> module find desired text blocks and replace them by the translated text. The primary engine is GPT-5.5 (F<llm/gpt5.pm>), which calls the L<llm|https://llm.datasette.io/> command; DeepL (F<deepl.pm>) and legacy B<gpty>-based engines are also included.\n",
-      "B<Greple> B<xlate> モジュールが対象のテキストブロックを検索し、翻訳されたテキストに置き換えます。メインのエンジンは GPT-5.5 (F<llm/gpt5.pm>) で、L<llm|https://llm.datasette.io/> コマンドを呼び出します。 DeepL (F<deepl.pm>) や、従来の B<gpty> ベースのエンジンも含まれています。\n"
+      "B<Greple> B<xlate> module find desired text blocks and replace them by the translated text. The primary engine is GPT-5.6 Terra (F<llm/gpt5.pm>), which calls the L<llm|https://llm.datasette.io/> command; DeepL (F<deepl.pm>) and legacy B<gpty>-based engines are also included.\n",
+      "B<Greple> B<xlate> モジュールを使用して、対象のテキストブロックを検索し、翻訳文に置き換えてください。 メインのエンジンは GPT-5.6 Terra (F<llm/gpt5.pm>) で、L<llm|https://llm.datasette.io/> コマンドを呼び出します。DeepL (F<deepl.pm>) や、従来の B<gpty> ベースのエンジンも含まれています。\n"
    ],
    [
       "Translations are cached per file, so re-running a command costs nothing for unchanged text. When a document is edited, only the changed paragraphs are sent to the API again; a context-aware engine also receives the surrounding translations, the raw source text around the change, and the previous version of the edited paragraph, so the new translation keeps the established wording (see B<--xlate-context-window>). Sensitive strings can be concealed before transmission (see L</ANONYMIZATION AND TEMPLATES>).\n",
@@ -84,6 +84,10 @@
       "マスキングによってテキストがどのように変換されるかは、B<--xlate-mask>オプションで見ることができる。\n"
    ],
    [
+      "Mask placeholders are well-formed self-closing XML tags such as C<< <m id=\"1\" /> >>. JSON-based LLM engines receive the tags in their input arrays. For DeepL, a request containing marker tags is escaped and enclosed in a temporary C<< <xlate> >> root, with XML tag handling enabled and each marker category registered as a non-splitting tag. The wrapper is removed before the placeholders are validated and restored.\n",
+      "マスクプレースホルダーは、のような、構文的に正しい自己閉じ型XMLタグですC<< <m id=\"1\" /> >>。JSONベースのLLMエンジンは、入力配列としてこれらのタグを受け取ります。DeepLの場合、マーカータグを含むリクエストはエスケープされ、一時的なC<< <xlate> >>ルートに囲まれます。この際、XMLタグ処理が有効化され、各マーカーカテゴリは分割不可タグとして登録されます。 プレースホルダーの検証および復元が行われる前に、このラッパーは削除されます。\n"
+   ],
+   [
       "Masking protects markup from being translated. To conceal sensitive strings from the translation service itself, see L</ANONYMIZATION AND TEMPLATES>; both can be used together.\n",
       "マスキングにより、マークアップが翻訳されるのを防ぐことができます。翻訳サービス自体から機密性の高い文字列を隠すには、L</ANONYMIZATION AND TEMPLATES>を参照してください。両方を併用することも可能です。\n"
    ],
@@ -92,8 +96,8 @@
       "このインターフェースは実験的なものであり、将来変更される可能性がある。\n"
    ],
    [
-      "Sensitive strings can be concealed before they are sent to the translation API and restored in the output. Three sources of anonymization rules are available: a dictionary file (B<--xlate-anonymize>), inline marks in the document itself (B<--xlate-anonymize-mark>), and YAML front matter values (B<--xlate-frontmatter>). Each string is replaced by a category tag such as C<< <person id=1 /> >> during transmission. The concealment target is API transmission only: local cache files store restored plain text. Use B<--xlate-dryrun> to inspect exactly what would be transmitted.\n",
-      "機密性の高い文字列は、翻訳APIに送信される前に隠蔽し、出力時に復元することができます。 匿名化ルールのソースとして、辞書ファイル（B<--xlate-anonymize>）、ドキュメント内のインラインマーク（B<--xlate-anonymize-mark>）、YAMLフロントマターの値（B<--xlate-frontmatter>）の3つが利用可能です。 各文字列は、送信中に C<< <person id=1 /> >> のようなカテゴリタグに置き換えられます。非表示の対象は API への送信時のみです。ローカルのキャッシュファイルには、復元されたプレーンテキストが保存されます。実際に送信される内容を正確に確認するには、B<--xlate-dryrun> を使用してください。\n"
+      "Sensitive strings can be concealed before they are sent to the translation API and restored in the output. Three sources of anonymization rules are available: a dictionary file (B<--xlate-anonymize>), inline marks in the document itself (B<--xlate-anonymize-mark>), and YAML front matter values (B<--xlate-frontmatter>). Each string is replaced by a category tag such as C<< <person id=\"1\" /> >> during transmission. The concealment target is API transmission only: local cache files store restored plain text. Use B<--xlate-dryrun> to inspect exactly what would be transmitted.\n",
+      "機密性の高い文字列は、翻訳APIに送信する前に隠蔽し、出力時に復元することができます。匿名化ルールには、辞書ファイル（B<--xlate-anonymize>）、ドキュメント自体内のインラインマーク（B<--xlate-anonymize-mark>）、およびYAMLフロントマターの値（B<--xlate-frontmatter>）の3つのソースが利用可能です。各文字列は、送信C<< <person id=\"1\" /> >>中に  などのカテゴリタグに置換されます。 非表示の対象はAPIへの送信時のみです。ローカルキャッシュファイルには復元されたプレーンテキストが保存されます。送信される内容を正確に確認B<--xlate-dryrun>するには、``を使用してください。\n"
    ],
    [
       "For form documents (quarterly reports and the like), define the actors up front and reference them in the body:\n",
@@ -212,16 +216,16 @@
       "一度に1行ずつ翻訳したい場合は、この値を1に設定する。このオプションはC<--xlate-maxlen>オプションより優先される。\n"
    ],
    [
-      "Specify a custom prompt to be sent to the translation engine. This option is available for the LLM engines (C<gpt3>, C<gpt4o>, C<gpt5>) but not for DeepL. You can customize the translation behavior by providing specific instructions to the AI model. If the prompt contains C<%s>, it will be replaced with the target language name.\n",
-      "翻訳エンジンに送信するカスタムプロンプトを指定します。このオプションはLLMエンジン（C<gpt3>、C<gpt4o>、C<gpt5>）で利用可能ですが、DeepLでは利用できません。 AIモデルに具体的な指示を与えることで、翻訳の挙動をカスタマイズできます。プロンプトに C<%s> が含まれている場合、それは対象言語名に置き換えられます。\n"
+      "Specify a custom prompt to be sent to the translation engine. This option is available for the LLM engines (C<gpt3>, C<gpt4o>, C<gpt5>) but not for DeepL. You can customize the translation behavior by providing specific instructions to the AI model. If the prompt contains C<%s>, it will be replaced with the target language name. For the llm-backed C<gpt5> engine, the document is supplied separately as a JSON request whose C<input> member is the array to translate and whose optional C<context> member contains reference data. A fixed instruction that treats those members as document data, not commands, is appended even when a custom prompt is used.\n",
+      "翻訳エンジンに送信するカスタムプロンプトを指定します。このオプションはLLMエンジン（C<gpt3>、C<gpt4o>、C<gpt5>）で利用可能ですが、DeepLでは利用できません。AIモデルに具体的な指示を与えることで、翻訳の挙動をカスタマイズできます。 プロンプトに C<%s> が含まれている場合、それは対象言語名に置き換えられます。 LLM ベースの C<gpt5> エンジンでは、ドキュメントは JSON リクエストとして別途提供されます。このリクエストの C<input> メンバーは翻訳対象の配列であり、オプションの C<context> メンバーには参照データが含まれます。 カスタムプロンプトが使用される場合でも、これらのメンバーをコマンドではなくドキュメントデータとして扱う固定の指示が追加されます。\n"
    ],
    [
       "Specify additional context information to be sent to the translation engine. This option can be used multiple times to provide multiple context strings. The context information helps the translation engine understand the background and produce more accurate translations.\n",
       "翻訳エンジンに送信する追加コンテキスト情報を指定します。このオプションは、複数のコンテキスト文字列を提供するために複数回使用することができます。コンテキスト情報は、翻訳エンジンが背景を理解し、より正確な翻訳を生成するのに役立ちます。\n"
    ],
    [
-      "Number of surrounding translated blocks passed as reference context when re-translating changed blocks (default 2). The context also includes the raw source text around the changed region (headings, list structure, captions) and, when available, the previous version of the changed text recovered from the cache, so that unchanged wording is preserved. Set to 0 to disable context-aware translation entirely. Note that each changed region is translated in its own API call and the context can add up to about 8000 characters to the system prompt, so context-aware translation trades some extra cost for consistency.\n",
-      "変更されたブロックを再翻訳する際に、参照コンテキストとして渡される周囲の翻訳済みブロックの数（デフォルトは 2）。このコンテキストには、変更された領域の周囲の生のソーステキスト（見出し、リスト構造、キャプション）や、利用可能な場合はキャッシュから復元された変更前のテキストも含まれるため、変更されていない表現が保持されます。 コンテキスト対応翻訳を完全に無効にするには、0 に設定します。変更された各領域は個別の API 呼び出しで翻訳され、コンテキストによってシステムプロンプトに最大約 8000 文字が追加される可能性があるため、コンテキスト対応翻訳は一貫性を確保するために多少の追加コストを伴います。\n"
+      "Number of surrounding translated blocks passed as reference context when re-translating changed blocks (default 2). The context also includes the raw source text around the changed region (headings, list structure, captions) and, when available, the previous version of the changed text recovered from the cache, so that unchanged wording is preserved. Set to 0 to disable context-aware translation entirely. Note that each changed region is translated in its own API call and the context can add up to about 8000 characters to the JSON user request, so context-aware translation trades some extra cost for consistency. Document-derived context is kept out of the system prompt.\n",
+      "変更されたブロックを再翻訳する際に、参照コンテキストとして渡される、そのブロックを囲む翻訳済みブロックの数（デフォルトは 2）。このコンテキストには、変更された領域を囲む生のソーステキスト（見出し、リスト構造、キャプション）や、利用可能な場合はキャッシュから復元された変更前のテキストも含まれるため、変更されていない表現が保持されます。 コンテキストを意識した翻訳を完全に無効にするには、0 に設定してください。変更された各領域は個別の API 呼び出しで翻訳され、コンテキストによって JSON ユーザーリクエストに最大約 8000 文字が追加される可能性があるため、コンテキストを意識した翻訳は一貫性を確保するために多少の追加コストを伴います。ドキュメントから派生したコンテキストは、システムプロンプトには含まれません。\n"
    ],
    [
       "Initialize a new document's cache from another document's cache file. Useful for periodic reports: seed the new issue's cache with the previous issue's, so unchanged paragraphs are not re-translated and edited paragraphs keep the previous issue's wording. The seed is used only when the target cache is empty; otherwise it is ignored with a warning. With the default C<--xlate-cache=auto>, specifying a seed also implies creating the new document's cache file.\n",
@@ -232,8 +236,8 @@
       "機密性の高い文字列を翻訳APIに送信する前に匿名化し、出力時に復元します。辞書ファイルには、項目ごとに1つのエントリが記載されます：JSON形式（標準的、機械生成可能）\n"
    ],
    [
-      "or in a simple line format (C<category pattern>, C</.../> for regex). Each item is replaced by a category tag such as C<< <person id=1 /> >>; the same string always gets the same tag, so the model can keep track of who is who. Unknown JSON fields are ignored, so generators (e.g. a local LLM extracting entities) may add their own annotations. Category C<lit> is reserved. Local cache files still store restored plain text: the concealment target is API transmission only.\n",
-      "または単純な行形式（C<category pattern>、正規表現の場合は C</.../>）。 各項目は C<< <person id=1 /> >> のようなカテゴリタグに置き換えられます。同じ文字列には常に同じタグが割り当てられるため、モデルは各項目を識別できます。未知の JSON フィールドは無視されるため、ジェネレータ（例：エンティティを抽出するローカル LLM）は独自の注釈を追加できます。 カテゴリ C<lit> は予約済みです。ローカルキャッシュファイルには、復元されたプレーンテキストが引き続き保存されます。隠蔽の対象はAPI経由の送信のみです。\n"
+      "or in a simple line format (C<category pattern>, C</.../> for regex). Each item is replaced by a category tag such as C<< <person id=\"1\" /> >>; the same string always gets the same tag, so the model can keep track of who is who. Unknown JSON fields are ignored, so generators (e.g. a local LLM extracting entities) may add their own annotations. Category C<lit> is reserved. Local cache files still store restored plain text: the concealment target is API transmission only.\n",
+      "または、シンプルな行形式（正規表現C</.../>の場合は `C<category pattern>, `）で指定します。各項目は `` などのカテゴリタグに置換されますC<< <person id=\"1\" /> >>。同じ文字列には常に同じタグが割り当てられるため、モデルは各項目が誰を指すかを追跡できます。 未知の JSON フィールドは無視されるため、ジェネレータ（例：エンティティを抽出するローカル LLM）は独自の注釈を追加できます。カテゴリ `` は予約済みC<lit>です。ローカルキャッシュファイルには復元された平文が引き続き保存されます。隠蔽の対象は API 経由の送信のみです。\n"
    ],
    [
       "A dictionary can be generated by an external tool -- for example a local model extracting sensitive entities:\n",
@@ -282,6 +286,10 @@
    [
       "See the translation result in real time in the STDERR output. The C<From> payload is shown as transmitted, after anonymization and masking.\n",
       "STDERR出力で翻訳結果をリアルタイムで確認できます。C<From>のペイロードは、匿名化およびマスキング処理後の送信時のまま表示されます。\n"
+   ],
+   [
+      "For a one-to-one changed block, show the smallest contiguous changed span in the old and new source, followed by the corresponding span in the old and new translation. The report is written to STDERR, makes no additional API call, and is omitted when old and new blocks cannot be paired unambiguously.\n",
+      "1対1で変更されたブロックについては、旧ソースと新ソースにおける最小の連続した変更範囲を表示し、その後に旧翻訳と新翻訳における対応する範囲を表示します。このレポートはSTDERRに出力され、追加のAPI呼び出しは行われません。また、旧ブロックと新ブロックを明確にペア付けできない場合は省略されます。\n"
    ],
    [
       "Use L<App::Greple::stripe> module to show the matched part by zebra striping fashion. This is useful when the matched parts are connected back-to-back.\n",

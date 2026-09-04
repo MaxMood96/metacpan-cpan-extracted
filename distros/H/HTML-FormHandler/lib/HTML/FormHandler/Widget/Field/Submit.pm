@@ -1,6 +1,6 @@
 package HTML::FormHandler::Widget::Field::Submit;
 # ABSTRACT: submit field rendering widget
-$HTML::FormHandler::Widget::Field::Submit::VERSION = '0.40068';
+$HTML::FormHandler::Widget::Field::Submit::VERSION = '0.410001';
 use Moose::Role;
 use namespace::autoclean;
 use HTML::FormHandler::Render::Util ('process_attrs');
@@ -41,7 +41,7 @@ HTML::FormHandler::Widget::Field::Submit - submit field rendering widget
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

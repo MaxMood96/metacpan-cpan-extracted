@@ -10,7 +10,7 @@ configure_requires:
   ExtUtils::MakeMaker: '6.63'
   Inline::MakeMaker: '0.51'
 dynamic_config: 1
-generated_by: 'ExtUtils::MakeMaker version 7.64, CPAN::Meta::Converter version 2.150010'
+generated_by: 'ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -25,5 +25,5 @@ requires:
   Inline::C: '0.75'
 resources:
   repository: https://cavac.at/public/mercurial/JavaScript-Embedded/
-version: v2.7.2
-x_serialization_backend: 'CPAN::Meta::YAML version 0.018'
+version: v2.7.3
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

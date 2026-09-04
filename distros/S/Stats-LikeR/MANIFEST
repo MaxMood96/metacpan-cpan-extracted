@@ -142,12 +142,15 @@ t/rank.t
 t/read_filter.20260706.t
 t/read_table.2.t
 t/read_table.comments.t
+t/read_table.fast_path.t
 t/read_table.na_strings.t
 t/read_table.t
 t/read_table.xlsx.t
 t/roc.t
 t/scale.keywords.t
 t/select_drop_rename_cols.t
+t/seq.R.R
+t/seq.R.t
 t/set_ops.t
 t/shapiro_test.R.scipy.R
 t/shapiro_test.R.scipy.py

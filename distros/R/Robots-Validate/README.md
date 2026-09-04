@@ -22,28 +22,16 @@ This module allows one to validate a robot user-agent string against the IP addr
 
 # RECENT CHANGES
 
-Changes for version v0.4.0 (2026-09-01)
+Changes for version v0.4.1 (2026-09-03)
 
-- Incompatible Changes
-    - This is a complete rewrite, and the interface is not compatible.
-    - Bumped minimum Perl version to v5.24;
 - Enhancements
-    - This uses the Aho-Corasick algorithm to match multiple user-agent strings efficiently.
-    - The robot rules are in a configuration file, allowing the user to easily update their own rules.
-    - The robot rules have been expanded and updated.
-    - Support for caching the results has been added, GH#3.
-    - Added the validation\_mode attribute to control how multiple user-agent matches are handled.
-- Security
-    - Add a max\_forward\_lookups attribute to limit the number of reverse DNS lookups. (CVE-2026-82309)
-- Tests
-    - Updated the tests to use Test2.
+    - Added robot rule for Piperic.
+- Bug Fixes
+    - Specified a minimum version of List::Util.
 - Documentation
-    - Updated the author email address.
-    - Updated the copyright year.
-    - Added a security policy.
-    - Added AI\_POLICY.md.
-- Toolchain
-    - Use SigStore instead of Module::Signature to sign releases.
+    - Updated the wording of the AI\_POLICY.
+- Tests
+    - Fixed warnings in Perl v5.24.
 
 See the `Changes` file for more details.
 
@@ -54,7 +42,7 @@ This module lists the following modules as runtime dependencies:
 - [Algorithm::AhoCorasick::XS](https://metacpan.org/pod/Algorithm%3A%3AAhoCorasick%3A%3AXS)
 - [File::ShareDir](https://metacpan.org/pod/File%3A%3AShareDir)
 - [File::Slurper](https://metacpan.org/pod/File%3A%3ASlurper)
-- [List::Util](https://metacpan.org/pod/List%3A%3AUtil)
+- [List::Util](https://metacpan.org/pod/List%3A%3AUtil) version 1.45 or later
 - [Moo](https://metacpan.org/pod/Moo) version 1 or later
 - [Net::DNS::Resolver](https://metacpan.org/pod/Net%3A%3ADNS%3A%3AResolver)
 - [Net::IP](https://metacpan.org/pod/Net%3A%3AIP)

@@ -1,6 +1,6 @@
 package HTML::FormHandler::BuildFields;
 # ABSTRACT: role to build field array
-$HTML::FormHandler::BuildFields::VERSION = '0.40068';
+$HTML::FormHandler::BuildFields::VERSION = '0.410001';
 use Moose::Role;
 use Try::Tiny;
 use Class::Load qw/ load_optional_class /;
@@ -55,8 +55,9 @@ sub _build_fields {
             $self->_process_field_list( $flist );
         }
     }
-    my $mlist = $self->model_fields if $self->fields_from_model;
-    $self->_process_field_list( $mlist ) if $mlist;
+    if ( $self->fields_from_model && (my $mlist = $self->model_fields) ) {
+        $self->_process_field_list( $mlist );
+    }
 
     return unless $self->has_fields;
 
@@ -460,7 +461,7 @@ HTML::FormHandler::BuildFields - role to build field array
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

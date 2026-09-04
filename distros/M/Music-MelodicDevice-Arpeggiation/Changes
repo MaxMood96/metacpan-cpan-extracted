@@ -1,5 +1,12 @@
 Revision history for Music-MelodicDevice-Arpeggiation
 
+0.0501 2026-09-03 21:10:00
+  - Add the "pedal_updown" type, too!
+
+0.0500 2026-09-03 20:53:19
+  - Add the pedal "up" and "down" arp types.
+  - Add more tests.
+
 0.0401 2026-09-01 21:07:01
   - Fix docs.
 

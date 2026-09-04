@@ -134,8 +134,15 @@ is(
     local $Catalyst::Seal::Dispatch::MAX_KEYS = 8;
     Catalyst::Seal::Dispatch::_clear();
 
-    # /steps/fwd forwards to ?to=, on purpose.
-    body(PATH_INFO => '/steps/fwd', QUERY_STRING => "to=/no/such/$_") for 1 .. 200;
+    # /steps/fwd forwards to ?to=, on purpose. Each failed forward logs an
+    # error, which is correct and would otherwise put 200 lines of noise into
+    # every smoke report.
+    {
+        require File::Spec;
+        open my $devnull, '>', File::Spec->devnull or die $!;
+        local *STDERR = $devnull;
+        body(PATH_INFO => '/steps/fwd', QUERY_STRING => "to=/no/such/$_") for 1 .. 200;
+    }
 
     my ($paths) = Catalyst::Seal::Dispatch::memo_sizes();
     cmp_ok($paths, '<=', 8, 'the path memo stopped growing at the cap')

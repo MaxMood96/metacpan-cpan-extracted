@@ -4,9 +4,10 @@ use strict;
 use warnings;
 use 5.008004;
 use Wasm::Wasmtime::FFI;
+use Carp ();
 
 # ABSTRACT: Global configuration for Wasm::Wasmtime::Engine
-our $VERSION = '0.23'; # VERSION
+our $VERSION = '0.24'; # VERSION
 
 
 $ffi_prefix = 'wasm_config_';
@@ -15,13 +16,14 @@ $ffi->load_custom_type('::PtrObject' => 'wasm_config_t' => __PACKAGE__);
 
 $ffi->attach( new => [] => 'wasm_config_t' );
 
-_generate_destroy();
+_generate_destroy('wasm_config_delete');
 
 
 foreach my $prop (qw(
   cranelift_debug_verifier
   debug_info
-  interruptable
+  epoch_interruption
+  consume_fuel
   wasm_bulk_memory
   wasm_reference_types
   wasm_multi_value
@@ -29,7 +31,7 @@ foreach my $prop (qw(
   wasm_threads
 ))
 {
-  $ffi->attach( [ "wasmtime_config_${prop}_set" => $prop ] => [ 'wasm_config_t', 'bool' ] => sub {
+  $ffi->attach( [ "wasmtime_config_${prop}_set" => $prop ] => [ 'wasm_config_t', 'bool' ] => 'void' => sub {
     my($xsub, $self, $value) = @_;
     $xsub->($self, $value);
     $self;
@@ -40,7 +42,7 @@ foreach my $prop (qw(
   max_wasm_stack
 ))
 {
-  $ffi->attach( [ "wasmtime_config_${prop}_set" => $prop ] => [ 'wasm_config_t', 'size_t' ] => sub {
+  $ffi->attach( [ "wasmtime_config_${prop}_set" => $prop ] => [ 'wasm_config_t', 'size_t' ] => 'void' => sub {
     my($xsub, $self, $value) = @_;
     $xsub->($self, $value);
     $self;
@@ -48,8 +50,7 @@ foreach my $prop (qw(
 }
 
 
-outer:
-foreach my $prop (qw( static_memory_maximum_size static_memory_guard_size dynamic_memory_guard_size ))
+foreach my $prop (qw( memory_reservation memory_guard_size ))
 {
   $ffi->attach( [ "wasmtime_config_${prop}_set" => $prop ] => [ 'wasm_config_t', 'uint64' ] => 'void' => sub {
     my($xsub, $self, $value) = @_;
@@ -62,22 +63,13 @@ foreach my $prop (qw( static_memory_maximum_size static_memory_guard_size dynami
 my %strategy = (
   auto      => 0,
   cranelift => 1,
-  lightbeam => 2,
+  winch     => 2,
 );
 
-$ffi->attach( [ 'wasmtime_config_strategy_set' => 'strategy' ] => [ 'wasm_config_t', 'uint8' ] => 'wasmtime_error_t' => sub {
+$ffi->attach( [ 'wasmtime_config_strategy_set' => 'strategy' ] => [ 'wasm_config_t', 'uint8' ] => 'void' => sub {
   my($xsub, $self, $value) = @_;
-  if(defined $strategy{$value})
-  {
-    if(my $error = $xsub->($self, $strategy{$value}))
-    {
-      Carp::croak($error->message);
-    }
-  }
-  else
-  {
-    Carp::croak("unknown strategy: $value");
-  }
+  Carp::croak("unknown strategy: $value") unless defined $strategy{$value};
+  $xsub->($self, $strategy{$value});
   $self;
 });
 
@@ -88,16 +80,10 @@ my %cranelift_opt_level = (
   speed_and_size => 2,
 );
 
-$ffi->attach( ['wasmtime_config_cranelift_opt_level_set' => 'cranelift_opt_level' ] => ['wasm_config_t', 'uint8' ] => sub {
+$ffi->attach( ['wasmtime_config_cranelift_opt_level_set' => 'cranelift_opt_level' ] => ['wasm_config_t', 'uint8' ] => 'void' => sub {
   my($xsub, $self, $value) = @_;
-  if(defined $cranelift_opt_level{$value})
-  {
-    $xsub->($self, $cranelift_opt_level{$value});
-  }
-  else
-  {
-    Carp::croak("unknown cranelift_opt_level: $value");
-  }
+  Carp::croak("unknown cranelift_opt_level: $value") unless defined $cranelift_opt_level{$value};
+  $xsub->($self, $cranelift_opt_level{$value});
   $self;
 });
 
@@ -106,42 +92,33 @@ my %profiler = (
   none    => 0,
   jitdump => 1,
   vtune   => 2,
+  perfmap => 3,
 );
 
-$ffi->attach( ['wasmtime_config_profiler_set' => 'profiler' ] => ['wasm_config_t', 'uint8'] => 'wasmtime_error_t' => sub {
+$ffi->attach( ['wasmtime_config_profiler_set' => 'profiler' ] => ['wasm_config_t', 'uint8'] => 'void' => sub {
   my($xsub, $self, $value) = @_;
-  if(defined $profiler{$value})
-  {
-    if(my $error = $xsub->($self, $profiler{$value}))
-    {
-      Carp::croak($error->message);
-    }
-  }
-  else
-  {
-    Carp::croak("unknown profiler: $value");
-  }
+  Carp::croak("unknown profiler: $value") unless defined $profiler{$value};
+  $xsub->($self, $profiler{$value});
   $self;
 });
 
 
-$ffi->attach( [ 'wasmtime_config_cache_config_load' => 'cache_config_load' ] => [ 'wasm_config_t', 'string' ] => sub {
+$ffi->attach( [ 'wasmtime_config_cache_config_load' => 'cache_config_load' ] => [ 'wasm_config_t', 'string' ] => 'wasmtime_error_t' => sub {
   my($xsub, $self, $value) = @_;
   Carp::croak("undef passed in as cache config") unless defined $value;
-  $xsub->($self, $value);
+  if(my $error = $xsub->($self, $value))
+  {
+    Carp::croak($error->message);
+  }
   $self;
 });
 
-$ffi->attach( [ 'wasmtime_config_cache_config_load' => 'cache_config_default' ] => [ 'wasm_config_t', 'string' ] => sub {
+$ffi->attach( [ 'wasmtime_config_cache_config_load' => 'cache_config_default' ] => [ 'wasm_config_t', 'string' ] => 'wasmtime_error_t' => sub {
   my($xsub, $self) = @_;
-  $xsub->($self, undef);
-  $self;
-});
-
-
-$ffi->attach( ['wasmtime_config_consume_fuel_set' => 'consume_fuel' ] => [ 'wasm_config_t', 'bool' ] => sub {
-  my($xsub, $self, $value) = @_;
-  $xsub->($self, $value);
+  if(my $error = $xsub->($self, undef))
+  {
+    Carp::croak($error->message);
+  }
   $self;
 });
 
@@ -159,7 +136,7 @@ Wasm::Wasmtime::Config - Global configuration for Wasm::Wasmtime::Engine
 
 =head1 VERSION
 
-version 0.23
+version 0.24
 
 =head1 SYNOPSIS
 
@@ -194,11 +171,19 @@ Create a new instance of the config class.
 Configures whether DWARF debug information is emitted for the generated
 code. This can improve profiling and the debugging experience.
 
-=head2 interruptable
+=head2 epoch_interruption
 
- $config->interruptable($bool);
+ $config->epoch_interruption($bool);
 
-Configures whether functions and loops will be interruptable.
+Configures whether execution of WebAssembly will "yield" when a deadline is
+reached.  This replaces the old (removed) C<interruptable> configuration.
+
+=head2 consume_fuel
+
+ $config->consume_fuel($bool);
+
+Whether or not fuel is enabled for generated code.  When enabled a store must
+be given fuel with C<< $store->set_fuel >> before WebAssembly can execute.
 
 =head2 max_wasm_stack
 
@@ -246,31 +231,28 @@ Configures whether the wasm multi value proposal is enabled.
 
 L<https://github.com/webassembly/multi-value>
 
-=head2 static_memory_maximum_size
+=head2 memory_reservation
 
- $config->static_memory_maximum_size($size);
+ $config->memory_reservation($size);
 
-Configure the static memory maximum size.
+Configures the size, in bytes, of virtual memory reservation for each linear
+memory.  Setting this (and L</memory_guard_size>) to C<0> disables the large
+C<PROT_NONE> reservations that can trip C<ulimit -v> limits.  Replaces the
+old (removed) C<static_memory_maximum_size>.
 
-=head2 static_memory_guard_size
+=head2 memory_guard_size
 
- $config->static_memory_guard_size($size);
+ $config->memory_guard_size($size);
 
-Configure the static memory guard size.
-
-=head2 dynamic_memory_guard_size
-
- $config->dynamic_memory_guard_size($size);
-
-Configure the dynamic memory guard size.
+Configures the size, in bytes, of the guard region placed after each linear
+memory.  Replaces the old (removed) C<static_memory_guard_size> /
+C<dynamic_memory_guard_size>.
 
 =head2 strategy
 
  $config->strategy($strategy);
 
 Configures the compilation strategy used for wasm code.
-
-Will throw an exception if the selected strategy is not supported on your platform.
 
 Acceptable values for C<$strategy> are:
 
@@ -280,7 +262,7 @@ Acceptable values for C<$strategy> are:
 
 =item C<cranelift>
 
-=item C<lightbeam>
+=item C<winch>
 
 =back
 
@@ -308,8 +290,6 @@ Acceptable values for C<$level> are:
 
 Configure the profiler.
 
-Will throw an exception if the selected profiler is not supported on your platform.
-
 Acceptable values for C<$profiler> are:
 
 =over 4
@@ -319,6 +299,8 @@ Acceptable values for C<$profiler> are:
 =item C<jitdump>
 
 =item C<vtune>
+
+=item C<perfmap>
 
 =back
 
@@ -333,18 +315,6 @@ Path to the cache configuration TOML file.
  $config->cache_config_default;
 
 Enable the default caching configuration.
-
-=head2 consume_fuel
-
- $config->consume_fuel($bool);
-
-Whether or not fuel is enabled for generated code.
-
-=head2 max_instances
-
- $confog->max_instances($size);
-
-Configures the maximum number of instances that can be created.
 
 =head1 SEE ALSO
 
@@ -362,7 +332,7 @@ Graham Ollis <plicease@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2020-2022 by Graham Ollis.
+This software is copyright (c) 2020-2026 by Graham Ollis.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

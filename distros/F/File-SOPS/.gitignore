@@ -5,3 +5,22 @@
 
 # Carton
 /local/
+
+# Interop sops binary -- large, platform-specific, refetched with maint/fetch-sops.
+# Lives in the repo so it survives a /tmp wipe; never committed.
+/.sops-bin/
+
+# Claude Code — commit: skills/, agents/, hooks/, settings.json
+# Ignore: local overrides, credentials, session data
+.claude/*.local.*
+.claude/local/
+.claude/.credentials.json
+.claude/statsig/
+.claude/todos/
+.claude/projects/
+# Temporary git worktrees created for isolated agent runs
+.claude/worktrees/
+
+# karr materialized task view -- never commit
+tasks/
+config.yml

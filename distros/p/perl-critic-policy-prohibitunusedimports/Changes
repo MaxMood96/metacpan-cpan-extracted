@@ -1,4 +1,7 @@
 Revision history for perl-critic-policy-prohibitunusedimports
 
+1.001 2026-09-03 TEODESIAN
+    - Ad 're' to the default exempt list
+
 1.000 2026-09-02 TEODESIAN
     - Initial Release

@@ -1,6 +1,6 @@
 package HTML::FormHandler::Field::Reset;
 # ABSTRACT: reset field
-$HTML::FormHandler::Field::Reset::VERSION = '0.40068';
+$HTML::FormHandler::Field::Reset::VERSION = '0.410001';
 use Moose;
 extends 'HTML::FormHandler::Field::NoValue';
 
@@ -27,7 +27,7 @@ HTML::FormHandler::Field::Reset - reset field
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

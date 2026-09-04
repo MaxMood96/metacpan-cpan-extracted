@@ -1,19 +1,18 @@
 use v5.40;
 use experimental 'class';
 #
-class Alien::Xmake v0.9.2 {
+class Alien::Xmake v0.9.4 {
     use File::Spec;
     use File::Basename qw[dirname];
+    use File::Temp     qw[tempdir];
     use JSON::PP       qw[decode_json];
     use Capture::Tiny  qw[capture];
     #
     field $windows = $^O eq 'MSWin32';
     field $verbose : param //= 0;
-
-    # Auto-confirm interactive xmake/xrepo prompts (e.g. -y / --confirm=yes). Useful when
-    # output is captured (Capture::Tiny) so a prompting install never hangs waiting on stdin.
     field $yes     : param //= 0;
     field $confirm : param //= ();
+    field $file    : param //= ();
     field $config  : param //= sub {
         my $conf;
         try {
@@ -112,6 +111,9 @@ class Alien::Xmake v0.9.2 {
         # Inject auto-confirm flags so captured/streamed installs never hang on a prompt.
         unshift @args, '--confirm=' . $confirm if defined $confirm && length $confirm;
         unshift @args, '-y'                    if $yes             && !( defined $confirm && length $confirm );
+
+        # Inject the build file so every action reads the given xmake.lua rather than one in the cwd.
+        unshift @args, '-F', $file if defined $file && length $file;
         my @cmd = ( $self->exe, $action, @args );
         $self->blah("Running: @cmd");
         @cmd;
@@ -120,13 +122,13 @@ class Alien::Xmake v0.9.2 {
     # Stream a task to the terminal (builds, runs, installs ...) and return success.
     method _run ( $action, @args ) {
         my @cmd = $self->_cmd( $action, @args );
-        system(@cmd) == 0;
+        return system(@cmd) == 0;
     }
 
     # Run a task capturing output; returns ($out, $err, $exit).
     method _capture ( $action, @args ) {
         my @cmd = $self->_cmd( $action, @args );
-        capture { system @cmd };
+        return capture { system @cmd };
     }
 
     # Slurp the extra trailing arguments out of %opts.
@@ -409,13 +411,29 @@ class Alien::Xmake v0.9.2 {
     method lua ( $script //= (), %opts ) {
         my @args;
         push @args, '-l' if $opts{list};
-        push @args, '-c' if $opts{command};
         push @args, '-d', $opts{deserialize} if $opts{deserialize};
-        push @args, '--stdin' if $opts{stdin};
-        push @args, $script   if defined $script && length $script;
+        if ( defined $script && length $script ) {
+            if ( $opts{command} || $opts{stdin} || !-f $script ) {
+                push @args, $self->_lua_script_file($script);
+            }
+            else {
+                push @args, $script;    # an existing script file on disk
+            }
+        }
         push @args, $self->_extra_args( \%opts );
         return $self->_out( 'lua', \%opts, @args ) if $opts{list};
         $self->_run( 'lua', @args );
+    }
+
+    # Write inline Lua to a temporary .lua file and return its path. The file lives in a temp dir
+    # created per call and is removed once the argument list is no longer needed.
+    method _lua_script_file ($code) {
+        my $dir  = tempdir( 'alien-xmake-lua-XXXXXX', CLEANUP => 1 );
+        my $file = File::Spec->catfile( $dir, 'script.lua' );
+        open my $fh, '>', $file or die "Alien::Xmake: cannot write $file: $!";
+        print {$fh} $code;
+        close $fh or die "Alien::Xmake: cannot close $file: $!";
+        return $file;
     }
 
     method macro ( $name //= (), %opts ) {
@@ -465,7 +483,6 @@ class Alien::Xmake v0.9.2 {
         my @args;
         push @args, '-l', $list        if defined $list && length $list;
         push @args, '-g', $opts{group} if $opts{group};
-        push @args, '--json'                    if $opts{json};
         push @args, '--pretty'                  if $opts{pretty};
         push @args, '--format=' . $opts{format} if $opts{format};
         push @args, '--target=' . $opts{target} if $opts{target};
@@ -478,6 +495,54 @@ class Alien::Xmake v0.9.2 {
         return decode_json($out) if ( $opts{format} // '' ) eq 'json' && $out =~ /[\{\[]/;
         return grep {/\S/} split( /\s+/, $out ) if defined $list && length $list;
         return split /\n/, $out;
+    }
+
+    # xmake show -t <target> rich target info (JSON by default; pass format/pretty/plain to tune).
+    method target_info ( $name, %opts ) {
+        my $plain = $opts{plain} || ( ( $opts{format} // '' ) eq 'plain' );
+        my @args;
+        push @args, '-t', $name if defined $name && length $name;
+        push @args, '--format=json' unless $plain;
+        push @args, '--pretty'                if $opts{pretty} && $plain;
+        push @args, '--group=' . $opts{group} if $opts{group};
+        push @args, $self->_extra_args( \%opts );
+        my ( $out, $err, $exit ) = $self->_capture( 'show', @args );
+        return () if $exit != 0;
+        $out =~ s/\e\[[0-9;]*m//g;
+        return $out if $plain;
+        my $data = eval { decode_json($out) };
+        return ()         if !$data;
+        return $data      if ref $data eq 'HASH';
+        return $data->[0] if ref $data eq 'ARRAY' && ref( $data->[0] ) eq 'HASH';
+        return $data;
+    }
+
+    # Whatever Lua the user runs, xmake's lua runner always appends a stray, empty "{ }" chunk
+    # (even on success), so we can't blindly decode_json the whole line. Strip that artifact plus
+    # surrounding whitespace, then decode whatever single JSON value remains.
+    method _first_json ($out) {
+        $out =~ s/\e\[[0-9;]*m//g;
+        $out =~ s/\s*\{\s*\}\s*$//;    # drop xmake's trailing empty-object artifact
+        $out =~ s/^\s+//;
+        $out =~ s/\s+$//;
+        return undef unless length $out;
+        my $json = eval { decode_json($out) };
+        return undef if !$json;
+        return $json;
+    }
+
+    # Run inline Lua that emits (or returns) one JSON value and return the decoded structure.
+    method lua_json ( $code //= '', %opts ) {
+        my $src = length( $opts{code} // '' ) ? $opts{code} : $code;
+        if ( $opts{return} ) {
+            $src =~ s/^\s*return\b//;    # allow "return <expr>" as well as a bare <expr>
+            $src = qq{local j = import("core.base.json")\nlocal v = ($src)\nprint(j.encode(v))};
+        }
+        my $file = $self->_lua_script_file($src);
+        my ( $out, $err, $exit ) = $self->_capture( 'lua', $file );
+        my $data = $self->_first_json($out);
+        return () if !defined $data;
+        return $data;
     }
 
     method watch (%opts) {
@@ -567,6 +632,9 @@ class Alien::Xmake v0.9.2 {
         return qq{"$path"} if $windows && $path =~ /\s/;
         $path;
     }
+
+    # Safely quote arguments for Windows cmd.exe
+    method _escape_args (@args) { return @args }
     }
     #
     1;

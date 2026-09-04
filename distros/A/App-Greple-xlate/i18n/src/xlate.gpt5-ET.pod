@@ -12,11 +12,11 @@ App::Greple::xlate - tõlke tugimoodul greple jaoks
 
 =head1 VERSION
 
-Version 2.01
+Version 2.02
 
 =head1 DESCRIPTION
 
-B<Greple> B<xlate> moodul leiab soovitud tekstiplokid ja asendab need tõlgitud tekstiga. Peamine mootor on GPT-5.5 (F<llm/gpt5.pm>), mis kutsub käsku L<llm|https://llm.datasette.io/>; samuti on kaasas DeepL (F<deepl.pm>) ja pärandmootorid, mis põhinevad B<gpty>-l.
+B<Greple> B<xlate> moodul leiab soovitud tekstiplokid ja asendab need tõlgitud tekstiga. Peamine mootor on GPT-5.6 Terra (F<llm/gpt5.pm>), mis kutsub käsku L<llm|https://llm.datasette.io/>; samuti on kaasas DeepL (F<deepl.pm>) ja pärandmootorid, mis põhinevad B<gpty>-l.
 
 Tõlked salvestatakse vahemällu failipõhiselt, nii et käsu uuesti käivitamine ei maksa muutmata teksti puhul midagi. Kui dokumenti redigeeritakse, saadetakse API-le uuesti ainult muudetud lõigud; kontekstiteadlik mootor saab ka ümbritsevad tõlked, muudatuse ümber oleva töötlemata lähteteksti ja redigeeritud lõigu eelmise versiooni, nii et uus tõlge säilitab väljakujunenud sõnastuse (vt B<--xlate-context-window>). Tundlikke stringe saab enne edastamist varjata (vt L</ANONYMIZATION AND TEMPLATES>).
 
@@ -92,13 +92,15 @@ Keerukat mustrit saab kirjutada mitmele reale, kasutades tagurpidi kaldkriipsuga
 
 Kuidas tekst maskeerimise käigus muundatakse, on nähtav valikuga B<--xlate-mask>.
 
+Maski kohatäited on korrektselt moodustatud isesulguvad XML-sildid, näiteks C<< <m id="1" /> >>. JSON-põhised LLM-mootorid saavad sildid oma sisendmassiivides. DeepLi puhul paojärjestatakse märgendsilte sisaldav päring ja suletakse ajutisse juurelementi C<< <xlate> >>, XML-siltide töötlemine lubatakse ning iga markeri kategooria registreeritakse mittepoolitatava sildina. Ümbris eemaldatakse enne kohatäidete valideerimist ja taastamist.
+
 Maskeerimine kaitseb märgistust tõlkimise eest. Tundlike stringide peitmiseks tõlketeenuse enda eest vt L</ANONYMIZATION AND TEMPLATES>; mõlemat saab kasutada koos.
 
 See liides on eksperimentaalne ja võib tulevikus muutuda.
 
 =head1 ANONYMIZATION AND TEMPLATES
 
-Tundlikud stringid saab peita enne nende saatmist tõlke-API-sse ja väljundis taastada. Saadaval on kolm anonüümimisreeglite allikat: sõnastikufail (B<--xlate-anonymize>), dokumendis endas olevad reasisesed märgid (B<--xlate-anonymize-mark>) ja YAML-i front matter väärtused (B<--xlate-frontmatter>). Iga string asendatakse edastamise ajal kategooriasildiga, näiteks C<< <person id=1 /> >>. Peitmise sihtmärk on ainult API-edastus: kohalikud vahemälufailid salvestavad taastatud lihtteksti. Kasutage käsku B<--xlate-dryrun>, et kontrollida täpselt, mida edastataks.
+Tundlikud stringid saab peita enne nende saatmist tõlke-API-sse ja väljundis taastada. Saadaval on kolm anonüümimisreeglite allikat: sõnastikufail (B<--xlate-anonymize>), dokumendis endas olevad reasisesed märgid (B<--xlate-anonymize-mark>) ja YAML-i front matter väärtused (B<--xlate-frontmatter>). Iga string asendatakse edastamise ajal kategooriasildiga, näiteks C<< <person id="1" /> >>. Peitmise sihtmärk on ainult API-edastus: kohalikud vahemälufailid salvestavad taastatud lihtteksti. Kasutage käsku B<--xlate-dryrun>, et kontrollida täpselt, mida edastataks.
 
 Vormidokumentide (kvartaliaruanded ja muu sarnane) puhul määratlege osalised kohe alguses ja viidake neile põhitekstis:
 
@@ -158,7 +160,7 @@ Praegu on saadaval järgmised mootorid
 
 =over 2
 
-=item * B<gpt5>: gpt-5.5 (via the C<llm> command)
+=item * B<gpt5>: gpt-5.6-terra (via the C<llm> command)
 
 =item * B<deepl>: DeepL API (via the C<deepl> command)
 
@@ -267,7 +269,7 @@ Sea see väärtus 1, kui soovid tõlkida ühe rea kaupa. See valik on ülimuslik
 
 =item B<--xlate-prompt>=I<text>
 
-Määrake tõlkemootorile saadetav kohandatud viip. See valik on saadaval LLM-mootorite (C<gpt3>, C<gpt4o>, C<gpt5>) jaoks, kuid mitte DeepL-i jaoks. Saate tõlkekäitumist kohandada, andes tehisintellekti mudelile konkreetsed juhised. Kui viip sisaldab C<%s>, asendatakse see sihtkeele nimega.
+Määrake tõlkemootorile saadetav kohandatud viip. See valik on saadaval LLM-mootorite (C<gpt3>, C<gpt4o>, C<gpt5>) jaoks, kuid mitte DeepL-i jaoks. Saate tõlkekäitumist kohandada, andes tehisintellekti mudelile konkreetsed juhised. Kui viip sisaldab C<%s>, asendatakse see sihtkeele nimega. LLM-taustaprogrammiga C<gpt5> mootori puhul edastatakse dokument eraldi JSON-päringuna, mille C<input> liige on tõlgitav massiiv ja mille valikuline C<context> liige sisaldab viiteandmeid. Fikseeritud juhis, mis käsitleb neid liikmeid dokumendiandmetena, mitte käskudena, lisatakse ka kohandatud viiba kasutamisel.
 
 =item B<--xlate-context>=I<text>
 
@@ -276,7 +278,7 @@ Määra täiendav kontekstiinfo, mis saadetakse tõlkemootorile. Seda valikut sa
 =item B<--xlate-context-window>=I<n>
 
 (Context-aware engines only, e.g. C<gpt5> on the llm backend)
-Ümbritsevate tõlgitud plokkide arv, mis antakse muudetud plokkide uuesti tõlkimisel viitekontekstina (vaikimisi 2). Kontekst sisaldab ka muudetud piirkonda ümbritsevat toorest lähteksti (pealkirjad, loendistruktuur, pildiallkirjad) ning võimaluse korral vahemälust taastatud muudetud teksti eelmist versiooni, et muutmata sõnastus säiliks. Määrake väärtuseks 0, et kontekstiteadlik tõlge täielikult keelata. Pange tähele, et iga muudetud piirkond tõlgitakse eraldi API-kutses ja kontekst võib süsteemiviibale lisada kuni umbes 8000 märki, seega vahetab kontekstiteadlik tõlge järjepidevuse nimel mõningase lisakulu vastu.
+Ümbritsevate tõlgitud plokkide arv, mis antakse muudetud plokkide uuesti tõlkimisel viitekontekstina (vaikimisi 2). Kontekst sisaldab ka muudetud piirkonda ümbritsevat toorest lähteksti (pealkirjad, loendistruktuur, pildiallkirjad) ning võimaluse korral vahemälust taastatud muudetud teksti eelmist versiooni, et muutmata sõnastus säiliks. Määrake väärtuseks 0, et kontekstiteadlik tõlge täielikult keelata. Pange tähele, et iga muudetud piirkond tõlgitakse eraldi API-kutses ja kontekst võib JSON-i kasutajapäringule lisada kuni umbes 8000 märki, seega vahetab kontekstiteadlik tõlge järjepidevuse nimel mõningase lisakulu vastu. Dokumendist tuletatud kontekst hoitakse süsteemiviibast eemal.
 
 =item B<--xlate-cache-seed>=I<file>
 
@@ -289,7 +291,7 @@ Anonümiseeri tundlikud stringid enne nende saatmist tõlke-API-le ja taasta nee
     [ { "category": "person",  "text": "山田太郎" },
       { "category": "company", "regex": "アクメ(株式会社)?" } ]
 
-või lihtsas reaformaadis (C<category pattern>, C</.../> regexi jaoks). Iga üksus asendatakse kategooriasildiga, näiteks C<< <person id=1 /> >>; sama string saab alati sama sildi, nii et mudel saab jälgida, kes on kes. Tundmatuid JSON-välju eiratakse, seega võivad generaatorid (nt kohalik LLM, mis ekstraheerib olemeid) lisada oma annotatsioone. Kategooria C<lit> on reserveeritud. Kohalikud vahemälufailid talletavad endiselt taastatud lihtteksti: varjamise siht on ainult API-edastus.
+või lihtsas reaformaadis (C<category pattern>, C</.../> regexi jaoks). Iga üksus asendatakse kategooriasildiga, näiteks C<< <person id="1" /> >>; sama string saab alati sama sildi, nii et mudel saab jälgida, kes on kes. Tundmatuid JSON-välju eiratakse, seega võivad generaatorid (nt kohalik LLM, mis ekstraheerib olemeid) lisada oma annotatsioone. Kategooria C<lit> on reserveeritud. Kohalikud vahemälufailid talletavad endiselt taastatud lihtteksti: varjamise siht on ainult API-edastus.
 
 Sõnastiku saab genereerida välise tööriistaga -- näiteks kohalik mudel, mis ekstraheerib tundlikke olemeid:
 
@@ -332,6 +334,10 @@ Määra sõnastiku ID, mida tõlkimisel kasutada. See valik on saadaval ainult D
 =item B<-->[B<no->]B<xlate-progress> (Default: True)
 
 Vaata tõlketulemust reaalajas STDERR-väljundis. C<From> payload kuvatakse edastatud kujul, pärast anonüümimist ja maskimist.
+
+=item B<--xlate-review>
+
+Üks-ühele muudetud ploki puhul näita vana ja uue lähteallika väikseimat järjestikust muudetud vahemikku, millele järgneb vastav vahemik vanas ja uues tõlkes. Aruanne kirjutatakse STDERR-i, see ei tee täiendavaid API-kutseid ning jäetakse välja, kui vanu ja uusi plokke ei saa üheselt paaristada.
 
 =item B<--xlate-stripe>
 

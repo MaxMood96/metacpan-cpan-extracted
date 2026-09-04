@@ -1,6 +1,6 @@
 package HTML::FormHandler::Blocks;
 # ABSTRACT: arrange form layout using blocks
-$HTML::FormHandler::Blocks::VERSION = '0.40068';
+$HTML::FormHandler::Blocks::VERSION = '0.410001';
 
 use Moose::Role;
 use Try::Tiny;
@@ -147,7 +147,7 @@ HTML::FormHandler::Blocks - arrange form layout using blocks
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

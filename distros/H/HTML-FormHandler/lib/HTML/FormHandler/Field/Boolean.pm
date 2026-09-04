@@ -1,6 +1,6 @@
 package HTML::FormHandler::Field::Boolean;
 # ABSTRACT: a true or false field
-$HTML::FormHandler::Field::Boolean::VERSION = '0.40068';
+$HTML::FormHandler::Field::Boolean::VERSION = '0.410001';
 use Moose;
 extends 'HTML::FormHandler::Field::Checkbox';
 
@@ -29,7 +29,7 @@ HTML::FormHandler::Field::Boolean - a true or false field
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 DESCRIPTION
 

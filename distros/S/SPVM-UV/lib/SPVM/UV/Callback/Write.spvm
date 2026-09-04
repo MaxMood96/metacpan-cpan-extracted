@@ -1,0 +1,10 @@
+# Copyright (c) 2026 Yuki Kimoto
+# MIT License
+
+class UV::Callback::Write : interface_t {
+  
+  use UV::Request::Write;
+  
+  required method : void ($uv_req_write : UV::Request::Write, $status : int);
+  
+}

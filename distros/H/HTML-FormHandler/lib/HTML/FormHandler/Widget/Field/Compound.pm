@@ -1,6 +1,6 @@
 package HTML::FormHandler::Widget::Field::Compound;
 # ABSTRACT: compound field widget
-$HTML::FormHandler::Widget::Field::Compound::VERSION = '0.40068';
+$HTML::FormHandler::Widget::Field::Compound::VERSION = '0.410001';
 use Moose::Role;
 
 
@@ -47,7 +47,7 @@ HTML::FormHandler::Widget::Field::Compound - compound field widget
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

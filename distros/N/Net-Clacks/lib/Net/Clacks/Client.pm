@@ -6,7 +6,7 @@ use diagnostics;
 use mro 'c3';
 use English qw(-no_match_vars);
 use Carp qw[carp croak confess cluck longmess shortmess];
-our $VERSION = 37;
+our $VERSION = 38;
 use autodie qw( close );
 use Array::Contains;
 use utf8;
@@ -116,6 +116,20 @@ sub init($self, $username, $password, $clientname, $iscaching) {
     # cap a hung or silently-dropped server connection turned into an indefinite
     # client-side hang. Callers can override this after construction.
     $self->{requesttimeout} = 30;
+
+    # Whether this client has told the server to stop expecting pings.
+    #
+    # NOPING is CONNECTION STATE, not a one-off command, so it has to be
+    # remembered and replayed. reconnect() rebuilds the outbuffer from
+    # nothing, so before this flag existed the NOPING was silently dropped by
+    # the first reconnect and never sent again: a client that had been
+    # deliberately exempted from the server's ping timeout quietly became
+    # subject to it, and was hung up on after pingtimeout seconds of the
+    # idleness it was exempted for in the first place. Worse, the reconnects
+    # that lost it are triggered by exactly the errors that make a client go
+    # quiet. Found on a PageCamel web backend 2026-09-03, whose ClacksCache
+    # calls disablePing() once at connect and never again.
+    $self->{noping} = 0;
 
     # Maximum time to spend trying to drain the outbuffer when the server isn't
     # reading (kernel send buffer full -> syswrite returns EAGAIN repeatedly).
@@ -301,6 +315,13 @@ sub reconnect($self) {
     # Also, this part is REQUIRED, just to make sure we actually speek to CLACKS protocol
     $self->{outbuffer} .= 'CLACKS ' . $self->{clientname} . "\r\n";
     $self->{outbuffer} .= 'OVERHEAD A ' . $self->{authtoken} . "\r\n";
+
+    # AFTER the auth line: the server ignores every command from a client it
+    # has not authenticated yet, so a NOPING sent ahead of it is thrown away.
+    if($self->{noping}) {
+        $self->{outbuffer} .= "NOPING\r\n";
+    }
+
     $self->doNetwork();
 
     return;
@@ -638,12 +659,19 @@ sub ping($self) {
         # Only send a ping every 120 seconds or less
         $self->{outbuffer} .= "PING\r\n";
         $self->{lastping} = time;
+
+        # The server resumes ping checking for this client the moment it
+        # receives a PING (it sets lastping back to a real timestamp), so a
+        # client that pings has ended its own exemption and must not have it
+        # replayed on the next reconnect.
+        $self->{noping} = 0;
     }
 
     return;
 }
 
 sub disablePing($self) {
+    $self->{noping} = 1;
     $self->{outbuffer} .= "NOPING\r\n";
 
     return;
@@ -808,6 +836,47 @@ sub store($self, $varname, $value) {
     return;
 }
 
+#
+# Watch for a server-side REFUSAL while waiting for a request answer.
+#
+# THE SERVER DOES NOT ALWAYS ANSWER A REQUEST. Two of its paths reply with an
+# OVERHEAD line and nothing else: a client that is not authenticated has its
+# commands ignored outright (Server.pm, "Ignore other command when not
+# authenticated"), and an authenticated client that lacks the permission for
+# the command gets 'OVERHEAD E permission_denied' from _requirePermission().
+# Neither ever produces the RETRIEVED / KEYLISTEND / CLIENTLISTEND / FLUSHED
+# line the four request methods below sit and wait for.
+#
+# Those lines are decoded in getNext(), but a caching client never calls it -
+# it calls retrieve() and nothing else. So every refusal used to be
+# indistinguishable from a dead server: the caller blocked for the full
+# requesttimeout, reported a timeout, marked the connection for reconnect,
+# and the reconnect presented the very same rejected credentials again. The
+# actual reason was sitting in the inline buffer the whole time, unread.
+# Diagnosed on a PageCamel web backend 2026-09-03, where it cost 30 seconds
+# per cache lookup and said only "timed out".
+#
+# Deliberately does NOT set needreconnect: a refusal is an answer. The
+# connection is fine and reconnecting only re-runs the same rejection.
+#
+# Returns the server's own message, having removed the line, or undef.
+#
+sub _checkRefusal($self) {
+    for(my $i = 0; $i < scalar @{$self->{inlines}}; $i++) {
+        next if($self->{inlines}->[$i] !~ /^OVERHEAD\ (.+?)\ (.+)/);
+        my ($flags, $value) = ($1, $2);
+
+        # E = error_message, F = auth_failed. Flags are a letter set, so a
+        # line may legitimately carry others alongside.
+        next if($flags !~ /[EF]/);
+
+        splice @{$self->{inlines}}, $i, 1;
+        return $value;
+    }
+
+    return;
+}
+
 sub retrieve($self, $varname) {
     if(!defined($varname) || !length($varname)) {
         carp("varname not defined!");
@@ -846,6 +915,12 @@ sub retrieve($self, $varname) {
         $self->doNetwork(0.5);
         if($self->{needreconnect}) {
             # Nothing we can do, really...
+            return;
+        }
+
+        my $refused = $self->_checkRefusal();
+        if(defined($refused)) {
+            carp("retrieve($varname) refused by server: $refused");
             return;
         }
         for(my $i = 0; $i < scalar @{$self->{inlines}}; $i++) {
@@ -1024,6 +1099,12 @@ sub keylist($self) {
             # Nothing we can do, really...
             return;
         }
+
+        my $refused = $self->_checkRefusal();
+        if(defined($refused)) {
+            carp("keylist() refused by server: $refused");
+            return;
+        }
         $liststartfound = 0;
         $listendfound = 0;
         for(my $i = 0; $i < scalar @{$self->{inlines}}; $i++) {
@@ -1111,6 +1192,12 @@ sub clientlist($self) {
         $self->doNetwork(0.5);
         if($self->{needreconnect}) {
             # Nothing we can do, really...
+            return;
+        }
+
+        my $refused = $self->_checkRefusal();
+        if(defined($refused)) {
+            carp("clientlist() refused by server: $refused");
             return;
         }
         $liststartfound = 0;
@@ -1207,6 +1294,12 @@ sub flush($self, $flushid = '') {
         $self->doNetwork(0.5);
         if($self->{needreconnect}) {
             # Nothing we can do, really...
+            return;
+        }
+
+        my $refused = $self->_checkRefusal();
+        if(defined($refused)) {
+            carp("flush($flushid) refused by server: $refused");
             return;
         }
         for(my $i = 0; $i < scalar @{$self->{inlines}}; $i++) {
@@ -1429,6 +1522,11 @@ Send a PING (keepalive) packet.
 =head2 disablePing
 
 Temporarly disable auto-disconnects by the server (NOPING command). Useful before doing something with indeterminate length (long running functions and such).
+
+The setting is remembered and re-sent automatically if the connection is
+re-established, so a client that is exempt stays exempt across a reconnect.
+Sending an explicit L</ping> ends the exemption, because the server resumes
+ping checking as soon as it receives one.
 
 =head2 notify
 

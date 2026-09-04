@@ -19,6 +19,7 @@ my %WriteMakefileArgs = (
   "PREREQ_PM" => {
     "Catalyst::View" => 0,
     "File::Spec" => 0,
+    "Heap::Fibonacci" => 0,
     "IO::File::WithPath" => 0,
     "Moose" => 0,
     "MooseX::Aliases" => 0,
@@ -53,7 +54,7 @@ my %WriteMakefileArgs = (
     "strict" => 0,
     "warnings" => 0
   },
-  "VERSION" => "v0.1.3",
+  "VERSION" => "v0.1.6",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -72,6 +73,7 @@ my %FallbackPrereqs = (
   "FindBin" => 0,
   "HTTP::Request::Common" => 0,
   "HTTP::Status" => 0,
+  "Heap::Fibonacci" => 0,
   "IO::File::WithPath" => 0,
   "IO::Handle" => 0,
   "IPC::Open3" => 0,

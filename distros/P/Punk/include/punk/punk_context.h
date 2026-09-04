@@ -26,7 +26,8 @@ enum {
     PCX_OPENAPI = 5,
     PCX_MATCH   = 6,
     PCX_UA      = 7,  /* memoised $c->ua; the agent itself lives on the app */
-    PCX_REQID   = 8   /* Punk::Plugin::RequestId's id, when it is loaded     */
+    PCX_REQID   = 8,  /* Punk::Plugin::RequestId's id, when it is loaded     */
+    PCX_AFTER_RES = 9 /* $c->after_response's queue, vivified on first use   */
 };
 
 static AV *pcx_av(pTHX_ SV *self) {
@@ -268,6 +269,12 @@ static SV *punk_coerce(pTHX_ SV *c, SV *ret) {
     }
 }
 
+/* The after_response phase: scheduled here because this is the one place a
+ * final response exists. Defined in punk_afterres.h, which is included after
+ * hm_abi.h because the loop timer is one of the three ways it defers - the
+ * pcg_check / pi_check arrangement. */
+static void pk_after_res(pTHX_ SV *c, SV *resp);
+
 /* Finish a response: coerce if needed, run the after-dispatch hooks (each may
  * replace the triplet), and blank the body on HEAD. +1. */
 static SV *punk_deliver(pTHX_ SV *c, SV *resp, int is_head, AV *after) {
@@ -276,6 +283,7 @@ static SV *punk_deliver(pTHX_ SV *c, SV *resp, int is_head, AV *after) {
     /* a streaming coderef has no triplet to mutate: skip after-hooks and HEAD */
     if (SvROK(r) && SvTYPE(SvRV(r)) == SVt_PVCV) {
         if (PK_OBS_WANT_RES) pk_obs_fire_res(aTHX_ c, r);
+        pk_after_res(aTHX_ c, r);
         return r;
     }
     if (after) {
@@ -310,6 +318,7 @@ static SV *punk_deliver(pTHX_ SV *c, SV *resp, int is_head, AV *after) {
      * the moment it was, and sees it exactly once either way. The four
      * dispatcher exits that never come through here fire it themselves. */
     if (PK_OBS_WANT_RES) pk_obs_fire_res(aTHX_ c, r);
+    pk_after_res(aTHX_ c, r);
     return r;
 }
 

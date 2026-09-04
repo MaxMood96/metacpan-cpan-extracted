@@ -166,4 +166,140 @@ static void prl_install(pTHX_ SV *self, IV limit, IV window, IV by,
         SvREFCNT_dec(closure);
 }
 
+/* "header:X-Api-Key" -> the env key it arrives under, as a mortal SV. */
+static SV *prl_header_envkey(pTHX_ const char *bs, STRLEN bl) {
+    SV *k = sv_2mortal(newSVpvs("HTTP_"));
+    STRLEN j;
+    for (j = 7; j < bl; j++) {
+        char ch = bs[j];
+        ch = (ch == '-') ? '_' : (char)toupper((unsigned char)ch);
+        sv_catpvn(k, &ch, 1);
+    }
+    return k;
+}
+
+/* ---- boot: compile the route-level rate_limit options --------------------- */
+
+/* The `rate_limit` route option, compiled the way `validate` is: one guard
+ * closure appended to the record, running the same prl_check_cb the keyword
+ * installs on before_dispatch. A route that declares nothing is untouched and
+ * the whole pass costs nothing.
+ *
+ * The counter namespace defaults to this route's own method and path, so two
+ * routes with the same budget do not spend each other's. Naming a `tag`
+ * shares one deliberately, which is how three routes get one budget between
+ * them:
+ *
+ *     my %auth = ( limit => 5, window => 60, tag => 'auth' );
+ *     post '/login'    => $t, { rate_limit => \%auth };
+ *     post '/register' => $t, { rate_limit => \%auth };
+ *     post '/forgot'   => $t, { rate_limit => \%auth };
+ */
+static void prl_compile_routes(pTHX_ SV *self) {
+    HV *h = (HV *)SvRV(self);
+    SV **rlp = hv_fetchs(h, K_RL_ROUTES, 0);
+    AV *rls;
+    HV *by;
+    SSize_t i, n;
+
+    if (!(rlp && *rlp && SvROK(*rlp) && SvTYPE(SvRV(*rlp)) == SVt_PVAV))
+        return;
+    rls = (AV *)SvRV(*rlp);
+    n = av_len(rls) + 1;
+    if (!n) return;
+    by = pk_route_index(aTHX_ self, "rate_limit");
+
+    for (i = 0; i < n; i++) {
+        SV **rp = av_fetch(rls, i, 0);
+        HV *rr, *rec, *spec;
+        SV **m, **p, **sp, **x;
+        SV *where;
+        HE *he;
+        IV limit = 60, window = 60, by_mode = 0;
+        SV *byfn = NULL, *envkeysv = NULL, *tagsv;
+        const char *envkey = "";
+        STRLEN elen = 0;
+        AV *cap;
+
+        if (!(rp && *rp && SvROK(*rp) && SvTYPE(SvRV(*rp)) == SVt_PVHV))
+            continue;
+        rr = (HV *)SvRV(*rp);
+        m  = hv_fetchs(rr, K_METHOD, 0);
+        p  = hv_fetchs(rr, K_PATH, 0);
+        sp = hv_fetchs(rr, K_RATE_LIMIT, 0);
+        if (!(m && *m && p && *p && sp && *sp
+              && SvROK(*sp) && SvTYPE(SvRV(*sp)) == SVt_PVHV))
+            continue;
+        spec = (HV *)SvRV(*sp);
+
+        where = sv_2mortal(newSVsv(*m));
+        sv_catpvs(where, " ");
+        sv_catsv(where, *p);
+        he = hv_fetch_ent(by, where, 0, 0);
+        if (!he)
+            croak("Punk: rate_limit on unknown route %s", SvPV_nolen(where));
+        rec = (HV *)SvRV(HeVAL(he));
+
+        x = hv_fetchs(spec, "limit", 0);
+        if (x && *x) {
+            if (!SvOK(*x) || !looks_like_number(*x))
+                croak("Punk: rate_limit limit on %s is a count of requests",
+                      SvPV_nolen(where));
+            limit = SvIV(*x);
+        }
+        x = hv_fetchs(spec, "window", 0);
+        if (x && *x) {
+            if (!SvOK(*x) || !looks_like_number(*x) || SvIV(*x) <= 0)
+                croak("Punk: rate_limit window on %s is a positive number "
+                      "of seconds", SvPV_nolen(where));
+            window = SvIV(*x);
+        }
+        x = hv_fetchs(spec, "by", 0);
+        if (x && *x && SvOK(*x)) {
+            if (SvROK(*x) && SvTYPE(SvRV(*x)) == SVt_PVCV) {
+                by_mode = 2; byfn = *x;
+            }
+            else if (SvROK(*x))
+                croak("Punk: rate_limit by on %s is 'ip', 'header:NAME' or "
+                      "a coderef", SvPV_nolen(where));
+            else {
+                STRLEN bl;
+                const char *bs = SvPV(*x, bl);
+                if (bl > 7 && strnEQ(bs, "header:", 7)) {
+                    by_mode = 1;
+                    envkeysv = prl_header_envkey(aTHX_ bs, bl);
+                    envkey = SvPV(envkeysv, elen);
+                }
+                else if (!(bl == 2 && memEQ(bs, "ip", 2)))
+                    croak("Punk: rate_limit by on %s is 'ip', 'header:NAME' "
+                          "or a coderef, not '%.*s'", SvPV_nolen(where),
+                          (int)bl, bs);
+            }
+        }
+        x = hv_fetchs(spec, "tag", 0);
+        if (x && *x && SvOK(*x) && SvCUR(*x)) {
+            tagsv = sv_2mortal(newSVsv(*x));
+        }
+        else {
+            /* this route's own namespace, so one route's retries are not
+             * charged to another with the same limit */
+            tagsv = sv_2mortal(newSVpvs("route "));
+            sv_catsv(tagsv, where);
+        }
+
+        cap = newAV();
+        av_extend(cap, PRL_BYFN);
+        (void)av_store(cap, PRL_LIMIT,  newSViv(limit));
+        (void)av_store(cap, PRL_WINDOW, newSViv(window));
+        (void)av_store(cap, PRL_BY,     newSViv(by_mode));
+        (void)av_store(cap, PRL_ENVKEY, newSVpvn(envkey, elen));
+        (void)av_store(cap, PRL_FOR,    newSVpvs(""));   /* the route is it */
+        (void)av_store(cap, PRL_TAG,    newSVsv(tagsv));
+        (void)av_store(cap, PRL_BYFN,
+                       (by_mode == 2 && byfn) ? newSVsv(byfn) : newSV(0));
+        pk_route_guard_push(aTHX_ rec,
+                            punk_closure(aTHX_ prl_check_cb, cap));
+    }
+}
+
 #endif /* PUNK_RATELIMIT_H */

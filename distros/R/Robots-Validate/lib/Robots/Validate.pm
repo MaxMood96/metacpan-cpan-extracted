@@ -9,7 +9,7 @@ use Moo 1;
 use Algorithm::AhoCorasick::XS;
 use File::ShareDir qw( dist_file );
 use File::Slurper  qw( read_binary );
-use List::Util     qw( all any none uniqstr );
+use List::Util     1.45 qw( all any none uniqstr );
 use Net::DNS::Resolver;
 use Net::IP qw( ip_expand_address ip_is_ipv4 ip_is_ipv6 ip_splitprefix );
 use Net::Patricia;
@@ -28,7 +28,7 @@ use experimental qw( lexical_subs signatures );
 
 use namespace::autoclean;
 
-our $VERSION = 'v0.4.0';
+our $VERSION = 'v0.4.1';
 
 
 has resolver => (
@@ -564,7 +564,7 @@ Robots::Validate - Validate that IP addresses are associated with known robots
 
 =head1 VERSION
 
-version v0.4.0
+version v0.4.1
 
 =head1 SYNOPSIS
 

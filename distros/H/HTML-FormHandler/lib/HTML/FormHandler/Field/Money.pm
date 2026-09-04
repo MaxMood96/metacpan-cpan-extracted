@@ -1,6 +1,6 @@
 package HTML::FormHandler::Field::Money;
 # ABSTRACT: US currency-like values
-$HTML::FormHandler::Field::Money::VERSION = '0.40068';
+$HTML::FormHandler::Field::Money::VERSION = '0.410001';
 use HTML::FormHandler::Moose;
 extends 'HTML::FormHandler::Field::Text';
 
@@ -85,7 +85,7 @@ HTML::FormHandler::Field::Money - US currency-like values
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 DESCRIPTION
 

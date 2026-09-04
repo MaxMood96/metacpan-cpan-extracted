@@ -1,6 +1,6 @@
 package HTML::FormHandler::I18N::pt_br;
 # ABSTRACT: Brazilian Portuguese message file
-$HTML::FormHandler::I18N::pt_br::VERSION = '0.40068';
+$HTML::FormHandler::I18N::pt_br::VERSION = '0.410001';
 use strict;
 use warnings;
 use utf8;
@@ -111,7 +111,7 @@ HTML::FormHandler::I18N::pt_br - Brazilian Portuguese message file
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 NAME
 

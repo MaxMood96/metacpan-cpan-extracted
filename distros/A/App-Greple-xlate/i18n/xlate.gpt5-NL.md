@@ -10,11 +10,11 @@ App::Greple::xlate - vertaalondersteuningsmodule voor greple
 
 # VERSION
 
-Version 2.01
+Version 2.02
 
 # DESCRIPTION
 
-**Greple** **xlate** module vindt gewenste tekstblokken en vervangt deze door de vertaalde tekst. De primaire engine is GPT-5.5 (`llm/gpt5.pm`), die het [llm](https://llm.datasette.io/)-commando aanroept; DeepL (`deepl.pm`) en legacy **gpty**-gebaseerde engines zijn ook inbegrepen.
+**Greple** **xlate** module vindt gewenste tekstblokken en vervangt deze door de vertaalde tekst. De primaire engine is GPT-5.6 Terra (`llm/gpt5.pm`), die het [llm](https://llm.datasette.io/)-commando aanroept; DeepL (`deepl.pm`) en legacy **gpty**-gebaseerde engines zijn ook inbegrepen.
 
 Vertalingen worden per bestand gecachet, dus het opnieuw uitvoeren van een commando kost niets voor ongewijzigde tekst. Wanneer een document wordt bewerkt, worden alleen de gewijzigde alinea's opnieuw naar de API gestuurd; een contextbewuste engine ontvangt ook de omringende vertalingen, de ruwe brontekst rond de wijziging en de vorige versie van de bewerkte alinea, zodat de nieuwe vertaling de gevestigde formulering behoudt (zie **--xlate-context-window**). Gevoelige strings kunnen vóór verzending worden verborgen (zie ["ANONYMIZATION AND TEMPLATES"](#anonymization-and-templates)).
 
@@ -81,13 +81,15 @@ Een complex patroon kan over meerdere regels worden geschreven met een backslash
 
 Hoe de tekst door maskering wordt getransformeerd, is te zien met de optie **--xlate-mask**.
 
+Maskerplaatshouders zijn goed gevormde zelfsluitende XML-tags zoals `<m id="1" />`. Op JSON gebaseerde LLM-engines ontvangen de tags in hun invoerarrays. Voor DeepL wordt een verzoek met markeringstags ge-escapet en ingesloten in een tijdelijke root `<xlate>`, waarbij XML-tagverwerking is ingeschakeld en elke markeringscategorie als niet-splitsende tag is geregistreerd. De wrapper wordt verwijderd voordat de plaatshouders worden gevalideerd en hersteld.
+
 Maskering beschermt markup tegen vertaling. Om gevoelige strings voor de vertaaldienst zelf te verbergen, zie ["ANONYMIZATION AND TEMPLATES"](#anonymization-and-templates); beide kunnen samen worden gebruikt.
 
 Deze interface is experimenteel en kan in de toekomst veranderen.
 
 # ANONYMIZATION AND TEMPLATES
 
-Gevoelige tekenreeksen kunnen worden verborgen voordat ze naar de vertaal-API worden verzonden en in de uitvoer worden hersteld. Er zijn drie bronnen voor anonimiseringsregels beschikbaar: een woordenboekbestand (**--xlate-anonymize**), inline-markeringen in het document zelf (**--xlate-anonymize-mark**) en YAML-frontmatterwaarden (**--xlate-frontmatter**). Elke tekenreeks wordt tijdens de transmissie vervangen door een categorietag zoals `<person id=1 />`. Het doel van de verhulling is alleen API-transmissie: lokale cachebestanden slaan herstelde platte tekst op. Gebruik **--xlate-dryrun** om precies te inspecteren wat er zou worden verzonden.
+Gevoelige tekenreeksen kunnen worden verborgen voordat ze naar de vertaal-API worden verzonden en in de uitvoer worden hersteld. Er zijn drie bronnen voor anonimiseringsregels beschikbaar: een woordenboekbestand (**--xlate-anonymize**), inline-markeringen in het document zelf (**--xlate-anonymize-mark**) en YAML-frontmatterwaarden (**--xlate-frontmatter**). Elke tekenreeks wordt tijdens de transmissie vervangen door een categorietag zoals `<person id="1" />`. Het doel van de verhulling is alleen API-transmissie: lokale cachebestanden slaan herstelde platte tekst op. Gebruik **--xlate-dryrun** om precies te inspecteren wat er zou worden verzonden.
 
 Voor formulierdocumenten (kwartaalrapporten en dergelijke) definieer je de actoren vooraf en verwijs je ernaar in de hoofdtekst:
 
@@ -140,7 +142,7 @@ Sluit embedz-blokken uit van vertaling wanneer een document ze bevat:
 
     Op dit moment zijn de volgende engines beschikbaar
 
-    - **gpt5**: gpt-5.5 (via the `llm` command)
+    - **gpt5**: gpt-5.6-terra (via the `llm` command)
     - **deepl**: DeepL API (via the `deepl` command)
     - **gpt3**: gpt-3.5-turbo (legacy, via the `gpty` command)
     - **gpt4o**: gpt-4o-mini (legacy, via the `gpty` command)
@@ -238,7 +240,7 @@ Sluit embedz-blokken uit van vertaling wanneer een document ze bevat:
 
 - **--xlate-prompt**=_text_
 
-    Geef een aangepaste prompt op die naar de vertaalengine wordt gestuurd. Deze optie is beschikbaar voor de LLM-engines (`gpt3`, `gpt4o`, `gpt5`), maar niet voor DeepL. U kunt het vertaalgedrag aanpassen door specifieke instructies aan het AI-model te geven. Als de prompt `%s` bevat, wordt dit vervangen door de naam van de doeltaal.
+    Geef een aangepaste prompt op die naar de vertaalengine wordt gestuurd. Deze optie is beschikbaar voor de LLM-engines (`gpt3`, `gpt4o`, `gpt5`), maar niet voor DeepL. U kunt het vertaalgedrag aanpassen door specifieke instructies aan het AI-model te geven. Als de prompt `%s` bevat, wordt dit vervangen door de naam van de doeltaal. Voor de door llm ondersteunde engine `gpt5` wordt het document afzonderlijk geleverd als een JSON-verzoek waarvan het lid `input` de te vertalen array is en het optionele lid `context` referentiegegevens bevat. Een vaste instructie die deze leden als documentgegevens behandelt, niet als opdrachten, wordt toegevoegd, zelfs wanneer een aangepaste prompt wordt gebruikt.
 
 - **--xlate-context**=_text_
 
@@ -247,7 +249,7 @@ Sluit embedz-blokken uit van vertaling wanneer een document ze bevat:
 - **--xlate-context-window**=_n_
 
     (Context-aware engines only, e.g. `gpt5` on the llm backend)
-    Aantal omringende vertaalde blokken dat als referentiecontext wordt meegegeven bij het opnieuw vertalen van gewijzigde blokken (standaard 2). De context omvat ook de ruwe brontekst rond het gewijzigde gebied (koppen, lijststructuur, bijschriften) en, indien beschikbaar, de vorige versie van de gewijzigde tekst die uit de cache is hersteld, zodat ongewijzigde formuleringen behouden blijven. Stel in op 0 om contextbewuste vertaling volledig uit te schakelen. Merk op dat elk gewijzigd gebied in een eigen API-aanroep wordt vertaald en dat de context tot ongeveer 8000 tekens aan de systeemprompt kan toevoegen, dus contextbewuste vertaling ruilt enige extra kosten in voor consistentie.
+    Aantal omringende vertaalde blokken dat als referentiecontext wordt meegegeven bij het opnieuw vertalen van gewijzigde blokken (standaard 2). De context omvat ook de ruwe brontekst rond het gewijzigde gebied (koppen, lijststructuur, bijschriften) en, indien beschikbaar, de vorige versie van de gewijzigde tekst die uit de cache is hersteld, zodat ongewijzigde formuleringen behouden blijven. Stel in op 0 om contextbewuste vertaling volledig uit te schakelen. Merk op dat elk gewijzigd gebied in een eigen API-aanroep wordt vertaald en dat de context tot ongeveer 8000 tekens aan het JSON-gebruikersverzoek kan toevoegen, dus contextbewuste vertaling ruilt enige extra kosten in voor consistentie. Context die van het document is afgeleid, wordt buiten de systeemprompt gehouden.
 
 - **--xlate-cache-seed**=_file_
 
@@ -260,7 +262,7 @@ Sluit embedz-blokken uit van vertaling wanneer een document ze bevat:
         [ { "category": "person",  "text": "山田太郎" },
           { "category": "company", "regex": "アクメ(株式会社)?" } ]
 
-    of in een eenvoudige regelindeling (`category pattern`, `/.../` voor regex). Elk item wordt vervangen door een categorietag zoals `<person id=1 />`; dezelfde string krijgt altijd dezelfde tag, zodat het model kan bijhouden wie wie is. Onbekende JSON-velden worden genegeerd, zodat generatoren (bijv. een lokale LLM die entiteiten extraheert) hun eigen annotaties kunnen toevoegen. Categorie `lit` is gereserveerd. Lokale cachebestanden slaan nog steeds herstelde platte tekst op: het doel van verbergen is alleen API-verzending.
+    of in een eenvoudige regelindeling (`category pattern`, `/.../` voor regex). Elk item wordt vervangen door een categorietag zoals `<person id="1" />`; dezelfde string krijgt altijd dezelfde tag, zodat het model kan bijhouden wie wie is. Onbekende JSON-velden worden genegeerd, zodat generatoren (bijv. een lokale LLM die entiteiten extraheert) hun eigen annotaties kunnen toevoegen. Categorie `lit` is gereserveerd. Lokale cachebestanden slaan nog steeds herstelde platte tekst op: het doel van verbergen is alleen API-verzending.
 
     Een woordenlijst kan worden gegenereerd door een extern hulpmiddel -- bijvoorbeeld een lokaal model dat gevoelige entiteiten extraheert:
 
@@ -303,6 +305,10 @@ Sluit embedz-blokken uit van vertaling wanneer een document ze bevat:
 - **--**\[**no-**\]**xlate-progress** (Default: True)
 
     Bekijk het vertaalresultaat in realtime in de STDERR-uitvoer. De `From`-payload wordt getoond zoals verzonden, na anonimisering en masking.
+
+- **--xlate-review**
+
+    Voor een één-op-één gewijzigd blok toont u de kleinste aaneengesloten gewijzigde reeks in de oude en nieuwe bron, gevolgd door de overeenkomstige reeks in de oude en nieuwe vertaling. Het rapport wordt naar STDERR geschreven, doet geen extra API-aanroep en wordt weggelaten wanneer oude en nieuwe blokken niet eenduidig kunnen worden gekoppeld.
 
 - **--xlate-stripe**
 

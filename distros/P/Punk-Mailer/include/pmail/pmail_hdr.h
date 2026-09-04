@@ -299,10 +299,10 @@ static void pmail_hdr_date(char *buf, size_t size, time_t t)
  * (the token comes from a pid-keyed pool), and readable in a log */
 static SV *pmail_hdr_message_id(pTHX_ const char *domain, STRLEN dlen, time_t t)
 {
-    char token[25];
+    char token[25], tb[PMAIL_U64_LEN];
     if (pmail_random_token(token, 24) != 0)
         croak("Punk::Mailer: no entropy available for a Message-ID");
-    return newSVpvf("<%llu.%lu.%s@%.*s>", (unsigned long long)t,
+    return newSVpvf("<%s.%lu.%s@%.*s>", pmail_u64_str(tb, (pmail_u64)t),
                     (unsigned long)getpid(), token, (int)dlen, domain);
 }
 

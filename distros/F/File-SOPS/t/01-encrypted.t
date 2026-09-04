@@ -2,6 +2,7 @@
 use strict;
 use warnings;
 use Test::More;
+use JSON::MaybeXS;
 
 use File::SOPS::Encrypted;
 
@@ -43,20 +44,31 @@ ok($enc_string =~ /^ENC\[AES256_GCM,/, 'encrypted string format');
 my $decrypted = $encrypted->decrypt_value(key => $key, aad => 'test:path');
 is($decrypted, $original, 'decrypt roundtrip successful');
 
-# Test different types
+# Test different types.
+#
+# The type comes from the SCALAR, not from its text (k15, ADR 0002), so
+# every case here is spelled as the Perl value it means: '42' is a string and
+# stays type:str, while 42 is an integer. A Perl string that reads like a
+# number or a boolean is still a string -- that is the whole rule -- so the
+# only way to reach type:bool is a JSON::PP::Boolean.
 for my $test (
-    ['42', 'int', 42],
-    ['3.14', 'float', 3.14],
-    ['true', 'bool', 1],
-    ['hello world', 'str', 'hello world'],
+    [ 42,           'int',   42            ],
+    [ 3.14,         'float', 3.14          ],
+    [ JSON->true,   'bool',  1             ],
+    [ JSON->false,  'bool',  0             ],
+    [ 'hello world','str',   'hello world' ],
+    [ '42',         'str',   '42'          ],
+    [ '3.14',       'str',   '3.14'        ],
+    [ 'true',       'str',   'true'        ],
 ) {
     my ($value, $type, $expected) = @$test;
     my $enc = File::SOPS::Encrypted->encrypt_value(
         value => $value,
         key   => $key,
     );
+    is($enc->type, $type, "'$value' is typed $type");
     my $dec = $enc->decrypt_value(key => $key);
-    is($dec, $expected, "roundtrip for $type");
+    is($dec, $expected, "roundtrip for $type ('$value')");
 }
 
 # Test wrong AAD fails

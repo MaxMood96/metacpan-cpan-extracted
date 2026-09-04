@@ -34,7 +34,7 @@ resources:
   bugtracker: https://github.com/perlwasm/Alien-wasmtime/issues
   homepage: https://metacpan.org/pod/Alien::wasmtime
   repository: git://github.com/perlwasm/Alien-wasmtime.git
-version: '0.18'
+version: '0.19'
 x_alienfile:
   generated_by: 'Dist::Zilla::Plugin::AlienBuild version 0.33'
   requires:

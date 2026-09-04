@@ -43,6 +43,7 @@ xlate [ options ] -t LANG FILE [ greple options ]
     --frontmatter     exclude/anonymize YAML front matter
     --seed=#          seed cache from another cache file
     --context=#       context blocks for re-translation
+    --review          show minimal source/translation revision spans
     -w, --wrap=#      wrap line by # width
     -m, --maxlen=#    max length per API call
     -l, --library=#   show library files (XLATE.mk, xlate.el)
@@ -80,7 +81,7 @@ xlate [ options ] -t LANG FILE [ greple options ]
 
 =head1 VERSION
 
-    Version 2.01
+    Version 2.02
 
 =head1 INCOMPATIBLE CHANGES IN 2.0
 
@@ -292,6 +293,7 @@ declare -A OPTS=(
     [ frontmatter       # YAML front matter                ]=
     [ seed           :  # seed cache from another file     ]=
     [ context        :  # context window size              ]=
+    [ review            # show revision spans              ]=
     [   pattern | p @   # pattern to determine area        ]=
     [      file | f @   # pattern file                     ]=
     [   library | l :!  # show library files               ]=
@@ -371,6 +373,7 @@ if [[ ${make:-} ]]; then
          ${frontmatter:+XLATE_FRONTMATTER=1} \
          ${seed:+XLATE_SEED=\""$seed"\"} \
          ${context:+XLATE_CONTEXT_WINDOW=\""$context"\"} \
+         ${review:+XLATE_REVIEW=1} \
          ${files:+XLATE_FILES=\""$files"\"} \
          "${opt[@]}" \
     || exit 1
@@ -413,6 +416,7 @@ option+=(--all)
 [[ ${frontmatter:-}    ]] && option+=(--xlate-frontmatter)
 [[ ${seed:-}           ]] && option+=(--xlate-cache-seed="$seed")
 [[ ${context:-}        ]] && option+=(--xlate-context-window="$context")
+[[ ${review:-}         ]] && option+=(--xlate-review)
 
 declare -a area
 case ${1:-} in
@@ -712,6 +716,11 @@ document's cache I<file>.  Useful for periodic reports.
 
 Number of surrounding translated blocks passed as context when
 re-translating changed blocks (default 2, 0 to disable).
+
+=item B<--review>
+
+For a one-to-one block revision, show the minimal changed spans in the
+source and translation on STDERR.  This does not make another API call.
 
 =item B<-w> I<width>, B<--wrap>=I<width>
 

@@ -7,7 +7,7 @@ build_requires:
 configure_requires:
   ExtUtils::MakeMaker: '0'
 dynamic_config: 0
-generated_by: 'ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010'
+generated_by: 'ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013'
 license: mit
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -26,7 +26,7 @@ provides:
     file: lib/Net/NATS2/Base.pm
   Net::NATS2::Client:
     file: lib/Net/NATS2/Client.pm
-    version: v0.3.4
+    version: v0.3.5
   Net::NATS2::ConnectInfo:
     file: lib/Net/NATS2/ConnectInfo.pm
   Net::NATS2::Connection:
@@ -45,12 +45,11 @@ requires:
   IO::Socket::INET: '0'
   JSON: '0'
   MIME::Base64: '0'
-  URI: '0'
   perl: '5.010'
 resources:
   bugtracker: https://github.com/dshadow/perl-nats2/issues
   homepage: https://github.com/dshadow/perl-nats2
   license: https://opensource.org/license/mit
   repository: https://github.com/dshadow/perl-nats2
-version: v0.3.4
+version: v0.3.5
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

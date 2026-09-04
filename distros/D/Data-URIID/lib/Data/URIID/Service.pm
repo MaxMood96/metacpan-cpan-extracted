@@ -22,7 +22,7 @@ use Data::Identifier::Generate v0.25;
 use Data::URIID::Result;
 use Data::URIID::Colour;
 
-our $VERSION = v0.23;
+our $VERSION = v0.24;
 
 use parent 'Data::URIID::Base';
 
@@ -1648,7 +1648,7 @@ Data::URIID::Service - Extractor for identifiers from URIs
 
 =head1 VERSION
 
-version v0.23
+version v0.24
 
 =head1 SYNOPSIS
 

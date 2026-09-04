@@ -54,8 +54,23 @@ static MAGIC *pmail_mg_findext(SV *sv, int type, const MGVTBL *vtbl) {
 /* Message and attachment sizes. Never IV: on the 32-bit smokers an IV is
  * 32 bits and a file can be larger than that. unsigned long long is C99
  * and every compiler on the matrix, including the FreeBSD 9 gcc 4.2, has
- * it. Printed through %llu with an explicit cast. */
+ * it. */
 typedef unsigned long long pmail_u64;
+
+/* Every message here is formatted by perl (newSVpvf, croak, sv_vcatpvf),
+ * and perl's formatter only understands "ll" when IVSIZE >= 8. On a 32-bit
+ * perl "%llu" is copied out verbatim and its argument is left on the list,
+ * so every conversion after it takes the wrong one - a later %s reads a
+ * size as a pointer. Sizes go through this instead, as %s. */
+#define PMAIL_U64_LEN 21
+
+static char *pmail_u64_str(char *buf, pmail_u64 v)
+{
+    char *p = buf + PMAIL_U64_LEN - 1;
+    *p = '\0';
+    do { *--p = (char)('0' + (int)(v % 10)); v /= 10; } while (v);
+    return p;
+}
 
 #define PMAIL_CRLF "\r\n"
 

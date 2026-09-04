@@ -1,6 +1,6 @@
 package HTML::FormHandler::Widget::Form::Role::HTMLAttributes;
 # ABSTRACT: set HTML attributes on the form tag
-$HTML::FormHandler::Widget::Form::Role::HTMLAttributes::VERSION = '0.40068';
+$HTML::FormHandler::Widget::Form::Role::HTMLAttributes::VERSION = '0.410001';
 use Moose::Role;
 
 sub html_form_tag {
@@ -53,7 +53,7 @@ HTML::FormHandler::Widget::Form::Role::HTMLAttributes - set HTML attributes on t
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 AUTHOR
 

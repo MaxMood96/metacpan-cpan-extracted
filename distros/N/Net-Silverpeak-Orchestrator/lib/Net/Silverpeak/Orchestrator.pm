@@ -1,5 +1,5 @@
 package Net::Silverpeak::Orchestrator;
-$Net::Silverpeak::Orchestrator::VERSION = '0.017000';
+$Net::Silverpeak::Orchestrator::VERSION = '0.018000';
 # ABSTRACT: Silverpeak Orchestrator REST API client library
 
 use 5.024;
@@ -544,6 +544,41 @@ sub delete_servicegroup($self, $name) {
 }
 
 
+sub list_compound_applications($self, $resource_key='userDefined') {
+    my $res = $self->_is_version_93
+        ? $self->get('/gms/rest/applicationDefinition',
+            {
+                resourceKey => $resource_key,
+                base => 'compoundClassification',
+            })
+        : $self->get('/gms/rest/applicationDefinition/compoundClassification',
+            { resourceKey => $resource_key });
+    $self->_error_handler($res)
+        unless $res->code == 200;
+    return $res->data;
+}
+
+
+sub create_or_update_compound_application($self, $id, $data) {
+    $data->{id} = $id;
+
+    my $res = $self->_post_with_params('/gms/rest/applicationDefinition/compoundClassification', { id => $id }, $data);
+    $self->_error_handler($res)
+        unless $res->code == 200;
+    return 1;
+}
+
+
+sub delete_compound_application($self, $id) {
+    my $res = $self->_is_version_93
+        ? $self->delete('/gms/rest/applicationDefinition/compoundClassification', { id => $id })
+        : $self->delete('/gms/rest/applicationDefinition/compoundClassification/' . uri_escape($id));
+    $self->_error_handler($res)
+        unless $res->code == 200;
+    return 1;
+}
+
+
 sub list_domain_applications($self, $resource_key='userDefined') {
     my $res = $self->_is_version_93
         ? $self->get('/gms/rest/applicationDefinition',
@@ -636,7 +671,7 @@ Net::Silverpeak::Orchestrator - Silverpeak Orchestrator REST API client library
 
 =head1 VERSION
 
-version 0.017000
+version 0.018000
 
 =head1 SYNOPSIS
 
@@ -924,6 +959,27 @@ Returns true on success.
 
 Throws an exception on error.
 
+=head2 list_compound_applications
+
+Returns an arrayref of compound applications for a resource key which
+defaults to 'userDefined'.
+
+=head2 create_or_update_compound_application
+
+Takes a compound application id, not compound application name, and a hashref of its config.
+
+Returns true on success.
+
+Throws an exception on error.
+
+=head2 delete_compound_application
+
+Takes a compound application id, not compound application name.
+
+Returns true on success.
+
+Throws an exception on error.
+
 =head2 list_domain_applications
 
 Returns an arrayref of domain name applications for a resource key which
@@ -993,7 +1049,7 @@ The only workaround is to set an expiration date for it.
 
 =head1 AUTHOR
 
-Alexander Hartmaier <abraxxa@cpan.org>
+Alexander Hartmaier <alex@hartmaier.priv.at>
 
 =head1 COPYRIGHT AND LICENSE
 

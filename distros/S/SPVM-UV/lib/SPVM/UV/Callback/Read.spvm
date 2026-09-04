@@ -1,0 +1,9 @@
+# Copyright (c) 2026 Yuki Kimoto
+# MIT License
+
+class UV::Callback::Read : interface_t {
+  
+  use UV::Handle::Stream;
+  
+  required method : void ($uv_stream : UV::Handle::Stream, $nread : int, $buffer : string);
+}

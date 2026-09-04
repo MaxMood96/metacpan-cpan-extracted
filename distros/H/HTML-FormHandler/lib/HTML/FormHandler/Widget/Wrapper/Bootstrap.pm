@@ -1,6 +1,6 @@
 package HTML::FormHandler::Widget::Wrapper::Bootstrap;
 # ABSTRACT: Twitter Bootstrap 2.0 field wrapper
-$HTML::FormHandler::Widget::Wrapper::Bootstrap::VERSION = '0.40068';
+$HTML::FormHandler::Widget::Wrapper::Bootstrap::VERSION = '0.410001';
 use Moose::Role;
 use namespace::autoclean;
 use HTML::FormHandler::Render::Util ('process_attrs');
@@ -14,7 +14,7 @@ sub wrap_field {
 
     my $output;
     # is this a control group or a form action?
-    my $form_actions = 1 if ( $self->name eq 'form_actions' || $self->type_attr eq 'submit'
+    my $form_actions = ( $self->name eq 'form_actions' || $self->type_attr eq 'submit'
         || $self->type_attr eq 'reset' );
     # create attribute string for wrapper
     my $attr = $self->wrapper_attributes($result);
@@ -105,7 +105,7 @@ HTML::FormHandler::Widget::Wrapper::Bootstrap - Twitter Bootstrap 2.0 field wrap
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

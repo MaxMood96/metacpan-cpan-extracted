@@ -60,6 +60,6 @@
          "web" : "https://github.com/openSUSE/cavil-matcher"
       }
    },
-   "version" : "1.04",
+   "version" : "1.05",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

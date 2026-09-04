@@ -372,6 +372,7 @@ static SV *pmail_resend_payload(pTHX_ HV *self, HV *spec, pmail_msg *m, SV **ref
                 struct stat st;
                 int fd;
                 SV *raw;
+                char sb[PMAIL_U64_LEN];
                 if (stat(path, &st) != 0) {
                     *refusal = newSVpvf("cannot read attachment '%s': %s", path,
                                         strerror(errno));
@@ -379,10 +380,10 @@ static SV *pmail_resend_payload(pTHX_ HV *self, HV *spec, pmail_msg *m, SV **ref
                     return NULL;
                 }
                 if ((NV)st.st_size > maxatt) {
-                    *refusal = newSVpvf("attachment '%s' is %llu bytes, over the resend "
+                    *refusal = newSVpvf("attachment '%s' is %s bytes, over the resend "
                                         "transport's max_attachment of %.0" NVff,
                                         SvPV_nolen(a->filename),
-                                        (unsigned long long)st.st_size, maxatt);
+                                        pmail_u64_str(sb, (pmail_u64)st.st_size), maxatt);
                     SvREFCNT_dec(ref);
                     return NULL;
                 }

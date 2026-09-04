@@ -1,7 +1,7 @@
 use Test2::V0;
 use Test2::Tools::Compare qw( array bag hash all_items all_values );
 use Test2::Tools::Subtest qw( subtest_buffered );
-use List::Util qw( first );
+use List::Util qw( first max );
 use Net::Silverpeak::Orchestrator;
 
 skip_all "environment variables not set"
@@ -374,7 +374,7 @@ subtest_buffered 'address groups' => sub {
         bag {
             all_items match qr/^[a-zA-Z0-9_\-\.]+$/;
 
-            end();
+            etc();
         },
         'list_addressgroup_names ok');
 
@@ -399,13 +399,13 @@ subtest_buffered 'address groups' => sub {
                         end();
                     };
 
-                    end();
+                    etc();
                 };
 
                 end();
             };
 
-            end();
+            etc();
         },
         'list_addressgroups ok');
 
@@ -521,7 +521,7 @@ subtest_buffered 'service groups' => sub {
         bag {
             all_items match qr/^[a-zA-Z0-9_\-\.]+$/;
 
-            end();
+            etc();
         },
         'list_servicegroup_names ok');
 
@@ -557,13 +557,13 @@ subtest_buffered 'service groups' => sub {
                         end();
                     };
 
-                    end();
+                    etc();
                 };
 
                 end();
             };
 
-            end();
+            etc();
         },
         'list_servicegroups ok');
 
@@ -810,7 +810,59 @@ subtest_buffered 'service groups' => sub {
         'delete_servicegroup ok');
 };
 
-subtest_buffered 'applications' => sub {
+subtest_buffered 'compound applications' => sub {
+    is(my $compound_application_by_id = $orchestrator->list_compound_applications,
+        hash {
+            all_keys number_ge(1);
+            all_vals hash {
+                field id                => number_ge(1);
+                field name              => match qr/^[a-zA-Z0-9_\-\.]+$/;
+                field description       => E();
+                field disabled          => check_isa('JSON::PP::Boolean');
+                field confidence        => validator(sub{ $_ >= 1 && $_ <= 100 });
+                field priority          => validator(sub{ $_ >= 0 && $_ <= 100 });
+                field protocol          => E();
+                field dst_dns           => E();
+                field dst_ip            => E();
+                field dst_port          => E();
+
+                etc();
+            };
+
+            etc();
+        },
+        'list_compound_applications ok');
+
+    my $highest_compound_application_id = max keys $compound_application_by_id->%* // 0;
+    my $test_compound_application_id = $highest_compound_application_id + 1;
+    diag "highest compound application id is $highest_compound_application_id, " .
+        "using $test_compound_application_id for test compound application";
+
+    ok($orchestrator->create_or_update_compound_application($test_compound_application_id, {
+            # don't pass the id, the method ensures it's present
+            name        => 'test_application',
+            confidence  => 100,
+            protocol    => 'tcp',
+            dst_port    => '80|443',
+            dst_ip      => '192.0.2.10',
+        }),
+        'create using create_or_update_compound_application ok');
+
+    ok($orchestrator->create_or_update_compound_application($test_compound_application_id, {
+            # don't pass the id, the method ensures it's present
+            name        => 'test_application',
+            confidence  => 99,
+            protocol    => 'tcp',
+            dst_port    => '80|443',
+            dst_dns     => 'acme.example.org',
+        }),
+        'update using create_or_update_compound_application ok');
+
+    ok($orchestrator->delete_compound_application($test_compound_application_id),
+        'delete_compound_application ok');
+};
+
+subtest_buffered 'domain applications' => sub {
     is($orchestrator->list_domain_applications,
         bag {
             all_items hash {
@@ -823,7 +875,7 @@ subtest_buffered 'applications' => sub {
                 end();
             };
 
-            end();
+            etc();
         },
         'list_domain_applications ok');
 
@@ -850,7 +902,7 @@ subtest_buffered 'application groups' => sub {
                 field apps => bag {
                     all_items match qr/^[a-zA-Z0-9_\-\.]+$/;
 
-                    end();
+                    etc();
                 };
 
                 etc();

@@ -6695,6 +6695,210 @@ static void S_emit_row(pTHX_ AV **rowp, SV *field, bool use_cb, SV *callback, AV
 	*rowp = newAV();
 }
 
+/*read_table's fast path: assembling the output shape here instead of in perl.
+
+read_table used to hand every single row to a perl closure that rebuilt it as
+a hash, one field at a time.  Measured on a 300,000 x 5 CSV, that closure was
+79% of read_table's wall clock and this parser only 21%, so the shape the
+caller asked for is now built here, from the fields the parser already has.
+
+The closure is still what reads the header -- it has to be, since the header
+is where every message read_table can produce comes from -- and it is still
+the only path for the shapes that need per-row perl: 'hoh' names each row from
+one of its own columns, and a 'filter' is perl by definition.  read_table
+passes a plan hash only when neither applies; the parser looks at it after
+each callback returns, and once the callback has filled it in, takes over.
+
+The plan's keys, all set by read_table's install_plan():
+
+  keys  the output column names, header order, duplicates already collapsed
+  idx   for each of those, the field index to take it from.  This is where a
+        duplicate column name is resolved: idx holds the LAST field carrying
+        the name, which is what "later values win" means when the perl path
+        builds one hash per row.
+  ncol  the field count every data row must have -- the full header width,
+        which is >= the number of output columns when names repeat
+  out    mode 0: the array read_table returns.  mode 1: the column arrays, in
+         the same order as keys.
+  mode   0 = aoh, one hash per row; 1 = hoa, one array per column
+  na     the na.strings set, or undef when there is none
+  file   for the alignment message
+  row    a REFERENCE to read_table's $data_row, read once when the plan is
+         picked up: the callback has already emitted the rows before this
+         point, and the alignment message counts rows from 1 across both.*/
+typedef struct {
+	AV     *out;
+	SV    **keys;	//mode 0 only; owned by the plan hash, not by us
+	AV    **cols;	//mode 1 only; ditto
+	size_t *idx;	//validated against ncol in S_plan_init()
+	HV     *na;	//NULL when no na.strings were given
+	const char *file;
+	size_t  nout;
+	size_t  ncol;
+	size_t  row;	//data rows emitted so far, by both paths together
+	short int mode;	// 0 = aoh, 1 = hoa
+	bool    active;	//has the callback filled the plan in yet
+} csv_plan;
+
+/*One required plan key, or a croak.  install_plan() is the only thing that
+writes a plan, so none of these can fire from read_table -- but every idx below
+indexes a C array with a number that came from perl, and a croak is a better
+answer than a crash if _parse_csv_file ever gets a plan from somewhere else.*/
+static SV *S_plan_key(pTHX_ HV *restrict h, const char *restrict k)
+{
+	SV **e = hv_fetch(h, k, (I32)strlen(k), 0);
+	if (!e || !*e || !SvOK(*e))
+		croak("_parse_csv_file: plan is missing '%s'", k);
+	return *e;
+}
+
+/*As above, for a key that has to hold a reference to type t.*/
+static SV *S_plan_ref(pTHX_ HV *restrict h, const char *restrict k, svtype t)
+{
+	SV *sv = S_plan_key(aTHX_ h, k);
+	if (!SvROK(sv) || SvTYPE(SvRV(sv)) != t)
+		croak("_parse_csv_file: plan key '%s' is the wrong kind of reference", k);
+	return SvRV(sv);
+}
+
+/*Read the plan hash into the struct above, once, the first time read_table has
+filled it in.  Every SV, AV and HV pointer taken here is borrowed: the plan
+hash is a lexical in read_table and outlives this parse, so the only things
+this frees are the three C arrays, from S_plan_free().*/
+static void S_plan_init(pTHX_ csv_plan *restrict p, HV *restrict h)
+{
+	AV *keys, *idx;
+	size_t j;
+
+	keys    = (AV*)S_plan_ref(aTHX_ h, "keys", SVt_PVAV);
+	idx     = (AV*)S_plan_ref(aTHX_ h, "idx",  SVt_PVAV);
+	p->out  = (AV*)S_plan_ref(aTHX_ h, "out",  SVt_PVAV);
+	p->ncol = (size_t)SvUV(S_plan_key(aTHX_ h, "ncol"));
+	p->mode = (short int)SvIV(S_plan_key(aTHX_ h, "mode"));
+	p->file = SvPV_nolen_const(S_plan_key(aTHX_ h, "file"));
+	{	/*a reference to read_table's $data_row, not a copy: it is read
+		here, which is after the callback has emitted any rows of its own*/
+		SV *rsv = S_plan_key(aTHX_ h, "row");
+		if (!SvROK(rsv))
+			croak("_parse_csv_file: plan key 'row' is not a reference");
+		p->row = (size_t)SvUV(SvRV(rsv));
+	}
+	{
+		SV **e = hv_fetchs(h, "na", 0);
+		p->na = (e && *e && SvROK(*e) && SvTYPE(SvRV(*e)) == SVt_PVHV)
+		        ? (HV*)SvRV(*e) : NULL;
+	}
+	if (p->mode != 0 && p->mode != 1)
+		croak("_parse_csv_file: plan 'mode' %d is not 0 (aoh) or 1 (hoa)",
+		      (int)p->mode);
+	if (av_len(idx) != av_len(keys))
+		croak("_parse_csv_file: plan 'idx' and 'keys' are different lengths");
+
+	p->nout = (size_t)(av_len(keys) + 1);
+	Newx(p->idx,  p->nout ? p->nout : 1, size_t);
+	Newx(p->keys, p->nout ? p->nout : 1, SV*);
+	for (j = 0; j < p->nout; j++) {
+		SV **ie = av_fetch(idx,  (SSize_t)j, 0);
+		SV **ke = av_fetch(keys, (SSize_t)j, 0);
+		IV   i  = (ie && *ie) ? SvIV(*ie) : -1;
+		if (i < 0 || (UV)i >= (UV)p->ncol || !ke || !*ke)
+			croak("_parse_csv_file: plan 'idx' entry %" UVuf " is not a field "
+			      "of a %" UVuf "-column row", (UV)j, (UV)p->ncol);
+		p->idx[j]  = (size_t)i;
+		p->keys[j] = *ke;
+	}
+	if (p->mode == 1) {
+		if ((size_t)(av_len(p->out) + 1) != p->nout)
+			croak("_parse_csv_file: plan 'out' has one array per column in "
+			      "hoa mode");
+		Newx(p->cols, p->nout ? p->nout : 1, AV*);
+		for (j = 0; j < p->nout; j++) {
+			SV **ce = av_fetch(p->out, (SSize_t)j, 0);
+			if (!ce || !*ce || !SvROK(*ce) || SvTYPE(SvRV(*ce)) != SVt_PVAV)
+				croak("_parse_csv_file: plan 'out' entry %" UVuf " is not an "
+				      "ARRAY reference", (UV)j);
+			p->cols[j] = (AV*)SvRV(*ce);
+		}
+	}
+	p->active = TRUE;
+}
+
+/*Save-stack destructor for the plan.  The struct is on the heap rather than
+the XS body's stack because a croak inside S_fast_row() unwinds that frame
+before the save stack is run, and this would then be freeing through a
+dangling pointer.*/
+static void S_plan_free(pTHX_ void *v)
+{
+	csv_plan *p = (csv_plan*)v;
+	Safefree(p->idx);
+	Safefree(p->keys);
+	Safefree(p->cols);
+	Safefree(p);
+}
+
+/*One data row, straight from the parser's field list into the output shape.
+
+The field SVs are MOVED, not copied: the row AV holds the only reference to
+each, so handing it to the hash or the column array costs a pointer rather
+than a newSVsv() of every cell.  The AV is then reset to empty and reused for
+the next row.  Any field no output column asked for -- which happens only when
+the header repeats a name -- is released here instead.
+
+An empty field, and a field listed in na.strings, become undef, which is the
+same rule the perl path applies and the same one that has always made an empty
+cell undef rather than "".  Every cell is SvPOK -- the parser builds each one
+with newSVsv() from the field accumulator, which is a PV from newSVpvs("") on
+-- so SvCUR() is the whole of the "is it empty" test.
+
+restrict holds on both: row is the parser's own buffer, never one of the arrays
+the plan points at, and the plan is not reachable from it.*/
+static void S_fast_row(pTHX_ csv_plan *restrict p, AV *restrict row)
+{
+	SV **ary;
+	HV  *h = NULL;
+	size_t j, w = (size_t)(AvFILLp(row) + 1);
+
+	if (w != p->ncol) {
+		/*The row is this function's to free: read_table's die() would have
+		been thrown with the row already mortal, and croak() here unwinds
+		past the caller's local before it can drop it.*/
+		size_t at = p->row + 1;
+		SvREFCNT_dec((SV*)row);
+		croak("Alignment error on %s data row %" UVuf " (%" UVuf " fields vs %" UVuf " headers).\n",
+		      p->file, (UV)at, (UV)w, (UV)p->ncol);
+	}
+	p->row++;
+	ary = AvARRAY(row);
+	if (p->mode == 0) {
+		h = newHV();
+		hv_ksplit(h, (IV)p->nout);	//no rehash while the row is filled
+	}
+	for (j = 0; j < p->nout; j++) {
+		SV *v = ary[p->idx[j]];
+		ary[p->idx[j]] = NULL;	//ownership leaves the row here
+		if (v && (SvCUR(v) == 0
+		          || (p->na && hv_exists_ent(p->na, v, 0)))) {
+			SvREFCNT_dec(v);
+			v = NULL;
+		}
+		if (!v)
+			v = newSV(0);	//undef: an empty or na.strings cell
+		if (p->mode == 0) {
+			if (!hv_store_ent(h, p->keys[j], v, 0))
+				SvREFCNT_dec(v);
+		} else {
+			av_push(p->cols[j], v);
+		}
+	}
+	for (j = 0; j < p->ncol; j++) {	//only a repeated header name leaves any
+		SvREFCNT_dec(ary[j]);
+		ary[j] = NULL;
+	}
+	AvFILLp(row) = -1;
+	if (p->mode == 0)
+		av_push(p->out, newRV_noinc((SV*)h));
+}
+
 static void lm_append(pTHX_ char **bufp, size_t *lenp, size_t *capp, const char *s){
 	size_t slen = strlen(s);
 	size_t sep  = (*lenp > 0) ? 1 : 0;
@@ -15865,13 +16069,15 @@ PPCODE:
 	XSRETURN_EMPTY;
 }
 
-SV* _parse_csv_file(char* file, const char* sep_str, const char* comment_str, SV* callback = &PL_sv_undef)
+SV* _parse_csv_file(char* file, const char* sep_str, const char* comment_str, SV* callback = &PL_sv_undef, SV* plan_sv = &PL_sv_undef)
 PREINIT:
 	PerlIO *fp;
 	AV *data = NULL;
 	AV *current_row = NULL;
 	SV *field = NULL;
 	SV *line_sv = NULL;
+	HV *plan_hv = NULL;
+	csv_plan *plan = NULL;
 	bool in_quotes = 0, post_quote = 0, use_cb = 0;
 	size_t sep_len, comment_len;
 	char sep0 = 0;
@@ -15882,6 +16088,17 @@ CODE:
 		else
 			croak("_parse_csv_file: callback must be a CODE reference");
 	}
+/*The fast path (see csv_plan above) is offered only alongside a callback:
+the callback reads the header, then fills this hash in and hands the rest of
+the file to S_fast_row().  read_table passes it only for the shapes that need
+no per-row perl.*/
+	if (SvOK(plan_sv)) {
+		if (!use_cb)
+			croak("_parse_csv_file: a plan needs a callback to fill it in");
+		if (!SvROK(plan_sv) || SvTYPE(SvRV(plan_sv)) != SVt_PVHV)
+			croak("_parse_csv_file: plan must be a HASH reference");
+		plan_hv = (HV*)SvRV(plan_sv);
+	}
 	sep_len = sep_str ? strlen(sep_str) : 0;
 	comment_len = comment_str ? strlen(comment_str) : 0;
 	sep0 = sep_len ? sep_str[0] : 0;
@@ -15890,6 +16107,8 @@ CODE:
 		croak("Could not open file '%s'", file);
 	ENTER;
 	SAVEDESTRUCTOR_X(S_pclose, fp);
+	Newxz(plan, 1, csv_plan);
+	SAVEDESTRUCTOR_X(S_plan_free, plan);
 	line_sv = newSV(128);
 	SAVEFREESV(line_sv);
 	field = newSVpvs("");
@@ -15983,11 +16202,28 @@ CODE:
 			sv_catpvn(field, "\n", 1);
 		} else {
 			post_quote = 0;
-			S_emit_row(aTHX_ &current_row, field, use_cb, callback, data);
+			if (plan->active) {
+				av_push(current_row, newSVsv(field));
+				sv_setpvs(field, "");
+				S_fast_row(aTHX_ plan, current_row);
+			} else {
+				S_emit_row(aTHX_ &current_row, field, use_cb, callback, data);
+				/*The callback fills the plan in on the row that fixes
+the header, so this is looked at once per row until it does -- twice in
+practice, and never again afterwards.*/
+				if (plan_hv && hv_exists(plan_hv, "out", 3))
+					S_plan_init(aTHX_ plan, plan_hv);
+			}
 		}
 	}
 	if (in_quotes) {
-		S_emit_row(aTHX_ &current_row, field, use_cb, callback, data);
+		if (plan->active) {
+			av_push(current_row, newSVsv(field));
+			sv_setpvs(field, "");
+			S_fast_row(aTHX_ plan, current_row);
+		} else {
+			S_emit_row(aTHX_ &current_row, field, use_cb, callback, data);
+		}
 	}
 	SvREFCNT_dec((SV*)current_row);
 	LEAVE;
@@ -21041,30 +21277,188 @@ void seq(from, to, by = 1.0)
 	NV by
 PPCODE:
 	{
-		if (by == 0.0) {//Handle the zero 'by' case
-			if (from == to) {
-				EXTEND(SP, 1);
-				mPUSHn(from);
-				XSRETURN(1);
-			} else {
-				croak("invalid 'by' argument: cannot be zero when from != to");
-			}
+	/*R's seq(), which is base::seq.default() -- R 4.6.1
+	src/library/base/R/seq.R -- for the from/to/by case, plus from:to (that
+	is seq_colon() in src/main/seq.c) for the case where 'by' is omitted.
+	Both are transcribed rather than approximated: every fuzz factor and
+	degenerate case below decides a length or an endpoint that a plain
+	(to - from)/by loop gets wrong, and up to 0.314 this function was that
+	plain loop.
+
+	seq.default() and the seq.int() primitive are not the same function and
+	do not agree, so it matters which one is being copied.  seq.int()
+	tolerates a slightly negative n := (to - from)/by (it rejects only
+	n < -1e-10), allows 100 * INT_MAX elements, and short-circuits
+	by = +/-1 to from:to; seq.default() rejects any negative n, caps at
+	INT_MAX, and reaches from:to only when 'by' is genuinely absent.  This is
+	seq.default(), because that is what R's seq() calls -- which is why
+	seq(1, 4.9999999) has five elements here and seq(1, 4.9999999, 1) has
+	four.
+
+	The order of the checks is R's, and it is load-bearing: the
+	"indistinguishable endpoints" collapse sits after the sign and too-small
+	errors, so seq(1e15, 1e15 + 20, -2) croaks rather than returning the
+	single value 1e15.
+
+	  'from', 'to' must be finite                          -> croak
+	  'by' absent                                          -> from:to
+	  del == 0 && to == 0                                  -> to
+	  n := del/by, or to/by - from/by when del overflowed
+	  !finite(n), with by == 0 && del == 0                 -> from
+	  !finite(n)                                           -> croak
+	  n < 0                                                -> croak
+	  n > INT_MAX                                          -> croak
+	  |del| / max(|to|,|from|) < 100*eps                   -> from
+	  n_elem := trunc(n + 1e-10) + 1
+	  element i := from + i*by, last one clamped to 'to'*/
+	/*R's two fuzz factors, at the spellings R uses: 1e-10 is the one in
+	seq.default() (and do_seq()'s `#define FEPS 1e-10`), applied to n before
+	truncating; seq_colon() instead adds 1 + FLT_EPSILON.  Neither is derived
+	from the working precision -- they are the fudge R has settled on so that
+	seq(0, 1, 0.1) yields 11 values rather than 10 -- so they do not scale
+	with NV width.  The looser one is why 1:4.9999999 is 1 2 3 4 5.*/
+	const NV feps       = 1e-10;
+	const NV colon_feps = FLT_EPSILON;
+	/*Largest integer an NV names exactly on a double build, 2**53.  Below it
+	the IV fast path at the bottom of this function reproduces the NV formula
+	value for value; above it the two can disagree, so the fast path stops
+	there.  A long-double or __float128 NV carries at least 64 mantissa bits
+	and could go further, but the bound stays at the narrowest width so that
+	one call returns the same values on every build.*/
+	const NV iv_exact = 9007199254740992.0;
+	const bool by_given = (items >= 3); //an omitted 'by' is R's from:to, either way
+	const I32 gimme = GIMME_V;  //I32 is what block_gimme() returns
+	size_t n_elem   = 1;    // how many values the sequence has
+	NV     first    = from; // element 0
+	NV     step     = 0.0;  // element i is first + i*step, unless quarter
+	NV     raw_last = from; // element n_elem-1 before R's clamp to 'to'
+	NV     last_val = from; // element n_elem-1 after it
+	/*TRUE when |to - from| overflowed the NV.  Element i is then
+	4 * (first/4 + i*(step/4)), which is what R does to keep the
+	intermediate finite; scaling by 4 either way is exact, so no value moves
+	that does not have to.*/
+	bool   quarter = FALSE;
+
+	if (!nv_isfinite(from)) croak("seq: 'from' must be a finite number");
+	if (!nv_isfinite(to))   croak("seq: 'to' must be a finite number");
+	{
+	const NV del = to - from;
+
+	if (!by_given) {
+		/*from:to.  This branch has the looser fuzz and no clamp, and it is
+		the only one that runs unit steps in whichever direction 'to' lies --
+		seq(5, 1) is 5 4 3 2 1, where up to 0.314 it croaked.*/
+		const NV r = nv_fabs(del);
+		/*R's cap here is R_XLEN_T_MAX, but EXTEND() casts its count to int
+		on perl 5.10 and 5.12, so int is the binding limit; the message is
+		R's.  A sequence that long would need 2.1e9 SVs and cannot be built
+		on any machine, so the two caps are indistinguishable in practice.*/
+		if (r >= (NV)INT_MAX) croak("seq: result would be too long a vector");
+		step = (del >= 0.0) ? 1.0 : -1.0;
+		if (from == nv_trunc(from) && to == nv_trunc(to) && r <= iv_exact)
+			n_elem = (size_t)r + 1;     //both ends integral: exact count, no fuzz
+		else
+			n_elem = (size_t)(r + 1.0 + colon_feps);
+		last_val = raw_last = first + (NV)(n_elem - 1) * step;
+	} else if (del == 0.0 && to == 0.0) {
+		last_val = raw_last = to;       //R returns 'to' here whatever 'by' is
+	} else {
+		const bool finite_del = nv_isfinite(del);
+		//to/by - from/by is R's rewrite for a (to - from) that overflowed
+		const NV n = finite_del ? del / by : to / by - from / by;
+		if (!nv_isfinite(n)) {
+			//by == 0 with from == to is the one un-steppable case R allows
+			if (!(del == 0.0 && by == 0.0))
+				croak("seq: invalid '(to - from)/by'");
+			last_val = raw_last = from;
+		} else if (n < 0.0) {
+			croak("seq: wrong sign in 'by' argument");
+		} else if (n > (NV)INT_MAX) {
+			croak("seq: 'by' argument is much too small");
+		} else if (finite_del &&
+		           nv_fabs(del) / nv_fmax(nv_fabs(to), nv_fabs(from)) < 100.0 * DBL_EPSILON) {
+	/*'from' and 'to' are too close together for the count
+	(to - from)/by to mean anything, so R returns 'from' alone.
+	This is why seq(1e15, 1e15 + 20, 2) is one value, not eleven.
+
+	DBL_EPSILON, not NV_EPSILON, which is a deliberate departure
+	from this file's rule about double-sized constants: R's
+	100 * .Machine$double.eps is a third fuzz factor rather than a
+	tolerance on this build's arithmetic, so like the 1e-10 and
+	FLT_EPSILON above it belongs to seq()'s definition and does not
+	scale with NV width.  Scaling it was tried and reverted: with
+	NV_EPSILON this same call returns eleven values on perl-5.12.5
+	and 5.44.0-quadmath and one on perl-5.44.0, which is a worse
+	answer than R's on every build.*/
+			last_val = raw_last = from;
+		} else {
+			n_elem  = (size_t)(n + feps) + 1;
+			step    = by;
+			quarter = !finite_del;
+			//see the EXTEND() note above; R's own cap allows exactly one more
+			if (n_elem > (size_t)INT_MAX)
+				croak("seq: 'by' argument is much too small");
+			raw_last = quarter
+			         ? 4.0 * (first / 4.0 + (NV)(n_elem - 1) * (step / 4.0))
+			         : first + (NV)(n_elem - 1) * step;
+	/*R applies pmin(x, to) / pmax(x, to) to the whole vector, but
+	the sequence is monotone and feps can carry it at most one step
+	past 'to', so the last element is the only one that can need it.
+	Added in R 2.9.0; it is what stops seq(0, 1, 0.00025 + 5e-16)
+	from overshooting 1, which R's tests/reg-tests-1b.R asserts.*/
+			last_val = raw_last;
+			if ((step > 0.0 && last_val > to) || (step < 0.0 && last_val < to))
+				last_val = to;
 		}
-		if ((from < to && by < 0.0) || (from > to && by > 0.0)) {
-			croak("wrong sign in 'by' argument");
-		}// Check for wrong direction / infinite loop
-	/*Calculate number of elements.
-	R uses a small epsilon (like 1e-10) to avoid dropping the last
-	element due to floating point inaccuracies.*/
-		NV n_elements_d = (to - from) / by;
-		if (n_elements_d < 0.0) n_elements_d = 0.0;
-		size_t n_elements = (n_elements_d + 1e-10) + 1;
-		// Pre-extend the stack to avoid reallocating inside the loop
-		EXTEND(SP, n_elements);
-		for (size_t i = 0; i < n_elements; i++) {
-			mPUSHn(from + i * by);
-		}
-		XSRETURN(n_elements);
+	}
+	}
+	{
+	/*Push IVs, not NVs, when the sequence is exactly an integer one.  The
+	numbers are identical either way -- this picks an SV body, not an
+	arithmetic -- but it is the cheaper body by a wide margin, and it is also
+	what R returns here (seq.default()'s `int` branch yields an integer
+	vector).  Measured on perl-5.44.0 at n = 1e6: building the returned list
+	drops from 16.3 to 13.4 ns/element, and join(',', seq(1, n)), which
+	stringifies every element, from 409 to 83 ns/element -- an IV never
+	reaches Gconvert().  raw_last is bounded as well as last_val so that
+	i * istep below cannot leave IV range: the unclamped endpoint bounds
+	every intermediate.*/
+	const bool use_iv = !quarter
+		&& first    == nv_trunc(first)
+		&& step     == nv_trunc(step)
+		&& last_val == nv_trunc(last_val)
+		&& nv_fabs(first)    <= iv_exact
+		&& nv_fabs(raw_last) <= iv_exact
+		&& nv_fabs(last_val) <= iv_exact;
+	/*Nothing the caller can reach needs the other n_elem-1 values: in void
+	context none of them, and in scalar context only the last, which is what
+	the caller's assignment reads off the top of the stack -- the same answer
+	perl gives for any list-returning sub, and what this function returned
+	before.  Building them anyway is not free and is not reclaimed: measured
+	on perl-5.44.0, `seq(1, 1e7);` as a statement of its own took 190 ms and
+	left 384 MB of resident memory behind for the life of the process (the
+	grown argument stack, the grown mortal stack, and the SV arenas the ten
+	million heads came out of).  It now takes 5 us and no memory.*/
+	if (gimme == G_VOID) XSRETURN(0);
+	if (gimme == G_SCALAR) {
+		EXTEND(SP, 1);
+		if (use_iv) mPUSHi((IV)last_val); else mPUSHn(last_val);
+		XSRETURN(1);
+	}
+	EXTEND(SP, (SSize_t)n_elem);
+	if (use_iv) {
+		const IV i0 = (IV)first, istep = (IV)step;
+		for (size_t i = 0; i + 1 < n_elem; i++) mPUSHi(i0 + (IV)i * istep);
+	} else if (quarter) {
+		const NV f4 = first / 4.0, s4 = step / 4.0;
+		for (size_t i = 0; i + 1 < n_elem; i++) mPUSHn(4.0 * (f4 + (NV)i * s4));
+	} else {
+		for (size_t i = 0; i + 1 < n_elem; i++) mPUSHn(first + (NV)i * step);
+	}
+	//the last element is pushed from last_val, which carries R's clamp
+	if (use_iv) mPUSHi((IV)last_val); else mPUSHn(last_val);
+	XSRETURN((SSize_t)n_elem);
+	}
 	}
 
 SV* rnorm(...)
@@ -22141,8 +22535,7 @@ CODE:
 		per observation (40 MB at n = 5e6) to hold three pointers.*/
 		size_t names_cap = 8;
 		Newxz(group_names, names_cap, GroupLabel);
-		// Map string group names → contiguous integer IDs
-		HV *group_map    = newHV();
+		HV *group_map    = newHV();// Map string group names → contiguous integer IDs
 		size_t          next_group_id = 0;
 		for (size_t i = 0; i < nx; i++) {
 			SV **x_el = av_fetch(x_av, i, 0);
@@ -22151,10 +22544,10 @@ CODE:
 					  && g_el && SvOK(*g_el)) {
 				NV v = SvNV(*x_el);
 				if (nv_isnan(v)) continue; //NA to R; see the 'h' path
-				/*SvPV() with the length, not SvPV_nolen() plus strlen(): a
-				label with an embedded NUL was truncated at it, so "a\0X" and
-				"a\0Y" collapsed into one group and deflated the degrees of
-				freedom.  It also drops a strlen() pass per observation.*/
+	/*SvPV() with the length, not SvPV_nolen() plus strlen(): a
+	label with an embedded NUL was truncated at it, so "a\0X" and
+	"a\0Y" collapsed into one group and deflated the degrees of
+	freedom.  It also drops a strlen() pass per observation.*/
 				STRLEN glen;
 				const char *g_str = SvPV(*g_el, glen);
 				const I32 klen = SvUTF8(*g_el) ? -(I32)glen : (I32)glen;
@@ -22547,7 +22940,7 @@ CODE:
 	SV*x_sv = ST(0);
 	NV mean = 0.0, sd = 1.0; //defaults
 	bool give_log = 0;
-	// --- Parse remaining named arguments from the flat stack
+	// Parse remaining named arguments from the flat stack
 	if ((items - 1) % 2 != 0) {
 	  croak("dnorm: Expected an even number of key-value named arguments after 'x'");
 	}
@@ -22574,8 +22967,7 @@ CODE:
 			}
 		}
 		RETVAL = newRV_noinc((SV*)result_av);
-	} else {
-	  // x is a single numeric scalar
+	} else {// x is a single numeric scalar
 	  NV x_val = SvNV(x_sv);
 	  NV res = c_dnorm(x_val, mean, sd, give_log);
 	  RETVAL = newSVnv(res);
@@ -23051,8 +23443,7 @@ CODE:
 			SV *h_row_sv   = NULL;
 			HV *h_row_hv   = NULL;
 			AV *h_row_av   = NULL;
-			// 3. Fetch from $h
-			if (target_root_mode == 1) {
+			if (target_root_mode == 1) {// 3. Fetch from $h
 				HE *h_fetch_he = hv_fetch_ent((HV *)SvRV(h_ref), row_key_sv, 0, 0);
 				if (h_fetch_he) h_row_sv = HeVAL(h_fetch_he);
 			} else {
@@ -23173,7 +23564,7 @@ CODE:
 			AV*av = (AV*)rv;
 			size_t len = av_len(av) + 1;
 			if (items > 1) {
-				// CASE 2b: Array of Hashes (string key) or Array of Arrays (numeric index)
+	// CASE 2b: Array of Hashes (string key) or Array of Arrays (numeric index)
 				SV*arg2 = ST(1);
 				STRLEN klen;
 				const char*key = SvPV(arg2, klen);
@@ -23249,38 +23640,37 @@ CODE:
 					}
 				}
 			} else { // CASE 3: Hash Reference (No 2nd argument)
-				 HE*he;
-				 hv_iterinit(hv);
-				 while ((he = hv_iternext(hv))) {
-					 SV*val = HeVAL(he);
-					 if (SvROK(val)) {// SAFETY CHECK
-						 SV*inner_rv = SvRV(val);
-						 // If it's a Hash of Arrays, count ALL elements in the inner arrays
-						 if (SvTYPE(inner_rv) == SVt_PVAV) {
-							 AV*inner_av = (AV*)inner_rv;
-							 size_t len = av_len(inner_av) + 1;
-							 for (size_t i = 0; i < len; i++) {
-								 SV**valp = av_fetch(inner_av, i, 0);
-								 if (valp) increment_count(aTHX_ counts_hv, *valp, fast_nv);
-							 }
-						 } else if (SvTYPE(inner_rv) == SVt_PVHV) {
-						 // If it's a Hash of Hashes, count ALL elements across all inner keys
-							 HV*inner_hv = (HV*)inner_rv;
-							 HE*inner_he;
-							 hv_iterinit(inner_hv);
-							 while ((inner_he = hv_iternext(inner_hv))) {
-								 SV*inner_val = HeVAL(inner_he);
-								 increment_count(aTHX_ counts_hv, inner_val, fast_nv);
-							 }
-						 } else { //Unrecognized nested reference type
-							 SvREFCNT_dec((SV*)counts_hv);
-							 croak("value_counts: Unsupported nested reference type.");
-						 }
-					 } else {
-						 //Simple scalar value
-						 increment_count(aTHX_ counts_hv, val, fast_nv);
-					 }
-				 }
+				HE*he;
+				hv_iterinit(hv);
+				while ((he = hv_iternext(hv))) {
+					SV*val = HeVAL(he);
+					if (SvROK(val)) {// SAFETY CHECK
+						SV*inner_rv = SvRV(val);
+						// If it's a Hash of Arrays, count ALL elements in the inner arrays
+						if (SvTYPE(inner_rv) == SVt_PVAV) {
+							AV*inner_av = (AV*)inner_rv;
+							size_t len = av_len(inner_av) + 1;
+							for (size_t i = 0; i < len; i++) {
+								SV**valp = av_fetch(inner_av, i, 0);
+								if (valp) increment_count(aTHX_ counts_hv, *valp, fast_nv);
+							}
+						} else if (SvTYPE(inner_rv) == SVt_PVHV) {
+						// If it's a Hash of Hashes, count ALL elements across all inner keys
+							HV*inner_hv = (HV*)inner_rv;
+							HE*inner_he;
+							hv_iterinit(inner_hv);
+							while ((inner_he = hv_iternext(inner_hv))) {
+								SV*inner_val = HeVAL(inner_he);
+								increment_count(aTHX_ counts_hv, inner_val, fast_nv);
+							}
+						} else { //Unrecognized nested reference type
+							SvREFCNT_dec((SV*)counts_hv);
+							croak("value_counts: Unsupported nested reference type.");
+						}
+					} else {//Simple scalar value
+						increment_count(aTHX_ counts_hv, val, fast_nv);
+					}
+				}
 			}
 		} else {// Safely decrement the reference count of our hash before dying to prevent a leak
 			SvREFCNT_dec((SV*)counts_hv);
@@ -23596,16 +23986,13 @@ CODE:
 	  else if (strEQ(key, "rank"))   rank_opt  = SvOK(val) ? (long)SvIV(val) : -1;
 	  else croak("prcomp: unknown argument '%s'", key);
 	}
-
 	if (!x_sv || !SvROK(x_sv))
 	  croak("prcomp: 'x' is a required argument and must be a reference");
-
 	// 3. Detect Data Structure (AoA, AoH, HoA, HoH)
 	bool is_aoa = 0, is_aoh = 0, is_hoa = 0, is_hoh = 0;
 	size_t n_raw = 0, p = 0;
 	char **colnames = NULL;
 	SV *ref = SvRV(x_sv);
-
 	if (SvTYPE(ref) == SVt_PVAV) {
 	  AV *av = (AV*)ref;
 	  n_raw = av_len(av) + 1;
@@ -23619,18 +24006,18 @@ CODE:
 		   } else croak("prcomp: Array reference must contain ArrayRefs (AoA) or HashRefs (AoH)");
 	  }
 	} else if (SvTYPE(ref) == SVt_PVHV) {
-	  HV *hv = (HV*)ref;
-	  if (hv_iterinit(hv) > 0) {
-		   HE *entry = hv_iternext(hv);
-		   SV *val = hv_iterval(hv, entry);
-		   if (SvROK(val) && SvTYPE(SvRV(val)) == SVt_PVAV) {
-			   is_hoa = TRUE;
-			   n_raw = av_len((AV*)SvRV(val)) + 1;
-		   } else if (SvROK(val) && SvTYPE(SvRV(val)) == SVt_PVHV) {
-			   is_hoh = TRUE;
-			   n_raw = hv_iterinit(hv);
-		   } else croak("prcomp: Hash reference must contain ArrayRefs (HoA) or HashRefs (HoH)");
-	  }
+		HV *hv = (HV*)ref;
+		if (hv_iterinit(hv) > 0) {
+			HE *entry = hv_iternext(hv);
+			SV *val = hv_iterval(hv, entry);
+			if (SvROK(val) && SvTYPE(SvRV(val)) == SVt_PVAV) {
+				is_hoa = 1;
+				n_raw = av_len((AV*)SvRV(val)) + 1;
+			} else if (SvROK(val) && SvTYPE(SvRV(val)) == SVt_PVHV) {
+				is_hoh = 1;
+				n_raw = hv_iterinit(hv);
+			} else croak("prcomp: Hash reference must contain ArrayRefs (HoA) or HashRefs (HoH)");
+		}
 	}
 
 	if (n_raw == 0 || (p == 0 && !is_aoh && !is_hoa && !is_hoh)) croak("prcomp: input matrix is empty or has zero columns");
@@ -23669,14 +24056,11 @@ CODE:
 				      (UV)r, (UV)len, (UV)p);
 		}
 	}
-
-	// 4. Extract and Sort Column Names (for named-column inputs)
-	if (is_aoh) {
+	if (is_aoh) {// 4. Extract and Sort Column Names (for named-column inputs)
 		AV *av = (AV*)ref;
 		HV *first = (HV*)SvRV(*av_fetch(av, 0, 0));
 		p = hv_iterinit(first);
 		if (p == 0) croak("prcomp: row hashes cannot be empty");
-
 		colnames = (char**)safemalloc(p * sizeof(char*));
 		size_t c = 0;
 		HE *entry;
@@ -23714,23 +24098,23 @@ CODE:
 	NV *restrict X_mat = (NV*)safemalloc(n_raw * p * sizeof(NV));
 	size_t n = 0;
 	if (is_aoa) {
-	  AV *av = (AV*)ref;
-	  for (size_t i = 0; i < n_raw; i++) {
-		   SV **row_sv = av_fetch(av, i, 0);
-		   if (row_sv && SvROK(*row_sv) && SvTYPE(SvRV(*row_sv)) == SVt_PVAV) {
-			   AV *row_av = (AV*)SvRV(*row_sv);
-			   bool row_ok = TRUE;
-			   for (size_t j = 0; j < p; j++) {
-				   SV **cell_sv = av_fetch(row_av, j, 0);
-				   if (cell_sv && SvOK(*cell_sv) && looks_like_number(*cell_sv)) {
-					   NV v = SvNV(*cell_sv);
-					   if (!nv_isfinite(v)) row_ok = FALSE;
-					   else X_mat[n * p + j] = v;
-				   } else row_ok = FALSE;
-			   }
-			   if (row_ok) n++;
-		   }
-	  }
+		AV *av = (AV*)ref;
+		for (size_t i = 0; i < n_raw; i++) {
+			SV **row_sv = av_fetch(av, i, 0);
+			if (row_sv && SvROK(*row_sv) && SvTYPE(SvRV(*row_sv)) == SVt_PVAV) {
+				AV *row_av = (AV*)SvRV(*row_sv);
+				bool row_ok = TRUE;
+				for (size_t j = 0; j < p; j++) {
+					SV **cell_sv = av_fetch(row_av, j, 0);
+					if (cell_sv && SvOK(*cell_sv) && looks_like_number(*cell_sv)) {
+						NV v = SvNV(*cell_sv);
+						if (!nv_isfinite(v)) row_ok = FALSE;
+						else X_mat[n * p + j] = v;
+					} else row_ok = FALSE;
+				}
+				if (row_ok) n++;
+			}
+		}
 	} else if (is_aoh) {
 	  AV *av = (AV*)ref;
 	  for (size_t i = 0; i < n_raw; i++) {
@@ -23788,12 +24172,12 @@ CODE:
 		}
 	}
 	if (n == 0) {
-	  if (colnames) {
-		   for (size_t i = 0; i < p; i++) Safefree(colnames[i]);
-		   Safefree(colnames);
-	  }
-	  Safefree(X_mat);
-	  croak("prcomp: 0 valid observations after listwise NA deletion");
+		if (colnames) {
+			for (size_t i = 0; i < p; i++) Safefree(colnames[i]);
+			Safefree(colnames);
+		}
+		Safefree(X_mat);
+		croak("prcomp: 0 valid observations after listwise NA deletion");
 	}
 	// 6. Center and Scale
 	NV *restrict cen_vec = (NV*)safecalloc(p, sizeof(NV));
@@ -24885,7 +25269,7 @@ SV* density(...)
 				na_rm = SvTRUE(val) ? TRUE : FALSE;
 			else croak("density: unknown argument '%s'", key);
 		}
-		//R: if(!missing(window) && missing(kernel)) kernel <- window
+	//R: if(!missing(window) && missing(kernel)) kernel <- window
 		if (window >= 0 && kernel < 0) kernel = window;
 		if (kernel < 0) kernel = DENS_K_GAUSSIAN;
 		if (give_rkern) {

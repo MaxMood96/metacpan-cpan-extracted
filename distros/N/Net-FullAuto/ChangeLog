@@ -19,6 +19,11 @@
 #
 #######################################################################
 
+2026-09-03  Brian M. Kelly <Brian.Kelly@fullauto.com>
+
+        * Version 1.0000834 released
+
+        * Added linux script command prepend
 
 2026-05-31  Brian M. Kelly <Brian.Kelly@fullauto.com>
 

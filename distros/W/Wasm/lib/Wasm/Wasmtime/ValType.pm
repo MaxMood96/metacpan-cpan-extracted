@@ -6,7 +6,7 @@ use 5.008004;
 use Wasm::Wasmtime::FFI;
 
 # ABSTRACT: Wasmtime value type class
-our $VERSION = '0.23'; # VERSION
+our $VERSION = '0.24'; # VERSION
 
 
 $ffi_prefix = 'wasm_valtype_';
@@ -27,6 +27,8 @@ foreach my $key (keys %kind)
   my $value = $kind{$key};
   $rkind{$value} = $key;
 }
+# 'externref' is the wasm-c-api name for kind 128; accept it as an alias
+$rkind{externref} = 128;
 
 
 $ffi->attach( new => ['uint8'] => 'wasm_valtype_t' => sub {
@@ -81,7 +83,7 @@ Wasm::Wasmtime::ValType - Wasmtime value type class
 
 =head1 VERSION
 
-version 0.23
+version 0.24
 
 =head1 SYNOPSIS
 
@@ -170,7 +172,7 @@ Graham Ollis <plicease@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2020-2022 by Graham Ollis.
+This software is copyright (c) 2020-2026 by Graham Ollis.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

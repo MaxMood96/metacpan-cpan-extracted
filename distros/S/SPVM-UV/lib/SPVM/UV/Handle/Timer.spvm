@@ -1,0 +1,20 @@
+# Copyright (c) 2026 Yuki Kimoto
+# MIT License
+
+class UV::Handle::Timer extends UV::Handle {
+  
+  use UV::Callback::Timer;
+  use Resource::UV;
+  use UV::Resource::UV;
+  
+  
+  # Fields
+  has timer_cb : rw UV::Callback::Timer;
+  
+  # Class Mehtods
+  native static method new : UV::Handle::Timer ();
+  
+  # Instance Methods
+  native method start : void ($cb : UV::Callback::Timer, $timeout_msec : long, $interval_msec : long = 0);
+  
+}

@@ -3,6 +3,7 @@ package Wasm::Wasmtime::Caller;
 use strict;
 use warnings;
 use 5.008004;
+use FFI::Platypus::Buffer ();
 use Wasm::Wasmtime::FFI;
 use Wasm::Wasmtime::Extern;
 use base qw( Exporter );
@@ -10,10 +11,9 @@ use base qw( Exporter );
 our @EXPORT = qw( wasmtime_caller );
 
 $ffi_prefix = 'wasmtime_caller_';
-$ffi->load_custom_type('::PtrObject' => 'wasmtime_caller_t' => __PACKAGE__);
 
 # ABSTRACT: Wasmtime caller interface
-our $VERSION = '0.23'; # VERSION
+our $VERSION = '0.24'; # VERSION
 
 
 our @callers;
@@ -26,18 +26,28 @@ sub wasmtime_caller (;$)
 
 sub new
 {
-  my($class, $ptr) = @_;
+  my($class, $ptr, $store) = @_;
   bless {
-    ptr => $ptr,
+    ptr   => $ptr,
+    store => $store,
   }, $class;
 }
 
-$ffi->attach( export_get => ['wasmtime_caller_t','wasm_byte_vec_t*'] => 'wasm_extern_t' => sub {
+
+sub store { shift->{store} }
+
+$ffi->attach( export_get => ['opaque','opaque','size_t','wasmtime_extern_t'] => 'bool' => sub {
   my $xsub = shift;
   my $self = shift;
   return undef unless $self->{ptr};
-  my $name = Wasm::Wasmtime::ByteVec->new($_[0]);
-  $xsub->($self, $name);
+  my $name = shift;
+  $name = defined $name ? "$name" : "";
+  my($nptr, $nlen) = FFI::Platypus::Buffer::scalar_to_buffer($name);
+  my $extern = Wasm::Wasmtime::ExternData->new;
+  return undef unless $xsub->($self->{ptr}, $nptr, $nlen, $extern);
+  my $obj = Wasm::Wasmtime::Extern->from_extern($extern, $self->{store});
+  $extern->free;
+  $obj;
 });
 
 1;
@@ -54,7 +64,7 @@ Wasm::Wasmtime::Caller - Wasmtime caller interface
 
 =head1 VERSION
 
-version 0.23
+version 0.24
 
 =head1 SYNOPSIS
 
@@ -64,8 +74,8 @@ version 0.23
  {
    # this just uses Platypus to create a utility function
    # to convert a pointer to a C string into a Perl string.
-   use FFI::Platypus 1.00;
-   my $ffi = FFI::Platypus->new( api => 1 );
+   use FFI::Platypus 2.00;
+   my $ffi = FFI::Platypus->new( api => 2 );
    $ffi->attach_cast( 'cstring' => 'opaque' => 'string' );
  }
  
@@ -100,11 +110,7 @@ version 0.23
 
 This class represents the caller's context when calling a Perl L<Wasm::Wasmtime::Func> from
 WebAssembly.  The primary purpose of this structure is to provide access to the caller's
-exported memory.  This allows functions which take pointers as arguments to easily read the
-memory the pointers point into.
-
-This is intended to be a pretty temporary mechanism for accessing the Caller's memory until
-interface types has been fully standardized and implemented.
+exported memory.
 
 =head1 FUNCTIONS
 
@@ -113,13 +119,11 @@ interface types has been fully standardized and implemented.
  my $caller = wasmtime_caller;
  my $caller = wasmtime_caller $index;
 
-This returns the current caller context (an instance of L<Wasm::Wasmtime::Caller>).  If
-the current Perl code wasn't called from WebAssembly, then it will return C<undef>.  If
-C<$index> is given, then that indicates how many WebAssembly call frames to go back
-before the current one.  (This is vaguely similar to how the Perl C<caller> function
-works).
+Returns the current caller context (an instance of L<Wasm::Wasmtime::Caller>), or
+C<undef> if the current Perl code wasn't called from WebAssembly.  C<$index>
+indicates how many WebAssembly call frames to go back.
 
-This function is exported by default using L<Exporter>.
+This function is exported by default.
 
 =head1 METHODS
 
@@ -127,8 +131,14 @@ This function is exported by default using L<Exporter>.
 
  my $extern = $caller->export_get($name);
 
-Returns the L<Wasm::Wasmtime::Extern> for the named export C<$name>.  As of this writing,
-only L<Wasm::Wasmtime::Memory> types are supported.
+Returns the L<Wasm::Wasmtime::Extern> for the named export C<$name>.  As of this
+writing only L<Wasm::Wasmtime::Memory> exports are supported by Wasmtime here.
+
+=head2 store
+
+ my $store = $caller->store;
+
+Returns the L<Wasm::Wasmtime::Store> the caller belongs to.
 
 =head1 SEE ALSO
 
@@ -146,7 +156,7 @@ Graham Ollis <plicease@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2020-2022 by Graham Ollis.
+This software is copyright (c) 2020-2026 by Graham Ollis.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

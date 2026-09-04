@@ -21,7 +21,7 @@ use Data::URIID::Service;
 
 use parent 'Data::Identifier::Interface::Known';
 
-our $VERSION = v0.23;
+our $VERSION = v0.24;
 
 my %names = (
     service => {
@@ -236,6 +236,8 @@ sub lookup {
     croak 'Passed undef as URI' unless defined $uri;
 
     if (blessed($uri) && !$uri->isa('URI')) {
+        my $unhandled;
+
         if (defined(my $displaycolour = eval {$uri->displaycolour})) {
             if (eval {$displaycolour->isa('Data::URIID::Colour')}) {
                 $secondary{attributes} //= {};
@@ -254,9 +256,6 @@ sub lookup {
             # We guess here.
             $uri = $uri->data;
             $type = 'qrcode';
-        } elsif ($uri->isa('Data::Identifier')) {
-            $type = $uri->type->uuid;
-            $uri  = $uri->id;
         } elsif ($uri->isa('Data::TagDB::Tag')) {
             $uri  = Data::Identifier->new(from => $uri);
             $type = $uri->type->uuid;
@@ -275,6 +274,26 @@ sub lookup {
             $secondary{attributes}{roles} = [[Data::Identifier->new(sid => 17)]];
             $secondary{digest} = $data->{digests};
         } else {
+            my $id = eval {Data::Identifier->new(from => $uri)};
+
+            if (defined $id) {
+                $uri = $id;
+            } else {
+                $unhandled = 1;
+            }
+        }
+
+        if ($uri->isa('Data::Identifier')) {
+            $secondary{attributes} //= {};
+            if (defined(my $displayname = $uri->displayname(default => undef, no_defaults => 1))) {
+                $secondary{attributes}{displayname} //= {'*' => $displayname};
+            }
+            if (defined(my $displaycolour = $uri->displaycolour(default => undef, no_defaults => 1))) {
+                $secondary{attributes}{displaycolour} //= {'*' => $displaycolour};
+            }
+            $type = $uri->type->uuid;
+            $uri  = $uri->id;
+        } elsif ($unhandled) {
             croak 'Invalid type of object passed';
         }
     }
@@ -542,7 +561,7 @@ Data::URIID - Extractor for identifiers from URIs
 
 =head1 VERSION
 
-version v0.23
+version v0.24
 
 =head1 SYNOPSIS
 

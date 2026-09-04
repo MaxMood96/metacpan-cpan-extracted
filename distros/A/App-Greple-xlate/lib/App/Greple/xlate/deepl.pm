@@ -1,6 +1,6 @@
 package App::Greple::xlate::deepl;
 
-our $VERSION = "2.01";
+our $VERSION = "2.02";
 
 use v5.14;
 use warnings;
@@ -23,21 +23,82 @@ my %param = (
     clipboard => { max => 5000,       sub => \&clipboard },
     );
 
+sub deepl_command {
+    my @tags = @_;
+    my $glossary = $App::Greple::xlate::glossary;
+    my @c = ('deepl', 'text');
+    push @c, ('--to', $lang_to);
+    push @c, ('--from', $lang_from) if $lang_from ne 'ORIGINAL';
+    push @c, ('--auth-key', $auth_key) if $auth_key;
+    push @c, ('--glossary-id', $glossary) if $glossary;
+    if (@tags) {
+        # Marker placeholders are self-closing XML tags.  Tell DeepL to
+        # preserve their tag names and id attributes instead of treating
+        # them as ordinary translatable text.
+        push @c, '--tag-handling', 'xml',
+            '--non-splitting-tags', join(',', @tags);
+    }
+    if (my @contexts = @{$opt{contexts}}) {
+        push @c, '--context' => join "\n", @contexts;
+    }
+    @c;
+}
+
+sub _xml_wrap {
+    my $text = shift;
+    $text =~ s/&/&amp;/g;
+    $text =~ s/</&lt;/g;
+    $text =~ s/>/&gt;/g;
+    $text =~ s{
+        &lt;([a-z][a-z0-9_]*)\s+([a-z0-9_]+)="(\d+)"\s*/&gt;
+    }{<$1 $2="$3"/>}gx;
+    "<xlate>$text</xlate>";
+}
+
+sub _marker_tags {
+    my $text = shift;
+    my %tag;
+    $tag{$1} = 1 while $text =~ m{
+        <([a-z][a-z0-9_]*)\s+[a-z0-9_]+="\d+"\s*/>
+    }gx;
+    sort keys %tag;
+}
+
+sub _xml_unwrap {
+    my($text, $source) = @_;
+    $text =~ s/\A<xlate>//
+        or die "DeepL XML response has no opening wrapper.\n";
+    $text =~ s{</xlate>\r?\n?\z}{}
+        or die "DeepL XML response has no closing wrapper.\n";
+    $text =~ s{
+        <([a-z][a-z0-9_]*)\s+([a-z0-9_]+)=["'](\d+)["']\s*/>
+    }{<$1 $2="$3" />}gx;
+    $text =~ s{
+        <([a-z][a-z0-9_]*)\s+([a-z0-9_]+)=["'](\d+)["']\s*>\s*</\1>
+    }{<$1 $2="$3" />}gx;
+    $text =~ s/&lt;/</g;
+    $text =~ s/&gt;/>/g;
+    $text =~ s/&amp;/&/g;
+    while ($source =~ m{
+        (<[a-z][a-z0-9_]*\s+[a-z0-9_]+="\d+"\s*/>)
+        (\s+)
+        (?=(<[a-z][a-z0-9_]*\s+[a-z0-9_]+="\d+"\s*/>))
+    }gx) {
+        my($left, $space, $right) = ($1, $2, $3);
+        $text =~ s/\Q$left$right\E/$left$space$right/g;
+    }
+    $text;
+}
+
 sub deepl {
     state $deepl = Command::Run->new;
-    state $command = do {
-        my $glossary = $App::Greple::xlate::glossary;
-        my   @c = ('deepl', 'text');
-        push @c,  ('--to', $lang_to);
-        push @c,  ('--from', $lang_from) if $lang_from ne 'ORIGINAL';
-        push @c,  ('--auth-key', $auth_key) if $auth_key;
-        push @c,  ('--glossary-id', $glossary) if $glossary;
-        if (my @contexts = @{$opt{contexts}}) {
-            push @c, '--context' => join "\n", @contexts;
-        }
-        \@c;
-    };
-    $deepl->command(@$command, shift)->update->data;
+    my $text = shift;
+    my @tags = _marker_tags($text);
+    my @command = deepl_command(@tags);
+    my $source = $text;
+    $text = _xml_wrap($text) if @tags;
+    my $data = $deepl->command(@command, $text)->update->data;
+    @tags ? _xml_unwrap($data, $source) : $data;
 }
 
 sub clipboard {

@@ -1,6 +1,6 @@
 package HTML::FormHandler::Widget::Field::HorizCheckboxGroup;
 # ABSTRACT: checkbox group field role
-$HTML::FormHandler::Widget::Field::HorizCheckboxGroup::VERSION = '0.40068';
+$HTML::FormHandler::Widget::Field::HorizCheckboxGroup::VERSION = '0.410001';
 use Moose::Role;
 use namespace::autoclean;
 use HTML::FormHandler::Render::Util ('process_attrs');
@@ -107,7 +107,7 @@ HTML::FormHandler::Widget::Field::HorizCheckboxGroup - checkbox group field role
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

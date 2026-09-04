@@ -4,7 +4,7 @@
 requires "Algorithm::AhoCorasick::XS" => "0";
 requires "File::ShareDir" => "0";
 requires "File::Slurper" => "0";
-requires "List::Util" => "0";
+requires "List::Util" => "1.45";
 requires "Moo" => "1";
 requires "Net::DNS::Resolver" => "0";
 requires "Net::IP" => "0";
@@ -21,6 +21,7 @@ requires "namespace::autoclean" => "0";
 requires "perl" => "v5.24.0";
 recommends "Algorithm::AhoCorasick::XS" => "0.04";
 recommends "CHI" => "0.40";
+recommends "Net::DNS" => "1.57";
 recommends "Ref::Util::XS" => "0";
 recommends "TOML::XS" => "0.06";
 recommends "Type::Tiny::XS" => "0";

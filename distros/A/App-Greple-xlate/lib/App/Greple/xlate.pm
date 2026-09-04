@@ -1,6 +1,6 @@
 package App::Greple::xlate;
 
-our $VERSION = "2.01";
+our $VERSION = "2.02";
 
 =encoding utf-8
 
@@ -16,12 +16,12 @@ App::Greple::xlate - translation support module for greple
 
 =head1 VERSION
 
-Version 2.01
+Version 2.02
 
 =head1 DESCRIPTION
 
 B<Greple> B<xlate> module find desired text blocks and replace them by
-the translated text.  The primary engine is GPT-5.5 (F<llm/gpt5.pm>),
+the translated text.  The primary engine is GPT-5.6 Terra (F<llm/gpt5.pm>),
 which calls the L<llm|https://llm.datasette.io/> command; DeepL
 (F<deepl.pm>) and legacy B<gpty>-based engines are also included.
 
@@ -146,6 +146,14 @@ escaped newline.
 How the text is transformed by masking can be seen by B<--xlate-mask>
 option.
 
+Mask placeholders are well-formed self-closing XML tags such as
+C<< <m id="1" /> >>.  JSON-based LLM engines receive the tags in their
+input arrays.  For DeepL, a request containing marker tags is escaped
+and enclosed in a temporary C<< <xlate> >> root, with XML tag handling
+enabled and each marker category registered as a non-splitting tag.
+The wrapper is removed before the placeholders are validated and
+restored.
+
 Masking protects markup from being translated.  To conceal sensitive
 strings from the translation service itself, see L</ANONYMIZATION AND
 TEMPLATES>; both can be used together.
@@ -160,7 +168,7 @@ anonymization rules are available: a dictionary file
 (B<--xlate-anonymize>), inline marks in the document itself
 (B<--xlate-anonymize-mark>), and YAML front matter values
 (B<--xlate-frontmatter>).  Each string is replaced by a category tag
-such as C<< <person id=1 /> >> during transmission.  The concealment
+such as C<< <person id="1" /> >> during transmission.  The concealment
 target is API transmission only: local cache files store restored
 plain text.  Use B<--xlate-dryrun> to inspect exactly what would be
 transmitted.
@@ -237,7 +245,7 @@ At this time, the following engines are available
 
 =over 2
 
-=item * B<gpt5>: gpt-5.5 (via the C<llm> command)
+=item * B<gpt5>: gpt-5.6-terra (via the C<llm> command)
 
 =item * B<deepl>: DeepL API (via the C<deepl> command)
 
@@ -378,6 +386,11 @@ option is available for the LLM engines (C<gpt3>, C<gpt4o>, C<gpt5>)
 but not for DeepL.  You can customize the translation behavior by
 providing specific instructions to the AI model.  If the prompt
 contains C<%s>, it will be replaced with the target language name.
+For the llm-backed C<gpt5> engine, the document is supplied separately
+as a JSON request whose C<input> member is the array to translate and
+whose optional C<context> member contains reference data.  A fixed
+instruction that treats those members as document data, not commands,
+is appended even when a custom prompt is used.
 
 =item B<--xlate-context>=I<text>
 
@@ -397,9 +410,10 @@ of the changed text recovered from the cache, so that unchanged
 wording is preserved.  Set to 0 to disable context-aware translation
 entirely.
 Note that each changed region is translated in its own API call and
-the context can add up to about 8000 characters to the system
-prompt, so context-aware translation trades some extra cost for
-consistency.
+the context can add up to about 8000 characters to the JSON user
+request, so context-aware translation trades some extra cost for
+consistency.  Document-derived context is kept out of the system
+prompt.
 
 =item B<--xlate-cache-seed>=I<file>
 
@@ -421,7 +435,7 @@ entry per item: in JSON (canonical, machine-generatable)
       { "category": "company", "regex": "アクメ(株式会社)?" } ]
 
 or in a simple line format (C<category pattern>, C</.../> for regex).
-Each item is replaced by a category tag such as C<< <person id=1 /> >>;
+Each item is replaced by a category tag such as C<< <person id="1" /> >>;
 the same string always gets the same tag, so the model can keep track
 of who is who.  Unknown JSON fields are ignored, so generators (e.g. a
 local LLM extracting entities) may add their own annotations.
@@ -513,6 +527,14 @@ machine and for estimating the cost of a run.
 See the translation result in real time in the STDERR output.  The
 C<From> payload is shown as transmitted, after anonymization and
 masking.
+
+=item B<--xlate-review>
+
+For a one-to-one changed block, show the smallest contiguous changed
+span in the old and new source, followed by the corresponding span in
+the old and new translation.  The report is written to STDERR, makes no
+additional API call, and is omitted when old and new blocks cannot be
+paired unambiguously.
 
 =item B<--xlate-stripe>
 
@@ -818,6 +840,7 @@ our %opt = (
     anonymize_mark => \(our $anonymize_mark),
     template => \(our $template_option),
     frontmatter => \(our $use_frontmatter = 0),
+    review => \(our $show_review = 0),
     contexts => (\our @contexts),
 );
 lock_keys %opt;
@@ -1033,6 +1056,7 @@ sub region_context {
                $tied->old_entries_slice($lo, $hi);
     }
     return {
+        new_texts    => [ map $blocks->[$_]{key}, $from .. $to ],
         source_before => source_slice_before($blocks->[$from]{s}),
         source_after  => source_slice_after($blocks->[$to]{e}),
         hits_before   => \@before,
@@ -1080,12 +1104,55 @@ sub _progress {
 sub clone_context {
     my $ctx = shift;
     return {
+        new_texts    => [ @{$ctx->{new_texts} // []} ],
         source_before => $ctx->{source_before},
         source_after  => $ctx->{source_after},
         hits_before   => [ map [ @$_ ], @{$ctx->{hits_before} // []} ],
         hits_after    => [ map [ @$_ ], @{$ctx->{hits_after}  // []} ],
         old_pairs     => [ map [ @$_ ], @{$ctx->{old_pairs}   // []} ],
     };
+}
+
+sub change_span {
+    my($old, $new) = @_;
+    my @old = split //, $old;
+    my @new = split //, $new;
+    my $prefix = 0;
+    $prefix++ while $prefix < @old && $prefix < @new
+        && $old[$prefix] eq $new[$prefix];
+    my $suffix = 0;
+    $suffix++ while $suffix < @old - $prefix
+        && $suffix < @new - $prefix
+        && $old[-1 - $suffix] eq $new[-1 - $suffix];
+    my $old_len = @old - $prefix - $suffix;
+    my $new_len = @new - $prefix - $suffix;
+    my $old_change = $old_len
+        ? join('', @old[$prefix .. $prefix + $old_len - 1]) : '';
+    my $new_change = $new_len
+        ? join('', @new[$prefix .. $prefix + $new_len - 1]) : '';
+    ($prefix, $old_change, $new_change);
+}
+
+sub review_quote {
+    local $_ = shift // '';
+    s/\\/\\\\/g;
+    s/\n/\\n/g;
+    s/\t/\\t/g;
+    s/"/\\"/g;
+    qq{"$_"};
+}
+
+sub review_change {
+    my($old_source, $new_source, $old_translation, $new_translation) = @_;
+    print STDERR "[xlate.pm] Review:\n";
+    for my $change (
+        [ source => change_span($old_source, $new_source) ],
+        [ target => change_span($old_translation, $new_translation) ],
+    ) {
+        my($label, $offset, $old, $new) = @$change;
+        printf STDERR "  %s \@%d: %s -> %s\n",
+            $label, $offset, review_quote($old), review_quote($new);
+    }
 }
 
 sub cache_update {
@@ -1125,6 +1192,7 @@ sub cache_update {
             $anonobj->mask(@from);
             if ($context) {
                 $masked_context = clone_context($context);
+                $anonobj->mask_reference(@{$masked_context->{new_texts}});
                 $anonobj->mask_reference(
                     $masked_context->{source_before},
                     $masked_context->{source_after});
@@ -1151,6 +1219,13 @@ sub cache_update {
         }
 
         _progress({label => "To"}, @to);
+        if ($show_review && $context
+            && @pristine == 1
+            && @{$context->{old_pairs} // []} == 1) {
+            my($old_source, $old_translation) = @{$context->{old_pairs}[0]};
+            review_change($old_source, $pristine[0],
+                          $old_translation, $to[0]);
+        }
         if (defined(my $tre = template_regex())) {
             for my $i (0 .. $#pristine) {
                 # Translation may legitimately reorder expressions to
@@ -1348,6 +1423,7 @@ builtin xlate-context-window=i $context_window
 builtin xlate-anonymize=s      $anonymize_file
 builtin xlate-anonymize-mark:s $anonymize_mark
 builtin xlate-template:s   $template_option
+builtin xlate-review!      $show_review
 builtin xlate-cache-seed=s $cache_seed
 
 builtin deepl-auth-key=s   $App::Greple::xlate::deepl::auth_key

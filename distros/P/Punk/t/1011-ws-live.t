@@ -78,6 +78,11 @@ if (!$pid) {
         $ws->on(close => sub { $room->leave($_[0]) });
     };
 
+    websocket '/any' => sub {
+        my ($c, $ws) = @_;
+        $ws->on(message => sub { $_[0]->send('any ok') });
+    }, { origin => 0 };
+
     websocket '/proto' => sub {
         my ($c, $ws) = @_;
         $ws->on(message => sub { $_[0]->send('proto:' . ($_[0]->protocol // '-')) });
@@ -332,6 +337,28 @@ sub http_get {
     my ($s2, $hdr2) = ws_connect(path => '/proto', protocol => 'nope.v9');
     like($hdr2, qr{\AHTTP/1\.1 400}, 'an unsupported subprotocol is a 400');
     close $s2;
+}
+
+# ---- the Origin check, on the wire ------------------------------------------
+#
+# t/1012-ws-origin.t covers the rules; this is the proof that a real browser's
+# handshake is refused by a real server before the socket is ever detached.
+{
+    my ($s, $hdr) = ws_connect(path => '/echo',
+                               extra => [ 'Origin: http://evil.example' ]);
+    like($hdr, qr{\AHTTP/1\.1 403}, 'a cross-origin upgrade is refused');
+    close $s;
+
+    my ($s2, $hdr2) = ws_connect(path => '/echo',
+                                 extra => [ "Origin: http://$host" ]);
+    like($hdr2, qr{\AHTTP/1\.1 101},
+        'and the page this application served is not');
+    close $s2;
+
+    my ($s3, $hdr3) = ws_connect(path => '/any',
+                                 extra => [ 'Origin: http://evil.example' ]);
+    like($hdr3, qr{\AHTTP/1\.1 101}, 'origin => 0 opens the socket to anyone');
+    close $s3;
 }
 
 # ---- handshake rejections ---------------------------------------------------

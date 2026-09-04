@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# Fetch a pinned sops binary for the interop suite (t/04-interop.t).
+#
+# t/04-interop.t is the only test that proves this distribution's wire
+# format is compatible with the real sops CLI. It needs a sops binary on
+# PATH (or $SOPS_BIN) to run at all -- without one it silently skips.
+#
+# Usage: maint/fetch-sops [install-dir]
+#   install-dir defaults to $HOME/bin. Make sure it ends up on PATH, or
+#   run tests with SOPS_BIN=<install-dir>/sops.
+#
+#   The repo-local convention is `maint/fetch-sops .sops-bin`: that directory
+#   is .gitignore'd and is checked by the test suite automatically, so the
+#   binary survives a /tmp wipe and `prove -lr t/` finds it with no PATH or
+#   $SOPS_BIN fiddling. Prefer it over the old /tmp/sops location.
+
+set -euo pipefail
+
+SOPS_VERSION=v3.13.3
+DEST=${1:-$HOME/bin}
+
+# Map (uname -s, uname -m) to the release-asset suffix sops publishes.
+# Suffix is the trailing piece between the version and any .exe; "" is the
+# macOS universal-binary fallback. Anything not in this table is refused
+# rather than guessed at, because the wrong binary is a silent green suite.
+asset_suffix() {
+    local os arch
+    os=$(uname -s)
+    arch=$(uname -m)
+    case "$os" in
+        Linux)
+            case "$arch" in
+                x86_64)  echo linux.amd64 ;;
+                aarch64) echo linux.arm64 ;;
+                *) return 1 ;;
+            esac ;;
+        Darwin)
+            case "$arch" in
+                x86_64)  echo darwin.amd64 ;;
+                arm64)   echo darwin.arm64 ;;
+                *) return 1 ;;
+            esac ;;
+        MINGW*|MSYS*|CYGWIN*)
+            case "$arch" in
+                x86_64)  echo amd64.exe ;;
+                aarch64) echo arm64.exe ;;
+                *) return 1 ;;
+            esac ;;
+        *) return 1 ;;
+    esac
+}
+
+build_from_source() {
+    echo "Building sops $SOPS_VERSION from source with 'go install' ..."
+    mkdir -p "$DEST"
+    GOBIN="$DEST" go install "github.com/getsops/sops/v3/cmd/sops@${SOPS_VERSION}"
+}
+
+download_prebuilt() {
+    local suffix binary_name asset
+    suffix=$(asset_suffix) || {
+        echo "maint/fetch-sops: no prebuilt binary published for $(uname -s)/$(uname -m)." >&2
+        echo "Install Go (https://go.dev/dl/) to build from source instead." >&2
+        exit 1
+    }
+
+    # .exe is part of the published filename, not the suffix the helper returns.
+    binary_name="sops-${SOPS_VERSION}.${suffix}"
+    asset="sops-${SOPS_VERSION}.${suffix}"
+    local base="https://github.com/getsops/sops/releases/download/${SOPS_VERSION}"
+    local checksums="${base}/sops-${SOPS_VERSION}.checksums.txt"
+
+    echo "Downloading ${binary_name} from ${base} ..."
+    local tmpdir tmpbin tmpsums
+    tmpdir=$(mktemp -d)
+    # ${tmpdir:-} so the trap is safe under `set -u` even if it fires before
+    # mktemp ran (e.g. asset_suffix refused the platform).
+    trap '[[ -n "${tmpdir:-}" ]] && rm -rf "$tmpdir"' EXIT
+    tmpbin="$tmpdir/$binary_name"
+    tmpsums="$tmpdir/checksums.txt"
+
+    curl -fsSL -o "$tmpbin"  "${base}/${asset}"
+    curl -fsSL -o "$tmpsums" "$checksums"
+
+    # sha256sum format: "<hex>  <filename>", two spaces. grep -w would over-match
+    # on a hash prefix, so pin both the hash and the exact filename from the
+    # same line. `sha256sum -c` reads only one target at a time.
+    local expected
+    expected=$(awk -v f="$binary_name" '$2 == f { print $1 }' "$tmpsums")
+    if [[ -z "$expected" ]]; then
+        echo "maint/fetch-sops: no checksum published for $binary_name" >&2
+        exit 1
+    fi
+
+    local actual
+    if command -v sha256sum >/dev/null 2>&1; then
+        actual=$(sha256sum "$tmpbin" | awk '{ print $1 }')
+    elif command -v shasum >/dev/null 2>&1; then
+        actual=$(shasum -a 256 "$tmpbin" | awk '{ print $1 }')
+    else
+        echo "maint/fetch-sops: no sha256sum or shasum on PATH; cannot verify." >&2
+        exit 1
+    fi
+
+    if [[ "$actual" != "$expected" ]]; then
+        echo "maint/fetch-sops: sha256 mismatch for $binary_name" >&2
+        echo "  expected: $expected" >&2
+        echo "  actual:   $actual" >&2
+        exit 1
+    fi
+
+    mkdir -p "$DEST"
+    # Strip the .exe for the installed name on Windows so $DEST/sops is stable.
+    local install_name
+    if [[ "$binary_name" == *.exe ]]; then
+        install_name="sops.exe"
+    else
+        install_name="sops"
+    fi
+    install -m 0755 "$tmpbin" "$DEST/$install_name"
+}
+
+mkdir -p "$DEST"
+
+if command -v go >/dev/null 2>&1; then
+    build_from_source
+else
+    echo "No Go toolchain found on PATH; downloading prebuilt binary instead."
+    download_prebuilt
+fi
+
+echo "Done: $DEST/sops"
+"$DEST/sops" --version
+
+echo
+echo "Make sure $DEST is on PATH, or run tests with SOPS_BIN=$DEST/sops."

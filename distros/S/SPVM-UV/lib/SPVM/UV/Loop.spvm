@@ -1,0 +1,88 @@
+# Copyright (c) 2026 Yuki Kimoto
+# MIT License
+
+class UV::Loop : pointer {
+  
+  use UV;
+  use UV::Handle;
+  use UV::Handle::Idle;
+  use UV::Handle::Async;
+  use UV::Handle::Timer;
+  use UV::Handle::Poll;
+  use UV::Handle::Pipe;
+  use UV::Constant;
+  use UV::Request::Write;
+  use UV::Callback::Idle;
+  use UV::Callback::Timer;
+  use UV::Callback::Async;
+  use UV::Callback::Poll;
+  use UV::Callback::Read;
+  use UV::Callback::Write;
+  use UV::Callback::Close;
+  
+  use Resource::UV;
+  use UV::Resource::UV;
+  use Hash;
+  
+  # Class Variables
+  our $DEFAULT_LOOP : UV::Loop;
+  
+  INIT {
+    &default_loop;
+  }
+  
+  # Fields
+  has uv_handles_h : Hash of UV::Handle;
+  
+  # Class Mehtods
+  native static method new : UV::Loop ();
+  
+  native private static method default_loop : UV::Loop ();
+  
+  # Instance Methods
+  protected method init : void () {
+    $self->{uv_handles_h} = Hash->new;
+  }
+  
+  native method run : int ($uv_run_mode : int);
+  
+  native method idle_init : void ($uv_idle : UV::Handle::Idle);
+  
+  native method timer_init : void ($uv_timer : UV::Handle::Timer);
+  
+  native method poll_init : void ($uv_poll : UV::Handle::Poll, $fd : int);
+  
+  native method async_init : void ($uv_async : UV::Handle::Async, $cb : UV::Callback::Async);
+  
+  native method pipe_init : void ($uv_pipe : UV::Handle::Pipe, $ipc : int);
+  
+  private method set_uv_handle : void ($uv_handle  : UV::Handle) {
+    
+    my $uv_handle_address = Fn->to_address($uv_handle);
+    
+    $self->{uv_handles_h}{$uv_handle_address} = $uv_handle;
+    
+    $uv_handle->{loop} = $self;
+  }
+  
+  private method exists_uv_handle : int ($uv_handle  : UV::Handle) {
+    
+    my $uv_handle_address = Fn->to_address($uv_handle);
+    
+    return $self->{uv_handles_h}{$uv_handle_address}->(UV::Handle) ? 1 : 0;
+  }
+  
+  private method delete_uv_handle : void ($uv_handle  : UV::Handle) {
+    
+    if ($self->exists_uv_handle($uv_handle)) {
+      my $uv_handle_address = Fn->to_address($uv_handle);
+      
+      $self->{uv_handles_h}->delete($uv_handle_address);
+      
+      $uv_handle->{loop} = undef;
+    }
+  }
+  
+  native method DESTROY : void ();
+  
+}

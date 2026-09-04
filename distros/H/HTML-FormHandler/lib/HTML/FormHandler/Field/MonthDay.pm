@@ -1,6 +1,6 @@
 package HTML::FormHandler::Field::MonthDay;
 # ABSTRACT: select list 1 to 31
-$HTML::FormHandler::Field::MonthDay::VERSION = '0.40068';
+$HTML::FormHandler::Field::MonthDay::VERSION = '0.410001';
 use Moose;
 extends 'HTML::FormHandler::Field::IntRange';
 
@@ -24,7 +24,7 @@ HTML::FormHandler::Field::MonthDay - select list 1 to 31
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 DESCRIPTION
 

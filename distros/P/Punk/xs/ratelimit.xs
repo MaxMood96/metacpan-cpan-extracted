@@ -1,3 +1,17 @@
+MODULE = Punk        PACKAGE = Punk::RateLimit
+
+PROTOTYPES: DISABLE
+
+# The boot half of the `rate_limit` ROUTE option (punk_ratelimit.h): called
+# from Punk::App::compile_extras when any route carried one. Appends a C guard
+# closure running the same check the keyword installs on before_dispatch -
+# before the `validate` guard, so a refused request never parses a body.
+void
+_compile_routes(self)
+        SV *self
+    CODE:
+        prl_compile_routes(aTHX_ self);
+
 MODULE = Punk        PACKAGE = Punk::App
 
 PROTOTYPES: DISABLE
@@ -38,14 +52,8 @@ rate_limit(self, ...)
                     STRLEN bl;
                     const char *bs = SvPV(v, bl);
                     if (bl > 7 && strnEQ(bs, "header:", 7)) {
-                        STRLEN j;
                         by = 1;
-                        envkeysv = sv_2mortal(newSVpvs("HTTP_"));
-                        for (j = 7; j < bl; j++) {
-                            char ch = bs[j];
-                            ch = (ch == '-') ? '_' : (char)toupper((unsigned char)ch);
-                            sv_catpvn(envkeysv, &ch, 1);
-                        }
+                        envkeysv = prl_header_envkey(aTHX_ bs, bl);
                         envkey = SvPV(envkeysv, elen);
                     }
                     /* anything else (including 'ip') keeps by = 0 */

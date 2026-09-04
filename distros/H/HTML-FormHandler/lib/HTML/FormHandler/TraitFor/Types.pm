@@ -1,6 +1,6 @@
 package HTML::FormHandler::TraitFor::Types;
 # ABSTRACT: types used internally in FormHandler
-$HTML::FormHandler::TraitFor::Types::VERSION = '0.40068';
+$HTML::FormHandler::TraitFor::Types::VERSION = '0.410001';
 use Moose::Role;
 use Moose::Util::TypeConstraints;
 
@@ -56,7 +56,7 @@ HTML::FormHandler::TraitFor::Types - types used internally in FormHandler
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 AUTHOR
 

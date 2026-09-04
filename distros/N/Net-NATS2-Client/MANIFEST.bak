@@ -1,4 +1,5 @@
 .perltidyrc
+AGENTS.md
 CHANGELOG.md
 docker-compose.yaml
 examples/benchmark-pub.pl
@@ -6,6 +7,7 @@ examples/pub.pl
 examples/request.pl
 examples/sub-pub.pl
 examples/sub.pl
+lib/Net/NATS2/Base.pm
 lib/Net/NATS2/Client.pm
 lib/Net/NATS2/ConnectInfo.pm
 lib/Net/NATS2/Connection.pm
@@ -26,3 +28,4 @@ t/jetstream.t
 t/nats.t
 t/reconnect.t
 test.sh
+TODO.md

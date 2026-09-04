@@ -74,6 +74,23 @@ Creates a new instance.
     `--confirm=...`. Takes precedence over `yes => 1`. May be terse: `Alien::Xmake->new( confirm => 'yes'
     )`.
 
+- **file**
+
+    Constructor option. A path to the `xmake.lua` (or any Lua build file) that operations should read. Passed to every
+    action as `-F/--file`, so you can drive a project whose build description lives at a non-default path or is generated
+    at runtime from Perl. Works for `configure`, `build`, `run`, `install`, `project`, `clean`, `test` and the query
+    methods alike:
+
+    ```perl
+    use v5.40;
+    use Alien::Xmake;
+
+    my $x = Alien::Xmake->new( file => 'path/to/mybuild.lua' );
+    $x->configure( mode => 'release' );   # xmake configure -F path/to/mybuild.lua
+    $x->build;
+    $x->run;
+    ```
+
 ## `build( [$target], %options )`
 
 ```perl
@@ -398,11 +415,30 @@ errors (`-e`), `files` limits formatting to the given files, and `all`/`group`/`
 
 ```perl
 my @scripts = $xmake->lua( list => 1 );
-$xmake->lua('print(\"hello\")');
+$xmake->lua('print(os.host())');            # inline code -> "windows"
+$xmake->lua('./myscript.lua');              # or a script file on disk
 ```
 
-Runs a `xmake` Lua script. `list` lists the built-in scripts (captured), `command` runs the `script` argument as a
-command, `deserialize` records the output in the given format and `stdin` reads the script from standard input.
+Runs a `xmake` Lua script. Pass inline Lua code, or the path to a `.lua` file on disk. Inline code is written to a
+temporary script file and executed, which sidesteps the MSWin32 argv-mangling and STDIN-piping problems that break
+passing code as a command-line argument. `list` lists the built-in scripts (captured) and `deserialize` records the
+output in the given format. `command` and `stdin` are accepted and treated as inline code.
+
+## `lua_json( [$code], %options )`
+
+```perl
+my $host = $xmake->lua_json('os.host()', return => 1);              # "windows"
+my $info = $xmake->lua_json(q{import("core.base.json"); print(json.encode({arch=os.arch()}))});
+```
+
+Runs inline Lua and returns the decoded JSON it produced. In the simplest form the code prints one JSON value itself
+via `import`ing `core.base.json` and passing `print(json.encode(...))`. With `return => 1` just give the value,
+e.g. a string, a number, a table (`{1,2,3}`), or a nested structure (`{name='z', libs={'z','m'}}`), and the wrapper
+prints the encoded JSON for you.
+
+xmake's `lua` runner appends a stray `{ }` chunk even on success, so the wrapper locates and decodes the emitted JSON
+value and returns an empty list if none is found. `lua_json` is the general escape hatch when a specific method (like
+`target_info`) does not yet exist for a structured query.
 
 ## `macro( [$name], %options )`
 
@@ -471,9 +507,24 @@ Shows information about the current project or the `xmake` installation.
 
     Filter targets by group.
 
-- **json**, **pretty**
+- **pretty**
 
-    Legacy flags (`--json`) and pretty formatting.
+    `--format=json` output (and the other formats) is already decoded/structured; `pretty` only adds pretty-printed
+    formatting to the raw listing output.
+
+## `target_info( $name, %options )`
+
+```perl
+my $t = $xmake->target_info('hello');   # decoded HASH
+say $t->{targetfile};                   # build\windows\x64\release\hello.exe
+```
+
+Shows the rich, per-target detail that `xmake show -t <target>` produces: `name`, `kind`, `files`,
+`compilers`, `linker`, `rules`, `at` and `targetfile`.
+
+Returns the decoded JSON structure (a HASH) by default. Pass `plain => 1` (or `format => 'plain'`) to get the
+human-readable output instead. `group` filters by target group. An empty list is returned if the target does not
+exist.
 
 ## `watch( %options )`
 
@@ -667,6 +718,27 @@ say 'installed: ' . $x->config('install_type');        # share | system
 say 'version  : ' . $x->config('version');
 ```
 
+The list queries also work from a bare `show` (no project needed) for the global catalogs. Several return rich JSON:
+the `apis` value is a big HASH of the built-in module APIs, while `buildmodes`, `platforms`, `rules`, `themes` and
+`targets` come back as ARRAY refs. `architectures`, `envs`, `policies` and `toolchains` still print aligned table
+text (xmake does not JSON-serialize them), so those come back as a plain listing:
+
+```perl
+use v5.40;
+use Alien::Xmake;
+
+my $x = Alien::Xmake->new;
+
+my $apis = $x->show( 'apis', format => 'json' );          # HASH of built-in module APIs
+say for @{ $apis->{description_builtin_module_apis} };     # hash.md5, hash.uuid, ...
+
+my $platforms = $x->show( 'platforms', format => 'json' ); # ['windows', 'linux', ...]
+say for @$platforms;
+
+my $env = $x->show( undef, format => 'json' );             # environment object
+say $env->{xmake}{version};                                # xmake's own version string
+```
+
 ## Lint the project from Perl
 
 `check` runs xmake's **analysis** checkers - `syntax` validates the source compiles without linking and `clang.tidy`
@@ -709,6 +781,87 @@ use Alien::Xmake;
 my $x = Alien::Xmake->new;
 system $x->xrepo, qw[search zlib];             # find a package
 system $x->xrepo, qw[info libpng];             # package details
+```
+
+## Query structured target info and arbitrary Lua as JSON
+
+Capture methods return decoded Perl data instead of streaming. `target_info` gives the rich per-target detail, and
+`lua_json` is the escape hatch for any other structured query:
+
+```perl
+use v5.40;
+use Alien::Xmake;
+
+my $x = Alien::Xmake->new;
+$x->create('demo', template => 'console');
+chdir 'demo';
+$x->configure(mode => 'release');
+
+# decoded target HASH (name, kind, files, compilers, linker, targetfile ...)
+my $target = $x->target_info('demo');
+say $target->{targetfile};                      # build\windows\x64\release\demo.exe
+
+# arbitrary Lua, decoded back to Perl
+my $host = $x->lua_json('os.host()', return => 1);   # "windows"
+my $env  = $x->lua_json(q{return { host = os.host(), arch = os.arch() }}, return => 1);
+say $env->{arch};                                    # "x64"
+```
+
+## Emit the build file from Perl and drive it
+
+The `xmake.lua` is just a Lua file. Because every action accepts `-F/--file`, you can write that description directly
+from Perl (no interactive scaffolding), point the handle at it with the `file` constructor option, and run the whole
+lifecycle. The Perl DSL below composes the same statements you would type in a build file:
+
+```perl
+use v5.40;
+use Alien::Xmake;
+use File::Slurper qw[write_text];
+
+my $dir = 'build-dir';
+mkdir $dir or die $!;
+mkdir "$dir/src" or die $!;
+write_text "$dir/src/main.cpp", "int main() { return 42; }\n";
+
+my $lua = qq{
+set_project("hello")
+target("app")
+    set_kind("binary")
+    add_files("src/*.cpp")
+};
+
+write_text "$dir/mybuild.lua", $lua;
+
+my $x = Alien::Xmake->new( file => "$dir/mybuild.lua" );   # every action uses -F mybuild.lua
+chdir $dir;
+$x->configure( mode => 'release' );
+$x->build;                            # compiles src/main.cpp
+say for @{ $x->show( 'targets', format => 'json' ) };  # app
+```
+
+## Compose a project from Perl instead of writing Lua
+
+Hand-writing the build-file string works, but for authoring at runtime prefer [Alien::Xmake::Project](https://metacpan.org/pod/Alien%3A%3AXmake%3A%3AProject): a fluent Perl
+DSL that accumulates the `xmake.lua` statements for you, writes the file on `save`, and returns an [Alien::Xmake](https://metacpan.org/pod/Alien%3A%3AXmake)
+handle already bound to it. Targets are built with chains like `set_kind('binary')->add_files('src/*.cpp')`:
+
+```perl
+use v5.40;
+use Alien::Xmake::Project;
+
+my $p = Alien::Xmake::Project->new( file => 'build/xmake.lua' );
+$p->set_project('myapp')->set_version('0.1.0');
+$p->add_requires('zlib');
+$p->target('cli')
+    ->set_kind('binary')
+    ->add_files('src/*.cpp')
+    ->add_packages('zlib');
+$p->save;
+
+$p->xmake->configure(mode => 'release');   # xmake configure -F build/xmake.lua
+$p->xmake->build;
+$p->xmake->run;
+$p->xmake->project(kind => 'compile_commands');   # reuse any IDE generator
 ```
 
 # Prerequisites

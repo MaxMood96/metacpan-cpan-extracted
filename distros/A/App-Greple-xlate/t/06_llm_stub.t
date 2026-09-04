@@ -36,9 +36,9 @@ subtest 'ok mode' => sub {
 subtest 'models subcommand' => sub {
     my $r = run_stub(argv => ['models']);
     is($r->{result}, 0, 'exit status 0');
-    like($r->{data}, qr/gpt-5\.5/, 'lists gpt-5.5');
+    like($r->{data}, qr/gpt-5\.6-terra/, 'lists gpt-5.6-terra');
     $r = run_stub(argv => ['models'], env => { LLM_STUB_MODE => 'nomodel' });
-    unlike($r->{data}, qr/gpt-5\.5/, 'nomodel mode hides gpt-5.5');
+    unlike($r->{data}, qr/gpt-5\.6-terra/, 'nomodel mode hides gpt-5.6-terra');
 };
 
 subtest 'failure modes' => sub {
@@ -54,10 +54,10 @@ subtest 'failure modes' => sub {
 };
 
 subtest 'tag-shaped spans survive the transform' => sub {
-    my $r = run_stub(stdin => q(["see <person id=1 /> and text\n"]));
+    my $r = run_stub(stdin => q(["see <person id=\"1\" /> and text\n"]));
     is($r->{result}, 0, 'exit 0');
     is_deeply(JSON::PP->new->decode($r->{data}),
-              [ "SEE <person id=1 /> AND TEXT\n" ],
+              [ "SEE <person id=\"1\" /> AND TEXT\n" ],
               'tag kept verbatim, rest uppercased');
 };
 

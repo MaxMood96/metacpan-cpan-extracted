@@ -77,6 +77,23 @@ sub requests {
         { name => 'chain-forward', env => { PATH_INFO => '/steps/forward' } },
         { name => 'chain-visit',   env => { PATH_INFO => '/steps/visit' } },
         { name => 'chain-depth',   env => { PATH_INFO => '/steps/depth' } },
+
+        # CVE-2026-85491. A route decision is not a function of the path alone:
+        # these are driven in order, so the GET in the middle is exactly the
+        # request that poisoned the path in 0.02. Sealed and stock must agree
+        # on every one of them.
+        { name => 'guard-post-1',  env => { PATH_INFO => '/guard/post',
+                                            REQUEST_METHOD => 'POST' } },
+        { name => 'guard-get',     env => { PATH_INFO => '/guard/post',
+                                            REQUEST_METHOD => 'GET' } },
+        { name => 'guard-post-2',  env => { PATH_INFO => '/guard/post',
+                                            REQUEST_METHOD => 'POST' } },
+        { name => 'guard-deep-1',  env => { PATH_INFO => '/guard/thing/edit',
+                                            REQUEST_METHOD => 'POST' } },
+        { name => 'guard-deep-get',env => { PATH_INFO => '/guard/thing/edit',
+                                            REQUEST_METHOD => 'GET' } },
+        { name => 'guard-deep-2',  env => { PATH_INFO => '/guard/thing/edit',
+                                            REQUEST_METHOD => 'POST' } },
         # The encoding matrix. A mistake here is silent until somebody posts
         # non-ASCII, so it is driven by the parity table rather than by a
         # hand-written expectation.

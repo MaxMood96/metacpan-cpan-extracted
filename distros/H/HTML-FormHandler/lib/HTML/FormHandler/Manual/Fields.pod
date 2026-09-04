@@ -13,7 +13,7 @@ HTML::FormHandler::Manual::Fields - brief documentation of available fields
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 
@@ -198,6 +198,8 @@ L<HTML::FormHandler::Field::Text>
 A field formatted as a select element.
 
 L<HTML::FormHandler::Field::Select>
+
+This also handles radio buttons and checkboxes, by means of widgets.
 
 =head3 Checkbox
 

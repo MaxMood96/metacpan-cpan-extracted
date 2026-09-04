@@ -3,6 +3,7 @@
 
 requires "Catalyst::View" => "0";
 requires "File::Spec" => "0";
+requires "Heap::Fibonacci" => "0";
 requires "IO::File::WithPath" => "0";
 requires "Moose" => "0";
 requires "MooseX::Aliases" => "0";

@@ -1,6 +1,6 @@
 package HTML::FormHandler::Widget::Field::Hidden;
 # ABSTRACT: hidden field rendering widget
-$HTML::FormHandler::Widget::Field::Hidden::VERSION = '0.40068';
+$HTML::FormHandler::Widget::Field::Hidden::VERSION = '0.410001';
 use Moose::Role;
 use HTML::FormHandler::Render::Util ('process_attrs');
 
@@ -9,7 +9,7 @@ sub render_element {
     my ( $self, $result ) = @_;
     $result ||= $self->result;
 
-    my $output .= '<input type="hidden" name="';
+    my $output = '<input type="hidden" name="';
     $output .= $self->html_name . '"';
     $output .= ' id="' . $self->id . '"';
     $output .= ' value="' . $self->html_filter($result->fif) . '"';
@@ -46,7 +46,7 @@ HTML::FormHandler::Widget::Field::Hidden - hidden field rendering widget
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

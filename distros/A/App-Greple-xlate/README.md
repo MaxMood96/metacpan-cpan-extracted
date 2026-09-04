@@ -11,12 +11,12 @@ App::Greple::xlate - translation support module for greple
 
 # VERSION
 
-Version 2.01
+Version 2.02
 
 # DESCRIPTION
 
 **Greple** **xlate** module find desired text blocks and replace them by
-the translated text.  The primary engine is GPT-5.5 (`llm/gpt5.pm`),
+the translated text.  The primary engine is GPT-5.6 Terra (`llm/gpt5.pm`),
 which calls the [llm](https://llm.datasette.io/) command; DeepL
 (`deepl.pm`) and legacy **gpty**-based engines are also included.
 
@@ -132,6 +132,14 @@ escaped newline.
 How the text is transformed by masking can be seen by **--xlate-mask**
 option.
 
+Mask placeholders are well-formed self-closing XML tags such as
+`<m id="1" />`.  JSON-based LLM engines receive the tags in their
+input arrays.  For DeepL, a request containing marker tags is escaped
+and enclosed in a temporary `<xlate>` root, with XML tag handling
+enabled and each marker category registered as a non-splitting tag.
+The wrapper is removed before the placeholders are validated and
+restored.
+
 Masking protects markup from being translated.  To conceal sensitive
 strings from the translation service itself, see ["ANONYMIZATION AND
 TEMPLATES"](#anonymization-and-templates); both can be used together.
@@ -146,7 +154,7 @@ anonymization rules are available: a dictionary file
 (**--xlate-anonymize**), inline marks in the document itself
 (**--xlate-anonymize-mark**), and YAML front matter values
 (**--xlate-frontmatter**).  Each string is replaced by a category tag
-such as `<person id=1 />` during transmission.  The concealment
+such as `<person id="1" />` during transmission.  The concealment
 target is API transmission only: local cache files store restored
 plain text.  Use **--xlate-dryrun** to inspect exactly what would be
 transmitted.
@@ -216,7 +224,7 @@ Exclude embedz blocks from translation when a document contains them:
 
     At this time, the following engines are available
 
-    - **gpt5**: gpt-5.5 (via the `llm` command)
+    - **gpt5**: gpt-5.6-terra (via the `llm` command)
     - **deepl**: DeepL API (via the `deepl` command)
     - **gpt3**: gpt-3.5-turbo (legacy, via the `gpty` command)
     - **gpt4o**: gpt-4o-mini (legacy, via the `gpty` command)
@@ -346,6 +354,11 @@ Exclude embedz blocks from translation when a document contains them:
     but not for DeepL.  You can customize the translation behavior by
     providing specific instructions to the AI model.  If the prompt
     contains `%s`, it will be replaced with the target language name.
+    For the llm-backed `gpt5` engine, the document is supplied separately
+    as a JSON request whose `input` member is the array to translate and
+    whose optional `context` member contains reference data.  A fixed
+    instruction that treats those members as document data, not commands,
+    is appended even when a custom prompt is used.
 
 - **--xlate-context**=_text_
 
@@ -365,9 +378,10 @@ Exclude embedz blocks from translation when a document contains them:
     wording is preserved.  Set to 0 to disable context-aware translation
     entirely.
     Note that each changed region is translated in its own API call and
-    the context can add up to about 8000 characters to the system
-    prompt, so context-aware translation trades some extra cost for
-    consistency.
+    the context can add up to about 8000 characters to the JSON user
+    request, so context-aware translation trades some extra cost for
+    consistency.  Document-derived context is kept out of the system
+    prompt.
 
 - **--xlate-cache-seed**=_file_
 
@@ -389,7 +403,7 @@ Exclude embedz blocks from translation when a document contains them:
           { "category": "company", "regex": "アクメ(株式会社)?" } ]
 
     or in a simple line format (`category pattern`, `/.../` for regex).
-    Each item is replaced by a category tag such as `<person id=1 />`;
+    Each item is replaced by a category tag such as `<person id="1" />`;
     the same string always gets the same tag, so the model can keep track
     of who is who.  Unknown JSON fields are ignored, so generators (e.g. a
     local LLM extracting entities) may add their own annotations.
@@ -481,6 +495,14 @@ Exclude embedz blocks from translation when a document contains them:
     See the translation result in real time in the STDERR output.  The
     `From` payload is shown as transmitted, after anonymization and
     masking.
+
+- **--xlate-review**
+
+    For a one-to-one changed block, show the smallest contiguous changed
+    span in the old and new source, followed by the corresponding span in
+    the old and new translation.  The report is written to STDERR, makes no
+    additional API call, and is omitted when old and new blocks cannot be
+    paired unambiguously.
 
 - **--xlate-stripe**
 

@@ -1,11 +1,9 @@
 package HTML::FormHandler::Field::Select;
 # ABSTRACT: select fields
-$HTML::FormHandler::Field::Select::VERSION = '0.40068';
+$HTML::FormHandler::Field::Select::VERSION = '0.410001';
 use Moose;
 extends 'HTML::FormHandler::Field';
 use Carp;
-
-use HTML::Entities;
 
 
 has 'options' => (
@@ -220,8 +218,7 @@ sub _inner_validate_field {
     }
     for my $value ( ref $value eq 'ARRAY' ? @$value : ($value) ) {
         unless ( $options{$value} ) {
-            my $opt_value = encode_entities($value);
-            $self->add_error($self->get_message('select_invalid_value'), $opt_value);
+            $self->add_error($self->get_message('select_invalid_value'), $value);
             return;
         }
     }
@@ -364,7 +361,7 @@ HTML::FormHandler::Field::Select - select fields
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 DESCRIPTION
 

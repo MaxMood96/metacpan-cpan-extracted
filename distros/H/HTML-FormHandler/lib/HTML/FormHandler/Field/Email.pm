@@ -1,6 +1,6 @@
 package HTML::FormHandler::Field::Email;
 # ABSTRACT: validates email using Email::Valid
-$HTML::FormHandler::Field::Email::VERSION = '0.40068';
+$HTML::FormHandler::Field::Email::VERSION = '0.410001';
 use HTML::FormHandler::Moose;
 extends 'HTML::FormHandler::Field::Text';
 use Email::Valid;
@@ -73,7 +73,7 @@ HTML::FormHandler::Field::Email - validates email using Email::Valid
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 DESCRIPTION
 

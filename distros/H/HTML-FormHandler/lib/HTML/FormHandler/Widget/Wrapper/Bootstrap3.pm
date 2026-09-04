@@ -1,6 +1,6 @@
 package HTML::FormHandler::Widget::Wrapper::Bootstrap3;
 # ABSTRACT: Twitter Bootstrap 3.0 field wrapper
-$HTML::FormHandler::Widget::Wrapper::Bootstrap3::VERSION = '0.40068';
+$HTML::FormHandler::Widget::Wrapper::Bootstrap3::VERSION = '0.410001';
 use Moose::Role;
 use namespace::autoclean;
 use HTML::FormHandler::Render::Util ('process_attrs');
@@ -197,7 +197,7 @@ HTML::FormHandler::Widget::Wrapper::Bootstrap3 - Twitter Bootstrap 3.0 field wra
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

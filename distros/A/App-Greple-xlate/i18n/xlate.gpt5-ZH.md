@@ -10,11 +10,11 @@ App::Greple::xlate - greple 的翻译支持模块
 
 # VERSION
 
-Version 2.01
+Version 2.02
 
 # DESCRIPTION
 
-**Greple** **xlate** 模块查找所需的文本块，并将其替换为翻译后的文本。主要引擎是 GPT-5.5（`llm/gpt5.pm`），它会调用 [llm](https://llm.datasette.io/) 命令；同时还包含 DeepL（`deepl.pm`）和基于旧版 **gpty** 的引擎。
+**Greple** **xlate** 模块查找所需的文本块，并将其替换为翻译后的文本。主要引擎是 GPT-5.6 Terra（`llm/gpt5.pm`），它会调用 [llm](https://llm.datasette.io/) 命令；同时还包含 DeepL（`deepl.pm`）和基于旧版 **gpty** 的引擎。
 
 翻译会按文件缓存，因此对未更改的文本重新运行命令不会产生任何成本。当文档被编辑时，只有已更改的段落会再次发送到 API；上下文感知引擎还会接收周围的翻译、变更周边的原始源文本，以及已编辑段落的上一版本，因此新的翻译会保持既有措辞（见 **--xlate-context-window**）。敏感字符串可以在传输前隐藏（见 ["ANONYMIZATION AND TEMPLATES"](#anonymization-and-templates)）。
 
@@ -81,13 +81,15 @@ Version 2.01
 
 通过 **--xlate-mask** 选项可以查看文本经屏蔽转换后的样子。
 
+屏蔽占位符是格式正确的自闭合 XML 标签，例如 `<m id="1" />`。基于 JSON 的 LLM 引擎会在其输入数组中接收这些标签。对于 DeepL，包含标记标签的请求会被转义并封装在临时的 `<xlate>` 根标签中，同时启用 XML 标签处理，并将每个标记类别注册为不可拆分标签。在验证并还原占位符之前，会先移除该包装标签。
+
 屏蔽可保护标记不被翻译。若要向翻译服务本身隐藏敏感字符串，请参见 ["ANONYMIZATION AND TEMPLATES"](#anonymization-and-templates)；两者可以一起使用。
 
 此接口为实验性质，将来可能会改变。
 
 # ANONYMIZATION AND TEMPLATES
 
-敏感字符串可以在发送到翻译 API 之前被隐藏，并在输出中恢复。可使用三种匿名化规则来源：字典文件（**--xlate-anonymize**）、文档本身中的内联标记（**--xlate-anonymize-mark**）以及 YAML front matter 值（**--xlate-frontmatter**）。在传输期间，每个字符串都会被替换为诸如 `<person id=1 />` 之类的类别标签。隐藏目标仅限于 API 传输：本地缓存文件存储的是已恢复的纯文本。使用 **--xlate-dryrun** 可以准确检查将被传输的内容。
+敏感字符串可以在发送到翻译 API 之前被隐藏，并在输出中恢复。可使用三种匿名化规则来源：字典文件（**--xlate-anonymize**）、文档本身中的内联标记（**--xlate-anonymize-mark**）以及 YAML front matter 值（**--xlate-frontmatter**）。在传输期间，每个字符串都会被替换为诸如 `<person id="1" />` 之类的类别标签。隐藏目标仅限于 API 传输：本地缓存文件存储的是已恢复的纯文本。使用 **--xlate-dryrun** 可以准确检查将被传输的内容。
 
 对于表单类文档（季度报告等），请预先定义参与者，并在正文中引用它们：
 
@@ -140,7 +142,7 @@ Version 2.01
 
     目前可用的引擎如下所示
 
-    - **gpt5**: gpt-5.5 (via the `llm` command)
+    - **gpt5**: gpt-5.6-terra (via the `llm` command)
     - **deepl**: DeepL API (via the `deepl` command)
     - **gpt3**: gpt-3.5-turbo (legacy, via the `gpty` command)
     - **gpt4o**: gpt-4o-mini (legacy, via the `gpty` command)
@@ -238,7 +240,7 @@ Version 2.01
 
 - **--xlate-prompt**=_text_
 
-    指定要发送给翻译引擎的自定义提示。此选项适用于 LLM 引擎（`gpt3`、`gpt4o`、`gpt5`），但不适用于 DeepL。你可以通过向 AI 模型提供特定指令来自定义翻译行为。如果提示包含 `%s`，它将被替换为目标语言名称。
+    指定要发送给翻译引擎的自定义提示。此选项适用于 LLM 引擎（`gpt3`、`gpt4o`、`gpt5`），但不适用于 DeepL。你可以通过向 AI 模型提供特定指令来自定义翻译行为。如果提示包含 `%s`，它将被替换为目标语言名称。对于由 LLM 支持的 `gpt5` 引擎，文档会作为单独的 JSON 请求提供，其中的 `input` 成员是要翻译的数组，可选的 `context` 成员包含参考数据。即使使用自定义提示，也会附加一条固定指令，将这些成员视为文档数据而非命令。
 
 - **--xlate-context**=_text_
 
@@ -247,7 +249,7 @@ Version 2.01
 - **--xlate-context-window**=_n_
 
     (Context-aware engines only, e.g. `gpt5` on the llm backend)
-    重新翻译已更改的块时，作为参考上下文传递的周边已翻译块数量（默认 2）。上下文还包括更改区域周围的原始源文本（标题、列表结构、图注），以及在可用时从缓存中恢复的更改文本的先前版本，以便保留未更改的措辞。设为 0 可完全禁用上下文感知翻译。请注意，每个更改区域都会在其自己的 API 调用中翻译，并且上下文可能会向系统提示添加最多约 8000 个字符，因此上下文感知翻译会以一些额外成本换取一致性。
+    重新翻译已更改的块时，作为参考上下文传递的周边已翻译块数量（默认 2）。上下文还包括更改区域周围的原始源文本（标题、列表结构、图注），以及在可用时从缓存中恢复的更改文本的先前版本，以便保留未更改的措辞。设为 0 可完全禁用上下文感知翻译。请注意，每个更改区域都会在其自己的 API 调用中翻译，并且上下文可能会向 JSON 用户请求添加最多约 8000 个字符，因此上下文感知翻译会以一些额外成本换取一致性。源自文档的上下文不会放入系统提示中。
 
 - **--xlate-cache-seed**=_file_
 
@@ -260,7 +262,7 @@ Version 2.01
         [ { "category": "person",  "text": "山田太郎" },
           { "category": "company", "regex": "アクメ(株式会社)?" } ]
 
-    或采用简单行格式（`category pattern`，`/.../` 用于正则表达式）。每个项目都会被替换为一个类别标签，例如 `<person id=1 />`；相同字符串始终获得相同标签，因此模型可以跟踪谁是谁。未知的 JSON 字段会被忽略，因此生成器（例如提取实体的本地 LLM）可以添加自己的注释。类别 `lit` 为保留项。本地缓存文件仍存储已恢复的纯文本：隐藏目标仅限于 API 传输。
+    或采用简单行格式（`category pattern`，`/.../` 用于正则表达式）。每个项目都会被替换为一个类别标签，例如 `<person id="1" />`；相同字符串始终获得相同标签，因此模型可以跟踪谁是谁。未知的 JSON 字段会被忽略，因此生成器（例如提取实体的本地 LLM）可以添加自己的注释。类别 `lit` 为保留项。本地缓存文件仍存储已恢复的纯文本：隐藏目标仅限于 API 传输。
 
     字典可以由外部工具生成——例如由本地模型提取敏感实体：
 
@@ -303,6 +305,10 @@ Version 2.01
 - **--**\[**no-**\]**xlate-progress** (Default: True)
 
     在 STDERR 输出中实时查看翻译结果。`From` payload 会按传输时的形式显示，即经过匿名化和 masking 之后。
+
+- **--xlate-review**
+
+    对于一对一的变更块，显示旧版和新版源文本中最小的连续变更范围，随后显示旧版和新版译文中的对应范围。报告写入 STDERR，不会额外调用 API；当旧版和新版块无法明确配对时，则不显示报告。
 
 - **--xlate-stripe**
 

@@ -4,10 +4,13 @@
 ## Stub llm command for testing App::Greple::xlate::llm without API access.
 ##
 ## LLM_STUB_MODE:
-##   ok      - (default) return input JSON array elements uppercased
+##   ok      - (default) uppercase the request's input array elements
 ##   fail    - exit 1 with an error message on stderr
-##   nomodel - prompt call fails; "llm models" output lacks gpt-5.5
+##   nomodel - prompt call fails; "llm models" output lacks gpt-5.6-terra
 ##   short   - drop the last element from the response array
+##   long    - append an extra element to the response array
+##   badtype - return a non-string element in the response array
+##   number  - return a JSON number in the response array
 ##   badjson - return non-JSON text
 ##   swap    - swap the first two {{ ... }} expressions in each element
 ##             (mimics legitimate word-order changes in translation)
@@ -28,7 +31,7 @@ if (@ARGV and $ARGV[0] eq 'models') {
     if ($mode eq 'nomodel') {
         print "OpenAI Chat: gpt-4o-mini\n";
     } else {
-        print "OpenAI Chat: gpt-5.5\n";
+        print "OpenAI Responses: gpt-5.6-terra\n";
         print "OpenAI Chat: test-model\n";
     }
     exit 0;
@@ -55,14 +58,16 @@ if ($mode eq 'badjson') {
     exit 0;
 }
 
-my $list = JSON::PP->new->decode($input);
+my $request = JSON::PP->new->decode($input);
+my $list = ref($request) eq 'HASH' ? $request->{input} : $request;
+ref($list) eq 'ARRAY' or die "stub llm: input array missing\n";
 # A well-behaved model keeps XML-style marker tags verbatim; mimic
 # that: uppercase everything except tag-shaped spans.
 sub transform {
     my $s = shift;
     join '', map {
-        /\A<[a-z][a-z0-9_]* [a-z0-9_]+=\d+ *\/>\z/ ? $_ : uc
-    } split /(<[a-z][a-z0-9_]* [a-z0-9_]+=\d+ *\/>)/, $s;
+        /\A<[a-z][a-z0-9_]* [a-z0-9_]+="\d+" *\/>\z/ ? $_ : uc
+    } split /(<[a-z][a-z0-9_]* [a-z0-9_]+="\d+" *\/>)/, $s;
 }
 my @out = map { transform($_) } @$list;
 if ($mode eq 'swap') {
@@ -75,4 +80,7 @@ if ($mode eq 'swap') {
     }
 }
 pop @out if $mode eq 'short';
+push @out, "EXTRA\n" if $mode eq 'long';
+$out[0] = { unexpected => 'object' } if $mode eq 'badtype' and @out;
+$out[0] = 42 if $mode eq 'number' and @out;
 print JSON::PP->new->canonical->encode(\@out), "\n";

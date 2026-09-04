@@ -1,0 +1,23 @@
+# Copyright (c) 2026 Yuki Kimoto
+# MIT License
+
+class UV::Request::Write extends UV::Request {
+  
+  use UV::Request::Write;
+  use UV::Callback::Write;
+  
+  use Resource::UV;
+  use UV::Resource::UV;
+  
+  # Fields
+  has write_cb : rw UV::Callback::Write;
+  
+  has write_buffer : rw string;
+  
+  # Class Mehtods
+  native static method new : UV::Request::Write ();
+  
+  # Instance Methods
+  native method write : void ($uv_stream : UV::Handle::Stream, $buffer : string, $buffer_length : int, $cb : UV::Callback::Write, $buffer_offset : int = 0);
+  
+}

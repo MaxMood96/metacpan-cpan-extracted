@@ -1,6 +1,6 @@
 package HTML::FormHandler::Widget::Field::Role::SelectedOption;
 # ABSTRACT: allow setting options from options keys
-$HTML::FormHandler::Widget::Field::Role::SelectedOption::VERSION = '0.40068';
+$HTML::FormHandler::Widget::Field::Role::SelectedOption::VERSION = '0.410001';
 use Moose::Role;
 use namespace::autoclean;
 
@@ -32,7 +32,7 @@ HTML::FormHandler::Widget::Field::Role::SelectedOption - allow setting options f
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 AUTHOR
 

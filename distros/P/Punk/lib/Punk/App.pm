@@ -8,13 +8,14 @@ use Punk::Router::Scope;
 use Punk::Context;
 use Punk::Static;
 
-our $VERSION = '0.42';
+our $VERSION = '0.43';
 
-# The boot hook compile() probes just before the state hash freezes
-# (xs/compile.xs). The framework's own extras live here; a subclass that
-# overrides it must call SUPER::compile_extras.
 sub compile_extras {
     my ($self) = @_;
+    my $rr = $self->{rate_limit_routes};
+    if ($rr && ref $rr eq 'ARRAY' && @$rr) {
+        Punk::RateLimit::_compile_routes($self);  # XS; always loaded
+    }
     my $vr = $self->{validate_routes};
     if ($vr && ref $vr eq 'ARRAY' && @$vr) {
         Punk::Validate::_compile_routes($self);   # XS; always loaded
@@ -26,10 +27,6 @@ sub compile_extras {
     return;
 }
 
-# The application environment, resolved once at compile: the loaded
-# config's env when there is one, else PUNK_ENV, else production - the
-# safe default. Development is opted into (PUNK_ENV=development, or
-# `punk dev`, which sets it).
 sub env {
     my ($self) = @_;
     my $cfg = $self->config_object;

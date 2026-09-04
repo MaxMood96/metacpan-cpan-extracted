@@ -6,12 +6,13 @@ use Moose;
 extends 'Catalyst::View';
 
 use File::Spec;
+use Heap::Fibonacci (); # needed by IO::Async via WWW::Mechanize::Chrome
 use IO::File::WithPath;
 use MooseX::Aliases;
 use Path::Tiny qw( path );
 use Scalar::Util qw( blessed );
 use Try::Tiny;
-use Types::Common qw( Enum HashRef NonEmptySimpleStr PositiveOrZeroInt StrMatch );
+use Types::Common qw( Enum HashRef InstanceOf NonEmptySimpleStr PositiveOrZeroInt StrMatch );
 use URI::Escape qw( uri_escape_utf8 );
 use WWW::Mechanize::Chrome;
 
@@ -22,7 +23,7 @@ use namespace::autoclean;
 
 use experimental qw( signatures );
 
-our $VERSION = 'v0.1.3';
+our $VERSION = 'v0.1.6';
 
 # ABSTRACT: convert HTML (or TT) content to PDF using Chrome
 
@@ -95,6 +96,21 @@ has 'filename' => (
 );
 
 
+has mech => (
+    is      => 'ro',
+    isa     => InstanceOf ['WWW::Mechanize::Chrome'],
+    builder => '_build_mech',
+    lazy_build => 1,
+);
+
+sub _build_mech($self) {
+    my %args = $self->chrome_args->%*;
+    $args{headless}         //= 1;
+    $args{separate_session} //= 1;
+    return WWW::Mechanize::Chrome->new(%args);
+}
+
+
 sub process( $self, $c ) {
 
     my $args = $c->stash->{ $self->stash_key };
@@ -139,11 +155,7 @@ sub render( $self, $c, $args ) {
 
     my $wait = PositiveOrZeroInt->assert_return( $args->{wait} // 0 );
 
-    my $mech = $args->{mech} // WWW::Mechanize::Chrome->new(
-        headless         => 1,
-        separate_session => 1,
-        $self->chrome_args->%*
-    );
+    my $mech = $args->{mech} // $self->mech;
 
     return try {
         my $res = $mech->get_local( $file->stringify );
@@ -234,7 +246,7 @@ Catalyst::View::ChromePDF - convert HTML (or TT) content to PDF using Chrome
 
 =head1 VERSION
 
-version v0.1.3
+version v0.1.6
 
 =head1 SYNOPSIS
 
@@ -313,6 +325,8 @@ This contains additional arguments to pass to the constructor of L<WWW::Mechaniz
 
 This will be ignored if a separate L</mech> argument is passed in the stash.
 
+If the C<headless> and C<separate_session> arguments are missing or undefined, then they will be set.
+
 =head2 format
 
 This is the paper format. It defaults to C<undef>.
@@ -337,6 +351,12 @@ Acceptable values are "inline" or "attachment".
 
 This is the attachment filename. It defaults to F<output.pdf>.
 
+=head2 mech
+
+This is a L<WWW::Mechanize::Chrome> instance, initialised with the L</chrome_args>.
+
+This will be ignored if a separate C<mech> argument is passed in the stash.
+
 =head1 METHODS
 
 =head2 process
@@ -359,7 +379,7 @@ Otherwise, it will render the L<Catalyst::Response> body.
 
 This is a L<WWW::Mechanize::Chrome> instance.
 
-If omitted, a new instance will be created and then closed, using the L</chrome_args>.
+If omitted, the main L</mech> instance will be used.
 
 =head2 send_filehandle
 
@@ -390,6 +410,8 @@ Specify the paper width and height as an alternative to specifying the L</format
 These are in inches, as that is what L<WWW::Mechanize::Chrome> uses.
 
 =head2 orientation
+
+The is the orientation..
 
 =head1 COMPATIBILITY
 
@@ -427,7 +449,17 @@ Some of these options may be added in the future.
 
 =back
 
+=head1 KNOWN ISSUES
+
+When the application is shut down, this may trigger errors in the L</mech> object if it has not been properly closed.
+
 =head1 SECURITY CONSIDERATIONS
+
+=head2 Parameters
+
+It is assumed that the L</PARAMETERS> are controlled by the developer.
+
+If you allow a web user to select parameters, then you I<must> validate them.
 
 =head2 HTML
 

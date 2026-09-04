@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-App::Greple::xlate is a Perl module that provides translation support for the greple text processor. It enables translation of text using various AI-powered services including DeepL, GPT-3.5, GPT-4, and GPT-4o engines.
+App::Greple::xlate is a Perl module that provides translation support for the greple text processor. The primary engine is GPT-5.6 Terra (`gpt5`, via the `llm` command); DeepL and the legacy gpty-based GPT-3.5/GPT-4/GPT-4o engines are also available.
 
 ## Build and Development Commands
 
@@ -46,7 +46,7 @@ prove -lv t/02_run.t
   - `gpt3.pm` - GPT-3.5 integration
   - `gpt4.pm` - GPT-4 integration
   - `gpt4o.pm` - GPT-4o integration
-  - `gpt5.pm` - GPT-5.5 integration (engine name is still `gpt5`)
+  - `gpt5.pm` - GPT-5.6 Terra integration (engine name is still `gpt5`)
   - These are reached as `--xlate-engine=gpt3` etc.; the cache file name keeps
     the bare engine name (e.g. `gpt5`), unaffected by the gpty namespace.
 
@@ -76,11 +76,13 @@ The system generates `.json` cache files alongside source files to store transla
 
 ## Environment Variables
 - `DEEPL_AUTH_KEY` - DeepL API authentication
-- `OPENAI_API_KEY` - OpenAI API authentication
-- `XLATE_DEBUG` - Enable debug output
-- `XLATE_MAXLEN` - Set maximum API call length
-- `XLATE_USEAPI` - Use API mode
-- `XLATE_UPDATE` - Force cache updates
+- `OPENAI_API_KEY` - OpenAI API authentication (llm and gpty engines)
+- `GREPLE_XLATE_CACHE` - Default cache strategy (see the `--xlate-cache` POD)
+
+Note: `XLATE_DEBUG`, `XLATE_MAXLEN`, `XLATE_USEAPI`, `XLATE_UPDATE`,
+`XLATE_ENGINE`, `XLATE_ANONYMIZE`, etc. are **make variables** for the
+`share/XLATE.mk` workflow (`xlate -M`), not variables read by the Perl
+module. They are documented in the header of `share/XLATE.mk`.
 
 ## Examples and Documentation
 - `examples/` - Contains sample translation workflows with various file formats

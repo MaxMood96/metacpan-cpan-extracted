@@ -104,15 +104,25 @@ EOF
     is($q->list_locks(0, 0, { name => 'pq.cron.leader' })->{total}, 0,
        'no lease was ever taken');
 
-    # the 10s pass still beats the supervisor row with the scheduler
-    # off - registration was over 12s ago, so a fresh heartbeat proves
-    # the parent is beating, not coasting on its boot timestamp
-    my ($sup) = grep { $_->{role} eq 'supervisor' }
-        @{ $q->list_workers->{workers} };
+    # the 10s pass still beats the supervisor row with the scheduler off.
+    # What proves that is the timestamp moving, not its distance from the
+    # wall clock: a stalled smoker failed a freshness bound while the
+    # parent was beating perfectly well, and a parent coasting on its
+    # registration would sit still however long anyone waited.
+    my $sup_row = sub {
+        my ($s) = grep { $_->{role} eq 'supervisor' }
+            @{ $q->list_workers->{workers} };
+        return $s;
+    };
+    my $sup = $sup_row->();
     ok($sup, 'the supervisor row exists');
-    ok(time - $sup->{notified} < 11,
-       'and its heartbeat is fresher than the 10s cadence, so it never '
-     . 'reads as stale');
+    my $was = $sup ? $sup->{notified} : 0;
+    my $moved = wait_for(sub {
+        my $s = $sup_row->();
+        $s && $s->{notified} > $was ? $s->{notified} : undef;
+    }, 60);
+    ok($moved, 'and its heartbeat keeps advancing on the 10s cadence, so '
+             . 'it never reads as stale');
 
     pq_finish($h, 'TERM');
     unlink $app;

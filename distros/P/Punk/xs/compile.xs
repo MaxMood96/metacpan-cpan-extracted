@@ -959,6 +959,26 @@ compile(self)
                 }
             }
 
+            /* after_response lives on the app for the same reason: it is
+             * reached from a context at delivery, and a delivery from a
+             * settled future has no route to the compiled state. Stored only
+             * when there is one, so a response in an application that
+             * declares none does one hv_fetch that misses. */
+            {
+                SV **sp2 = hv_fetchs(hooks, K_AFTER_RES, 0);
+                AV *sl = (sp2 && *sp2 && SvROK(*sp2)) ? (AV *)SvRV(*sp2) : NULL;
+                SV *whats = sv_2mortal(newSVpvs("after_response hook"));
+                n = sl ? av_len(sl) + 1 : 0;
+                if (n) {
+                    AV *ares_out = newAV();
+                    for (i = 0; i < n; i++)
+                        av_push(ares_out, pc_resolve_target(aTHX_ self,
+                                    *av_fetch(sl, i, 0), whats));
+                    (void)hv_stores(h, K_AFTER_RES_C,
+                                    newRV_noinc((SV *)ares_out));
+                }
+            }
+
             /* The csrf check goes at the head of before_dispatch: a forged
              * request should be refused before an application hook sees it. */
             {

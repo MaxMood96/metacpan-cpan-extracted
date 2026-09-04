@@ -33,6 +33,7 @@ t/43-response-guard.t
 t/50-accessors.t
 t/55-prepare-parity.t
 t/60-dispatch.t
+t/61-dispatch-method.t
 t/70-finalize.t
 t/80-construct.t
 t/lib/SealTest.pm
@@ -40,6 +41,7 @@ t/lib/SealTest/Acc.pm
 t/lib/SealTest/Data.pm
 t/lib/SealTest/HttpError.pm
 t/lib/TestApp.pm
+t/lib/TestApp/Controller/Guard.pm
 t/lib/TestApp/Controller/Root.pm
 t/lib/TestApp/Controller/Steps.pm
 t/manifest.t

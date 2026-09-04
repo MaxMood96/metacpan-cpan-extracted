@@ -1,6 +1,6 @@
 package HTML::FormHandler::Field::NoValue;
 # ABSTRACT: base class for submit field
-$HTML::FormHandler::Field::NoValue::VERSION = '0.40068';
+$HTML::FormHandler::Field::NoValue::VERSION = '0.410001';
 use Moose;
 extends 'HTML::FormHandler::Field';
 
@@ -67,7 +67,7 @@ HTML::FormHandler::Field::NoValue - base class for submit field
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

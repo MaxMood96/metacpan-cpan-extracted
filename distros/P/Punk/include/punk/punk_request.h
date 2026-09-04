@@ -233,6 +233,19 @@ static void pq_overlay(pTHX_ HV *out, SV *src) {
         pq_overlay_hv(aTHX_ out, (HV *)SvRV(src));
 }
 
+/* What has become of the body: PQ_UNREAD, PQ_SLURPED (cached whole in
+ * PQ_BODY, the ->body semantics), or PQ_STREAMED (handed to a caller a chunk
+ * at a time and gone). The third state exists so that reading the body twice
+ * is an error somebody sees rather than an empty string somebody ships. */
+#define PQ_UNREAD   0
+#define PQ_SLURPED  1
+#define PQ_STREAMED 2
+
+static IV pq_read_state(pTHX_ AV *req) {
+    SV **flag = av_fetch(req, PQ_READ, 0);
+    return (flag && *flag && SvOK(*flag)) ? SvIV(*flag) : PQ_UNREAD;
+}
+
 /* The raw request body: read CONTENT_LENGTH bytes from psgi.input via
  * PerlIO on first call (then rewind, matching the Perl semantics),
  * cache in the BODY slot. Returns the cached SV (borrowed) - undef SV
@@ -241,6 +254,10 @@ static void pq_overlay(pTHX_ HV *out, SV *src) {
 static SV *pq_body(pTHX_ AV *req) {
     SV **flag = av_fetch(req, PQ_READ, 0);
     SV **b;
+    if (pq_read_state(aTHX_ req) == PQ_STREAMED)
+        croak("Punk::Request: the body was streamed and is gone - a body "
+              "can be read once, either whole (body/json/form) or in chunks "
+              "(body_each/body_to)");
     if (!(flag && *flag && SvTRUE(*flag))) {
         HV *env = punk_req_env(aTHX_ req);
         SV **in = hv_fetchs(env, "psgi.input", 0);
@@ -272,6 +289,172 @@ static SV *pq_body(pTHX_ AV *req) {
     }
     b = av_fetch(req, PQ_BODY, 0);
     return b && *b ? *b : &PL_sv_undef;
+}
+
+/* ---- the body, a chunk at a time ------------------------------------------
+ *
+ * ->body copies the whole request into one scalar. That is right for JSON and
+ * wrong for anything large: the server is already holding the bytes, and the
+ * copy doubles them for as long as the handler runs. The multipart parser has
+ * read the handle in chunks since uploads landed; this is the same window for
+ * a body that is not multipart - an import, an octet-stream PUT, an NDJSON
+ * feed - and the seam a server that drips the body in would arrive through.
+ *
+ * The sink returns 0 to carry on and non-zero to stop (which only the byte
+ * ceiling does).
+ */
+typedef int (*pq_sink_fn)(pTHX_ void *ud, const char *buf, STRLEN len);
+
+#define PQ_STREAM_CHUNK 65536
+
+/* Feed a cached body through the sink: what happens when the body was already
+ * read whole. The bytes are here, so serving them costs nothing and the
+ * caller does not have to care which happened. */
+static IV pq_stream_cached(pTHX_ SV *body, STRLEN chunk, pq_sink_fn sink,
+                           void *ud) {
+    STRLEN len, off = 0;
+    const char *p;
+    if (!body || !SvOK(body)) return 0;
+    p = SvPV_const(body, len);
+    while (off < len) {
+        STRLEN n = len - off;
+        if (n > chunk) n = chunk;
+        if (sink(aTHX_ ud, p + off, n)) break;
+        off += n;
+    }
+    return (IV)off;
+}
+
+/* Read the body off psgi.input in `chunk` byte windows, handing each to the
+ * sink. Returns the number of bytes read.
+ *
+ * With a CONTENT_LENGTH exactly that many bytes are read, which is what PSGI
+ * requires of an application.
+ *
+ * Without one, what happens turns on Transfer-Encoding, because that is what
+ * decides whether there is a body at all. A request with neither header has
+ * none, and this reads nothing - it does NOT go looking, which would turn an
+ * ordinary bodyless POST into an error. A chunked request has a body of
+ * unknown length, and that one is read to EOF - but only when the server says
+ * its input is buffered, since reading to EOF on a live socket is how an
+ * application hangs, and refusing with a reason beats hanging.
+ *
+ * `max` (0 for none) stops the read and croaks. It is the only ceiling there
+ * is once no length was declared, which is exactly when max_body had nothing
+ * to check either.
+ */
+static IV pq_body_stream(pTHX_ AV *req, STRLEN chunk, IV max,
+                         pq_sink_fn sink, void *ud) {
+    HV *env;
+    SV **in, **cl, **buf;
+    IV len, got = 0;
+    IO *io;
+    PerlIO *fp;
+    SV *window;
+    char *w;
+
+    if (!chunk) chunk = PQ_STREAM_CHUNK;
+
+    switch (pq_read_state(aTHX_ req)) {
+    case PQ_STREAMED:
+        croak("Punk::Request: the body was streamed and is gone - a body "
+              "can be read once, either whole (body/json/form) or in chunks "
+              "(body_each/body_to)");
+    case PQ_SLURPED: {
+        SV **b = av_fetch(req, PQ_BODY, 0);
+        return pq_stream_cached(aTHX_ (b && *b) ? *b : NULL, chunk, sink, ud);
+    }
+    default: break;
+    }
+
+    env = punk_req_env(aTHX_ req);
+    in  = hv_fetchs(env, "psgi.input", 0);
+    cl  = hv_fetchs(env, "CONTENT_LENGTH", 0);
+    len = (cl && *cl && SvOK(*cl)) ? SvIV(*cl) : -1;
+
+    if (len < 0) {
+        SV **te = hv_fetchs(env, "HTTP_TRANSFER_ENCODING", 0);
+        if (!(te && *te && SvOK(*te) && SvCUR(*te))) {
+            /* no length and no transfer coding: the request has no body */
+            (void)av_store(req, PQ_READ, newSViv(PQ_STREAMED));
+            return 0;
+        }
+        buf = hv_fetchs(env, "psgix.input.buffered", 0);
+        if (!(buf && *buf && SvTRUE(*buf)))
+            croak("Punk::Request: a chunked body with no CONTENT_LENGTH, and "
+                  "this server does not declare psgix.input.buffered - there "
+                  "is no length to read to and reading to EOF on a live "
+                  "socket would hang");
+    }
+
+    /* the state changes before the first read: a sink that dies halfway
+     * through has still consumed the input, and the next reader must be told
+     * so rather than handed the remainder */
+    (void)av_store(req, PQ_READ, newSViv(PQ_STREAMED));
+
+    if (!(in && *in && SvTRUE(*in)) || len == 0) return 0;
+    io = sv_2io(*in);
+    fp = io ? IoIFP(io) : NULL;
+    if (!fp) return 0;
+
+    window = sv_2mortal(newSV(chunk + 1));
+    SvPOK_on(window);
+    w = SvPVX(window);
+
+    while (len < 0 || got < len) {
+        STRLEN want = chunk;
+        SSize_t n;
+        if (len >= 0 && (IV)want > len - got) want = (STRLEN)(len - got);
+        n = PerlIO_read(fp, w, want);
+        if (n <= 0) break;
+        got += (IV)n;
+        if (max && got > max)
+            croak("Punk::Request: the request body passed %" IVdf " bytes, "
+                  "the ceiling this read was given", max);
+        if (sink(aTHX_ ud, w, (STRLEN)n)) break;
+    }
+    return got;
+}
+
+/* the two sinks: a Perl callback, and a handle */
+
+typedef struct { SV *cb; SV *self; } pq_sink_cb_ud;
+
+static int pq_sink_cb(pTHX_ void *ud, const char *buf, STRLEN len) {
+    pq_sink_cb_ud *s = (pq_sink_cb_ud *)ud;
+    dSP;
+    ENTER; SAVETMPS;
+    PUSHMARK(SP);
+    EXTEND(SP, 2);
+    /* a fresh scalar per chunk: a callback that keeps one must be able to,
+     * which a reused buffer would quietly break */
+    PUSHs(sv_2mortal(newSVpvn(buf, len)));
+    PUSHs(s->self);
+    PUTBACK;
+    (void)call_sv(s->cb, G_VOID | G_DISCARD);
+    SPAGAIN;
+    PUTBACK; FREETMPS; LEAVE;
+    return 0;
+}
+
+/* body_to's handle, owned by the savestack for as long as the read runs */
+typedef struct { PerlIO *fp; int open; } pq_out;
+
+static void pq_out_cleanup(pTHX_ void *p) {
+    pq_out *o = (pq_out *)p;
+    if (o->open) { (void)PerlIO_close(o->fp); o->open = 0; }
+}
+
+static int pq_sink_io(pTHX_ void *ud, const char *buf, STRLEN len) {
+    PerlIO *out = (PerlIO *)ud;
+    STRLEN off = 0;
+    while (off < len) {
+        SSize_t n = PerlIO_write(out, buf + off, len - off);
+        if (n <= 0) croak("Punk::Request: writing the body failed: %s",
+                          Strerror(errno));
+        off += (STRLEN)n;
+    }
+    return 0;
 }
 
 #endif /* PUNK_REQUEST_H */

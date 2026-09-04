@@ -1,6 +1,6 @@
 package HTML::FormHandler::TraitFor::Captcha;
 # ABSTRACT: generate and validate captchas
-$HTML::FormHandler::TraitFor::Captcha::VERSION = '0.40068';
+$HTML::FormHandler::TraitFor::Captcha::VERSION = '0.410001';
 use HTML::FormHandler::Moose::Role;
 use GD::SecurityImage;
 use HTTP::Date;
@@ -45,7 +45,7 @@ HTML::FormHandler::TraitFor::Captcha - generate and validate captchas
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

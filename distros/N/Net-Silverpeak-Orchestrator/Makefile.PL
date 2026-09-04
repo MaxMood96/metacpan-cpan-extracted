@@ -8,7 +8,7 @@ use ExtUtils::MakeMaker;
 
 my %WriteMakefileArgs = (
   "ABSTRACT" => "Silverpeak Orchestrator REST API client library",
-  "AUTHOR" => "Alexander Hartmaier <abraxxa\@cpan.org>",
+  "AUTHOR" => "Alexander Hartmaier <alex\@hartmaier.priv.at>",
   "CONFIGURE_REQUIRES" => {
     "ExtUtils::MakeMaker" => 0
   },
@@ -34,7 +34,7 @@ my %WriteMakefileArgs = (
     "Test2::V0" => "0.000135",
     "Test::More" => 0
   },
-  "VERSION" => "0.017000",
+  "VERSION" => "0.018000",
   "test" => {
     "TESTS" => "t/*.t"
   }

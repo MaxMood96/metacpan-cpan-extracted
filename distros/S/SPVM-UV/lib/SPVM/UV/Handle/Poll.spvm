@@ -1,0 +1,19 @@
+# Copyright (c) 2026 Yuki Kimoto
+# MIT License
+
+class UV::Handle::Poll extends UV::Handle {
+  
+  use UV::Callback::Poll;
+  use Resource::UV;
+  use UV::Resource::UV;
+  
+  # Fields
+  has poll_cb : rw UV::Callback::Poll;
+  
+  # Class Mehtods
+  native static method new : UV::Handle::Poll ();
+  
+  # Instance Methods
+  native method start : void ($cb : UV::Callback::Poll, $events : int);
+  
+}

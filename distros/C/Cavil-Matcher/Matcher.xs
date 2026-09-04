@@ -9,7 +9,6 @@
 typedef Matcher    *Cavil__Matcher__Engine;
 typedef SpookyHash *Cavil__Matcher__Hash;
 typedef Bag        *Cavil__Matcher__Bag;
-typedef FpSegment  *Cavil__Matcher__Fingerprints;
 
 MODULE = Cavil::Matcher  PACKAGE = Cavil::Matcher
 
@@ -68,37 +67,6 @@ SV *content_hash(const char *path)
     RETVAL = fp_content_hash(path);
   OUTPUT:
     RETVAL
-
-HV *fp_build(AV *files, const char *out_path, int k, int w, int dedup = 0)
-  CODE:
-    RETVAL = fp_build(files, out_path, k, w, dedup);
-  OUTPUT:
-    RETVAL
-
-Cavil::Matcher::Fingerprints fp_open(const char *path)
-  CODE:
-    RETVAL = fp_open(path);
-    if (!RETVAL) XSRETURN_UNDEF;
-  OUTPUT:
-    RETVAL
-
-MODULE = Cavil::Matcher  PACKAGE = Cavil::Matcher::Fingerprints
-
-AV *score(Cavil::Matcher::Fingerprints self, AV *query_fps, int top_n, double min_containment = 0.0, UV max_df = 0)
-  CODE:
-    RETVAL = fp_score(self, query_fps, top_n, min_containment, max_df);
-  OUTPUT:
-    RETVAL
-
-int verify(Cavil::Matcher::Fingerprints self, const char *path)
-  CODE:
-    RETVAL = fp_verify(self, path);
-  OUTPUT:
-    RETVAL
-
-void DESTROY(Cavil::Matcher::Fingerprints self)
-  CODE:
-    fp_destroy(self);
 
 MODULE = Cavil::Matcher  PACKAGE = Cavil::Matcher::Engine
 

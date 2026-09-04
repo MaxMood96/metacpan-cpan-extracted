@@ -1,0 +1,1610 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Alien::Xmake::Project - Compose and drive an xmake project from Perl
+
+=head1 SYNOPSIS
+
+    use v5.40;
+    use Alien::Xmake::Project;
+
+    my $p = Alien::Xmake::Project->new( file => 'build/xmake.lua' );
+    $p->set_project('myapp')->set_version('0.1.0');
+    $p->add_requires('zlib');
+
+    $p->target('cli')
+        ->set_kind('binary')
+        ->add_files('src/*.cpp')
+        ->add_packages('zlib');
+
+    $p->save;                                   # writes build/xmake.lua
+
+    $p->xmake->configure(mode => 'release');    # xmake configure -F build/xmake.lua
+    $p->xmake->build;
+    $p->xmake->run;
+
+=head1 DESCRIPTION
+
+C<xmake.lua> is just a Lua file. Rather than editing it by hand, this class lets you describe a project with fluent
+Perl method calls and then hands you a normal L<Alien::Xmake> object. Using chains like C<<
+$p->set_kind('binary')->add_files('src/*.cpp') >> you may drive every stage (configure, build, run, install, IDE
+generation, queries) directly from Perl.
+
+=head1 CONSTRUCTOR
+
+=head2 C<new( ... )>
+
+    my $p = Alien::Xmake::Project->new(
+        file => 'build/xmake.lua',   # where save() writes the build file
+        yes  => 1                    # auto-confirm prompts, forwarded to Alien::Xmake
+    );
+
+=over
+
+=item B<file>
+
+Path of the generated build file (default C<xmake.lua>). This becomes the C<file =E<gt>> option of the L<Alien::Xmake>
+handle returned by C<xmake>, so every action reads this file via C<-F>.
+
+=item B<yes>
+
+Boolean. Forwarded to L<Alien::Xmake/new> so captured installs (e.g. C<add_requires>) never hang on a prompt.
+
+=back
+
+=head1 METHODS
+
+=head2 Project level
+
+=head3 Identity
+
+=over
+
+=item C<set_project( $name )>
+
+    ...->set_project( 'libobseum' )
+
+Sets the project name at the top of the build file.
+
+=item C<set_version( $version )>
+
+    ...->set_version( '0.1.0' )
+
+Sets the project version string.
+
+=item C<set_xmakever( $version )>
+
+    ...->set_xmakever( '2.9.1' )
+
+Sets the minimum xmake version required to build the project.
+
+=back
+
+=head3 Global options and defaults
+
+=over
+
+=item C<set_config( $name, $value )>
+
+    ...->set_config( 'plat', 'windows' )
+
+Sets a global configuration item that applies to the whole project.
+
+=item C<set_defaultplat( @plats )>
+
+    ...->set_defaultplat( 'windows' )
+
+Sets the default platform used when none is given on the command line.
+
+=item C<set_defaultarchs( @archs )>
+
+    ...->set_defaultarchs( 'x86_64' )
+
+Sets the default architectures used when none are given.
+
+=item C<set_defaultmode( @modes )>
+
+    ...->set_defaultmode( 'release' )
+
+Sets the default build mode(s) used when none are given.
+
+=item C<set_allowedplats( @plats )>
+
+    ...->set_allowedplats( 'windows', 'linux', 'macosx' )
+
+Whitelists the platforms the project may be built for.
+
+=item C<set_allowedarchs( @archs )>
+
+    ...->set_allowedarchs( 'x86', 'x86_64' )
+
+Whitelists the architectures the project may be built for.
+
+=item C<set_allowedmodes( @modes )>
+
+    ...->set_allowedmodes( 'debug', 'release' )
+
+Whitelists the build modes the project supports.
+
+=item C<set_runtimes( @runtimes )>
+
+    ...->set_runtimes( 'MT', 'MD' )
+
+Sets the runtime flavour(s), e.g. C<MT>/C<MD> on MSVC.
+
+=back
+
+=head3 Global scope (applies to every target)
+
+=over
+
+=item C<set_toolchains( @names )>
+
+    ...->set_toolchains( 'clang' )
+
+Declares the toolchain(s) to use project-wide.
+
+=item C<set_toolset( %pairs )>
+
+    ...->set_toolset( cc => 'gcc', cxx => 'g++' )
+
+Sets the tool programs used by the toolchain, as a table of C<name =E<gt> program> pairs.
+
+=item C<set_plat( $plat )>
+
+    ...->set_plat( 'windows' )
+
+Pins the target platform for the whole project.
+
+=item C<set_arch( $arch )>
+
+    ...->set_arch( 'x86_64' )
+
+Pins the target architecture for the whole project.
+
+=item C<set_languages( @langs )>
+
+    ...->set_languages( 'c99', 'cxx11' )
+
+Sets the language standards for every target.
+
+=back
+
+=head3 Structure
+
+=over
+
+=item C<add_moduledirs( @dirs )>
+
+    ...->add_moduledirs( 'modules' )
+
+Adds extra module search directories.
+
+=item C<add_plugindirs( @dirs )>
+
+    ...->add_plugindirs( 'plugins' )
+
+Adds extra plugin search directories.
+
+=item C<includes( @files )>
+
+    ...->includes( 'build/config.lua' )
+
+Includes other build files.
+
+=item C<add_rules( @rules )>
+
+    ...->add_rules( 'mode.debug', 'mode.release' )
+
+Adds rule names to the whole project.
+
+=item C<add_addons( @addons )>
+
+    ...->add_addons( 'tools.xmake' )
+
+Enables addons.
+
+=back
+
+=head3 Packages and repositories
+
+=over
+
+=item C<add_requires( @packages )>
+
+    ...->add_requires( 'zlib', { system => true } )
+
+Adds project-wide package requirements. A trailing hashref becomes an options table; version strings pass through
+verbatim, and booleans must be real C<true>/C<false> (xmake expects C<true>, not C<1>).
+
+=item C<add_requireconfs( @configs )>
+
+    ...->add_requireconfs( 'zlib', { configs => { shared => true } } )
+
+Overrides requirement configs. Accepts a trailing options hashref.
+
+=item C<add_repositories( @repos )>
+
+    ...->add_repositories( 'myrepo', 'https://github.com/user/repo' )
+
+Registers package repositories. Accepts a trailing options hashref.
+
+=back
+
+=head3 Domain builders
+
+=over
+
+=item C<target( $name )>
+
+    ...->target( 'app' )
+
+Begins a C<target(...)> block and returns a L</Target builder>.
+
+=item C<option( $name )>
+
+    ...->option( 'with_foo' )
+
+Begins a C<option(...)> block and returns the L</Option builder>. Passing a trailing hashref instead emits the inline
+table form.
+
+=item C<rule( $name )>
+
+    ...->rule( 'markdown' )
+
+Begins a C<rule(...)> block and returns the L</Rule builder>.
+
+=item C<toolchain( $name )>
+
+    ...->toolchain( 'mycc' )
+
+Begins a C<toolchain(...)> block and returns the L</Toolchain builder>.
+
+=item C<package( $name )>
+
+    ...->package( 'zlib' )
+
+Begins a C<package(...)> block and returns the L</Package builder>.
+
+=item C<xpack( $name )>
+
+    ...->xpack( 'myapp' )
+
+Begins an C<xpack(...)> block and returns the L</Xpack builder>. The first call also emits
+C<includes("@builtin/xpack")> so the xpack plugin is enabled.
+
+=item C<namespace( $name, @lines )>
+
+    ...->namespace( 'core', 'add_rules("xmake.lua.lint")' )
+
+Begins a C<namespace(...)> block. Items may be raw Lua line strings or CODE refs called with the project so they can
+emit lines (C<< sub { $project->... } >> returning the statement text or lines).
+
+=back
+
+=head3 Emission and execution
+
+=over
+
+=item C<save>
+
+    ...->save
+
+Writes the accumulated description to C<file>. Returns the project.
+
+=item C<xmake>
+
+    ...->xmake
+
+Returns an L<Alien::Xmake> handle whose every action reads this project's build file (constructed once, cached).
+
+=item C<configure( %options )>
+
+    ...->configure( mode => 'release' )
+
+Configures the project via L<Alien::Xmake/configure>, auto-saving C<file> if not yet written.
+
+=item C<build( [$target], %options )>
+
+    ...->build
+
+Builds the project (or a specific target) via L<Alien::Xmake/build>, auto-saving C<file> if not yet written.
+
+=item C<run( [$target], %options )>
+
+    ...->run( 'app' )
+
+Runs the target via L<Alien::Xmake/run>.
+
+=item C<clean( [$target], %options )>
+
+    ...->clean
+
+Cleans target binaries and build directories via L<Alien::Xmake/clean>.
+
+=item C<install( [$target], %options )>
+
+    ...->install
+
+Installs the built artifacts via L<Alien::Xmake/install>.
+
+=item C<pack( [$name], %options )>
+
+    ...->pack
+
+Packs installation archives via L<Alien::Xmake/pack>, auto-saving C<file> if not yet written.
+
+=item C<project( [$kind], %options )>
+
+    ...->project( 'compile_commands' )
+    ...->project( kind => 'vsxmake', modes => 'release' )
+
+Generates project files (e.g. C<compile_commands>, C<vsxmake>, C<xcode>, C<cmake>, C<make>) via
+L<Alien::Xmake/project>. Auto-saves C<file> if not yet written.
+
+=item C<target_info( $name, %options )>
+
+    ...->target_info( 'app' )
+
+Returns rich target metadata parsed from C<xmake show -t <name> --format=json> via L<Alien::Xmake/target_info>.
+
+=item C<show( [$list], %options )>
+
+    ...->show
+    ...->show( 'targets' )                          # list target names
+    ...->show( 'platforms' )                        # list supported platforms
+    ...->show( 'toolchains' )                       # list available toolchains
+    ...->show( 'packages' )
+    ...->show( 'options' )
+    ...->show( 'lua', 'deps' )                      # show graph info for a config
+    ...->show( targets => { group => 'Library' } )  # targets in a group
+    ...->show( platforms => { pretty => 1 } )       # pretty-printed tree
+    ...->show( targets => { format => 'json' } )    # JSON (parsed to a structure)
+    ...->show( 'configs' )
+    ...->show( 'arch' )                             # target architecture
+    ...->show( 'plat' )
+    ...->show( 'mode' )
+    ...->show( 'host' )
+
+Runs C<xmake show> queries via L<Alien::Xmake/show> and returns the parsed results (a list of lines, a list of names
+for list queries, or a decoded structure when C<format =E<gt> 'json'>).
+
+=back
+
+=head2 Target builder
+
+Each method is chainable and corresponds to the same-named C<xmake.lua> statement inside a C<target(...)> block. A
+trailing hashref is emitted as an options table; C<true>/C<false> emit bare Lua booleans.
+
+=over
+
+=item C<set_kind( $kind )>
+
+    ...->set_kind( 'binary' )
+
+Sets the kind of target: C<binary> (executable), C<static>, C<shared>, C<object>, C<headeronly>, C<phony>.
+
+=over
+
+=item B<naming and output>
+
+=over
+
+=item C<set_basename( $name )>
+
+    ...->set_basename( 'myapp' )
+
+Overrides the base (file) name of the generated target.
+
+=item C<set_filename( $name )>
+
+    ...->set_filename( 'myapp.exe' )
+
+Overrides the full file name of the generated binary/library, including extension if desired.
+
+=item C<set_prefixname( $name )>
+
+    ...->set_prefixname( 'lib' )   # static lib -> libfoo.a
+
+Sets the prefix prepended to the target output file name.
+
+=item C<set_suffixname( $name )>
+
+    ...->set_suffixname( 'd' )     # myapp -> myappd
+
+Sets the suffix appended to the target output file name.
+
+=item C<set_extension( $ext )>
+
+    ...->set_extension( '.exe' )
+
+Sets the output file extension; calling with no argument clears a toolchain default.
+
+=item C<set_strip( $level )>
+
+    ...->set_strip( 'all' )
+
+Sets the strip mode applied at link time: C<debug> (strip debug symbols only), C<all> (strip all symbols), C<none>.
+Combined with C<set_symbols('debug')>, a separate debug-symbol file (dSYM/pdb/.sym) is also generated.
+
+=item C<set_group( $group )>
+
+    ...->set_group( 'Library' )
+
+Assigns the target to a project group, used by IDE generators to nest targets in folders.
+
+=item C<set_objectdir( $dir )>
+
+    ...->set_objectdir( '$(builddir)/.objs' )
+
+Sets the directory for intermediate object files.
+
+=item C<set_dependir( $dir )>
+
+    ...->set_dependir( '$(builddir)/.deps' )
+
+Sets the directory for compile dependency (C<.deps>) files.
+
+=item C<set_installdir( $dir )>
+
+    ...->set_installdir( '$(buildir)/lib' )
+
+Sets the directory into which the target's install files are placed on C<install>.
+
+=item C<set_prefixdir( $dir )>
+
+    ...->set_prefixdir( 'usr/local' )
+
+Sets the directory to strip as a prefix when installing relative paths.
+
+=back
+
+=item B<enablement and options>
+
+=over
+
+=item C<set_default( $bool )>
+
+    ...->set_default( false )
+
+Sets whether the target is built by default. Pass a real C<false> to opt out.
+
+=item C<set_enabled( $bool )>
+
+    ...->set_enabled( true )
+
+Sets whether the target is enabled at all; a disabled target is not built or used.
+
+=item C<set_options( @opts )>
+
+    ...->set_options( 'with_foo' )
+
+Makes the target depend on the named project C<option(...)> values.
+
+=item C<add_options( @opts )>
+
+    ...->add_options( 'with_bar' )
+
+Adds additional C<option(...)> requirement(s) to the target.
+
+=back
+
+=item B<compile model>
+
+=over
+
+=item C<set_warnings( $level )>
+
+    ...->set_warnings( 'all' )
+
+Sets the compiler warning level; xmake maps the abstract level to the right flag per compiler. Available levels:
+C<none>, C<less>, C<more>, C<extra>, C<pedantic>, C<all>, C<allextra>, C<everything>, C<error>.
+
+=item C<set_optimize( $level )>
+
+    ...->set_optimize( 'fastest' )
+
+Sets the compile optimization level; each level maps to the appropriate flag for the target compiler. Available levels:
+C<none>, C<fast>, C<faster>, C<fastest>, C<smallest>, C<aggressive>.
+
+=item C<set_symbols( $level )>
+
+    ...->set_symbols( 'debug' )
+    ...->set_symbols( 'debug', 'hidden' )
+
+Sets the debug-symbol mode. Levels may be combined: C<none>, C<debug>, C<hidden>, plus the msvc-only refinements
+C<edit> and C<embed>.
+
+=item C<set_fpmodels( @models )>
+
+    ...->set_fpmodels( 'fast', 'except' )
+
+Sets the floating-point compilation mode: C<fast>, C<strict>, C<except>, C<noexcept>, C<precise> (the default). Models
+may be combined, but C<fast> conflicts with C<precise>/C<strict>.
+
+=item C<set_exceptions( @modes )>
+
+    ...->set_exceptions( 'cxx' )
+
+Enables or disables C++ / Objective-C exceptions: C<cxx>, C<no-cxx>, C<objc>, C<no-objc>. xmake picks the
+compiler-specific flag.
+
+=item C<set_encodings( @encodings )>
+
+    ...->set_encodings( 'utf-8' )
+    ...->set_encodings( 'source:utf-8', 'target:gb2312' )
+
+Sets the source and/or target executable encoding. A bare encoding applies to both; prefix with C<source:> or
+C<target:> for one side.
+
+=item C<set_policy( $name, $value )>
+
+    ...->set_policy( 'build.warning', true )
+
+Sets a build policy for this target. See the xmake builtin-policies reference for the full list.
+
+=item C<set_pcheader( $header )>
+
+    ...->set_pcheader( 'common.h' )
+
+Sets the C precompiled header.
+
+=item C<set_pcxxheader( $header )>
+
+    ...->set_pcxxheader( 'common.hpp' )
+
+Sets the C++ precompiled header.
+
+=item C<set_pmheader( $header )>
+
+    ...->set_pmheader( 'common.h' )
+
+Sets the Objective-C precompiled header.
+
+=item C<set_pmxxheader( $header )>
+
+    ...->set_pmxxheader( 'common.hh' )
+
+Sets the Objective-C++ precompiled header.
+
+=item C<set_runtimes( @runtimes )>
+
+    ...->set_runtimes( 'MD' )
+
+Sets the runtime library flavour(s). On MSVC this selects the C runtime: C<MT>, C<MTd>, C<MD>, C<MDd>; on Android/iOS
+it selects the C++ STL implementation: C<c++_static>, C<c++_shared>.
+
+=item C<set_languages( @langs )>
+
+    ...->set_languages( 'c99', 'cxx11' )
+
+Sets the language standard(s). Standard C values: C<ansi>, C<c89>, C<gnu89>, C<c90>, C<gnu90>, C<c99>, C<gnu99>,
+C<c11>, C<gnu11>, C<c17>, C<gnu17>, ..., C<clatest>. C++ values use the C<cxxN> form (C<cxx98>, C<cxx11>, C<cxx14>,
+C<cxx17>, C<cxx20>, C<cxx23>, ..., C<cxxlatest>) or the C<C++N> spelling. A C and a C++ standard may be set together.
+
+=item C<add_forceincludes( @files )>
+
+    ...->add_forceincludes( 'config.h' )
+
+Force-includes the given header files in every translation unit.
+
+=item C<add_vectorexts( @exts )>
+
+    ...->add_vectorexts( 'sse2', 'avx' )
+
+Enables the given vector extensions.
+
+=back
+
+=item B<content and deps>
+
+Otherwise-identical statements grouped by shared semantics; each is chainable.
+
+=over
+
+=item C<add_files( @patterns )>
+
+    ...->add_files( 'src/*.cpp' )
+
+Adds source files or glob patterns to compile.
+
+=item C<remove_files( @patterns )>
+
+    ...->remove_files( 'src/old.cpp' )
+
+Removes source files/patterns previously added.
+
+=item C<remove_headerfiles( @files )>
+
+    ...->remove_headerfiles( 'src/old.h' )
+
+Removes header files from the header set.
+
+=item C<add_defines( @defines )>
+
+    ...->add_defines( 'NDEBUG' )
+
+Adds preprocessor macro definitions.
+
+=item C<add_undefines( @defines )>
+
+    ...->add_undefines( 'DEBUG' )
+
+Undefines macros.
+
+=item C<add_includedirs( @dirs )>
+
+    ...->add_includedirs( 'include' )
+
+Adds C header search directories.
+
+=item C<add_sysincludedirs( @dirs )>
+
+    ...->add_sysincludedirs( '/usr/include' )
+
+Adds system header search directories.
+
+=item C<add_embeddirs( @dirs )>
+
+    ...->add_embeddirs( 'assets' )
+
+Adds directories whose files are embedded into the target.
+
+=item C<add_links( @libs )>
+
+    ...->add_links( 'm', 'dl' )
+
+Adds libraries to link against.
+
+=item C<add_syslinks( @libs )>
+
+    ...->add_syslinks( 'pthread' )
+
+Adds system libraries to link against.
+
+=item C<add_linkorders( @orders )>
+
+    ...->add_linkorders( 'liba.a', 'libb.a' )
+
+Forces link ordering across whole libs.
+
+=item C<add_linkgroups( @groups )>
+
+    ...->add_linkgroups( 'pthread', 'm' )
+
+Wraps the named links in linker group flags, e.g. C<--start-group>/C<--end-group>.
+
+=item C<add_linkdirs( @dirs )>
+
+    ...->add_linkdirs( 'lib' )
+
+Adds library search directories.
+
+=item C<add_rpathdirs( @dirs )>
+
+    ...->add_rpathdirs( '$ORIGIN' )
+
+Adds runtime library search directories.
+
+=item C<add_deps( @targets )>
+
+    ...->add_deps( 'core' )
+
+Declares dependencies on other targets.
+
+=item C<add_rules( @rules )>
+
+    ...->add_rules( 'qt.static' )
+
+Attaches rule name(s) to this target.
+
+=item C<add_packages( @packages )>
+
+    ...->add_packages( 'zlib' )
+
+Links against the given packages from C<add_requires>.
+
+=item C<add_requires( @packages )>
+
+    ...->add_requires( 'zlib' )
+
+Requires packages that are then linked into this target.
+
+=item C<add_headerfiles( @files )>
+
+    ...->add_headerfiles( 'src/*.h' )
+
+Adds header files to install with the target.
+
+=item C<add_installfiles( @files )>
+
+    ...->add_installfiles( 'src/readme.txt' )
+
+Adds extra files to install with the target.
+
+=item C<add_extrafiles( @files )>
+
+    ...->add_extrafiles( 'src/license.txt' )
+
+Adds files that should be listed/installed but not compiled.
+
+=item C<add_imports( @mods )>
+
+    ...->add_imports( 'core.base.task' )
+
+Imports xmake modules for use in the target's Lua hooks.
+
+=item C<add_languages( @langs )>
+
+    ...->add_languages( 'cxx17' )
+
+Adds extra language standard(s) without replacing existing ones.
+
+=item C<add_frameworks( @frameworks )>
+
+    ...->add_frameworks( 'Foundation' )
+
+Adds system frameworks to link (macOS/iOS).
+
+=item C<add_frameworkdirs( @dirs )>
+
+    ...->add_frameworkdirs( '/System/Library/Frameworks' )
+
+Adds framework search directories.
+
+=item C<add_values( $key, @values )>
+
+    ...->add_values( 'wasm.preloadfiles', 'src/assets/app.js' )
+
+Sets a target-specific key/value pair, e.g. the wasm preload files.
+
+=item C<set_values( %pairs )>
+
+    ...->set_values( 'wasm.preloadfiles' => [ 'src/assets/app.js' ] )
+
+Replaces all values for a set of target-specific keys from a hashref.
+
+=back
+
+=item B<runtime / run>
+
+=over
+
+=item C<set_targetdir( $dir )>
+
+    ...->set_targetdir( '$(builddir)/out', { bindir => 'bin', libdir => 'lib' } )
+
+Sets the output directory for the target's files. By default output goes to C<build>; when set, this directory is
+preferred. Subdirectories such as C<bindir>/C<libdir> may be configured via a trailing table.
+
+=item C<set_rundir( $dir )>
+
+    ...->set_rundir( 'tests' )
+
+Sets the working directory used when the target runs.
+
+=item C<set_runargs( @args )>
+
+    ...->set_runargs( '--verbose' )
+
+Sets default arguments passed to the target when it runs.
+
+=item C<set_runenv( $name, $value )>
+
+    ...->set_runenv( 'HOME', '/tmp' )
+
+Sets a single environment variable for the running target.
+
+=item C<add_runenvs( %pairs )>
+
+    ...->add_runenvs( LD_LIBRARY_PATH => 'lib' )
+
+Adds environment variables for the running target from a hashref.
+
+=item C<add_tests( $name, @cmds )>
+
+    ...->add_tests( 'unit', 'test.exe' )
+
+Registers a runnable test that C<xmake test> can invoke.
+
+=back
+
+=item B<toolchain / plat / arch>
+
+=over
+
+=item C<set_plat( $plat )>
+
+    ...->set_plat( 'windows' )
+
+Pins this target to a specific platform.
+
+=item C<set_arch( $arch )>
+
+    ...->set_arch( 'x86_64' )
+
+Pins this target to a specific architecture.
+
+=item C<set_toolchains( @names )>
+
+    ...->set_toolchains( 'clang' )
+
+Sets the toolchain(s) used to build this target.
+
+=item C<set_toolset( %pairs )>
+
+    ...->set_toolset( cc => 'gcc', cxx => 'g++' )
+
+Sets the tool programs used by the toolchain, as a table of C<name =E<gt> program> pairs.
+
+=back
+
+=item B<flags>
+
+Compile and link flags carry their compiler prefix so one method covers each family: C<add_cflags> C<add_cxflags>
+C<add_cxxflags> C<add_mflags> C<add_mxflags> C<add_mxxflags> C<add_scflags> C<add_asflags> C<add_gcflags>
+C<add_dcflags> C<add_rcflags> C<add_fcflags> C<add_zcflags> C<add_cuflags> C<add_culdflags> C<add_cugencodes>
+C<add_ascnpuarchs> C<add_ldflags> C<add_arflags> C<add_shflags>.
+
+=item B<config-file generation>
+
+=over
+
+=item C<add_configfiles( @files )>
+
+    ...->add_configfiles( 'config.h.in', { filename => 'config.h' } )
+
+Generates a config file from a C<.in> template.
+
+=item C<set_configvar( $name, $value )>
+
+    ...->set_configvar( 'HAVE_X', '1' )
+
+Sets a config variable substituted into generated config files.
+
+=item C<set_configdir( $dir )>
+
+    ...->set_configdir( '$(projectdir)/config' )
+
+Sets the directory into which generated config files are written.
+
+=back
+
+=item B<compile-time feature detection>
+
+The full C<@builtin/check> helper family is wired in. The first call emits C<includes("@builtin/check")> at the project
+root exactly once. Each helper renders C<def, arg> and passes list-style arguments (links, headers, types) as a single
+Lua list rather than flattening them; a trailing hashref becomes the options table. Both the plain C<check_*> (defines
+the macro) and C<configvar_check_*> (writes C<set_configvar> into the generated config) forms are provided across
+C<links> C<syslinks> C<ctypes> C<cxxtypes> C<cfuncs> C<cxxfuncs> C<cincludes> C<cxxincludes> C<csnippets>
+C<cxxsnippets> C<features> C<macros> C<sizeof> C<alignof> C<bigendian> C<cflags> C<cxxflags>:
+
+    ...->add_configfiles( 'config.h.in', { filename => 'config.h' } )
+    ...->configvar_check_links( 'HAS_PTHREAD', [ 'pthread', 'm', 'dl' ] )
+    ...->configvar_check_ctypes( 'HAS_WCHAR', 'wchar_t' )
+
+  with C<config.h.in>:
+
+    ${define HAS_PTHREAD}
+    ${define HAS_WCHAR}
+
+=item B<scoped conditions (when)>
+
+C<when( $condition, $body )> wraps a group of statements in a Lua C<if/then/end> block so they only apply when a
+compile-time predicate holds (C<is_plat> C<is_os> C<is_arch> C<is_host> C<is_mode> C<is_kind> C<is_config>
+C<has_config> C<has_package>, or any Lua expression, including negations like C<not is_plat("windows")>). C<$body> is a
+code ref whose C<->E<gt>...>> chained calls back into the same builder, an arrayref of raw Lua lines, or a single raw
+Lua line string. Inner statements are indented one level and C<end> closes the block:
+
+    ...->when( 'is_plat("windows", "linux")', sub {
+        ...->add_links( 'pthread', 'm', 'dl' );
+    } )
+    ...->when( 'is_arch("arm.*")', 'add_defines("ARM")' )
+
+  emits:
+
+    if is_plat("windows", "linux") then
+        add_links("pthread", "m", "dl")
+    end
+    if is_arch("arm.*") then
+        add_defines("ARM")
+    end
+
+C<when> is also available at the project (root/global) scope to guard C<add_rules>/C<add_requires>/C<includes> and any
+root statement.
+
+=item B<raw hooks and escape hatch>
+
+Hooks take raw Lua function bodies: C<on_load> C<on_config> C<on_build> C<on_build_file> C<before_build> C<after_build>
+C<on_link> C<on_clean> C<on_install> C<on_uninstall> C<on_run>. Strings that begin with C<function> are emitted
+unquoted; other strings are quoted and joined as arguments:
+
+    ...->on_build( 'function (target) print(target:name()) end' )
+    ...->on_install( 'windows', 'function (target) end' )
+
+C<lua( @lines )> pushes raw Lua lines straight into the target body (escape hatch).
+
+=back
+
+=back
+
+=head2 Option builder
+
+An C<option(...)> block describes a configurable build option. Every method is chainable. A trailing hashref becomes an
+options table; C<true>/C<false> emit bare Lua booleans. Note that an option created with the inline table form (C<<
+option('name', { ... }) >>) cannot be extended with these setters.
+
+=over
+
+=item C<set_default( $value )>
+
+    ...->set_default( true )
+
+Sets the option's default value.
+
+=item C<set_values( @vals )>
+
+    ...->set_values( 'debug', 'release' )
+
+Sets the list of allowed values for the option.
+
+=item C<set_showmenu( $bool )>
+
+    ...->set_showmenu( true )
+
+Sets whether to show the option in the C<xmake f --help> menu.
+
+=item C<set_category( $category )>
+
+    ...->set_category( 'Features' )
+
+Groups the option under a category in the menu.
+
+=item C<set_description( $text )>
+
+    ...->set_description( 'Enable the foo feature' )
+
+Sets a human-readable description shown in the menu.
+
+=item C<add_deps( @opts )>
+
+    ...->add_deps( 'with_toolchain' )
+
+Requires the named other options to be resolved first.
+
+=item C<add_links( @libs )>
+
+    ...->add_links( 'm', 'dl' )
+
+Adds libraries the option links when enabled.
+
+=item C<add_linkdirs( @dirs )>
+
+    ...->add_linkdirs( 'lib' )
+
+Adds library search directories for the option.
+
+=item C<add_rpathdirs( @dirs )>
+
+    ...->add_rpathdirs( '$ORIGIN' )
+
+Adds runtime library search directories for the option.
+
+=item C<add_cincludes( @headers )>
+
+    ...->add_cincludes( 'math.h' )
+
+Probes for the presence of the given C headers.
+
+=item C<add_cxxincludes( @headers )>
+
+    ...->add_cxxincludes( 'vector' )
+
+Probes for the presence of the given C++ headers.
+
+=item C<add_ctypes( @types )>
+
+    ...->add_ctypes( 'wchar_t' )
+
+Probes for the presence of the given C types.
+
+=item C<add_cxxtypes( @types )>
+
+    ...->add_cxxtypes( 'std::string' )
+
+Probes for the presence of the given C++ types.
+
+=item C<add_csnippets( @code )>
+
+    ...->add_csnippets( 'int main() { return 0; }' )
+
+Probes C code snippets for successful compilation.
+
+=item C<add_cxxsnippets( @code )>
+
+    ...->add_cxxsnippets( 'int main() { return 0; }' )
+
+Probes C++ code snippets for successful compilation.
+
+=item C<add_cfuncs( @funcs )>
+
+    ...->add_cfuncs( 'pow' )
+
+Probes for the presence of the given C functions.
+
+=item C<add_cxxfuncs( @funcs )>
+
+    ...->add_cxxfuncs( 'std::swap' )
+
+Probes for the presence of the given C++ functions.
+
+=item C<add_defines( @defines )>
+
+    ...->add_defines( 'HAVE_FOO' )
+
+Adds macros defined when the option is enabled.
+
+=item C<add_cxflags( @flags )>
+
+    ...->add_cxflags( '-DFOO' )
+
+Adds C/C++ flags applied when the option is enabled.
+
+=item C<before_check( $body )> C<on_check( $body )> C<after_check( $body )>
+
+    ...->on_check( 'function (option) return false end' )
+
+Injects raw-Lua hooks around the option's compile-time check.
+
+=back
+
+=head2 Rule builder
+
+A C<rule(...)> block describes a custom build rule. Every method is chainable.
+
+=over
+
+=item C<set_extensions( @exts )>
+
+    ...->set_extensions( '.c', '.cpp' )
+
+Sets the file extensions this rule handles.
+
+=item C<add_deps( @rules )>
+
+    ...->add_deps( 'lex' )
+
+Makes this rule depend on other rules.
+
+=item C<add_imports( @mods )>
+
+    ...->add_imports( 'core.base.task' )
+
+Imports xmake modules for use in the rule's Lua hooks.
+
+=item C<on_load( $body )> C<on_config( $body )> C<on_link( $body )> C<on_build( $body )> C<on_build_file( $body )>
+C<on_build_files( $body )> C<on_clean( $body )> C<on_package( $body )> C<on_install( $body )> C<on_uninstall( $body )>
+
+    ...->on_build( 'function (target) print(target:name()) end' )
+
+Injects raw-Lua hooks (each takes raw Lua function bodies). C<lua( @lines )> pushes raw Lua lines straight into the
+rule body.
+
+=back
+
+=head2 Toolchain builder
+
+A C<toolchain(...)> block describes a custom toolchain. Every method is chainable.
+
+=over
+
+=item C<set_kind( $kind )>
+
+    ...->set_kind( 'standalone' )
+
+Sets the toolchain kind, e.g. C<standalone>.
+
+=item C<set_sdkdir( $dir )>
+
+    ...->set_sdkdir( '/opt/toolchain' )
+
+Sets the SDK root directory for the toolchain.
+
+=item C<set_bindir( $dir )>
+
+    ...->set_bindir( '/opt/toolchain/bin' )
+
+Sets the directory containing the toolchain's executables.
+
+=item C<set_toolset( %pairs )>
+
+    ...->set_toolset( cc => 'gcc', cxx => 'g++' )
+
+Sets this toolchain's tool programs as a table of C<name =E<gt> program> pairs.
+
+=item C<add_defines( @defines )>
+
+    ...->add_defines( 'FOO' )
+
+Adds preprocessor defines for the toolchain.
+
+=item C<on_load( $body )> C<on_check( $body )>
+
+    ...->on_load( 'function (toolchain) end' )
+
+Injects raw-Lua hooks (each takes raw Lua function bodies).
+
+=back
+
+=head2 Package builder
+
+A C<package(...)> block describes how a dependency package is fetched and installed. Every method is chainable; a
+trailing hashref becomes an options table; C<true>/C<false> emit bare Lua booleans.
+
+=over
+
+=item C<set_homepage( $url )>
+
+    ...->set_homepage( 'https://example.com' )
+
+Sets the package homepage URL.
+
+=item C<set_description( $text )>
+
+    ...->set_description( 'A useful library' )
+
+Sets a short description of the package.
+
+=item C<set_license( $license )>
+
+    ...->set_license( 'MIT' )
+
+Sets the package license identifier.
+
+=item C<set_kind( $kind )>
+
+    ...->set_kind( 'library' )
+
+Sets the package kind: C<library> (default), C<binary>, or C<headeronly>.
+
+=item C<set_urls( @urls )>
+
+    ...->set_urls( 'https://example.com/libfoo/v$(version).tar.gz' )
+
+Sets the official download URL(s) for the package.
+
+=item C<add_urls( @urls )>
+
+    ...->add_urls( 'https://mirror.example.com/libfoo.tar.gz' )
+
+Adds mirror download URL(s), tried in order until one works.
+
+=item C<add_versions( @vers )>
+
+    ...->add_versions( '1.0.0', { hash => 'sha256:<hexdigest>' } )
+
+Registers known versions of the package, each with an integrity hash.
+
+=item C<add_versionfiles( @files )>
+
+    ...->add_versionfiles( '1.0.0' => 'patch.tar.gz' )
+
+Adds version-specific file mappings.
+
+=item C<set_sourcedir( $dir )>
+
+    ...->set_sourcedir( 'src' )
+
+Uses a local source directory instead of downloading.
+
+=item C<add_patches( @patches )>
+
+    ...->add_patches( '1.0.0', 'patch.diff' )
+
+Adds patches to apply after unpacking.
+
+=item C<add_links( @libs )>
+
+    ...->add_links( 'foo' )
+
+Adds libraries this package provides.
+
+=item C<add_syslinks( @libs )>
+
+    ...->add_syslinks( 'pthread' )
+
+Adds system libraries this package links.
+
+=item C<add_includedirs( @dirs )>
+
+    ...->add_includedirs( 'include' )
+
+Adds include directories this package adds.
+
+=item C<add_bindirs( @dirs )>
+
+    ...->add_bindirs( 'bin' )
+
+Adds binary directories this package adds.
+
+=item C<add_defines( @defines )>
+
+    ...->add_defines( 'HAVE_FOO' )
+
+Adds defines this package adds to its consumers.
+
+=item C<add_frameworks( @frameworks )>
+
+    ...->add_frameworks( 'Foundation' )
+
+Adds system frameworks this package links (macOS/iOS).
+
+=item C<add_linkdirs( @dirs )>
+
+    ...->add_linkdirs( 'lib' )
+
+Adds library search directories this package adds.
+
+=item C<add_linkorders( @orders )>
+
+    ...->add_linkorders( 'liba.a' )
+
+Adds link ordering across whole libs for this package.
+
+=item C<add_linkgroups( @groups )>
+
+    ...->add_linkgroups( 'pthread', 'm' )
+
+Adds linker group flags for this package's links.
+
+=item C<add_configs( @configs )>
+
+    ...->add_configs( 'shared', true )
+    ...->add_configs( 'shared', false, 'icu', true )
+
+Sets default package configurations as alternating C<name, value> pairs.
+
+=item C<add_extsources( @sources )>
+
+    ...->add_extsources( 'ext/*.c' )
+
+Adds extra source files/objects to add when built from source.
+
+=item C<add_deps( @pkgs )>
+
+    ...->add_deps( 'zlib' )
+
+Declares dependencies on other packages.
+
+=item C<add_components( @comps )>
+
+    ...->add_components( 'core', 'io' )
+
+Declares components of this package.
+
+=item C<set_base( $rule )>
+
+    ...->set_base( 'github' )
+
+Bases this package on an existing package or rule.
+
+=item C<add_schemes( %schemes )>
+
+    ...->add_schemes( configs => { shared => true } )
+
+Sets scheme overrides that push configs onto consumers of this package.
+
+=item C<on_load( $body )> C<on_fetch( $body )> C<on_check( $body )> C<on_install( $body )> C<on_download( $body )>
+C<on_test( $body )> C<on_component( $body )>
+
+    ...->on_install( 'function (package) end' )
+
+Injects raw-Lua hooks (each takes raw Lua function bodies). C<lua( @lines )> pushes raw Lua lines straight into the
+package body.
+
+=back
+
+=head2 Xpack builder
+
+An C<xpack(...)> block describes a distributable installer package. The first C<xpack> call also emits
+C<includes("@builtin/xpack")> to enable the plugin. Every method is chainable; a trailing hashref becomes an options
+table; C<true>/C<false> emit bare Lua booleans.
+
+=over
+
+=item C<set_version( $version )>
+
+    ...->set_version( '1.0.0' )
+
+Sets the package version string.
+
+=item C<set_homepage( $url )>
+
+    ...->set_homepage( 'https://example.com' )
+
+Sets the package homepage URL.
+
+=item C<set_title( $title )>
+
+    ...->set_title( 'MyApp' )
+
+Sets the display title of the installer.
+
+=item C<set_author( $author )>
+
+    ...->set_author( 'Jane Doe' )
+
+Sets the author name.
+
+=item C<set_maintainer( $maintainer )>
+
+    ...->set_maintainer( 'Jane Doe' )
+
+Sets the maintainer name.
+
+=item C<set_description( $text )>
+
+    ...->set_description( 'Cross-platform app' )
+
+Sets a short description shown in the installer.
+
+=item C<set_copyright( $notice )>
+
+    ...->set_copyright( '2026 Jane Doe' )
+
+Sets the copyright notice for the installer.
+
+=item C<set_company( $company )>
+
+    ...->set_company( 'Acme Inc.' )
+
+Sets the company/organization name.
+
+=item C<set_inputkind( $kind )>
+
+    ...->set_inputkind( 'binary' )
+
+Identifies the packaged input source type: C<binary> or C<source>. Optional - built-in formats usually determine this
+from the format name, but it is needed for custom formats (e.g. to distinguish a binary C<deb> from a source C<deb>).
+
+=item C<set_formats( @formats )>
+
+    ...->set_formats( 'nsis', 'zip', 'targz' )
+
+Configures the packaging format(s) to generate; C<xmake pack> produces all of them at once. Supported formats: C<nsis>
+(Windows NSIS installer), C<wix>, C<zip>, C<targz>, C<srczip>, C<srctargz>, C<runself>, C<rpm>, C<srpm>, C<deb>,
+C<dmg>, C<appimage>, plus custom formats.
+
+=item C<set_basename( $name )>
+
+    ...->set_basename( 'myapp-setup' )
+
+Sets the base file name of the generated installer.
+
+=item C<set_extension( $ext )>
+
+    ...->set_extension( '.exe' )
+
+Sets the file extension of the generated installer.
+
+=item C<set_bindir( $dir )>
+
+    ...->set_bindir( 'bin' )
+
+Sets the directory whose contents become the payload's C<bin>.
+
+=item C<set_libdir( $dir )>
+
+    ...->set_libdir( 'lib' )
+
+Sets the directory whose contents become the payload's C<lib>.
+
+=item C<set_includedir( $dir )>
+
+    ...->set_includedir( 'include' )
+
+Sets the directory whose contents become the payload's C<include>.
+
+=item C<set_prefixdir( $dir )>
+
+    ...->set_prefixdir( 'usr/local' )
+
+Sets the install prefix inside the payload.
+
+=item C<set_specfile( $spec )>
+
+    ...->set_specfile( 'packaging/foo.spec' )
+
+Sets the path to a packaging spec file.
+
+=item C<set_specvar( $name, $value )>
+
+    ...->set_specvar( 'VERSION', '$(version)' )
+
+Sets a variable substituted into the spec file.
+
+=item C<set_iconfile( $file )>
+
+    ...->set_iconfile( 'assets/icon.ico' )
+
+Sets the icon file for the installer.
+
+=item C<set_license( $license )>
+
+    ...->set_license( 'MIT' )
+
+Sets the license text or identifier.
+
+=item C<set_licensefile( $file )>
+
+    ...->set_licensefile( 'LICENSE' )
+
+Sets the path to a license file bundled with the installer.
+
+=item C<set_nsis_displayicon( $bool )>
+
+    ...->set_nsis_displayicon( true )
+
+Sets whether to show the icon in the NSIS installer.
+
+=item C<add_sourcefiles( @files )>
+
+    ...->add_sourcefiles( 'src/*.c' )
+
+Adds source files to package.
+
+=item C<add_installfiles( @files )>
+
+    ...->add_installfiles( 'README.md' )
+
+Adds extra install files to package.
+
+=item C<add_targets( @targets )>
+
+    ...->add_targets( 'myapp' )
+
+Includes the named build targets' outputs in the package.
+
+=item C<add_components( @comps )>
+
+    ...->add_components( 'core' )
+
+Includes prebuilt components in the package.
+
+=item C<add_buildrequires( @pkgs )>
+
+    ...->add_buildrequires( 'nsis' )
+
+Adds packages required to build the installer.
+
+=item C<on_load( $body )> C<on_package( $body )>
+
+    ...->on_package( 'function (xpack) end' )
+
+Injects raw-Lua hooks (each takes raw Lua function bodies).
+
+=item C<component( $name, @body )>
+
+    ...->component( 'core', sub { ...->set_default( true ) } )
+
+Begins an C<xpack_component(...)> block; returns a L</XpackComponent builder>.
+
+=back
+
+=head3 XpackComponent builder
+
+An C<xpack_component(...)> block describes one sub-component of an xpack. Every method is chainable.
+
+=over
+
+=item C<set_title( $title )>
+
+    ...->set_title( 'Core runtime' )
+
+Sets the display title of the component.
+
+=item C<set_description( $text )>
+
+    ...->set_description( 'The core runtime library' )
+
+Sets the description of the component.
+
+=item C<set_default( $bool )>
+
+    ...->set_default( true )
+
+Sets whether the component is selected by default. Pass a real C<false> to deselect.
+
+=item C<add_sourcefiles( @files )>
+
+    ...->add_sourcefiles( 'src/*.c' )
+
+Adds source files to this component.
+
+=item C<add_installfiles( @files )>
+
+    ...->add_installfiles( 'LICENSE' )
+
+Adds extra install files to this component.
+
+=item C<on_load( $body )>
+
+    ...->on_load( 'function (component) end' )
+
+Injects a raw-Lua hook (takes a raw Lua function body).
+
+=item C<before_installcmd( $body )> C<on_installcmd( $body )> C<after_installcmd( $body )>
+C<before_uninstallcmd( $body )> C<on_uninstallcmd( $body )> C<after_uninstallcmd( $body )>
+
+    ...->on_installcmd( 'function (cmd) end' )
+
+Injects raw-Lua hooks around the component's install/uninstall commands (each takes raw Lua function bodies). C<lua(
+@lines )> pushes raw Lua lines straight into the component body.
+
+=back
+
+=head1 OPTION TABLES AND BOOLEANS
+
+Any method that in xmake takes a trailing table accepts a Perl hashref as its last argument. It is rendered with
+bracket keys so any string key is valid Lua:
+
+    $t->add_files('src/*.cpp', { unity_group => 'core' });   # add_files("src/*.cpp", {["unity_group"]="core"})
+
+Use the v5.36+ C<true>/C<false> keywords for booleans so xmake receives a real boolean, not the string C<"1">:
+
+    $p->add_requires('zlib', { shared => true });
+
+Key order in tables is deterministic (sorted).
+
+=head1 EXAMPLES
+
+A dependency-driven executable and a shared library with a test, built from Perl:
+
+    use v5.40;
+    use Alien::Xmake::Project;
+
+    my $p = Alien::Xmake::Project->new(file => 'xmake.lua');
+    $p->set_project('app')->set_version('0.1.0');
+    $p->add_rules('mode.debug', 'mode.release');
+    $p->add_requires('zlib', { configs => { shared => true } });
+
+    $p->target('core')
+        ->set_kind('shared')
+        ->add_files('src/core/*.cpp')
+        ->add_packages('zlib');
+
+    $p->target('app')
+        ->set_kind('binary')
+        ->add_files('src/main.cpp')
+        ->add_deps('core')
+        ->add_packages('zlib')
+        ->set_languages('c++20')
+        ->add_values('wasm.preloadfiles', 'src/assets/app.js')
+        ->on_install('windows', 'function (target) end');
+
+    $p->save;
+
+    $p->xmake->configure(mode => 'release');
+    $p->xmake->build;
+    $p->xmake->test;
+    $p->xmake->project(kind => 'vsxmake');   # feed any IDE generator
+
+=head1 SEE ALSO
+
+L<Alien::Xmake>, the example in C<eg/xmake_project.pl>
+
+=head1 LICENSE
+
+Copyright (C) Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms found in the Artistic License
+2. Other copyrights, terms, and conditions may apply to data transmitted through this module.
+
+=head1 AUTHOR
+
+Sanko Robinson L<https://github.com/sanko>
+
+=cut

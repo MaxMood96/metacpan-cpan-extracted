@@ -3,14 +3,8 @@ package Punk::RateLimit;
 use strict;
 use warnings;
 
-our $VERSION = '0.42';
+our $VERSION = '0.43';
 
-# Documentation only. The `rate_limit` keyword and the enforcement it installs
-# live in C - Punk::App::rate_limit (xs/ratelimit.xs) captures a rule into a
-# magic-CV closure whose body (punk_ratelimit.h) runs on every request with no
-# Perl frame - and the $c bridges block_ip / unblock_ip / rate_hit are in
-# xs/context.xs. Requiring this module just documents the feature; it defines
-# no subs of its own.
 
 1;
 
@@ -51,6 +45,16 @@ per worker. It is C<by> the client IP by default; C<< by => 'header:NAME' >>
 keys on a request header, and C<< by => sub { ... } >> on whatever the coderef
 returns for a context. C<for> scopes a rule to a path prefix, C<tag> names its
 counter namespace. Declare it more than once for layered limits.
+
+A route may also carry a budget of its own:
+
+    post '/login' => 'Web::Auth#login', { rate_limit => 5 };
+
+That is the same enforcement, installed as a guard on one route instead of a
+hook over a prefix, with the counter namespaced to the route unless a C<tag>
+says otherwise. It is the right shape for the routes an attacker retries -
+C</login>, C</register>, C</forgot> - which a prefix rule cannot single out.
+See L<Punk/A budget for one route>.
 
 Blocking is separate and cheaper: C<< $c->block_ip($ip, $ttl) >> adds an IP to
 the same arena's denylist, and Hyperman drops it at C<accept> - before a byte

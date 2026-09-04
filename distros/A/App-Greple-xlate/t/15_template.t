@@ -149,7 +149,7 @@ END
         unlike($payload, qr/report\.j2|template:/,
                'front matter is not a translation target');
         unlike($payload, qr/yamada taro/, 'value anonymized in body');
-        like($payload, qr/<var id=\d+ \/>/, 'var category tag used');
+        like($payload, qr/<var id=\\"\d+\\" \/>/, 'var category tag used');
     }
     # 文脈スライスにも front matter が出ないこと(1 段落変更)
     (my $mod = do { open my $fh, '<', $doc or die; local $/; <$fh> })

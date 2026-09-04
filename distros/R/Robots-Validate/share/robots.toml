@@ -6337,6 +6337,12 @@ network=[
   "54.236.1.0/24",
 ]
 
+[piperic]
+## About: https://piperic.com/bot
+
+agents="PipericBot"
+domain=".piperic.com"
+
 [qualified]
 ## Date: 2026-08-14
 ## About: https://www.qualified.com/legal/qualified-crawler-user-agent

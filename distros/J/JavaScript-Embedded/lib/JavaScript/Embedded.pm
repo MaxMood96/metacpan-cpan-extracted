@@ -12,7 +12,7 @@ BEGIN {
     unless -d "$Config{installsitelib}/_Inline";
 };
 
-our $VERSION = '2.7.2';
+our $VERSION = '2.7.3';
 
 my $GlobalRef = {};
 
@@ -202,6 +202,7 @@ sub set {
         my $last   = pop @props;
         my $others = join '.', @props;
 
+        $duk->perl_duk_arm_timeout();
         if ( $duk->peval_string($others) != 0 ) {
             croak $others . " is not a javascript object ";
         }
@@ -228,6 +229,7 @@ sub get {
     my $name = shift;
     my $duk  = $self->vm;
     $duk->push_string($name);
+    $duk->perl_duk_arm_timeout();
     if ( $duk->peval() != 0 ) {
         croak $duk->last_error_string();
     }
@@ -241,6 +243,7 @@ sub get_object {
     my $name = shift;
     my $duk  = $self->vm;
     $duk->push_string($name);
+    $duk->perl_duk_arm_timeout();
     if ( $duk->peval() != 0 ) {
         croak $duk->last_error_string();
     }
@@ -255,6 +258,7 @@ sub eval {
     my $string = shift;
     my $duk    = $self->duk;
 
+    $duk->perl_duk_arm_timeout();
     if ( $duk->peval_string($string) != 0 ) {
         croak $duk->last_error_string();
     }
@@ -491,6 +495,7 @@ sub to_perl {
                 for ( my $i = 0 ; $i < $len ; $i++ ) {
                     $self->push_perl( $_[$i] );
                 }
+                $self->perl_duk_arm_timeout();
                 if ( $self->pcall_method($len) == 1 ) {
                     croak $self->last_error_string();
                 }
@@ -660,6 +665,7 @@ sub safe_call {
         return defined $ret ? $ret : 1;
     };
 
+    $self->perl_duk_arm_timeout();
     eval { $ret = $self->perl_duk_safe_call( $safe, @_ ) };
     return defined $ret ? $ret : 1;
 }
@@ -860,6 +866,7 @@ package JavaScript::Embedded::Util;
             foreach my $val (@_) {
                 $duk->push_perl($val);
             }
+            $duk->perl_duk_arm_timeout();
             if ( $duk->pnew($len) != 0 ) {
                 croak $duk->last_error_string();
             }
@@ -935,6 +942,7 @@ package JavaScript::Embedded::Util;
                 }
             }
 
+            $duk->perl_duk_arm_timeout();
             if ($isNew) {
                 if ( $duk->pnew($len) != 0 ) {
                     croak $duk->last_error_string();
@@ -1082,6 +1090,12 @@ Not setting this option is the default, which means no timeout checking at all
 
     timeout => 5
 
+The value is a budget B<per execution>, measured in elapsed wall clock time.
+Every call that hands work to the engine - C<eval>, C<get>, C<get_object>, the
+dotted form of C<set>, and calling a JavaScript function held as a Perl
+coderef - starts the clock again, so an engine kept alive between calls does
+not accumulate time against it and does not expire while it sits idle.
+
 You can override this value later on another code evaluation by calling C<set_timeout> method
 
     $js->set_timeout(25);
@@ -1182,6 +1196,8 @@ L<< Bytecode execution timeout|https://github.com/svaarala/duktape/blob/master/d
 
 Enable/Disable timeout checking, to disable set the value to 0
 this value is in seconds
+
+Changes the budget every subsequent execution gets, and arms it immediately.
 
     my $js = JavaScript::Embedded->new();
 

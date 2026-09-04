@@ -1,0 +1,17 @@
+# Copyright (c) 2026 Yuki Kimoto
+# MIT License
+
+class UV::Handle::Async extends UV::Handle {
+  
+  use Resource::UV;
+  use UV::Resource::UV;
+  
+  # Fields
+  has async_cb : rw UV::Callback::Async;
+  
+  # Class Mehtods
+  native static method new : UV::Handle::Async ();
+  
+  # Instance Methods
+  native method send : void ();
+}

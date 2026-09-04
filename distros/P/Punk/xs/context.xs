@@ -1278,3 +1278,31 @@ cache(self, name = NULL)
     }
     OUTPUT:
         RETVAL
+
+# after_response($code): run $code once this response has been handed to the
+# server, off the request's own path. The queue is per request (PCX_AFTER_RES);
+# `hook after_response` is the application-wide half, and both are drained
+# together by punk_afterres.h. Chains.
+SV *
+after_response(self, code)
+        SV *self
+        SV *code
+    CODE:
+    {
+        AV *av = pcx_av(aTHX_ self);
+        SV *q;
+        if (!(SvROK(code) && SvTYPE(SvRV(code)) == SVt_PVCV))
+            croak("Punk: after_response takes a code reference");
+        q = pcx_get(aTHX_ av, PCX_AFTER_RES);
+        if (!(q && SvROK(q) && SvTYPE(SvRV(q)) == SVt_PVAV)) {
+            q = newRV_noinc((SV *)newAV());
+            if (!av_store(av, PCX_AFTER_RES, q)) {
+                SvREFCNT_dec(q);
+                croak("Punk: after_response could not queue");
+            }
+        }
+        av_push((AV *)SvRV(q), newSVsv(code));
+        RETVAL = newSVsv(self);
+    }
+    OUTPUT:
+        RETVAL

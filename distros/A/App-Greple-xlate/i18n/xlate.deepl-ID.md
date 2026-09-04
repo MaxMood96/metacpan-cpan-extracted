@@ -10,11 +10,11 @@ App::Greple::xlate - modul dukungan penerjemahan untuk greple
 
 # VERSION
 
-Version 2.01
+Version 2.02
 
 # DESCRIPTION
 
-**Greple** **xlate** modul akan menemukan blok teks yang diinginkan dan menggantinya dengan teks terjemahan. Mesin utama yang digunakan adalah GPT-5.5 (`llm/gpt5.pm`), yang memanggil perintah [llm](https://llm.datasette.io/); DeepL (`deepl.pm`) dan mesin berbasis **gpty** yang sudah ada sebelumnya juga disertakan.
+**Greple** **xlate** modul akan menemukan blok teks yang diinginkan dan menggantinya dengan teks terjemahan. Mesin utama adalah GPT-5.6 Terra (`llm/gpt5.pm`), yang memanggil perintah [llm](https://llm.datasette.io/); DeepL (`deepl.pm`) dan mesin berbasis **gpty** versi lama juga disertakan.
 
 Terjemahan disimpan dalam cache per berkas, sehingga menjalankan kembali perintah tidak memerlukan biaya tambahan untuk teks yang tidak berubah. Saat dokumen diedit, hanya paragraf yang berubah yang dikirim kembali ke API; mesin yang peka konteks juga menerima terjemahan di sekitarnya, teks sumber mentah di sekitar perubahan, dan versi sebelumnya dari paragraf yang diedit, sehingga terjemahan baru tetap mempertahankan gaya penulisan yang sudah ada (lihat **--xlate-context-window**). String yang sensitif dapat disembunyikan sebelum dikirim (lihat ["ANONYMIZATION AND TEMPLATES"](#anonymization-and-templates)).
 
@@ -81,13 +81,15 @@ Pola yang kompleks dapat ditulis dalam beberapa baris dengan baris baru yang di-
 
 Bagaimana teks diubah dengan masking dapat dilihat dengan opsi **--xlate-mask**.
 
+Penanda tempat (placeholder) berupa tag XML yang terbentuk dengan baik dan tertutup sendiri, seperti `<m id="1" />`. Mesin LLM berbasis JSON menerima tag-tag tersebut dalam array masukan mereka. Untuk DeepL, permintaan yang berisi tag penanda di-escape dan dibungkus dalam akar`<xlate>` sementara, dengan penanganan tag XML diaktifkan dan setiap kategori penanda didaftarkan sebagai tag yang tidak dapat dipisahkan. Pembungkus tersebut dihapus sebelum penanda tempat divalidasi dan dipulihkan.
+
 Penyamaran melindungi markup agar tidak diterjemahkan. Untuk menyembunyikan string sensitif dari layanan terjemahan itu sendiri, lihat ["ANONYMIZATION AND TEMPLATES"](#anonymization-and-templates); keduanya dapat digunakan bersamaan.
 
 Antarmuka ini bersifat eksperimental dan dapat berubah di masa depan.
 
 # ANONYMIZATION AND TEMPLATES
 
-String sensitif dapat disembunyikan sebelum dikirim ke API terjemahan dan dipulihkan dalam hasil terjemahan. Tersedia tiga sumber aturan anonimisasi: berkas kamus (**--xlate-anonymize**), tanda inline dalam dokumen itu sendiri (**--xlate-anonymize-mark**), dan nilai front matter YAML (**--xlate-frontmatter**). Setiap string diganti dengan tag kategori seperti `<person id=1 />` selama transmisi. Sasaran penyembunyian hanya pada transmisi API: berkas cache lokal menyimpan teks biasa yang telah dipulihkan. Gunakan **--xlate-dryrun** untuk memeriksa dengan tepat apa yang akan dikirimkan.
+String sensitif dapat disembunyikan sebelum dikirim ke API terjemahan dan dipulihkan dalam keluaran. Tersedia tiga sumber aturan anonimisasi: berkas kamus (**--xlate-anonymize**), penanda inline dalam dokumen itu sendiri (**--xlate-anonymize-mark**), dan nilai front matter YAML (**--xlate-frontmatter**). Setiap string diganti dengan tag kategori seperti  `<person id="1" />`selama transmisi. Sasaran penyembunyian hanya pada transmisi API: berkas cache lokal menyimpan teks biasa yang telah dipulihkan. Gunakan  **--xlate-dryrun**untuk memeriksa secara tepat apa yang akan dikirimkan.
 
 Untuk dokumen formulir (laporan triwulanan dan sejenisnya), tentukan aktor di bagian awal dan rujuk mereka di bagian isi:
 
@@ -140,7 +142,7 @@ Kecualikan blok embedz dari terjemahan jika dokumen mengandungnya:
 
     Pada saat ini, mesin berikut ini tersedia
 
-    - **gpt5**: gpt-5.5 (via the `llm` command)
+    - **gpt5**: gpt-5.6-terra (via the `llm` command)
     - **deepl**: DeepL API (via the `deepl` command)
     - **gpt3**: gpt-3.5-turbo (legacy, via the `gpty` command)
     - **gpt4o**: gpt-4o-mini (legacy, via the `gpty` command)
@@ -238,7 +240,7 @@ Kecualikan blok embedz dari terjemahan jika dokumen mengandungnya:
 
 - **--xlate-prompt**=_text_
 
-    Tentukan prompt khusus yang akan dikirim ke mesin terjemahan. Opsi ini tersedia untuk mesin LLM (`gpt3`, `gpt4o`, `gpt5`) tetapi tidak untuk DeepL. Anda dapat menyesuaikan perilaku terjemahan dengan memberikan instruksi spesifik kepada model AI. Jika prompt berisi `%s`, maka akan diganti dengan nama bahasa target.
+    Tentukan prompt khusus yang akan dikirim ke mesin terjemahan. Opsi ini tersedia untuk mesin LLM (`gpt3`, `gpt4o`, `gpt5`) tetapi tidak untuk DeepL. Anda dapat menyesuaikan perilaku terjemahan dengan memberikan instruksi spesifik kepada model AI. Jika prompt berisi `%s`, maka akan diganti dengan nama bahasa target. Untuk mesin `gpt5` yang didukung LLM, dokumen disediakan secara terpisah sebagai permintaan JSON yang anggota `input`-nya adalah array yang akan diterjemahkan dan anggota opsional `context`-nya berisi data referensi. Instruksi tetap yang memperlakukan anggota tersebut sebagai data dokumen, bukan perintah, ditambahkan bahkan saat prompt khusus digunakan.
 
 - **--xlate-context**=_text_
 
@@ -247,7 +249,7 @@ Kecualikan blok embedz dari terjemahan jika dokumen mengandungnya:
 - **--xlate-context-window**=_n_
 
     (Context-aware engines only, e.g. `gpt5` on the llm backend)
-    Jumlah blok terjemahan di sekitarnya yang diteruskan sebagai konteks referensi saat menerjemahkan ulang blok yang diubah (default 2). Konteks ini juga mencakup teks sumber mentah di sekitar wilayah yang diubah (judul, struktur daftar, keterangan) dan, jika tersedia, versi sebelumnya dari teks yang diubah yang diambil dari cache, sehingga kata-kata yang tidak diubah tetap dipertahankan. Atur ke 0 untuk menonaktifkan terjemahan berbasis konteks sepenuhnya. Perhatikan bahwa setiap wilayah yang diubah diterjemahkan dalam panggilan API tersendiri dan konteks dapat menambah hingga sekitar 8.000 karakter ke prompt sistem, sehingga terjemahan berbasis konteks menukar biaya tambahan dengan konsistensi.
+    Jumlah blok terjemahan di sekitarnya yang diteruskan sebagai konteks referensi saat menerjemahkan ulang blok yang diubah (default 2). Konteks tersebut juga mencakup teks sumber mentah di sekitar wilayah yang diubah (judul, struktur daftar, keterangan) dan, jika tersedia, versi sebelumnya dari teks yang diubah yang diambil dari cache, sehingga susunan kata yang tidak berubah tetap dipertahankan. Atur ke 0 untuk menonaktifkan terjemahan berbasis konteks sepenuhnya. Perhatikan bahwa setiap wilayah yang diubah diterjemahkan dalam panggilan API tersendiri dan konteks dapat menambah sekitar 8000 karakter ke permintaan JSON pengguna, sehingga terjemahan berbasis konteks menukar biaya tambahan dengan konsistensi. Konteks yang berasal dari dokumen tidak dimasukkan ke dalam prompt sistem.
 
 - **--xlate-cache-seed**=_file_
 
@@ -260,7 +262,7 @@ Kecualikan blok embedz dari terjemahan jika dokumen mengandungnya:
         [ { "category": "person",  "text": "山田太郎" },
           { "category": "company", "regex": "アクメ(株式会社)?" } ]
 
-    atau dalam format baris sederhana (`category pattern`, `/.../` untuk regex). Setiap item diganti dengan tag kategori seperti `<person id=1 />`; string yang sama selalu mendapatkan tag yang sama, sehingga model dapat melacak identitas masing-masing. Bidang JSON yang tidak dikenal diabaikan, sehingga generator (misalnya LLM lokal yang mengekstrak entitas) dapat menambahkan anotasi mereka sendiri. Kategori `lit` dicadangkan. File cache lokal tetap menyimpan teks biasa yang dipulihkan: penyembunyian hanya ditujukan untuk transmisi API.
+    atau dalam format baris sederhana (`category pattern`,  `/.../`untuk regex). Setiap item diganti dengan tag kategori seperti `<person id="1" />`; string yang sama selalu mendapatkan tag yang sama, sehingga model dapat melacak siapa adalah siapa. Bidang JSON yang tidak dikenal diabaikan, sehingga generator (misalnya LLM lokal yang mengekstrak entitas) dapat menambahkan anotasi mereka sendiri. Kategori  `lit`dicadangkan. File cache lokal tetap menyimpan teks biasa yang dipulihkan: target penyembunyian hanya berlaku untuk transmisi API.
 
     Kamus dapat dihasilkan oleh alat eksternal — misalnya model lokal yang mengekstrak entitas sensitif:
 
@@ -303,6 +305,10 @@ Kecualikan blok embedz dari terjemahan jika dokumen mengandungnya:
 - **--**\[**no-**\]**xlate-progress** (Default: True)
 
     Lihat hasil terjemahan secara real-time pada keluaran STDERR. Payload `From` ditampilkan sebagaimana dikirimkan, setelah anonimisasi dan penyamaran.
+
+- **--xlate-review**
+
+    Untuk blok yang diubah satu-ke-satu, tampilkan rentang perubahan berurutan terkecil dalam sumber lama dan baru, diikuti oleh rentang yang sesuai dalam terjemahan lama dan baru. Laporan ditulis ke STDERR, tidak melakukan panggilan API tambahan, dan diabaikan jika blok lama dan baru tidak dapat dipasangkan secara jelas.
 
 - **--xlate-stripe**
 

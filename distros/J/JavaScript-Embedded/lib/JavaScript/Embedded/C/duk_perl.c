@@ -28,8 +28,30 @@ typedef struct {
     } u;
 } perlDukMemHdr;
 
+/*
+ * WHY THE WATCHDOG IS TWO FIELDS AND NOT ONE.
+ *
+ * `timeout` is the BUDGET: how long one execution may take. `deadline` is
+ * the absolute point that budget runs out, and it is recomputed every time
+ * Perl asks the engine to run something - see perl_duk_arm_timeout(), which
+ * every execution entry point in JavaScript::Embedded calls first.
+ *
+ * These used to be one field carrying both meanings, and perl_duk_new()
+ * stored the raw budget into it as if it were already a deadline. That made
+ * the deadline "N seconds after the HOST PROCESS started" rather than "N
+ * seconds after THIS SCRIPT started", and nothing ever re-armed it. A
+ * long-lived process therefore crossed that point once, quietly, and from
+ * then on every eval() died instantly with "RangeError: execution timeout"
+ * without a single line of JavaScript having run. Only perl_duk_set_timeout()
+ * computed a real deadline, which is why calling it looked like a cure.
+ *
+ * Found 2026-09-03 on a PageCamel POS register: the mask idles in a 50Hz
+ * select loop, passes its 10 second budget in accumulated CPU time after
+ * about a quarter of an hour, and the next table plan render blew up.
+ */
 typedef struct {
     int timeout;
+    double deadline;
     size_t max_memory;
     size_t total_allocated;
     duk_context *ctx;
@@ -40,16 +62,42 @@ typedef struct {
 /**
   * perl_duk_exec_timeout
 ******************************************************************************/
+/*
+ * WALL CLOCK, NOT CPU CLOCK.
+ *
+ * This is a watchdog, and what it exists to bound is how long the caller
+ * waits - so it has to measure the time that actually passes. clock() gave
+ * process CPU time on POSIX and wall time on Windows, so the same timeout
+ * meant two different things on two platforms, and a script blocked inside a
+ * Perl callback burned none of its budget at all. CLOCK_MONOTONIC also does
+ * not move when somebody sets the system clock, which a deadline must not.
+ */
+static double perl_duk_now(void) {
+#ifdef _WIN32
+    return (double)clock() / (double)CLOCKS_PER_SEC;
+#else
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return (double)clock() / (double)CLOCKS_PER_SEC;
+    }
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1000000000.0;
+#endif
+}
+
+/* Give the next execution a full budget. Cheap enough to do unconditionally. */
+static void perl_duk_arm( perlDuk *duk ) {
+    if (duk->timeout > 0){
+        duk->deadline = perl_duk_now() + (double)duk->timeout;
+    } else {
+        duk->deadline = 0;
+    }
+}
+
 int perl_duk_exec_timeout( void *udata ) {
     perlDuk *duk = (perlDuk *) udata;
-    int timeout = duk->timeout;
 
-    if (timeout > 0){
-        clock_t uptime = clock();
-        int passed_time = (int)(uptime / CLOCKS_PER_SEC);
-        if (passed_time > timeout){
-            return 1;
-        }
+    if (duk->timeout > 0 && perl_duk_now() > duk->deadline){
+        return 1;
     }
     return 0;
 }
@@ -184,9 +232,12 @@ SV *perl_duk_new(const char *classname, size_t max_memory, int timeout) {
 
     perlDuk *duk = malloc(sizeof(*duk));
     duk->ctx = NULL;
-    duk->timeout = timeout;
+    duk->timeout = (timeout > 0) ? timeout : 0;
     duk->max_memory = max_memory;
     duk->total_allocated = 0;
+
+    /* Armed before the heap exists, because creating it already runs code. */
+    perl_duk_arm(duk);
 
     if (max_memory > 0){
         ctx = duk_create_heap(duk_sandbox_alloc, duk_sandbox_realloc, duk_sandbox_free, (void *)duk, fatal_handler);
@@ -213,13 +264,31 @@ SV *perl_duk_new(const char *classname, size_t max_memory, int timeout) {
 ******************************************************************************/
 void perl_duk_set_timeout(duk_context *ctx, int timeout){
     perlDuk *duk = get_user_data(ctx);
-    int current = 0;
 
-    if (timeout > 0){
-        timeout += (int)(clock() / CLOCKS_PER_SEC);
-    }
+    duk->timeout = (timeout > 0) ? timeout : 0;
+    perl_duk_arm(duk);
+}
 
-    duk->timeout = current + timeout;
+
+
+/**
+  * perl_duk_arm_timeout
+******************************************************************************/
+/*
+ * Start the clock on one execution. Every entry point in
+ * JavaScript::Embedded that hands work to the engine - eval, get, get_object,
+ * the dotted form of set, safe_call, and the pcall_method behind a JavaScript
+ * function called from Perl - calls this immediately before it does so.
+ *
+ * Deliberately NOT nesting-aware. A Perl callback invoked from JavaScript
+ * that re-enters the engine gets a fresh budget, which in principle lets a
+ * script bounce through Perl to buy time. A counter would close that, but a
+ * counter can also desynchronise - and a stuck counter reproduces exactly the
+ * never-re-armed bug this call exists to fix. A runaway loop in JavaScript,
+ * which is what the watchdog is for, re-enters nothing and still trips.
+ */
+void perl_duk_arm_timeout(duk_context *ctx){
+    perl_duk_arm(get_user_data(ctx));
 }
 
 

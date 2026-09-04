@@ -7,7 +7,7 @@ use warnings;
 our $VERSION;
 
 BEGIN {
-    $VERSION = '0.42';
+    $VERSION = '0.43';
     require XSLoader;
     XSLoader::load('Punk', $VERSION);
 }
@@ -174,6 +174,10 @@ client's retry replays the first response instead of doing the work
 twice. Unsafe methods only. Inert unless
 L<Punk::Plugin::Idempotency> is registered.
 
+=item * C<rate_limit> - a budget of requests per window for this route
+alone, refused with C<429> once it is spent. A count, or C<< { limit,
+window, by, tag } >>. See L</A budget for one route>.
+
 =item * C<name> - the route's name, for L</Named routes>. Everything that
 points at the route uses the name instead of spelling the path again:
 C<< $c->url_for('book', id => 42) >> in code, C<< {% url.book %} >> or the
@@ -296,11 +300,67 @@ the server's event loop. See L<Punk::WebSocket> for the events and
 L<Punk::WebSocket::Room> for broadcasting.
 
 Options: C<protocols> (an arrayref of acceptable subprotocols - a client
-that offers none of them is refused), C<max_message_size> (default 16MB),
+that offers none of them is refused), C<origin> (L</Which origins may
+open a socket>), C<max_message_size> (default 16MB),
 C<write_buffer_limit>, C<blocking>, and C<name> (L</Named routes>; the
 route is a GET route, so C<< $c->url_for >> and C<< {% url.chat %} >> give
 its path, and an application that wants C<wss://> does the scheme swap
 itself).
+
+=head3 Which origins may open a socket
+
+An upgrade carries the user's cookies, gets no preflight, and is not
+covered by the same-origin policy: the browser sends it wherever the page
+came from and delivers the answer. So the handshake refuses a request
+whose C<Origin> is not one this application answers as, with a C<403>
+before the socket is taken over. Without that, any page anywhere could
+open an authenticated socket to your application and read and write as
+whoever is looking at it.
+
+What counts as this application, by default and with no configuration:
+
+=over 4
+
+=item * The request's own C<Host>. That is what same-origin means, and it
+is sound against the attack - a page cannot set C<Host>, the browser sends
+the target's. The comparison is on host and port, not scheme.
+
+=item * The origin C<host> declares, this time including its scheme,
+along with the hosts its C<allow> list names. The pages an application
+serves are the pages that may talk back to it.
+
+=back
+
+A request that sends no C<Origin> at all is not refused. Browsers always
+send one on an upgrade; a client that does not send one - a mobile
+application, a daemon, C<Punk::Test> - has no ambient cookies to be used
+against it, and refusing it would break every non-browser client to stop
+an attack it cannot be the subject of.
+
+The option widens or replaces that:
+
+    websocket '/chat' => $target, { origin => 'app.example.com' };
+    websocket '/chat' => $target, { origin => [ 'app.example.com',
+                                                '*.example.net' ] };
+    websocket '/hub'  => $target, { origin => sub { ... } };
+    websocket '/pub'  => $target, { origin => 0 };
+
+A hostname or an arrayref of them is B<added> to the same-origin rule, in
+the syntax C<host>'s C<allow> takes: labels of C<[a-z0-9-]>, an optional
+leading C<*.> and an optional C<:port>, matched whole rather than as a
+pattern, so a typo croaks at the keyword instead of never matching. Use it
+for a front end served from a host of its own.
+
+A coderef is called with the context and the origin, and decides. C<0>
+turns the check off, which is the right answer for a socket API meant to
+be called from anywhere and the wrong one for anything a session reaches.
+C<undef> is refused rather than read as C<0>, because that value usually
+arrives from configuration and a missing key must not quietly take the
+check away.
+
+C<sse> has no such option: an C<EventSource> is an ordinary cross-origin
+request, so the browser applies CORS to it and L</cors> already says who
+may read one.
 
 WebSocket routes need L<Hyperman> 0.11 or later, whose C<detach> hands
 the socket to the application. On other PSGI servers, C<< blocking => 1 >>
@@ -585,6 +645,70 @@ C<punk.peer_addr>, because banning the proxy takes the site down. Boot-time
 config cannot catch that, and a silent no-op would leave an operator
 believing they had banned someone.
 
+=head2 rate_limit
+
+    rate_limit limit => 100, window => 60;
+    rate_limit limit => 20,  window => 60, for => '/api';
+    rate_limit limit => 1000, window => 3600, by => 'header:X-Api-Key';
+    rate_limit limit => 10,  window => 60, by => sub { $_[0]->auth_id };
+
+A budget of C<limit> requests per C<window> seconds for each caller, refused
+with C<429> and C<Retry-After> once it is spent. Counters live in
+L<Hyperman>'s shared arena, so the limit is exact across the whole worker
+pool rather than per worker, and the check costs no Perl frame.
+
+C<by> names the caller: C<ip> (the default, C<REMOTE_ADDR> - read
+L</The shared bucket> first if anything sits in front of the application),
+C<header:NAME>, or a coderef returning an identity, which is how a limit
+follows a signed-in user rather than their address. C<for> narrows the rule
+to a path prefix, and C<tag> names the counter, which two rules must differ
+in if they are not to spend each other's budget; by default the header, the
+coderef or the address supplies it. Declare it more than once for layered
+limits.
+
+A rule declared here applies to every request under its prefix. For a
+budget belonging to one route, see the C<rate_limit> B<route option> below.
+
+=head3 A budget for one route
+
+    post '/login' => 'Web::Auth#login', { rate_limit => 5 };
+
+    post '/login' => 'Web::Auth#login',
+         { rate_limit => { limit => 5, window => 60 } };
+
+The keyword is one policy for a path prefix, which is the right shape for
+"the whole API" and the wrong one for "five tries a minute at the password
+form". The route option is the second: a budget belonging to one route,
+compiled into a guard at C<to_app> so a route that declares nothing pays
+nothing.
+
+It takes the same C<limit>, C<window>, C<by> and C<tag> the keyword takes
+(C<for> is refused - the route is the scope), or a bare count as shorthand
+for that many in the default window. C<< rate_limit => 0 >> is what a route
+says by saying nothing.
+
+The counter is namespaced to the route, so C</login> and C</forgot> do not
+spend each other's budget. Naming a C<tag> is how they deliberately share
+one:
+
+    my %auth = ( limit => 5, window => 60, tag => 'auth' );
+    post '/login'    => 'Web::Auth#login',    { rate_limit => \%auth };
+    post '/register' => 'Web::Auth#register', { rate_limit => \%auth };
+    post '/forgot'   => 'Web::Auth#forgot',   { rate_limit => \%auth };
+
+The guard runs before the route's C<validate>, so a request over its budget
+is refused without its body being parsed. Layers compose: an application-wide
+rule and a route's own both apply, and the tighter one is reached first if it
+is the route's.
+
+Everything about the spec is checked where it is written - an unknown option,
+a C<by> that is not C<ip>, C<header:NAME> or a coderef, a window of zero -
+so a typo croaks at boot rather than limiting nothing.
+
+Like the keyword, this needs L<Hyperman> and its arena. Without one there is
+nowhere to count, and every request is allowed: a rate limit that cannot see
+its counters must not refuse traffic it has no evidence about.
+
 =head2 auth
 
     auth model => 'User',
@@ -635,6 +759,12 @@ cannot stand in for it. Set both.
 A request with no C<CONTENT_LENGTH> is passed through: that is a chunked
 body, which the server has already decoded and bounded against its own
 ceiling by the time Punk runs.
+
+What the application can still avoid is a B<second> copy of those bytes.
+C<< $c->req->body >> puts the whole request in one scalar; for a large one,
+L<Punk::Request/body_each> and L<Punk::Request/body_to> read it a window at a
+time instead, which is what the multipart parser has always done with
+uploads.
 
 =head2 host
 
@@ -897,15 +1027,72 @@ Every model on one database shares a single connection per worker.
     hook before_request  => sub { my ($c) = @_; ...; return };
     hook before_dispatch => sub { my ($c) = @_; ...; return };
     hook after_dispatch  => sub { my ($c, $resp) = @_; ... };
+    hook after_response  => sub { my ($c, $resp) = @_; ... };
 
 C<before_request> runs B<before routing>; C<before_dispatch> runs after
 routing and before guards (in both, a reference return short-circuits);
 C<after_dispatch> sees the finalized PSGI triplet and may mutate it or
-return a replacement.
+return a replacement; C<after_response> runs once that response has been
+handed to the server, and cannot change it.
 
-All three take a coderef or a C<'Controller#method'> target, run in
+The first three take a coderef or a C<'Controller#method'> target, run in
 registration order, and stop at the first reference return. A die goes
 through L</on_error>, and a returned Future is awaited.
+
+=head3 after_response
+
+C<after_dispatch> can replace the triplet, which is exactly why it has to
+run B<before> the response is written. C<after_response> is the phase after
+that: the work a request generates but the client is not waiting for - an
+audit row, a cache warm, a counter, an enqueue.
+
+    hook after_response => sub {
+        my ($c, $resp) = @_;
+        $c->model('Audit')->create({ path => $c->req->path,
+                                     status => $resp->[0] });
+    };
+
+A single request can add its own, which is usually the more useful half
+because the work is the handler's:
+
+    post '/orders' => sub {
+        my ($c) = @_;
+        my $order = $c->model('Order')->create($c->validate->data);
+        $c->after_response(sub { warm_the_dashboard($order) });
+        $c->json({ id => $order->{id} }, 201);
+    };
+
+The application's hooks run first, then whatever the request queued, each in
+registration order. Both are given the context and the response that was
+sent. A return value has nowhere to go and is discarded, and a die is logged
+through the application's logger while the rest still run: there is no
+response left to turn into a C<500>, and a die that vanished silently here
+would be worse than one that is written down.
+
+B<Where "after" is depends on what is underneath>, and it is worth knowing
+which of the three you have:
+
+=over 4
+
+=item * On a server offering C<psgix.cleanup> - the PSGI extension - the
+callbacks are handed to it and it runs them once the response is complete.
+
+=item * On a L<Hyperman> worker, they run on the next pass of the event loop,
+so the response has already been written to the socket and the worker is free
+to take other requests in the meantime.
+
+=item * Anywhere else they run B<inline>, immediately after the response is
+final and before it is returned to the server. The phase still runs in the
+right order and everything above still holds, but there is no loop to hand
+the work to, so a slow callback does delay the client. This is what a plain
+PSGI server and L<Punk::Test> do.
+
+=back
+
+None of the three is a job queue: nothing is persisted, nothing is retried,
+and a worker that dies takes its pending callbacks with it. Work that must
+happen belongs in L<Punk::Plugin::Queue>; work that would merely be nice to
+have off the request's path belongs here.
 
 =head3 before_request vs before_dispatch
 

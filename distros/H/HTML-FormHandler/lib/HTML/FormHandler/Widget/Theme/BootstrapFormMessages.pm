@@ -1,7 +1,8 @@
 package HTML::FormHandler::Widget::Theme::BootstrapFormMessages;
 # ABSTRACT: role to render form messages using Bootstrap styling
-$HTML::FormHandler::Widget::Theme::BootstrapFormMessages::VERSION = '0.40068';
+$HTML::FormHandler::Widget::Theme::BootstrapFormMessages::VERSION = '0.410001';
 use Moose::Role;
+use HTML::Entities qw( encode_entities );
 
 
 sub render_form_messages {
@@ -16,23 +17,23 @@ sub render_form_messages {
         $output = qq{\n<div class="alert $alert_error_class">};
         my $msg = $self->error_message;
         $msg ||= 'There were errors in your form';
-        $msg = $self->_localize($msg);
+        $msg = encode_entities($self->_localize($msg));
         $output .= qq{\n<span class="error_message">$msg</span>};
         $output .= qq{\n<span class="error_message">$_</span>}
-            for $result->all_form_errors;
+            for map { encode_entities($_) } $result->all_form_errors;
         $output .= "\n</div>";
     }
     elsif ( $result->validated ) {
         my $msg = $self->success_message;
         $msg ||= "Your form was successfully submitted";
-        $msg = $self->_localize($msg);
+        $msg = encode_entities($self->_localize($msg));
         $output = qq{\n<div class="alert alert-success">};
         $output .= qq{\n<span>$msg</span>};
         $output .= "\n</div>";
     }
     if ( $self->has_info_message && $self->info_message ) {
         my $msg = $self->info_message;
-        $msg = $self->_localize($msg);
+        $msg = encode_entities($self->_localize($msg));
         $output = qq{\n<div class="alert alert-info">};
         $output .= qq{\n<span>$msg</span>};
         $output .= "\n</div>";
@@ -56,7 +57,7 @@ HTML::FormHandler::Widget::Theme::BootstrapFormMessages - role to render form me
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 DESCRIPTION
 

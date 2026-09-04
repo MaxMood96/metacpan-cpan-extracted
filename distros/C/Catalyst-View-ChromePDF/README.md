@@ -61,17 +61,14 @@ It is intended as a successor to [Catalyst::View::Wkhtmltopdf](https://metacpan.
 
 # RECENT CHANGES
 
-Changes for version v0.1.3 (2026-08-10)
+Changes for version v0.1.6 (2026-09-03)
 
-- Enhancements
-    - Added a wait attribute for specifying a wait time for content to load.
 - Bug Fixes
-    - Fixed bug with setting tmpdir from the configuration.
-    - Fixed filename encoding.
-    - Removed use of Log::Log4perl.
-    - Catch Chrome errors.
+    - The headless and separate\_session arguments will be set if they are omitted from chrome\_args.
+    - The mech attribute is now lazy, and will not be instantiated if it is unused.
 - Documentation
-    - Added missing documentation.
+    - Added AI\_POLICY.md.
+    - Updated documentation for chome\_args and mech attributes.
 
 See the `Changes` file for more details.
 
@@ -81,6 +78,7 @@ This module lists the following modules as runtime dependencies:
 
 - [Catalyst::View](https://metacpan.org/pod/Catalyst%3A%3AView)
 - [File::Spec](https://metacpan.org/pod/File%3A%3ASpec)
+- [Heap::Fibonacci](https://metacpan.org/pod/Heap%3A%3AFibonacci)
 - [IO::File::WithPath](https://metacpan.org/pod/IO%3A%3AFile%3A%3AWithPath)
 - [Moose](https://metacpan.org/pod/Moose)
 - [MooseX::Aliases](https://metacpan.org/pod/MooseX%3A%3AAliases)
@@ -130,6 +128,12 @@ dzil install --install-command="cpan ."
 For more information, see [How to install CPAN modules](https://www.cpan.org/modules/INSTALL.html).
 
 # SECURITY CONSIDERATIONS
+
+## Parameters
+
+It is assumed that the ["PARAMETERS"](#parameters) are controlled by the developer.
+
+If you allow a web user to select parameters, then you _must_ validate them.
 
 ## HTML
 

@@ -7,7 +7,7 @@ use Wasm::Wasmtime::FFI;
 use Wasm::Wasmtime::Config;
 
 # ABSTRACT: Wasmtime engine class
-our $VERSION = '0.23'; # VERSION
+our $VERSION = '0.24'; # VERSION
 
 
 $ffi_prefix = 'wasm_engine_';
@@ -19,17 +19,16 @@ $ffi->attach( [ 'new_with_config' => 'new' ] => ['wasm_config_t'] => 'wasm_engin
   $config ||= Wasm::Wasmtime::Config->new;
   if(defined $ENV{PERL_WASM_WASMTIME_MEMORY})
   {
-    my($static_memory_maximum_size, $static_memory_guard_size, $dynamic_memory_guard_size) = split /:/, $ENV{PERL_WASM_WASMTIME_MEMORY};
-    $config->static_memory_maximum_size($static_memory_maximum_size);
-    $config->static_memory_guard_size($static_memory_guard_size);
-    $config->dynamic_memory_guard_size($dynamic_memory_guard_size);
+    my($memory_reservation, $memory_guard_size) = split /:/, $ENV{PERL_WASM_WASMTIME_MEMORY};
+    $config->memory_reservation($memory_reservation) if defined $memory_reservation && length $memory_reservation;
+    $config->memory_guard_size($memory_guard_size)   if defined $memory_guard_size   && length $memory_guard_size;
   }
-  my $self = $xsub->($config),
+  my $self = $xsub->($config);
   delete $config->{ptr};
   $self;
 });
 
-_generate_destroy();
+_generate_destroy('wasm_engine_delete');
 
 1;
 
@@ -45,7 +44,7 @@ Wasm::Wasmtime::Engine - Wasmtime engine class
 
 =head1 VERSION
 
-version 0.23
+version 0.24
 
 =head1 SYNOPSIS
 
@@ -88,7 +87,7 @@ Graham Ollis <plicease@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2020-2022 by Graham Ollis.
+This software is copyright (c) 2020-2026 by Graham Ollis.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

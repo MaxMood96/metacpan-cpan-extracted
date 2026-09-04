@@ -382,13 +382,14 @@ static void pm_durable_attachments(pTHX_ HV *cfg, SV *c, HV *spec)
                 struct stat st;
                 const char *pp = SvPV_nolen(path);
                 int fd;
+                char sb[PMAIL_U64_LEN];
                 if (stat(pp, &st) != 0)
                     croak("Punk::Plugin::Mailer: cannot read attachment '%s': %s", pp, strerror(errno));
                 if ((NV)st.st_size > max)
-                    croak("Punk::Plugin::Mailer: attachment '%s' is %llu bytes, over "
+                    croak("Punk::Plugin::Mailer: attachment '%s' is %s bytes, over "
                           "later_inline_max (%.0" NVff "); register Punk::Plugin::Blob to keep "
                           "it on disk for the job", SvPV_nolen(filename),
-                          (unsigned long long)st.st_size, max);
+                          pmail_u64_str(sb, (pmail_u64)st.st_size), max);
                 fd = open(pp, O_RDONLY);
                 if (fd < 0) croak("Punk::Plugin::Mailer: cannot open attachment '%s': %s", pp, strerror(errno));
                 content = newSV((STRLEN)st.st_size + 1);

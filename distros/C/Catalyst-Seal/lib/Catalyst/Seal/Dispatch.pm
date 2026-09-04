@@ -197,87 +197,37 @@ sub _clear_components { %COMPONENT = (); return }
 
 # ------------------------------------------------------------ route lookup
 #
-# Catalyst/Dispatcher.pm:371 walks the path from the full string down, trying
-# every dispatch type at every level, and moves each segment it fails on into
-# the arguments. For "/" that is one iteration; for "/api/v1/users/42" it is
-# five, times the number of dispatch types.
+# ------------------------------------------------------------ route lookup
 #
-# Which level matched, which dispatch type matched it, and what ended up in the
-# arguments are a pure function of the path once the action table is frozen.
-# The match itself is not replayed from the memo: it is called again, so that
-# $c->action, $req->action, $req->match and $req->captures are set by the
-# dispatch type exactly as before. Only the descent is skipped.
+# There is deliberately no route memo here. 0.02 had one, keyed on the request
+# path, and it was CVE-2026-85491.
 #
-# The key is the request path, which is caller controlled, hence the cap.
-
-my %ROUTE;
-
-sub _clear_routes { %ROUTE = (); return }
-sub route_memo_size { scalar keys %ROUTE }
-
-sub _prepare_action_tail {
-    my ($c, $req, $args) = @_;
-
-    s/%([0-9A-Fa-f]{2})/chr(hex($1))/eg
-        for grep { defined } @{ $req->captures || [] };
-
-    return unless $c->debug;
-
-    if (defined $req->match && length $req->match) {
-        my $match = $req->match;
-        $match =~ s/%([0-9A-Fa-f]{2})/chr(hex($1))/eg;
-        $match = Encode::decode_utf8($match);
-        $c->log->debug( 'Path is "' . $match . '"' );
-    }
-    $c->log->debug( 'Arguments are "'
-        . join( '/', map { Encode::decode_utf8 $_ } @$args ) . '"' ) if @$args;
-    return;
-}
-
-sub _prepare_action {
-    my ( $self, $c ) = @_;
-
-    my $req   = $c->req;
-    my $rpath = $req->path;
-    my $key   = defined $rpath ? $rpath : '';
-
-    if (my $hit = $ROUTE{$key}) {
-        my @args = @{ $hit->{args} };
-        $req->args( \@args );
-        if (!$hit->{type} || $hit->{type}->match( $c, $hit->{path} )) {
-            _prepare_action_tail($c, $req, \@args);
-            return;
-        }
-        # The table moved under us without a register we saw. Fall through and
-        # redo it properly rather than trusting a stale answer.
-        delete $ROUTE{$key};
-    }
-
-    my $path = $rpath;
-    my @path = split /\//, $rpath;
-    $req->args( \my @args );
-    unshift( @path, '' );    # Root action
-
-    my $matched;
-  DESCEND: while (@path) {
-        $path = join '/', @path;
-        $path =~ s#^/+##;
-
-        foreach my $type ( @{ $self->dispatch_types } ) {
-            if ( $type->match( $c, $path ) ) { $matched = $type; last DESCEND }
-        }
-
-        my $arg = pop(@path);
-        $arg =~ s/%([0-9A-Fa-f]{2})/chr(hex($1))/eg;
-        unshift @args, $arg;
-    }
-
-    $ROUTE{$key} = { path => $path, args => [@args], type => $matched }
-        if keys %ROUTE < $MAX_KEYS;
-
-    _prepare_action_tail($c, $req, \@args);
-    return;
-}
+# The premise it rested on was that "which level matched, which dispatch type
+# matched it, and what ended up in the arguments are a pure function of the
+# path once the action table is frozen". That is false.
+# Catalyst::ActionRole::HTTPMethods, ConsumesContent, Scheme and QueryMatching
+# each wrap match() with a test on request state that is not the path, so the
+# same path matches a different action, or none, depending on the method, the
+# content type, the scheme or the query.
+#
+# Two things followed. A request that legitimately failed to match wrote a
+# negative entry, and replaying it returned without consulting any dispatch
+# type, so $c->action was never set: one unauthenticated GET of a
+# :Method('POST') path disabled that path for the life of the worker. And a
+# positive entry recorded the level an earlier request had descended to, so a
+# GET that fell past a deep POST-only action onto a shallow any-method one
+# would route a later POST to the shallow action, with whatever guarded the
+# deep one never running.
+#
+# It cannot be repaired by widening the key. match() is wrapped by whatever
+# roles an application applies, so what the decision depends on is not
+# knowable from here, and there is no reliable way to detect that an action is
+# matched on the path alone. Anything remembered about a routing decision has
+# to key on all of the request state or not be remembered.
+#
+# The memos that remain in this file do not have this problem: get_action and
+# get_containers are lookups in _action_hash and _container_hash, and consult
+# no request state at all. t/61-dispatch-method.t is the regression.
 
 sub _component {
     my ($c, $name, @args) = @_;
@@ -352,8 +302,6 @@ Catalyst::Seal::register_step('dispatch' => sub {
     _rewire_dispatch_actions($app);
     Catalyst::Seal::Guard::replace(
         'Catalyst::component'               => \&_component);
-    Catalyst::Seal::Guard::replace(
-        'Catalyst::Dispatcher::prepare_action' => \&_prepare_action);
 
     
     my $register = Catalyst::Dispatcher->can('register');
@@ -363,7 +311,6 @@ Catalyst::Seal::register_step('dispatch' => sub {
             _clear();
             _clear_chain();
             _clear_components();
-            _clear_routes();
             return $register->(@_);
         };
     }

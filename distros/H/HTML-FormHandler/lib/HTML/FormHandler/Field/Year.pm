@@ -1,6 +1,6 @@
 package HTML::FormHandler::Field::Year;
 # ABSTRACT: year selection list
-$HTML::FormHandler::Field::Year::VERSION = '0.40068';
+$HTML::FormHandler::Field::Year::VERSION = '0.410001';
 use Moose;
 extends 'HTML::FormHandler::Field::IntRange';
 
@@ -34,7 +34,7 @@ HTML::FormHandler::Field::Year - year selection list
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 DESCRIPTION
 

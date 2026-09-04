@@ -1,11 +1,12 @@
 package HTML::FormHandler::Render::Simple;
 # ABSTRACT: simple rendering role
-$HTML::FormHandler::Render::Simple::VERSION = '0.40068';
+$HTML::FormHandler::Render::Simple::VERSION = '0.410001';
 use Moose::Role;
 
 requires( 'sorted_fields', 'field' );
 
 use HTML::FormHandler::Render::Util ('process_attrs', 'ucc_widget');
+use HTML::Entities qw( encode_entities );
 
 
 
@@ -30,7 +31,7 @@ sub render_form_errors {
     return '' unless $self->has_form_errors;
     my $output = "\n<div class=\"form_errors\">";
     $output .= qq{\n<span class="error_message">$_</span>}
-        for $self->all_form_errors;
+        for map { encode_entities($_) } $self->all_form_errors;
     $output .= "\n</div>";
     return $output;
 }
@@ -82,7 +83,7 @@ sub wrap_field {
 
     $output .= "\n$rendered_field";
     $output .= qq{\n<span class="error_message">$_</span>}
-        for $field->all_errors;
+        for map { encode_entities($_) } $field->all_errors;
 
     $output .= "\n</$wrapper_tag>";
 
@@ -276,7 +277,7 @@ sub render_reset {
 sub render_captcha {
     my ( $self, $field ) = @_;
 
-    my $output .= '<img src="' . $self->captcha_image_url . '"/>';
+    my $output = '<img src="' . $self->captcha_image_url . '"/>';
     $output .= '<input id="' . $field->id . '" name="';
     $output .= $field->html_name . '"/>';
     return $output;
@@ -298,7 +299,7 @@ HTML::FormHandler::Render::Simple - simple rendering role
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

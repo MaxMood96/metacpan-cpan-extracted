@@ -403,3 +403,115 @@ cookie(self, name)
     }
     OUTPUT:
         RETVAL
+
+# body_each(\&cb, %opts): the request body in chunks, each handed to the
+# callback as ($chunk, $req). Options: `chunk` (window size, default 64KB) and
+# `max` (a ceiling in bytes; 0, the default, is none). Returns the byte count.
+#
+# The body is read once: after this, ->body and ->json croak rather than
+# answer with nothing. A body already read whole is replayed from the copy, so
+# the order the two are called in is not a trap.
+IV
+body_each(self, cb, ...)
+        SV *self
+        SV *cb
+    CODE:
+    {
+        AV *req = punk_req_av(aTHX_ self);
+        pq_sink_cb_ud ud;
+        STRLEN chunk = 0;
+        IV max = 0;
+        int i;
+        if (!(SvROK(cb) && SvTYPE(SvRV(cb)) == SVt_PVCV))
+            croak("Punk::Request: body_each takes a code reference");
+        if ((items - 2) % 2)
+            croak("Punk::Request: body_each takes key => value options");
+        for (i = 2; i + 1 < items; i += 2) {
+            const char *k = SvPV_nolen(ST(i));
+            SV *v = ST(i + 1);
+            if (strEQ(k, "chunk")) {
+                IV n = SvOK(v) ? SvIV(v) : 0;
+                if (n <= 0) croak("Punk::Request: body_each chunk is a "
+                                  "positive number of bytes");
+                chunk = (STRLEN)n;
+            }
+            else if (strEQ(k, "max")) max = SvOK(v) ? SvIV(v) : 0;
+            else croak("Punk::Request: unknown body_each option '%s'", k);
+        }
+        ud.cb = cb;
+        ud.self = self;
+        RETVAL = pq_body_stream(aTHX_ req, chunk, max, pq_sink_cb, &ud);
+    }
+    OUTPUT:
+        RETVAL
+
+# body_to($dest, %opts): spool the body straight to a file, without a copy of
+# it ever existing in the application. $dest is a path or an open handle; the
+# same `chunk` and `max` options apply. Returns the byte count.
+IV
+body_to(self, dest, ...)
+        SV *self
+        SV *dest
+    CODE:
+    {
+        AV *req = punk_req_av(aTHX_ self);
+        STRLEN chunk = 0;
+        IV max = 0;
+        int i, opened = 0;
+        PerlIO *out = NULL;
+        if ((items - 2) % 2)
+            croak("Punk::Request: body_to takes key => value options");
+        for (i = 2; i + 1 < items; i += 2) {
+            const char *k = SvPV_nolen(ST(i));
+            SV *v = ST(i + 1);
+            if (strEQ(k, "chunk")) {
+                IV n = SvOK(v) ? SvIV(v) : 0;
+                if (n <= 0) croak("Punk::Request: body_to chunk is a "
+                                  "positive number of bytes");
+                chunk = (STRLEN)n;
+            }
+            else if (strEQ(k, "max")) max = SvOK(v) ? SvIV(v) : 0;
+            else croak("Punk::Request: unknown body_to option '%s'", k);
+        }
+        if (!SvOK(dest))
+            croak("Punk::Request: body_to takes a path or an open handle");
+        if (SvROK(dest) || SvTYPE(dest) == SVt_PVGV) {
+            IO *io = sv_2io(dest);
+            out = io ? IoOFP(io) : NULL;
+            if (!out && io) out = IoIFP(io);
+            if (!out)
+                croak("Punk::Request: body_to was given a handle that is "
+                      "not open for writing");
+        }
+        else {
+            const char *path = SvPV_nolen(dest);
+            out = PerlIO_open(path, "wb");
+            if (!out)
+                croak("Punk::Request: cannot write '%s': %s", path,
+                      Strerror(errno));
+            opened = 1;
+        }
+        {   /* A die mid-read must still close what this opened, and the
+             * ordinary path must still be able to report a close that failed
+             * - a flush error on the last block is how a spooled file ends up
+             * short. So: the savestack owns the handle for the die path, and
+             * the success path closes it first and clears the flag. */
+            pq_out o;
+            IV got;
+            o.fp = out;
+            o.open = opened;
+            ENTER;
+            SAVEDESTRUCTOR_X(pq_out_cleanup, &o);
+            got = pq_body_stream(aTHX_ req, chunk, max, pq_sink_io, out);
+            if (o.open) {
+                o.open = 0;
+                if (PerlIO_close(out) != 0)
+                    croak("Punk::Request: closing the file failed: %s",
+                          Strerror(errno));
+            }
+            LEAVE;
+            RETVAL = got;
+        }
+    }
+    OUTPUT:
+        RETVAL

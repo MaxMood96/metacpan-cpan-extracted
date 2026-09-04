@@ -10,11 +10,11 @@ App::Greple::xlate - tõlke tugimoodul greple jaoks
 
 # VERSION
 
-Version 2.01
+Version 2.02
 
 # DESCRIPTION
 
-**Greple** **xlate** moodul leiab soovitud tekstiplokid ja asendab need tõlgitud tekstiga. Peamine mootor on GPT-5.5 (`llm/gpt5.pm`), mis kutsub käsku [llm](https://llm.datasette.io/); samuti on kaasas DeepL (`deepl.pm`) ja pärandmootorid, mis põhinevad **gpty**-l.
+**Greple** **xlate** moodul leiab soovitud tekstiplokid ja asendab need tõlgitud tekstiga. Peamine mootor on GPT-5.6 Terra (`llm/gpt5.pm`), mis kutsub käsku [llm](https://llm.datasette.io/); samuti on kaasas DeepL (`deepl.pm`) ja pärandmootorid, mis põhinevad **gpty**-l.
 
 Tõlked salvestatakse vahemällu failipõhiselt, nii et käsu uuesti käivitamine ei maksa muutmata teksti puhul midagi. Kui dokumenti redigeeritakse, saadetakse API-le uuesti ainult muudetud lõigud; kontekstiteadlik mootor saab ka ümbritsevad tõlked, muudatuse ümber oleva töötlemata lähteteksti ja redigeeritud lõigu eelmise versiooni, nii et uus tõlge säilitab väljakujunenud sõnastuse (vt **--xlate-context-window**). Tundlikke stringe saab enne edastamist varjata (vt ["ANONYMIZATION AND TEMPLATES"](#anonymization-and-templates)).
 
@@ -81,13 +81,15 @@ Keerukat mustrit saab kirjutada mitmele reale, kasutades tagurpidi kaldkriipsuga
 
 Kuidas tekst maskeerimise käigus muundatakse, on nähtav valikuga **--xlate-mask**.
 
+Maski kohatäited on korrektselt moodustatud isesulguvad XML-sildid, näiteks `<m id="1" />`. JSON-põhised LLM-mootorid saavad sildid oma sisendmassiivides. DeepLi puhul paojärjestatakse märgendsilte sisaldav päring ja suletakse ajutisse juurelementi `<xlate>`, XML-siltide töötlemine lubatakse ning iga markeri kategooria registreeritakse mittepoolitatava sildina. Ümbris eemaldatakse enne kohatäidete valideerimist ja taastamist.
+
 Maskeerimine kaitseb märgistust tõlkimise eest. Tundlike stringide peitmiseks tõlketeenuse enda eest vt ["ANONYMIZATION AND TEMPLATES"](#anonymization-and-templates); mõlemat saab kasutada koos.
 
 See liides on eksperimentaalne ja võib tulevikus muutuda.
 
 # ANONYMIZATION AND TEMPLATES
 
-Tundlikud stringid saab peita enne nende saatmist tõlke-API-sse ja väljundis taastada. Saadaval on kolm anonüümimisreeglite allikat: sõnastikufail (**--xlate-anonymize**), dokumendis endas olevad reasisesed märgid (**--xlate-anonymize-mark**) ja YAML-i front matter väärtused (**--xlate-frontmatter**). Iga string asendatakse edastamise ajal kategooriasildiga, näiteks `<person id=1 />`. Peitmise sihtmärk on ainult API-edastus: kohalikud vahemälufailid salvestavad taastatud lihtteksti. Kasutage käsku **--xlate-dryrun**, et kontrollida täpselt, mida edastataks.
+Tundlikud stringid saab peita enne nende saatmist tõlke-API-sse ja väljundis taastada. Saadaval on kolm anonüümimisreeglite allikat: sõnastikufail (**--xlate-anonymize**), dokumendis endas olevad reasisesed märgid (**--xlate-anonymize-mark**) ja YAML-i front matter väärtused (**--xlate-frontmatter**). Iga string asendatakse edastamise ajal kategooriasildiga, näiteks `<person id="1" />`. Peitmise sihtmärk on ainult API-edastus: kohalikud vahemälufailid salvestavad taastatud lihtteksti. Kasutage käsku **--xlate-dryrun**, et kontrollida täpselt, mida edastataks.
 
 Vormidokumentide (kvartaliaruanded ja muu sarnane) puhul määratlege osalised kohe alguses ja viidake neile põhitekstis:
 
@@ -140,7 +142,7 @@ Välistage embedz-plokid tõlkimisest, kui dokument neid sisaldab:
 
     Praegu on saadaval järgmised mootorid
 
-    - **gpt5**: gpt-5.5 (via the `llm` command)
+    - **gpt5**: gpt-5.6-terra (via the `llm` command)
     - **deepl**: DeepL API (via the `deepl` command)
     - **gpt3**: gpt-3.5-turbo (legacy, via the `gpty` command)
     - **gpt4o**: gpt-4o-mini (legacy, via the `gpty` command)
@@ -238,7 +240,7 @@ Välistage embedz-plokid tõlkimisest, kui dokument neid sisaldab:
 
 - **--xlate-prompt**=_text_
 
-    Määrake tõlkemootorile saadetav kohandatud viip. See valik on saadaval LLM-mootorite (`gpt3`, `gpt4o`, `gpt5`) jaoks, kuid mitte DeepL-i jaoks. Saate tõlkekäitumist kohandada, andes tehisintellekti mudelile konkreetsed juhised. Kui viip sisaldab `%s`, asendatakse see sihtkeele nimega.
+    Määrake tõlkemootorile saadetav kohandatud viip. See valik on saadaval LLM-mootorite (`gpt3`, `gpt4o`, `gpt5`) jaoks, kuid mitte DeepL-i jaoks. Saate tõlkekäitumist kohandada, andes tehisintellekti mudelile konkreetsed juhised. Kui viip sisaldab `%s`, asendatakse see sihtkeele nimega. LLM-taustaprogrammiga `gpt5` mootori puhul edastatakse dokument eraldi JSON-päringuna, mille `input` liige on tõlgitav massiiv ja mille valikuline `context` liige sisaldab viiteandmeid. Fikseeritud juhis, mis käsitleb neid liikmeid dokumendiandmetena, mitte käskudena, lisatakse ka kohandatud viiba kasutamisel.
 
 - **--xlate-context**=_text_
 
@@ -247,7 +249,7 @@ Välistage embedz-plokid tõlkimisest, kui dokument neid sisaldab:
 - **--xlate-context-window**=_n_
 
     (Context-aware engines only, e.g. `gpt5` on the llm backend)
-    Ümbritsevate tõlgitud plokkide arv, mis antakse muudetud plokkide uuesti tõlkimisel viitekontekstina (vaikimisi 2). Kontekst sisaldab ka muudetud piirkonda ümbritsevat toorest lähteksti (pealkirjad, loendistruktuur, pildiallkirjad) ning võimaluse korral vahemälust taastatud muudetud teksti eelmist versiooni, et muutmata sõnastus säiliks. Määrake väärtuseks 0, et kontekstiteadlik tõlge täielikult keelata. Pange tähele, et iga muudetud piirkond tõlgitakse eraldi API-kutses ja kontekst võib süsteemiviibale lisada kuni umbes 8000 märki, seega vahetab kontekstiteadlik tõlge järjepidevuse nimel mõningase lisakulu vastu.
+    Ümbritsevate tõlgitud plokkide arv, mis antakse muudetud plokkide uuesti tõlkimisel viitekontekstina (vaikimisi 2). Kontekst sisaldab ka muudetud piirkonda ümbritsevat toorest lähteksti (pealkirjad, loendistruktuur, pildiallkirjad) ning võimaluse korral vahemälust taastatud muudetud teksti eelmist versiooni, et muutmata sõnastus säiliks. Määrake väärtuseks 0, et kontekstiteadlik tõlge täielikult keelata. Pange tähele, et iga muudetud piirkond tõlgitakse eraldi API-kutses ja kontekst võib JSON-i kasutajapäringule lisada kuni umbes 8000 märki, seega vahetab kontekstiteadlik tõlge järjepidevuse nimel mõningase lisakulu vastu. Dokumendist tuletatud kontekst hoitakse süsteemiviibast eemal.
 
 - **--xlate-cache-seed**=_file_
 
@@ -260,7 +262,7 @@ Välistage embedz-plokid tõlkimisest, kui dokument neid sisaldab:
         [ { "category": "person",  "text": "山田太郎" },
           { "category": "company", "regex": "アクメ(株式会社)?" } ]
 
-    või lihtsas reaformaadis (`category pattern`, `/.../` regexi jaoks). Iga üksus asendatakse kategooriasildiga, näiteks `<person id=1 />`; sama string saab alati sama sildi, nii et mudel saab jälgida, kes on kes. Tundmatuid JSON-välju eiratakse, seega võivad generaatorid (nt kohalik LLM, mis ekstraheerib olemeid) lisada oma annotatsioone. Kategooria `lit` on reserveeritud. Kohalikud vahemälufailid talletavad endiselt taastatud lihtteksti: varjamise siht on ainult API-edastus.
+    või lihtsas reaformaadis (`category pattern`, `/.../` regexi jaoks). Iga üksus asendatakse kategooriasildiga, näiteks `<person id="1" />`; sama string saab alati sama sildi, nii et mudel saab jälgida, kes on kes. Tundmatuid JSON-välju eiratakse, seega võivad generaatorid (nt kohalik LLM, mis ekstraheerib olemeid) lisada oma annotatsioone. Kategooria `lit` on reserveeritud. Kohalikud vahemälufailid talletavad endiselt taastatud lihtteksti: varjamise siht on ainult API-edastus.
 
     Sõnastiku saab genereerida välise tööriistaga -- näiteks kohalik mudel, mis ekstraheerib tundlikke olemeid:
 
@@ -303,6 +305,10 @@ Välistage embedz-plokid tõlkimisest, kui dokument neid sisaldab:
 - **--**\[**no-**\]**xlate-progress** (Default: True)
 
     Vaata tõlketulemust reaalajas STDERR-väljundis. `From` payload kuvatakse edastatud kujul, pärast anonüümimist ja maskimist.
+
+- **--xlate-review**
+
+    Üks-ühele muudetud ploki puhul näita vana ja uue lähteallika väikseimat järjestikust muudetud vahemikku, millele järgneb vastav vahemik vanas ja uues tõlkes. Aruanne kirjutatakse STDERR-i, see ei tee täiendavaid API-kutseid ning jäetakse välja, kui vanu ja uusi plokke ei saa üheselt paaristada.
 
 - **--xlate-stripe**
 

@@ -12,11 +12,11 @@ App::Greple::xlate - Übersetzungsunterstützungsmodul für Greple
 
 =head1 VERSION
 
-Version 2.01
+Version 2.02
 
 =head1 DESCRIPTION
 
-B<Greple> B<xlate> Das Modul sucht die gewünschten Textblöcke und ersetzt sie durch den übersetzten Text. Die primäre Engine ist GPT-5.5 (F<llm/gpt5.pm>), die den Befehl L<llm|https://llm.datasette.io/> aufruft; DeepL (F<deepl.pm>) und ältere, auf B<gpty> basierende Engines sind ebenfalls enthalten.
+B<Greple> B<xlate> Das Modul sucht die gewünschten Textblöcke und ersetzt sie durch den übersetzten Text. Die primäre Engine ist GPT-5.6 Terra (F<llm/gpt5.pm>), die den Befehl L<llm|https://llm.datasette.io/> aufruft; DeepL (F<deepl.pm>) und ältere, auf B<gpty> basierende Engines sind ebenfalls enthalten.
 
 Übersetzungen werden pro Datei zwischengespeichert, sodass die erneute Ausführung eines Befehls für unveränderten Text keine Kosten verursacht. Wenn ein Dokument bearbeitet wird, werden nur die geänderten Absätze erneut an die API gesendet; eine kontextbezogene Engine erhält zudem die umgebenden Übersetzungen, den Rohquelltext rund um die Änderung sowie die vorherige Version des bearbeiteten Absatzes, sodass die neue Übersetzung die etablierte Formulierung beibehält (siehe B<--xlate-context-window>). Sensible Zeichenfolgen können vor der Übertragung ausgeblendet werden (siehe L</ANONYMIZATION AND TEMPLATES>).
 
@@ -92,13 +92,15 @@ Komplexe Muster können über mehrere Zeilen hinweg geschrieben werden, wobei Ze
 
 Wie der Text durch die Maskierung umgewandelt wird, können Sie mit der Option B<--xlate-mask> sehen.
 
+Platzhalter sind wohlgeformte, selbstschließende XML-Tags wie z. B. C<< <m id="1" /> >>. JSON-basierte LLM-Engines erhalten die Tags in ihren Eingabe-Arrays. Bei DeepL wird eine Anfrage, die Marker-Tags enthält, mit Escape-Zeichen versehen und in eine temporäre  C<< <xlate> >>Root eingeschlossen, wobei die XML-Tag-Verarbeitung aktiviert ist und jede Marker-Kategorie als nicht teilbares Tag registriert wird. Der Wrapper wird entfernt, bevor die Platzhalter validiert und wiederhergestellt werden.
+
 Durch Maskierung wird das Markup vor der Übersetzung geschützt. Um sensible Zeichenfolgen vor dem Übersetzungsdienst selbst zu verbergen, siehe L</ANONYMIZATION AND TEMPLATES>; beide Funktionen können zusammen verwendet werden.
 
 Diese Schnittstelle ist experimentell und kann sich in Zukunft noch ändern.
 
 =head1 ANONYMIZATION AND TEMPLATES
 
-Sensible Zeichenfolgen können vor dem Senden an die Übersetzungs-API ausgeblendet und in der Ausgabe wiederhergestellt werden. Es stehen drei Quellen für Anonymisierungsregeln zur Verfügung: eine Wörterbuchdatei (B<--xlate-anonymize>), Inline-Markierungen im Dokument selbst (B<--xlate-anonymize-mark>) und YAML-Front-Matter-Werte (B<--xlate-frontmatter>). Jede Zeichenfolge wird während der Übertragung durch ein Kategorie-Tag wie C<< <person id=1 /> >> ersetzt. Die Ausblendung gilt nur für die API-Übertragung: Lokale Cache-Dateien speichern den wiederhergestellten Klartext. Verwenden Sie B<--xlate-dryrun>, um genau zu überprüfen, was übertragen würde.
+Sensible Zeichenfolgen können vor dem Versand an die Übersetzungs-API ausgeblendet und in der Ausgabe wiederhergestellt werden. Es stehen drei Quellen für Anonymisierungsregeln zur Verfügung: eine Wörterbuchdatei (B<--xlate-anonymize>), Inline-Markierungen im Dokument selbst (B<--xlate-anonymize-mark>) und YAML-Frontmatter-Werte (B<--xlate-frontmatter>). Jede Zeichenfolge wird währendC<< <person id="1" /> >> der Übertragung durch ein Kategorie-Tag wie  ersetzt. Das Ziel der Ausblendung ist ausschließlich die API-Übertragung: Lokale Cache-Dateien speichern den wiederhergestellten Klartext. Verwenden Sie  , umB<--xlate-dryrun> genau zu überprüfen, was übertragen würde.
 
 Bei Formulardokumenten (Quartalsberichte und Ähnliches) definieren Sie die Akteure im Vorfeld und verweisen im Hauptteil darauf:
 
@@ -158,7 +160,7 @@ Zur Zeit sind die folgenden Engines verfügbar
 
 =over 2
 
-=item * B<gpt5>: gpt-5.5 (via the C<llm> command)
+=item * B<gpt5>: gpt-5.6-terra (via the C<llm> command)
 
 =item * B<deepl>: DeepL API (via the C<deepl> command)
 
@@ -267,7 +269,7 @@ Setzen Sie diesen Wert auf 1, wenn Sie jeweils nur eine Zeile übersetzen wollen
 
 =item B<--xlate-prompt>=I<text>
 
-Geben Sie eine benutzerdefinierte Eingabeaufforderung an, die an die Übersetzungs-Engine gesendet werden soll. Diese Option ist für die LLM-Engines (C<gpt3>, C<gpt4o>, C<gpt5>) verfügbar, nicht jedoch für DeepL. Sie können das Übersetzungsverhalten anpassen, indem Sie dem KI-Modell spezifische Anweisungen geben. Wenn die Eingabeaufforderung C<%s> enthält, wird diese durch den Namen der Zielsprache ersetzt.
+Geben Sie eine benutzerdefinierte Eingabe an, die an die Übersetzungs-Engine gesendet werden soll. Diese Option ist für die LLM-Engines (C<gpt3>, C<gpt4o>, C<gpt5>) verfügbar, nicht jedoch für DeepL. Sie können das Übersetzungsverhalten anpassen, indem Sie dem KI-Modell spezifische Anweisungen geben. Wenn die Eingabeaufforderung C<%s> enthält, wird diese durch den Namen der Zielsprache ersetzt. Bei der LLM-gestützten C<gpt5>-Engine wird das Dokument separat als JSON-Anfrage bereitgestellt, deren C<input>-Element das zu übersetzende Array ist und deren optionales C<context>-Element Referenzdaten enthält. Eine feste Anweisung, die diese Elemente als Dokumentdaten und nicht als Befehle behandelt, wird auch dann angehängt, wenn eine benutzerdefinierte Eingabeaufforderung verwendet wird.
 
 =item B<--xlate-context>=I<text>
 
@@ -276,7 +278,7 @@ Geben Sie zusätzliche Kontextinformationen an, die an die Übersetzungsmaschine
 =item B<--xlate-context-window>=I<n>
 
 (Context-aware engines only, e.g. C<gpt5> on the llm backend)
-Anzahl der umgebenden übersetzten Blöcke, die bei der Neuübersetzung geänderter Blöcke als Referenzkontext übergeben werden (Standardwert 2). Der Kontext umfasst auch den Rohquelltext rund um den geänderten Bereich (Überschriften, Listenstruktur, Bildunterschriften) sowie, sofern verfügbar, die aus dem Cache wiederhergestellte vorherige Version des geänderten Textes, sodass unveränderte Formulierungen erhalten bleiben. Setzen Sie den Wert auf 0, um die kontextbezogene Übersetzung vollständig zu deaktivieren. Beachten Sie, dass jeder geänderte Bereich in einem eigenen API-Aufruf übersetzt wird und der Kontext die System-Eingabeaufforderung um bis zu etwa 8000 Zeichen erweitern kann; die kontextbezogene Übersetzung erkauft sich also Konsistenz mit etwas zusätzlichem Aufwand.
+Anzahl der umgebenden übersetzten Blöcke, die bei der Neuübersetzung geänderter Blöcke als Referenzkontext übergeben werden (Standardwert 2). Der Kontext umfasst auch den rohen Quelltext rund um den geänderten Bereich (Überschriften, Listenstruktur, Bildunterschriften) sowie, sofern verfügbar, die aus dem Cache wiederhergestellte vorherige Version des geänderten Textes, damit unveränderte Formulierungen erhalten bleiben. Setzen Sie den Wert auf 0, um die kontextbezogene Übersetzung vollständig zu deaktivieren. Beachten Sie, dass jeder geänderte Bereich in einem eigenen API-Aufruf übersetzt wird und der Kontext die JSON-Benutzeranfrage um bis zu etwa 8.000 Zeichen erweitern kann; daher geht die kontextbezogene Übersetzung mit einem gewissen Mehraufwand zugunsten der Konsistenz einher. Aus dem Dokument abgeleiteter Kontext wird aus der System-Eingabeaufforderung ausgeklammert.
 
 =item B<--xlate-cache-seed>=I<file>
 
@@ -289,7 +291,7 @@ Anonymisieren Sie sensible Zeichenfolgen, bevor sie an die Übersetzungs-API ges
     [ { "category": "person",  "text": "山田太郎" },
       { "category": "company", "regex": "アクメ(株式会社)?" } ]
 
-oder in einem einfachen Zeilenformat (C<category pattern>, C</.../> für reguläre Ausdrücke). Jedes Element wird durch ein Kategorie-Tag wie C<< <person id=1 /> >> ersetzt; dieselbe Zeichenfolge erhält immer dasselbe Tag, sodass das Modell den Überblick darüber behalten kann, wer wer ist. Unbekannte JSON-Felder werden ignoriert, sodass Generatoren (z. B. ein lokales LLM, das Entitäten extrahiert) ihre eigenen Anmerkungen hinzufügen können. Die Kategorie C<lit> ist reserviert. Lokale Cache-Dateien speichern weiterhin den wiederhergestellten Klartext: Das Ziel der Verschleierung ist ausschließlich die API-Übertragung.
+oder in einem einfachen Zeilenformat (C<category pattern>,  fürC</.../> reguläre Ausdrücke). Jedes Element wird durch ein Kategorie-Tag wie  ersetztC<< <person id="1" /> >>; dieselbe Zeichenfolge erhält immer dasselbe Tag, sodass das Modell den Überblick darüber behalten kann, wer wer ist. Unbekannte JSON-Felder werden ignoriert, sodass Generatoren (z. B. ein lokales LLM, das Entitäten extrahiert) eigene Anmerkungen hinzufügen können. Die Kategorie  C<lit>ist reserviert. Lokale Cache-Dateien speichern weiterhin den wiederhergestellten Klartext: Die Verschleierung gilt ausschließlich für die API-Übertragung.
 
 Ein Wörterbuch kann von einem externen Tool generiert werden – zum Beispiel von einem lokalen Modell, das sensible Entitäten extrahiert:
 
@@ -332,6 +334,10 @@ Rufen Sie die Übersetzungs-API nicht auf; zeigen Sie stattdessen über die Fort
 =item B<-->[B<no->]B<xlate-progress> (Default: True)
 
 Sehen Sie sich das Übersetzungsergebnis in Echtzeit in der STDERR-Ausgabe an. Die C<From>-Nutzlast wird so angezeigt, wie sie nach Anonymisierung und Maskierung übertragen wurde.
+
+=item B<--xlate-review>
+
+Bei einem eins-zu-eins geänderten Block wird der kleinste zusammenhängende geänderte Abschnitt in der alten und neuen Quelle angezeigt, gefolgt vom entsprechenden Abschnitt in der alten und neuen Übersetzung. Der Bericht wird an STDERR geschrieben, führt keinen zusätzlichen API-Aufruf durch und wird weggelassen, wenn alte und neue Blöcke nicht eindeutig zugeordnet werden können.
 
 =item B<--xlate-stripe>
 

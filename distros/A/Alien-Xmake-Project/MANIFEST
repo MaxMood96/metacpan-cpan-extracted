@@ -1,0 +1,15 @@
+Build.PL
+CONTRIBUTING.md
+Changes.md
+LICENSE
+MANIFEST
+META.json
+META.yml
+README.md
+SECURITY.md
+cpanfile
+eg/xmake_project.pl
+lib/Alien/Xmake/Project.pm
+lib/Alien/Xmake/Project.pod
+t/000_compile.t
+t/001_project.t

@@ -2,7 +2,7 @@ use v5.40;
 use feature 'class';
 no warnings 'experimental::class';
 #
-class Alien::Xrepo v0.9.2 {
+class Alien::Xrepo v0.9.4 {
     use Alien::Xmake;
     use JSON::PP;
     use Path::Tiny;
@@ -25,7 +25,7 @@ class Alien::Xrepo v0.9.2 {
     method blah       ($msg)  { return unless $verbose; say $msg; }
     #
     class    #
-        Alien::Xrepo::PackageInfo v0.9.2 {
+        Alien::Xrepo::PackageInfo v0.9.4 {
         use Path::Tiny;
         field $includedirs : param : reader;
         field $libfiles    : param : reader;

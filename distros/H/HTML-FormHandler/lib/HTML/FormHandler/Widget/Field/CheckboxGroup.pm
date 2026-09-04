@@ -1,6 +1,6 @@
 package HTML::FormHandler::Widget::Field::CheckboxGroup;
 # ABSTRACT: checkbox group field role
-$HTML::FormHandler::Widget::Field::CheckboxGroup::VERSION = '0.40068';
+$HTML::FormHandler::Widget::Field::CheckboxGroup::VERSION = '0.410001';
 use Moose::Role;
 use namespace::autoclean;
 use HTML::FormHandler::Render::Util ('process_attrs');
@@ -61,7 +61,7 @@ sub render_option {
     }
     my $lattr_str = process_attrs( $lattr );
     my $id = $self->id . '.' . $self->options_index;
-    my $output .= qq{\n<label$lattr_str for="$id">};
+    my $output = qq{\n<label$lattr_str for="$id">};
     my $value = $option->{value};
     $output .= qq{\n<input type="checkbox"};
     $output .= qq{ value="} . $self->html_filter($value) . '"';
@@ -108,7 +108,7 @@ HTML::FormHandler::Widget::Field::CheckboxGroup - checkbox group field role
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

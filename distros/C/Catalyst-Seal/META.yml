@@ -27,8 +27,8 @@ requires:
   Moose: '0'
   Scalar::Util: '0'
   Sub::Util: '1.40'
-  perl: '5.008003'
+  perl: '5.014'
 resources:
   repository: https://github.com/ThisUsedToBeAnEmail/Catalyst-Seal.git
-version: '0.01'
+version: '0.03'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

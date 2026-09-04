@@ -429,44 +429,15 @@ XS_INTERNAL(pv_guard_cb) {
 static void pv_compile_routes(pTHX_ SV *self) {
     HV *h = (HV *)SvRV(self);
     SV **vrp = hv_fetchs(h, K_VALIDATE_ROUTES, 0);
-    SV **rop = hv_fetchs(h, K_ROUTER, 0);
-    AV *vrs, *recs;
+    AV *vrs;
     HV *by;
-    SV *recs_rv;
     SSize_t i, n;
     if (!(vrp && *vrp && SvROK(*vrp) && SvTYPE(SvRV(*vrp)) == SVt_PVAV))
         return;
     vrs = (AV *)SvRV(*vrp);
     n = av_len(vrs) + 1;
     if (!n) return;
-    if (!(rop && *rop && SvOK(*rop)))
-        croak("Punk: validate routes with no router");
-    recs_rv = pcx_call_meth(aTHX_ *rop, "records", NULL, 0, 1);
-    if (!(recs_rv && SvROK(recs_rv) && SvTYPE(SvRV(recs_rv)) == SVt_PVAV)) {
-        if (recs_rv) SvREFCNT_dec(recs_rv);
-        croak("Punk: validate routes but no compiled records");
-    }
-    sv_2mortal(recs_rv);
-    recs = (AV *)SvRV(recs_rv);
-
-    by = (HV *)sv_2mortal((SV *)newHV());
-    {
-        SSize_t ri, rn = av_len(recs) + 1;
-        for (ri = 0; ri < rn; ri++) {
-            SV **rp = av_fetch(recs, ri, 0);
-            HV *rec; SV **m, **p; SV *key;
-            if (!(rp && *rp && SvROK(*rp) && SvTYPE(SvRV(*rp)) == SVt_PVHV))
-                continue;
-            rec = (HV *)SvRV(*rp);
-            m = hv_fetchs(rec, K_METHOD, 0);
-            p = hv_fetchs(rec, K_PATH, 0);
-            if (!(m && *m && p && *p)) continue;
-            key = sv_2mortal(newSVsv(*m));
-            sv_catpvs(key, " ");
-            sv_catsv(key, *p);
-            (void)hv_store_ent(by, key, newSVsv(*rp), 0);
-        }
-    }
+    by = pk_route_index(aTHX_ self, "validate");
 
     for (i = 0; i < n; i++) {
         SV **vp = av_fetch(vrs, i, 0);
@@ -538,23 +509,14 @@ static void pv_compile_routes(pTHX_ SV *self) {
 
         {
             AV *cap = newAV();
-            SV *guard;
-            SV **gp;
             av_push(cap, compiled);                       /* owns the +1 */
             av_push(cap, (SvROK(schema)
                           && SvTYPE(SvRV(schema)) == SVt_PVHV)
                          ? newSVsv(schema) : newSV(0));
             av_push(cap, src ? newSVsv(src) : newSV(0));
             av_push(cap, resolved ? resolved : newSV(0)); /* owns the +1 */
-            guard = punk_closure(aTHX_ pv_guard_cb, cap);
-            gp = hv_fetchs(rec, K_GUARDS, 0);
-            if (!(gp && *gp && SvROK(*gp)
-                  && SvTYPE(SvRV(*gp)) == SVt_PVAV)) {
-                (void)hv_stores(rec, K_GUARDS,
-                                newRV_noinc((SV *)newAV()));
-                gp = hv_fetchs(rec, K_GUARDS, 0);
-            }
-            av_push((AV *)SvRV(*gp), guard);              /* owns the +1 */
+            pk_route_guard_push(aTHX_ rec,
+                                punk_closure(aTHX_ pv_guard_cb, cap));
         }
     }
 }

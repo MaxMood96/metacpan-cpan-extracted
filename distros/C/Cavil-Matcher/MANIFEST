@@ -2,7 +2,6 @@ Changes
 COPYING
 docs/Architecture.md
 lib/Cavil/Matcher.pm
-lib/Cavil/Matcher/FpIndex.pm
 lib/Cavil/Matcher/Index.pm
 lib/Cavil/Matcher/Manifest.pm
 Makefile.PL
@@ -99,7 +98,6 @@ t/fixtures/text/09normalize.1.in
 t/fixtures/text/09normalize.1.out
 t/fixtures/text/09normalize.2.in
 t/fixtures/text/09normalize.2.out
-t/fp_index.t
 typemap
 xt/differential.t
 META.yml                                 Module YAML meta-data (added by MakeMaker)

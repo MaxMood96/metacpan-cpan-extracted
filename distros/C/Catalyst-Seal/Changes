@@ -1,5 +1,23 @@
 Revision history for Catalyst-Seal
 
+0.03	2026-09-04
+	- SECURITY: CVE-2026-85491. Remove the dispatch route memo added in 0.01.
+	  It was keyed on the request path alone, on the premise that which action
+	  a path resolves to is a pure function of that path.
+	- t/61-dispatch-method.t is the regression, and six method-varying requests
+	  are now in the t/20-parity.t table.
+	- The memos that remain resolve through get_action and get_containers,
+	  which are lookups in the action and container tables and consult no
+	  request state. Audited, and documented in Dispatch.pm.
+	- Costs about 2us a request on a one segment path and 4us on two.
+
+0.02	2026-09-03
+	- Do not rely on when perl collects an object to test that the response
+	  destructor calls DEMOLISH. CPAN Testers failed t/70-finalize.t on
+	  5.16.3, 5.18.0, 5.18.2 and 5.18.4.
+	- Require Devel::GlobalDestruction and Scalar::Util where they are used.
+	- Silence 200 deliberate forward errors that t/60-dispatch.t was putting
+	  into every smoke report.
+
 0.01	2026-09-02
 	First version
-    

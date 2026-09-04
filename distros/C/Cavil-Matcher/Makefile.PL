@@ -59,7 +59,7 @@ WriteMakefile(
   depend => {
     'src/bindings$(OBJ_EXT)'  => 'src/bindings.h src/tokenizer.h src/segment.h src/matcher.h src/bag.h src/fingerprint.h src/SpookyV2.h',
     'src/matcher$(OBJ_EXT)'   => 'src/matcher.h src/segment.h src/tokenizer.h',
-    'src/fingerprint$(OBJ_EXT)' => 'src/fingerprint.h src/segment.h src/tokenizer.h',
+    'src/fingerprint$(OBJ_EXT)' => 'src/fingerprint.h src/tokenizer.h src/SpookyV2.h',
     'src/segment$(OBJ_EXT)'   => 'src/segment.h src/tokenizer.h',
     'src/tokenizer$(OBJ_EXT)' => 'src/tokenizer.h src/SpookyV2.h',
     'src/bag$(OBJ_EXT)'       => 'src/bag.h src/tokenizer.h',

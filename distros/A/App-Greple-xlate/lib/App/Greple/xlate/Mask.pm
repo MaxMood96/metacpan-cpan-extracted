@@ -21,7 +21,7 @@ my %default = (
     ASSIGNED  => undef, # "tag\0string" -> tag string
     ASSIGN_ORDER => undef, # tag strings in assignment order
     ORIGIN    => undef, # tag string -> original string
-    TRACK     => undef, # tag string -> 1 (must come back in response)
+    TRACK     => undef, # tag string -> expected response occurrence count
 );
 
 sub new {
@@ -89,7 +89,10 @@ sub file_rules {
 ##
 sub add_escape_rule {
     my $obj = shift;
-    unshift @{$obj->{RULES}}, [ 'lit', '<[a-z][a-z0-9_]* [a-z0-9_]+=\d+ */>' ];
+    unshift @{$obj->{RULES}}, [
+        'lit',
+        q{<[a-z][a-z0-9_]* [a-z0-9_]+=(?:"\d+"|'\d+'|\d+) */>},
+    ];
     $obj;
 }
 
@@ -172,7 +175,7 @@ sub _stable_tag {
     my($obj, $tag, $matched) = @_;
     my $key = "$tag\0$matched";
     $obj->{ASSIGNED}{$key} //= do {
-        my $t = sprintf("<%s %s=%d />",
+        my $t = sprintf('<%s %s="%d" />',
                         $tag, $obj->{INDEX}, ++$obj->{COUNTER}{$tag});
         $obj->{ORIGIN}{$t} = $matched;
         push @{$obj->{ASSIGN_ORDER}}, $t;
@@ -187,7 +190,7 @@ sub _mask_stable {
             my($tag, $pat) = @$rule;
             s{$pat}{
                 my $t = $obj->_stable_tag($tag, ${^MATCH});
-                $obj->{TRACK}{$t} = 1 if $track;
+                $obj->{TRACK}{$t}++ if $track;
                 $t;
             }gpe;
         }
@@ -208,7 +211,7 @@ sub mask {
         for my $pat (@patterns) {
             next if $pat =~ /^\s*(#|$)/;
             s{$pat}{
-                my $tag = sprintf("<%s %s=%d />",
+                my $tag = sprintf('<%s %s="%d" />',
                                   $obj->{TAG}, $obj->{INDEX}, ++$obj->{NUMBER});
                 push @$fromto, [ $tag, ${^MATCH} ];
                 $tag;
@@ -227,7 +230,17 @@ sub mask_reference {
 sub unmask {
     my $obj = shift;
     if ($obj->{STABLE}) {
-        my %missing = %{$obj->{TRACK}};
+        # Verify the complete placeholder multiset before restoring anything.
+        # ASSIGN_ORDER also includes reference-only tags; those must not leak
+        # into the response unless the same stable tag occurs in the payload.
+        for my $t (@{$obj->{ASSIGN_ORDER}}) {
+            my $want = $obj->{TRACK}{$t} // 0;
+            my $got = 0;
+            $got += () = /\Q$t\E/g for @_;
+            $got == $want or die sprintf(
+                "Masking error: \"%s\" count mismatch (expected %d, got %d).\n",
+                $t, $want, $got);
+        }
         for (@_) {
             # Restore in REVERSE assignment order: the escape rule runs
             # first, so its tags are assigned first and must be restored
@@ -236,39 +249,25 @@ sub unmask {
             # substitution corrupt it.
             for my $t (reverse @{$obj->{ASSIGN_ORDER}}) {
                 my $orig = $obj->{ORIGIN}{$t};
-                if (s/\Q$t/$orig/g) {
-                    delete $missing{$t};
-                }
+                s/\Q$t/$orig/g;
             }
-        }
-        if (%missing) {
-            die sprintf("Masking error: \"%s\" missing in the output(%s).\n",
-                        join('", "', sort keys %missing),
-                        join('', @_),
-                    );
         }
         return $obj;
     }
     my @tags = map $_->[0], @{$obj->{TABLE}};
-    my %tags = map { $_ => 1 } @tags;
+    for my $t (@tags) {
+        my $got = 0;
+        $got += () = /\Q$t\E/g for @_;
+        $got == 1 or die sprintf(
+            "Masking error: \"%s\" count mismatch (expected 1, got %d).\n",
+            $t, $got);
+    }
     # edit parameters in place
     for (@_) {
         for my $fromto (reverse @{$obj->{TABLE}}) {
             my($from, $to) = @$fromto;
-            # update the first one
-            if (my $n = s/\Q$from/$to/) {
-                if ($n > 1 or not exists $tags{$from}) {
-                    warn "Masking error: \"$from\" duplicated.\n";
-                }
-                delete $tags{$from};
-            }
+            s/\Q$from/$to/g;
         }
-    }
-    if (%tags) {
-        die sprintf("Masking error: \"%s\" missing in the output(%s).\n",
-                    join('", "', keys %tags),
-                    join('', @_),
-                );
     }
     $obj->reset if $obj->{AUTORESET};
     return $obj;

@@ -10,11 +10,11 @@ App::Greple::xlate - module d’assistance à la traduction pour greple
 
 # VERSION
 
-Version 2.01
+Version 2.02
 
 # DESCRIPTION
 
-**Greple** **xlate** module recherche les blocs de texte souhaités et les remplace par le texte traduit. Le moteur principal est GPT-5.5 (`llm/gpt5.pm`), qui appelle la commande [llm](https://llm.datasette.io/) ; DeepL (`deepl.pm`) et les moteurs hérités basés sur **gpty** sont également inclus.
+**Greple** **xlate** module recherche les blocs de texte souhaités et les remplace par le texte traduit. Le moteur principal est GPT-5.6 Terra (`llm/gpt5.pm`), qui appelle la commande [llm](https://llm.datasette.io/) ; DeepL (`deepl.pm`) et les moteurs hérités basés sur **gpty** sont également inclus.
 
 Les traductions sont mises en cache par fichier, de sorte que réexécuter une commande ne coûte rien pour le texte inchangé. Lorsqu’un document est modifié, seuls les paragraphes modifiés sont de nouveau envoyés à l’API ; un moteur sensible au contexte reçoit également les traductions environnantes, le texte source brut autour de la modification et la version précédente du paragraphe modifié, afin que la nouvelle traduction conserve la terminologie établie (voir **--xlate-context-window**). Les chaînes sensibles peuvent être masquées avant la transmission (voir ["ANONYMIZATION AND TEMPLATES"](#anonymization-and-templates)).
 
@@ -81,13 +81,15 @@ Un motif complexe peut être écrit sur plusieurs lignes avec un retour à la li
 
 La manière dont le texte est transformé par le masquage peut être visualisée avec l’option **--xlate-mask**.
 
+Les espaces réservés de masquage sont des balises XML autofermantes bien formées, telles que `<m id="1" />`. Les moteurs LLM basés sur JSON reçoivent les balises dans leurs tableaux d’entrée. Pour DeepL, une requête contenant des balises de marqueur est échappée et entourée d’une racine temporaire `<xlate>`, avec la gestion des balises XML activée et chaque catégorie de marqueur enregistrée comme balise ne provoquant pas de découpage. L’enveloppe est supprimée avant que les espaces réservés soient validés et restaurés.
+
 Le masquage protège le balisage contre la traduction. Pour dissimuler les chaînes sensibles au service de traduction lui-même, voir ["ANONYMIZATION AND TEMPLATES"](#anonymization-and-templates) ; les deux peuvent être utilisés ensemble.
 
 Cette interface est expérimentale et susceptible d’évoluer à l’avenir.
 
 # ANONYMIZATION AND TEMPLATES
 
-Les chaînes sensibles peuvent être dissimulées avant d’être envoyées à l’API de traduction et restaurées dans la sortie. Trois sources de règles d’anonymisation sont disponibles : un fichier dictionnaire (**--xlate-anonymize**), des marques inline dans le document lui-même (**--xlate-anonymize-mark**) et des valeurs de front matter YAML (**--xlate-frontmatter**). Chaque chaîne est remplacée par une balise de catégorie telle que `<person id=1 />` pendant la transmission. La cible de la dissimulation est uniquement la transmission à l’API : les fichiers de cache locaux stockent le texte brut restauré. Utilisez **--xlate-dryrun** pour examiner exactement ce qui serait transmis.
+Les chaînes sensibles peuvent être dissimulées avant d’être envoyées à l’API de traduction et restaurées dans la sortie. Trois sources de règles d’anonymisation sont disponibles : un fichier dictionnaire (**--xlate-anonymize**), des marques inline dans le document lui-même (**--xlate-anonymize-mark**) et des valeurs de front matter YAML (**--xlate-frontmatter**). Chaque chaîne est remplacée par une balise de catégorie telle que `<person id="1" />` pendant la transmission. La cible de la dissimulation est uniquement la transmission à l’API : les fichiers de cache locaux stockent le texte brut restauré. Utilisez **--xlate-dryrun** pour examiner exactement ce qui serait transmis.
 
 Pour les documents de formulaire (rapports trimestriels et similaires), définissez les acteurs en amont et référencez-les dans le corps :
 
@@ -140,7 +142,7 @@ Excluez les blocs embedz de la traduction lorsqu’un document en contient :
 
     À ce stade, les moteurs suivants sont disponibles
 
-    - **gpt5**: gpt-5.5 (via the `llm` command)
+    - **gpt5**: gpt-5.6-terra (via the `llm` command)
     - **deepl**: DeepL API (via the `deepl` command)
     - **gpt3**: gpt-3.5-turbo (legacy, via the `gpty` command)
     - **gpt4o**: gpt-4o-mini (legacy, via the `gpty` command)
@@ -238,7 +240,7 @@ Excluez les blocs embedz de la traduction lorsqu’un document en contient :
 
 - **--xlate-prompt**=_text_
 
-    Spécifiez une invite personnalisée à envoyer au moteur de traduction. Cette option est disponible pour les moteurs LLM (`gpt3`, `gpt4o`, `gpt5`), mais pas pour DeepL. Vous pouvez personnaliser le comportement de traduction en fournissant des instructions spécifiques au modèle d’IA. Si l’invite contient `%s`, elle sera remplacée par le nom de la langue cible.
+    Spécifiez une invite personnalisée à envoyer au moteur de traduction. Cette option est disponible pour les moteurs LLM (`gpt3`, `gpt4o`, `gpt5`), mais pas pour DeepL. Vous pouvez personnaliser le comportement de traduction en fournissant des instructions spécifiques au modèle d’IA. Si l’invite contient `%s`, elle sera remplacée par le nom de la langue cible. Pour le moteur `gpt5` reposant sur un LLM, le document est fourni séparément sous forme de requête JSON dont le membre `input` est le tableau à traduire et dont le membre facultatif `context` contient des données de référence. Une instruction fixe qui traite ces membres comme des données de document, et non comme des commandes, est ajoutée même lorsqu’une invite personnalisée est utilisée.
 
 - **--xlate-context**=_text_
 
@@ -247,7 +249,7 @@ Excluez les blocs embedz de la traduction lorsqu’un document en contient :
 - **--xlate-context-window**=_n_
 
     (Context-aware engines only, e.g. `gpt5` on the llm backend)
-    Nombre de blocs traduits environnants transmis comme contexte de référence lors de la retraduction de blocs modifiés (par défaut 2). Le contexte inclut également le texte source brut autour de la région modifiée (titres, structure de liste, légendes) et, lorsqu’elle est disponible, la version précédente du texte modifié récupérée depuis le cache, afin que les formulations inchangées soient préservées. Définissez à 0 pour désactiver entièrement la traduction tenant compte du contexte. Notez que chaque région modifiée est traduite dans son propre appel API et que le contexte peut ajouter jusqu’à environ 8000 caractères à l’invite système, de sorte que la traduction tenant compte du contexte échange un coût supplémentaire contre de la cohérence.
+    Nombre de blocs traduits environnants transmis comme contexte de référence lors de la retraduction de blocs modifiés (par défaut 2). Le contexte inclut également le texte source brut autour de la région modifiée (titres, structure de liste, légendes) et, lorsqu’elle est disponible, la version précédente du texte modifié récupérée depuis le cache, afin que les formulations inchangées soient préservées. Définissez à 0 pour désactiver entièrement la traduction tenant compte du contexte. Notez que chaque région modifiée est traduite dans son propre appel API et que le contexte peut ajouter jusqu’à environ 8000 caractères à la requête utilisateur JSON, de sorte que la traduction tenant compte du contexte échange un coût supplémentaire contre de la cohérence. Le contexte dérivé du document est exclu de l’invite système.
 
 - **--xlate-cache-seed**=_file_
 
@@ -260,7 +262,7 @@ Excluez les blocs embedz de la traduction lorsqu’un document en contient :
         [ { "category": "person",  "text": "山田太郎" },
           { "category": "company", "regex": "アクメ(株式会社)?" } ]
 
-    ou dans un format simple par ligne (`category pattern`, `/.../` pour les regex). Chaque élément est remplacé par une étiquette de catégorie telle que `<person id=1 />` ; la même chaîne reçoit toujours la même étiquette, de sorte que le modèle peut suivre qui est qui. Les champs JSON inconnus sont ignorés, de sorte que les générateurs (par exemple un LLM local extrayant des entités) peuvent ajouter leurs propres annotations. La catégorie `lit` est réservée. Les fichiers de cache locaux stockent toujours le texte brut restauré : la cible de la dissimulation est uniquement la transmission à l’API.
+    ou dans un format simple par ligne (`category pattern`, `/.../` pour les regex). Chaque élément est remplacé par une étiquette de catégorie telle que `<person id="1" />` ; la même chaîne reçoit toujours la même étiquette, de sorte que le modèle peut suivre qui est qui. Les champs JSON inconnus sont ignorés, de sorte que les générateurs (par exemple un LLM local extrayant des entités) peuvent ajouter leurs propres annotations. La catégorie `lit` est réservée. Les fichiers de cache locaux stockent toujours le texte brut restauré : la cible de la dissimulation est uniquement la transmission à l’API.
 
     Un dictionnaire peut être généré par un outil externe — par exemple un modèle local extrayant des entités sensibles :
 
@@ -303,6 +305,10 @@ Excluez les blocs embedz de la traduction lorsqu’un document en contient :
 - **--**\[**no-**\]**xlate-progress** (Default: True)
 
     Voir le résultat de la traduction en temps réel dans la sortie STDERR. La charge utile `From` est affichée telle qu’elle est transmise, après anonymisation et masquage.
+
+- **--xlate-review**
+
+    Pour un bloc modifié en correspondance un-à-un, affichez la plus petite plage contiguë modifiée dans l’ancienne et la nouvelle source, suivie de la plage correspondante dans l’ancienne et la nouvelle traduction. Le rapport est écrit sur STDERR, n’effectue aucun appel API supplémentaire et est omis lorsque les anciens et nouveaux blocs ne peuvent pas être appariés sans ambiguïté.
 
 - **--xlate-stripe**
 

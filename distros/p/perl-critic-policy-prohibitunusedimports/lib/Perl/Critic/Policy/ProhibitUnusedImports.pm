@@ -1,5 +1,5 @@
 package Perl::Critic::Policy::ProhibitUnusedImports;
-$Perl::Critic::Policy::ProhibitUnusedImports::VERSION = '1.000';
+$Perl::Critic::Policy::ProhibitUnusedImports::VERSION = '1.001';
 # ABSTRACT: An import nobody uses is a dependency nobody knew they had.
 
 use strict;
@@ -19,7 +19,7 @@ Readonly::Scalar my $DESC => q{Unused import};
 Readonly::Scalar my $EXPL => q{Remove it, or the prerequisite it drags along outlives the code that wanted it};
 
 Readonly::Scalar my $DEFAULT_ALLOW => join ' ', qw{
-  strict warnings utf8 feature lib autodie parent base constant
+  strict warnings utf8 feature lib autodie parent base constant re
   vars subs overload open integer bytes locale sigtrap version experimental
   Filter::Simple Carp::Always FindBin::libs
 };
@@ -301,7 +301,7 @@ Perl::Critic::Policy::ProhibitUnusedImports - An import nobody uses is a depende
 
 =head1 VERSION
 
-version 1.000
+version 1.001
 
 =head1 Perl::Critic::Policy::ProhibitUnusedImports
 
@@ -370,7 +370,7 @@ only what is yours:
 
 The built-in list is the pragmas plus the usual side-effect modules:
 
-    strict warnings utf8 feature lib autodie parent base constant
+    strict warnings utf8 feature lib autodie parent base constant re
     vars subs overload open integer bytes locale sigtrap version experimental
     Filter::Simple Carp::Always FindBin::libs
 

@@ -10,6 +10,7 @@ set_spell_cmd('aspell list');
 add_stopwords(<DATA>);
 all_pod_files_spelling_ok( qw( bin lib ) );
 __DATA__
+49699333
 ABYTES
 ASE
 Alex
@@ -37,6 +38,7 @@ NIST
 NONCEBYTES
 NPUBBYTES
 NaCl
+Nicolas
 OpenSSL
 PRF
 PUBLICKEYBYTES
@@ -61,6 +63,7 @@ cryptographic
 decrypt
 decrypted
 decrypts
+dependabot
 eg
 generichash
 hash
@@ -72,6 +75,7 @@ keyspace
 lib
 libsodium
 memzero
+nicolas
 nonces
 onetimeauth
 packageable

@@ -1,5 +1,17 @@
 Revision history for Perl module JavaScript::Embedded
 
+2.7.3 2026-09-03
+    - Fix the execution timeout expiring against the age of the host process
+      instead of the length of the script. A context built with
+      new(timeout => N) was born with a deadline of N seconds after process
+      start and was never re-armed, so any process that stayed alive longer
+      than that got "RangeError: execution timeout" from every subsequent
+      eval, with no JavaScript having run. The budget is now re-armed at each
+      execution entry point.
+    - The watchdog measures elapsed wall clock time (CLOCK_MONOTONIC) rather
+      than process CPU time, so it behaves the same on all platforms and
+      counts time spent inside Perl callbacks.
+
 2.7.2 2022-07-14
     - Implement compile install time (Sisyphus)
 

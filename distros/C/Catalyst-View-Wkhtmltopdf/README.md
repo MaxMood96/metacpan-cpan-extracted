@@ -51,7 +51,9 @@ sub ciao : Local {
 
 # STATUS
 
-The wkhtmltopdf project is no longer being maintained, and this module will be deprecated in a later release.
+The wkhtmltopdf project is no longer being maintained, and this module has been deprecated.
+
+Consider migrating to [Catalyst::View::ChromePDF](https://metacpan.org/pod/Catalyst%3A%3AView%3A%3AChromePDF).
 
 See ["SECURITY CONSIDERATIONS"](#security-considerations).
 
@@ -63,13 +65,13 @@ It can also handle direct conversion of [Template-Toolkit](https://metacpan.org/
 
 # RECENT CHANGES
 
-Changes for version v0.6.3 (2026-07-27)
+Changes for version v0.6.4 (2026-09-03)
 
-- Enhancements
-    - Added the send\_filehandle option, which enables returning a filehandle rather than the PDF. It defaults to false, which reverts the behavior back to pre-v0.6.0.
+- Important Changes
+    - This module has been deprecated.
 - Documentation
-    - Fixed incorrect description for tmpdir.
-    - Added KNOWN ISSUES.
+    - Mention Catalyst::View::ChromePDF as an alternative in the STATUS.
+    - Added AI\_POLICY.md
 
 See the `Changes` file for more details.
 
@@ -160,9 +162,7 @@ A separate process will need to purge files, to prevent them from filling the di
 
 # SUPPORT
 
-Only the latest version of this module will be supported.
-
-Future releases may only support Perl versions released in the last ten (10) years.
+This module is deprecated.  There may not be future releases.
 
 Please report any bugs or feature requests on the bugtracker website
 [https://rt.cpan.org/Public/Dist/Display.html?Name=Catalyst-View-Wkhtmltopdf](https://rt.cpan.org/Public/Dist/Display.html?Name=Catalyst-View-Wkhtmltopdf)

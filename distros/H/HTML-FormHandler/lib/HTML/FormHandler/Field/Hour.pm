@@ -1,6 +1,6 @@
 package HTML::FormHandler::Field::Hour;
 # ABSTRACT: accept integer from 0 to 23
-$HTML::FormHandler::Field::Hour::VERSION = '0.40068';
+$HTML::FormHandler::Field::Hour::VERSION = '0.410001';
 use Moose;
 extends 'HTML::FormHandler::Field::IntRange';
 
@@ -24,7 +24,7 @@ HTML::FormHandler::Field::Hour - accept integer from 0 to 23
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 DESCRIPTION
 

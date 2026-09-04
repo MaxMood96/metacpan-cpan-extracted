@@ -1,6 +1,6 @@
 package HTML::FormHandler;
 # ABSTRACT: HTML forms using Moose
-$HTML::FormHandler::VERSION = '0.40068';
+$HTML::FormHandler::VERSION = '0.410001';
 use Moose;
 extends 'HTML::FormHandler::Base'; # to make some methods overridable by roles
 with 'HTML::FormHandler::Model', 'HTML::FormHandler::Fields',
@@ -817,7 +817,7 @@ HTML::FormHandler - HTML forms using Moose
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 
@@ -959,6 +959,12 @@ can be used in any Perl application.
 
 More Formhandler documentation and a tutorial can be found in the manual
 at L<HTML::FormHandler::Manual>.
+
+=head1 STARTING A NEW PROJECT?
+
+Consider using L<Data::MuForm> instead.  It is the successor to this module
+and may provide you speed or usability benefits.  See
+L<Data::MuForm::Manual::FormHandlerDiff> for differences between HFH and DMF.
 
 =head1 ATTRIBUTES and METHODS
 

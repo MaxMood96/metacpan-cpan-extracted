@@ -78,5 +78,14 @@ is($uri->host,     'example.test', 'URI adapter parses host');
 is($uri->port,     4222,           'URI adapter parses port');
 is($uri->user,     'user',         'URI adapter parses user');
 is($uri->password, 'pass',         'URI adapter parses password');
+is($uri->scheme,   'nats',         'URI adapter preserves the NATS scheme');
+is($uri->as_string, 'nats://user:pass@example.test:4222', 'URI adapter preserves the URI string');
+
+my $encoded_uri = Net::NATS2::URI->parse('nats://user%20name:pa%2Fss@[::1]:4222');
+is($encoded_uri->host,     '::1',       'URI adapter parses an IPv6 host');
+is($encoded_uri->port,     4222,        'URI adapter parses an IPv6 port');
+is($encoded_uri->user,     'user name', 'URI adapter decodes a username');
+is($encoded_uri->password, 'pa/ss',     'URI adapter decodes a password');
+ok(!Net::NATS2::URI->parse('http://example.test:4222'), 'URI adapter rejects non-NATS schemes');
 
 done_testing;

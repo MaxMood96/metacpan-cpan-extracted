@@ -12,11 +12,11 @@ App::Greple::xlate - modul dukungan terjemahan untuk greple
 
 =head1 VERSION
 
-Version 2.01
+Version 2.02
 
 =head1 DESCRIPTION
 
-B<Greple> B<xlate> modul menemukan blok teks yang diinginkan dan menggantinya dengan teks terjemahan. Mesin utama adalah GPT-5.5 (F<llm/gpt5.pm>), yang memanggil perintah L<llm|https://llm.datasette.io/>; DeepL (F<deepl.pm>) dan mesin lama berbasis B<gpty> juga disertakan.
+B<Greple> B<xlate> modul menemukan blok teks yang diinginkan dan menggantinya dengan teks terjemahan. Mesin utama adalah GPT-5.6 Terra (F<llm/gpt5.pm>), yang memanggil perintah L<llm|https://llm.datasette.io/>; DeepL (F<deepl.pm>) dan mesin lama berbasis B<gpty> juga disertakan.
 
 Terjemahan di-cache per file, sehingga menjalankan ulang perintah tidak memerlukan biaya untuk teks yang tidak berubah. Ketika dokumen diedit, hanya paragraf yang berubah yang dikirim lagi ke API; mesin yang sadar konteks juga menerima terjemahan di sekitarnya, teks sumber mentah di sekitar perubahan, dan versi sebelumnya dari paragraf yang diedit, sehingga terjemahan baru mempertahankan pilihan kata yang sudah ditetapkan (lihat B<--xlate-context-window>). String sensitif dapat disembunyikan sebelum transmisi (lihat L</ANONYMIZATION AND TEMPLATES>).
 
@@ -92,13 +92,15 @@ Pola kompleks dapat ditulis dalam beberapa baris dengan baris baru yang di-escap
 
 Bagaimana teks diubah oleh masking dapat dilihat dengan opsi B<--xlate-mask>.
 
+Placeholder mask adalah tag XML self-closing yang terbentuk dengan baik, seperti C<< <m id="1" /> >>. Mesin LLM berbasis JSON menerima tag tersebut dalam array inputnya. Untuk DeepL, permintaan yang berisi tag penanda di-escape dan dibungkus dalam root C<< <xlate> >> sementara, dengan penanganan tag XML diaktifkan dan setiap kategori penanda didaftarkan sebagai tag yang tidak dipisahkan. Pembungkus dihapus sebelum placeholder divalidasi dan dipulihkan.
+
 Masking melindungi markup agar tidak diterjemahkan. Untuk menyembunyikan string sensitif dari layanan terjemahan itu sendiri, lihat L</ANONYMIZATION AND TEMPLATES>; keduanya dapat digunakan bersama.
 
 Antarmuka ini bersifat eksperimental dan dapat berubah di masa mendatang.
 
 =head1 ANONYMIZATION AND TEMPLATES
 
-String sensitif dapat disembunyikan sebelum dikirim ke API terjemahan dan dipulihkan dalam output. Tersedia tiga sumber aturan anonimisasi: berkas kamus (B<--xlate-anonymize>), tanda inline dalam dokumen itu sendiri (B<--xlate-anonymize-mark>), dan nilai front matter YAML (B<--xlate-frontmatter>). Setiap string diganti dengan tag kategori seperti C<< <person id=1 /> >> selama transmisi. Target penyembunyian hanya transmisi API: berkas cache lokal menyimpan teks biasa yang telah dipulihkan. Gunakan B<--xlate-dryrun> untuk memeriksa secara persis apa yang akan ditransmisikan.
+String sensitif dapat disembunyikan sebelum dikirim ke API terjemahan dan dipulihkan dalam output. Tersedia tiga sumber aturan anonimisasi: berkas kamus (B<--xlate-anonymize>), tanda inline dalam dokumen itu sendiri (B<--xlate-anonymize-mark>), dan nilai front matter YAML (B<--xlate-frontmatter>). Setiap string diganti dengan tag kategori seperti C<< <person id="1" /> >> selama transmisi. Target penyembunyian hanya transmisi API: berkas cache lokal menyimpan teks biasa yang telah dipulihkan. Gunakan B<--xlate-dryrun> untuk memeriksa secara persis apa yang akan ditransmisikan.
 
 Untuk dokumen formulir (laporan triwulanan dan sejenisnya), definisikan aktor di awal dan rujuk mereka di isi:
 
@@ -158,7 +160,7 @@ Saat ini, mesin berikut tersedia
 
 =over 2
 
-=item * B<gpt5>: gpt-5.5 (via the C<llm> command)
+=item * B<gpt5>: gpt-5.6-terra (via the C<llm> command)
 
 =item * B<deepl>: DeepL API (via the C<deepl> command)
 
@@ -267,7 +269,7 @@ Setel nilai ini ke 1 jika Anda ingin menerjemahkan satu baris setiap kali. Opsi 
 
 =item B<--xlate-prompt>=I<text>
 
-Tentukan prompt khusus untuk dikirim ke mesin penerjemahan. Opsi ini tersedia untuk mesin LLM (C<gpt3>, C<gpt4o>, C<gpt5>) tetapi tidak untuk DeepL. Anda dapat menyesuaikan perilaku penerjemahan dengan memberikan instruksi spesifik kepada model AI. Jika prompt berisi C<%s>, itu akan diganti dengan nama bahasa target.
+Tentukan prompt khusus untuk dikirim ke mesin penerjemahan. Opsi ini tersedia untuk mesin LLM (C<gpt3>, C<gpt4o>, C<gpt5>) tetapi tidak untuk DeepL. Anda dapat menyesuaikan perilaku penerjemahan dengan memberikan instruksi spesifik kepada model AI. Jika prompt berisi C<%s>, itu akan diganti dengan nama bahasa target. Untuk mesin C<gpt5> yang didukung llm, dokumen diberikan secara terpisah sebagai permintaan JSON yang anggota C<input>-nya adalah array yang akan diterjemahkan dan anggota C<context> opsionalnya berisi data referensi. Instruksi tetap yang memperlakukan anggota tersebut sebagai data dokumen, bukan perintah, ditambahkan bahkan ketika prompt khusus digunakan.
 
 =item B<--xlate-context>=I<text>
 
@@ -276,7 +278,7 @@ Tentukan informasi konteks tambahan yang akan dikirim ke mesin terjemahan. Opsi 
 =item B<--xlate-context-window>=I<n>
 
 (Context-aware engines only, e.g. C<gpt5> on the llm backend)
-Jumlah blok terjemahan di sekitarnya yang diteruskan sebagai konteks referensi saat menerjemahkan ulang blok yang berubah (default 2). Konteks juga mencakup teks sumber mentah di sekitar wilayah yang berubah (heading, struktur daftar, caption) dan, bila tersedia, versi sebelumnya dari teks yang berubah yang dipulihkan dari cache, sehingga susunan kata yang tidak berubah dipertahankan. Atur ke 0 untuk menonaktifkan terjemahan sadar konteks sepenuhnya. Perhatikan bahwa setiap wilayah yang berubah diterjemahkan dalam panggilan API-nya sendiri dan konteks dapat menambah hingga sekitar 8000 karakter ke prompt sistem, sehingga terjemahan sadar konteks menukar sedikit biaya tambahan demi konsistensi.
+Jumlah blok terjemahan di sekitarnya yang diteruskan sebagai konteks referensi saat menerjemahkan ulang blok yang berubah (default 2). Konteks juga mencakup teks sumber mentah di sekitar wilayah yang berubah (heading, struktur daftar, caption) dan, bila tersedia, versi sebelumnya dari teks yang berubah yang dipulihkan dari cache, sehingga susunan kata yang tidak berubah dipertahankan. Atur ke 0 untuk menonaktifkan terjemahan sadar konteks sepenuhnya. Perhatikan bahwa setiap wilayah yang berubah diterjemahkan dalam panggilan API-nya sendiri dan konteks dapat menambah hingga sekitar 8000 karakter ke permintaan pengguna JSON, sehingga terjemahan sadar konteks menukar sedikit biaya tambahan demi konsistensi. Konteks yang berasal dari dokumen tidak dimasukkan ke dalam prompt sistem.
 
 =item B<--xlate-cache-seed>=I<file>
 
@@ -289,7 +291,7 @@ Anonimkan string sensitif sebelum dikirim ke API terjemahan, dan pulihkan string
     [ { "category": "person",  "text": "山田太郎" },
       { "category": "company", "regex": "アクメ(株式会社)?" } ]
 
-atau dalam format baris sederhana (C<category pattern>, C</.../> untuk regex). Setiap item diganti dengan tag kategori seperti C<< <person id=1 /> >>; string yang sama selalu mendapatkan tag yang sama, sehingga model dapat melacak siapa itu siapa. Field JSON yang tidak dikenal diabaikan, sehingga generator (mis. LLM lokal yang mengekstrak entitas) dapat menambahkan anotasi mereka sendiri. Kategori C<lit> dicadangkan. File cache lokal tetap menyimpan teks biasa yang dipulihkan: target penyembunyian hanya transmisi API.
+atau dalam format baris sederhana (C<category pattern>, C</.../> untuk regex). Setiap item diganti dengan tag kategori seperti C<< <person id="1" /> >>; string yang sama selalu mendapatkan tag yang sama, sehingga model dapat melacak siapa itu siapa. Field JSON yang tidak dikenal diabaikan, sehingga generator (mis. LLM lokal yang mengekstrak entitas) dapat menambahkan anotasi mereka sendiri. Kategori C<lit> dicadangkan. File cache lokal tetap menyimpan teks biasa yang dipulihkan: target penyembunyian hanya transmisi API.
 
 Kamus dapat dihasilkan oleh alat eksternal -- misalnya model lokal yang mengekstrak entitas sensitif:
 
@@ -332,6 +334,10 @@ Jangan panggil API terjemahan; sebagai gantinya tampilkan, melalui tampilan prog
 =item B<-->[B<no->]B<xlate-progress> (Default: True)
 
 Lihat hasil terjemahan secara waktu nyata di keluaran STDERR. Payload C<From> ditampilkan seperti yang dikirimkan, setelah anonimisasi dan masking.
+
+=item B<--xlate-review>
+
+Untuk blok yang berubah satu-ke-satu, tampilkan rentang perubahan berurutan terkecil dalam sumber lama dan baru, diikuti oleh rentang yang sesuai dalam terjemahan lama dan baru. Laporan ditulis ke STDERR, tidak membuat panggilan API tambahan, dan dihilangkan apabila blok lama dan baru tidak dapat dipasangkan secara tegas.
 
 =item B<--xlate-stripe>
 

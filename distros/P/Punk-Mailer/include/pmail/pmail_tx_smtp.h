@@ -316,6 +316,7 @@ static SV *pmail_smtp_deliver(pTHX_ SV *self_sv, SV *spec_sv, SV *env_sv)
     pmail_u64 size;
     SV *id, *result = NULL;
     int r, tls_on = (tlsmode == PMAIL_TLS_IMPLICIT);
+    char sb[PMAIL_U64_LEN], lb[PMAIL_U64_LEN];
 
     memset(&c, 0, sizeof c);
     c.a = PM_FETCH;
@@ -479,13 +480,13 @@ static SV *pmail_smtp_deliver(pTHX_ SV *self_sv, SV *spec_sv, SV *env_sv)
     c.phase = "mail";
     if (c.cap_size && c.size_limit && size > c.size_limit) {
         result = pmail_result_newf(aTHX_ PMAIL_ST_REJECTED, 552, "5.3.4", "smtp", id,
-                                   "the message is %llu bytes, over the %llu-byte SIZE "
-                                   "limit %s:%d announced", (unsigned long long)size,
-                                   (unsigned long long)c.size_limit, host, port);
+                                   "the message is %s bytes, over the %s-byte SIZE "
+                                   "limit %s:%d announced", pmail_u64_str(sb, size),
+                                   pmail_u64_str(lb, c.size_limit), host, port);
         goto quit;
     }
-    if (c.cap_size) r = pmail_smtp_sendf(aTHX_ &c, "MAIL FROM:<%s> SIZE=%llu",
-                                         SvPV_nolen(from), (unsigned long long)size);
+    if (c.cap_size) r = pmail_smtp_sendf(aTHX_ &c, "MAIL FROM:<%s> SIZE=%s",
+                                         SvPV_nolen(from), pmail_u64_str(sb, size));
     else r = pmail_smtp_sendf(aTHX_ &c, "MAIL FROM:<%s>", SvPV_nolen(from));
     if (r != 0) { result = pmail_smtp_lost(aTHX_ &c, -1, id); goto done; }
     PMAIL_SMTP_STEP("mail", c.code == 250);

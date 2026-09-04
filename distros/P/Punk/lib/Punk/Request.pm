@@ -4,7 +4,7 @@ use 5.010;
 use strict;
 use warnings;
 
-our $VERSION = '0.42';
+our $VERSION = '0.43';
 
 1;
 
@@ -119,6 +119,52 @@ rewound.
 =head2 json
 
 The body decoded as JSON through File::Raw::JSON's C ABI.
+
+=head2 body_each($code, %options)
+
+    my $bytes = $c->req->body_each(sub {
+        my ($chunk, $req) = @_;
+        $digest->add($chunk);
+    });
+
+The body a window at a time instead of all at once. C<$code> is called with
+each chunk and the request; the return value is the total byte count.
+
+C<body> copies the whole request into one scalar, which is right for JSON and
+wrong for anything large - the server is already holding those bytes, and the
+copy doubles them for as long as the handler runs. This is the same window the
+multipart parser has always read uploads through, for a body that is not
+multipart: an import, an C<application/octet-stream> C<PUT>, a feed of
+newline-delimited JSON.
+
+Options: C<chunk>, the window size in bytes (default 65536), and C<max>, a
+ceiling after which the read croaks (default 0, no ceiling).
+
+=head2 body_to($dest, %options)
+
+    my $bytes = $c->req->body_to('/var/spool/import.ndjson');
+    my $bytes = $c->req->body_to($fh, chunk => 1024 * 1024);
+
+The body straight to a file - a path, which is opened and closed here, or a
+handle already open for writing. Nothing larger than one window is ever held
+in the application. Takes the same C<chunk> and C<max> options, and returns
+the byte count.
+
+=head2 Reading the body once
+
+A body can be read whole or in chunks, not both ways round. After
+C<body_each> or C<body_to> the bytes have gone, and C<body>, C<json> and
+C<form> croak saying so rather than answering with nothing - an empty string
+where a body was expected is a bug that ships. The other order is not a trap:
+a body already read whole is replayed to C<body_each> from the copy, so the
+order two pieces of code happen to run in cannot break either.
+
+What happens with no C<CONTENT_LENGTH> is HTTP's answer. With no transfer
+coding either, the request has no body and nothing is read. A chunked body has
+no declared length, so it is read to EOF - but only on a server that sets
+C<psgix.input.buffered>, because reading to EOF on a live socket is how an
+application hangs. C<max> is the only ceiling in that case: C<max_body> had no
+length to check either.
 
 =head2 cookies
 

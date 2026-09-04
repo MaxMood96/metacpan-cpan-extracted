@@ -1,6 +1,6 @@
 package HTML::FormHandler::Field::Compound;
 # ABSTRACT: field consisting of subfields
-$HTML::FormHandler::Field::Compound::VERSION = '0.40068';
+$HTML::FormHandler::Field::Compound::VERSION = '0.410001';
 use Moose;
 extends 'HTML::FormHandler::Field';
 with 'HTML::FormHandler::Fields';
@@ -91,7 +91,7 @@ HTML::FormHandler::Field::Compound - field consisting of subfields
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

@@ -1,6 +1,6 @@
 package HTML::FormHandler::Widget::Field::Role::HTMLAttributes;
 # ABSTRACT: apply HTML attributes
-$HTML::FormHandler::Widget::Field::Role::HTMLAttributes::VERSION = '0.40068';
+$HTML::FormHandler::Widget::Field::Role::HTMLAttributes::VERSION = '0.410001';
 
 use Moose::Role;
 use HTML::FormHandler::Render::Util ('process_attrs');
@@ -25,7 +25,7 @@ HTML::FormHandler::Widget::Field::Role::HTMLAttributes - apply HTML attributes
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

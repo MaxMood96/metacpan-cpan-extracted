@@ -3,7 +3,7 @@ package Catalyst::Seal;
 use strict;
 use warnings;
 
-our $VERSION = '0.01';
+our $VERSION = '0.03';
 
 use XSLoader ();
 XSLoader::load('Catalyst::Seal', $VERSION);
@@ -109,7 +109,7 @@ Catalyst::Seal - freeze a Catalyst application at setup and make it 4x faster
 
 =head1 VERSION
 
-Version 0.01
+Version 0.03
 
 =cut
 

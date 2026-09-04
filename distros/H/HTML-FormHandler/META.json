@@ -4,7 +4,7 @@
       "FormHandler Contributors - see HTML::FormHandler"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Dist::Zilla version 6.010, CPAN::Meta::Converter version 2.150005",
+   "generated_by" : "Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150015",
    "license" : [
       "perl_5"
    ],
@@ -28,11 +28,14 @@
          }
       },
       "runtime" : {
+         "recommends" : {
+            "Crypt::Blowfish" : "0",
+            "Crypt::CBC" : "0",
+            "MIME::Base64" : "0"
+         },
          "requires" : {
             "Carp" : "0",
             "Class::Load" : "0.06",
-            "Crypt::Blowfish" : "0",
-            "Crypt::CBC" : "0",
             "Data::Clone" : "0",
             "DateTime" : "0",
             "DateTime::Format::Strptime" : "0",
@@ -44,16 +47,13 @@
             "JSON::MaybeXS" : "1.003003",
             "List::Util" : "1.33",
             "Locale::Maketext" : "1.09",
-            "MIME::Base64" : "0",
             "Moose" : "2.1403",
-            "MooseX::Getopt" : "0.16",
             "MooseX::Types" : "0.20",
             "MooseX::Types::Common" : "0",
             "MooseX::Types::LoadableClass" : "0.006",
             "Sub::Exporter" : "0",
             "Sub::Name" : "0",
             "Try::Tiny" : "0",
-            "aliased" : "0",
             "namespace::autoclean" : "0.09"
          }
       },
@@ -64,6 +64,7 @@
             "Test::Exception" : "0",
             "Test::Memory::Cycle" : "1.04",
             "Test::More" : "0.94",
+            "Test::Needs" : "0",
             "Test::Warn" : "0"
          }
       }
@@ -71,15 +72,17 @@
    "release_status" : "stable",
    "resources" : {
       "bugtracker" : {
-         "web" : "http://github.com/gshank/html-formhandler/issues"
+         "web" : "https://github.com/gshank/html-formhandler/issues"
       },
       "repository" : {
          "type" : "git",
          "url" : "git://github.com/gshank/html-formhandler.git",
-         "web" : "http://github.com/gshank/html-formhandler"
+         "web" : "https://github.com/gshank/html-formhandler"
       }
    },
-   "version" : "0.40068",
-   "x_serialization_backend" : "Cpanel::JSON::XS version 3.0231"
+   "version" : "0.410001",
+   "x_generated_by_perl" : "v5.44.0",
+   "x_serialization_backend" : "Cpanel::JSON::XS version 4.43",
+   "x_spdx_expression" : "Artistic-1.0-Perl OR GPL-1.0-or-later"
 }
 

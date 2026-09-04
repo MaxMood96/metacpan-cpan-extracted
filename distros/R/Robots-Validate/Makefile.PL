@@ -27,7 +27,7 @@ my %WriteMakefileArgs = (
     "Algorithm::AhoCorasick::XS" => 0,
     "File::ShareDir" => 0,
     "File::Slurper" => 0,
-    "List::Util" => 0,
+    "List::Util" => "1.45",
     "Moo" => 1,
     "Net::DNS::Resolver" => 0,
     "Net::IP" => 0,
@@ -60,7 +60,7 @@ my %WriteMakefileArgs = (
     "strict" => 0,
     "warnings" => 0
   },
-  "VERSION" => "v0.4.0",
+  "VERSION" => "v0.4.1",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -76,7 +76,7 @@ my %FallbackPrereqs = (
   "File::Temp" => 0,
   "IO::Handle" => 0,
   "IPC::Open3" => 0,
-  "List::Util" => 0,
+  "List::Util" => "1.45",
   "Module::Load" => 0,
   "Module::Metadata" => 0,
   "Moo" => 1,

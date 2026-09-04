@@ -1,6 +1,6 @@
 package HTML::FormHandler::Field::AddElement;
 # ABSTRACT: Field to support repeatable javascript add
-$HTML::FormHandler::Field::AddElement::VERSION = '0.40068';
+$HTML::FormHandler::Field::AddElement::VERSION = '0.410001';
 use HTML::FormHandler::Moose;
 extends 'HTML::FormHandler::Field::Display';
 use HTML::FormHandler::Render::Util ('process_attrs');
@@ -44,7 +44,7 @@ HTML::FormHandler::Field::AddElement - Field to support repeatable javascript ad
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

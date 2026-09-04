@@ -1,6 +1,6 @@
 package HTML::FormHandler::Field::Result;
 # ABSTRACT: result class for fields
-$HTML::FormHandler::Field::Result::VERSION = '0.40068';
+$HTML::FormHandler::Field::Result::VERSION = '0.410001';
 use Moose;
 with 'HTML::FormHandler::Result::Role';
 
@@ -68,7 +68,7 @@ HTML::FormHandler::Field::Result - result class for fields
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

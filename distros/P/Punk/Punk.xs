@@ -109,6 +109,8 @@ static const frj_abi *punk_frj(pTHX) {
 #include "punk/punk_wsconn.h"     /* the live WebSocket connection         */
 #include "punk/punk_wshandshake.h" /* the upgrade handshake (SHA-1 + base64) */
 #include "punk/punk_sse.h"         /* Server-Sent Events streams            */
+#include "punk/punk_afterres.h"   /* after_response: the loop timer needs the
+                                     ABI, so it lands below hm_abi.h        */
 #include "punk/punk_ratelimit.h"  /* rate_limit: a C before_dispatch closure */
 #include "punk/punk_wsroom.h"      /* per-worker pub/sub rooms              */
 #include "punk/punk_cache.h"       /* the in-memory cache, bounded by BYTES  */

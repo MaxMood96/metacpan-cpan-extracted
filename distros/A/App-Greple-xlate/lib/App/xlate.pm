@@ -1,6 +1,6 @@
 package App::xlate;
 
-our $VERSION = "2.01";
+our $VERSION = "2.02";
 
 1;
 =encoding utf-8
@@ -38,6 +38,7 @@ xlate [ options ] -t LANG FILE [ greple options ]
     --frontmatter     exclude/anonymize YAML front matter
     --seed=#          seed cache from another cache file
     --context=#       context blocks for re-translation
+    --review          show minimal source/translation revision spans
     -w, --wrap=#      wrap line by # width
     -m, --maxlen=#    max length per API call
     -l, --library=#   show library files (XLATE.mk, xlate.el)
@@ -75,7 +76,7 @@ xlate [ options ] -t LANG FILE [ greple options ]
 
 =head1 VERSION
 
-    Version 2.01
+    Version 2.02
 
 =head1 INCOMPATIBLE CHANGES IN 2.0
 
@@ -339,6 +340,11 @@ document's cache I<file>.  Useful for periodic reports.
 
 Number of surrounding translated blocks passed as context when
 re-translating changed blocks (default 2, 0 to disable).
+
+=item B<--review>
+
+For a one-to-one block revision, show the minimal changed spans in the
+source and translation on STDERR.  This does not make another API call.
 
 =item B<-w> I<width>, B<--wrap>=I<width>
 

@@ -144,6 +144,10 @@ Catalyst::Seal::register_step('finalize' => sub {
         'Catalyst::finalize_encoding' => \&_finalize_encoding);
 
     my $destroy = 0;
+    # _response_destroy calls both of these by full name, so this module is
+    # what has to make sure they are loaded, not whoever happened to load Moose.
+    require Devel::GlobalDestruction;
+    require Scalar::Util;
     if (_destroy_is_stock()) {
         no warnings 'redefine';
         $Catalyst::Seal::Guard::ORIGINAL{'Catalyst::Response::DESTROY'}

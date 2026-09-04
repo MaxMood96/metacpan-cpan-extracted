@@ -18,8 +18,8 @@ my $prog = Music::Chord::Progression->new(
         5 => [1,2,3,4,6],
         6 => [1,2,3,4,5],
     },
-    chord_map  => [('7') x 6], # every chord is the same flavor
-    substitute => 1,
+    chord_map  => [('7') x 6], # every chord is the same flavor: 7th
+    substitute => 1, # do tritone substitution - why not
     verbose    => 0,
 );
 my $chords = $prog->generate;
@@ -30,7 +30,7 @@ my $arp = Music::MelodicDevice::Arpeggiation->new(verbose => 1);
 my $score = setup_score(bpm => 100);
 
 for my $c (@$chords) {
-    my $arped = $arp->arp($c, 1, 'diverge');
+    my $arped = $arp->arp($c, 1, 'converge');
     print ddc $arped;
     for my $n (@$arped) {
       $score->n(midi_format(@$n));

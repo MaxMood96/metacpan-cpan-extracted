@@ -1,5 +1,18 @@
 Revision history for Robots-Validate:
 
+v0.4.1    2026-09-03 18:04:47+01:00 Europe/London
+  [Enhancements]
+  - Added robot rule for Piperic.
+
+  [Bug Fixes]
+  - Specified a minimum version of List::Util.
+
+  [Documentation]
+  - Updated the wording of the AI_POLICY.
+
+  [Tests]
+  - Fixed warnings in Perl v5.24.
+
 v0.4.0    2026-09-01 10:49:11+01:00 Europe/London
   [Incompatible Changes]
   - This is a complete rewrite, and the interface is not compatible.

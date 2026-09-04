@@ -1,6 +1,6 @@
 package HTML::FormHandler::Widget::Field::Captcha;
 # ABSTRACT: Captcha field rendering widget
-$HTML::FormHandler::Widget::Field::Captcha::VERSION = '0.40068';
+$HTML::FormHandler::Widget::Field::Captcha::VERSION = '0.410001';
 use Moose::Role;
 use namespace::autoclean;
 use HTML::FormHandler::Render::Util ('process_attrs');
@@ -11,7 +11,7 @@ sub render_element {
     $result ||= $self->result;
     return '' if $self->widget eq 'no_widget';
 
-    my $output .= '<img src="' . $self->form->captcha_image_url . '"/>';
+    my $output = '<img src="' . $self->form->captcha_image_url . '"/>';
     $output .= '<input id="' . $self->id . '" name="';
     $output .= $self->html_name . '"';
     $output .= process_attrs($self->element_attributes);
@@ -41,7 +41,7 @@ HTML::FormHandler::Widget::Field::Captcha - Captcha field rendering widget
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

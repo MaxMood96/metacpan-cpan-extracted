@@ -1,6 +1,6 @@
 package App::Greple::xlate::gpty::gpt4o;
 
-our $VERSION = "2.01";
+our $VERSION = "2.02";
 
 use v5.14;
 use warnings;
@@ -24,7 +24,7 @@ my %param = (
               prompt => <<END
 Translate the following text into %s, preserving the line structure.
 For each input line, output only the corresponding translated line in the same line position.
-Leave blank lines and any XML-style tags (e.g., <m id=1 />, <tag>, </tag>) unchanged and do not translate them.
+Leave blank lines unchanged. Within every line, preserve XML-style tags (e.g., <m id="1" />, <tag>, </tag>) exactly and translate only the surrounding text.
 Do not output the original (pre-translation) text under any circumstances.
 The number and order of output lines must always match the input exactly: output line n must correspond to input line n.
 Output only the translated lines or unchanged tags/blank lines.

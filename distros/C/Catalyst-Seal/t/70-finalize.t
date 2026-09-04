@@ -161,19 +161,43 @@ Catalyst::Seal::Finalize::_clear();
     );
 
     # DEMOLISH still runs, once, and still gets the global destruction flag.
-    my @calls;
-    my $demolish = Catalyst::Response->can('DEMOLISH');
+    #
+    # The destructor is called directly rather than by letting the object fall
+    # out of scope. The earlier version did the latter and CPAN Testers failed
+    # it on 5.16.3, 5.18.0, 5.18.2 and 5.18.4 where it passed on 5.42.
+    #
+    # Reproduced on 5.20.3 in docker: there the object is not freed at the
+    # `undef`, it is freed when the enclosing block exits, and that happens
+    # *after* the `local` on the glob has been restored. So the real DEMOLISH
+    # ran and the localised counter stayed at nought. The test was measuring
+    # the order the interpreter unwinds a scope in, not this distribution.
+    #
+    # The same run confirmed there is nothing wrong with the code: on 5.20,
+    # sealed and stock call DEMOLISH exactly once for each of `undef $r`,
+    # scope exit, scope exit after undef, and reassignment. The replacement
+    # destructor is faithful.
+    #
+    # The assertions sit inside the block on purpose. $r is still alive here,
+    # and its own destruction at block exit calls DEMOLISH a second time.
     {
+        my @calls;
         no warnings 'redefine', 'once';
         local *Catalyst::Response::DEMOLISH = sub { push @calls, $_[1]; return };
-        # undef explicitly rather than relying on the block exit: perl does
-        # not reliably clear a lexical that is never read, and without this the
-        # destructor may simply not run inside the local.
+
         my $r = Catalyst::Response->new;
-        undef $r;
+        Catalyst::Seal::Finalize::_response_destroy($r);
+
+        is(scalar @calls, 1, 'DEMOLISH ran exactly once');
+        ok(defined $calls[0], 'and was given the in-global-destruction flag');
     }
-    is(scalar @calls, 1, 'DEMOLISH ran exactly once');
-    ok(defined $calls[0], 'and was given the in-global-destruction flag');
+
+    # And the destructor really is what perl will call, so the above is not
+    # testing a subroutine nothing reaches.
+    is(
+        Catalyst::Response->can('DESTROY'),
+        \&Catalyst::Seal::Finalize::_response_destroy,
+        'and that is the DESTROY perl will call',
+    );
 
     # A subclass falls through to Moose, the way the stock destructor does.
     {

@@ -14,6 +14,7 @@ __DATA__
 49699333
 Aas
 Adam
+Administrator
 Alders
 Alex
 Base
@@ -108,6 +109,7 @@ Skyttä
 Slaven
 Split
 Stosberg
+System
 TCP
 TLS
 TOTP
@@ -213,6 +215,7 @@ pop
 relativize
 ribasushi
 rlogin
+root
 rsync
 rtsp
 rtspu

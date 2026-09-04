@@ -137,89 +137,34 @@ in bounded chunks, stops cleanly at the end of usable data, and bounds the amoun
 at once. Unreadable paths and missing files produce empty results rather than errors. The guiding rule is
 simple and absolute - no input, however hostile or malformed, may crash the scan.
 
-## The fingerprint index (snippet provenance)
+## Fingerprinting for snippet provenance
 
-The pattern engine answers "which known licenses does this file contain". A second, closely related
-question is "which known open source code does this snippet resemble", and it is what powers a service
-where someone submits a fragment (for example AI-generated code) and asks how much of it already exists in
-the open source Cavil has seen. This is a different lookup from license matching and it is kept
-deliberately separate, but it reuses almost everything above: the same frozen tokenizer and hashing, and
-the same on-disk discipline of a versioned, checksummed, structure-validated, memory-mapped segment
-published atomically.
+The pattern engine answers "which known licenses does this file contain". A closely related question is
+"which known open source code does this snippet resemble", used by a service where someone submits a
+fragment (for example AI-generated code) and asks how much of it already exists in the open source Cavil
+has seen. This distribution provides the *primitives* for that question. The searchable index that turns
+fingerprints back into packages and paths lives in the consuming application - Cavil keeps it in Postgres -
+not here.
 
-The idea is the one plagiarism detectors have used for decades, called winnowing. A file's tokens are
-grouped into overlapping runs (k tokens each), every run is hashed, and a stable subset of those hashes is
-selected by taking the smallest hash in each sliding window of the runs. The selection is deterministic
-and shift-stable, so the same code always yields the same fingerprints no matter how it is chopped up
-while reading, and it survives reformatting and renaming because the layout has already disappeared during
-tokenization. The window width is the one knob: a wider window keeps fewer fingerprints (cheaper) and a
-narrower window keeps more (more robust), with the fingerprint count landing near two divided by the
+Two calls make up the surface. `content_hash` returns the 128-bit hash of a file's raw bytes as 32 hex
+characters, produced by the same frozen hasher the pattern side uses, so identical content always yields
+the same key and the database can join on it. `fingerprint_file` winnows a file into a set of fingerprints,
+each carrying the exact line range it covers so a match can be highlighted.
+
+Winnowing is the idea plagiarism detectors have used for decades. A file's tokens are grouped into
+overlapping runs (k tokens each), every run is hashed, and a stable subset of those hashes is selected by
+taking the smallest hash in each sliding window of the runs. The selection is deterministic and
+shift-stable, so the same code always yields the same fingerprints no matter where it sits in a file or how
+it was chopped up while reading, and it survives reformatting and renaming because the layout has already
+disappeared during tokenization. The window width is the one knob: a wider window keeps fewer fingerprints
+(cheaper) and a narrower window keeps more (more robust), with the count landing near two divided by the
 window-plus-one, times the number of runs.
 
-Where a pattern segment is a prefix tree walked by a file, a fingerprint segment is simply a sorted array
-of 16-byte records, each a fingerprint value paired with a reference to the *content* it came from and the
-exact line range it covers. The content reference points into a small per-segment table of 128-bit content
-hashes, not file names: the content hash is the stable, deduplication-native key that the Cavil database
-maps to every path, package, version and piece of metadata. Keeping the record minimal and content-keyed
-is deliberate, because this is the huge, expensive-to-rebuild part of the system; anything richer that a
-future feature needs lives in the database keyed by that hash and never forces the index to be re-emitted.
-A query winnows the submitted snippet the same way and binary-searches each of its fingerprints into the
-array. The score reported for a candidate is containment: the fraction of the snippet's distinct
-fingerprints found in it (and, because each content also records its own fingerprint count, the reverse
-fraction too, so a caller can tell "your snippet is inside this file" from "this file is your snippet").
-That is the same "match percentage" commercial tools show, and a risk indicator is built from it by
-weighting containment with the license risk Cavil already knows for the matched code, so that resembling
-copyleft code reads louder than resembling permissive code. The result is advisory and probabilistic,
-never an automated verdict.
-
-Containment is set membership over the whole file, not an alignment: it asks whether each of the snippet's
-fingerprints exists anywhere in the content, not whether they line up in one place. That makes it robust to
-edits, which is the point for provenance: rename a function or change a few tokens and it still matches its
-origin. The flip side is that it is position-blind, and a single change lowers the score only if the one
-fingerprint it perturbs appears nowhere else in the matched file, which in a file that already uses those
-tokens it usually does. So a lightly modified copy can still report 100%, and that "100%" means "every
-fingerprint of your snippet is present in this file", not "byte-identical". Telling a verbatim copy from a
-modified one would need positional/alignment scoring layered on top; containment alone does not, by design.
-
-Two properties matter for correctness. First, the index never collapses a fingerprint: every occurrence
-is a separate record, so a fingerprint present in fifty files returns all fifty. Nothing that was indexed
-becomes unfindable. Second, the index is content-addressed by a package version's checksum and lives under
-its own manifest and generation, completely independent of the pattern generation. Editing a license
-pattern and re-scanning a package changes its license conclusions but not its source bytes, so it must not
-touch the fingerprint index at all. A package version is fingerprinted once and reused on every later
-re-scan of that same version. The one-time full build is therefore the only time the whole corpus is
-fingerprinted; from then on the cost tracks churn, which is what makes a weekly full re-scan and constant
-pattern-driven re-scans cost the fingerprint index almost nothing.
-
-The care point is document-frequency. Boilerplate that appears across genuinely unrelated code is noise
-and is worth pruning, but the same good function repeated across many *versions* of one package must not be
-mistaken for boilerplate and dropped. The obvious grouping, "count once per package", does not work here,
-because package names carry their version (rust1.23, go-1.23) and are not reliably parseable back to a
-project, and because every Cavil deployment uses its own naming scheme, so any name-based grouping would
-be an unportable guess. So identity is taken from content, not names: fingerprints are deduplicated and document
-frequency is counted per distinct *file content* (the checksum Cavil already computes). Fifty versions
-shipping a byte-identical file collapse to one stored copy and contribute one to document frequency, while
-a line that truly appears across thousands of unrelated file contents is still high-frequency and prunes.
-A matched fingerprint resolves through its content checksum back to every package, version and path that
-carries it, so nothing becomes unfindable and the version list is recovered from the database rather than
-guessed from a name. Verbatim vendored copies fall out of the same rule: one content, kept and detectable,
-not mistaken for noise.
-
-Measured on a few hundred megabytes of real C, Python and JavaScript source, each fingerprint costs about
-sixteen bytes on disk (the sorted record alone; filenames map back through the database in production),
-the index holds roughly three fingerprints per kilobyte of source at the wide window, a snippet scores in
-well under a millisecond against a cached segment, and detection quality is essentially unchanged across
-window widths even though storage falls several-fold at the wide window. So the cheap large window is the
-right default, and the storage of a very large corpus is dominated by that sixteen-bytes-per-fingerprint
-record cost times the corpus size, before per-content document-frequency pruning trims the boilerplate
-tail.
-
-Because each record already carries the exact matched line range, the same index also answers "which
-files contain code like this snippet, and where", so it doubles as a snippet code-search engine over the
-whole corpus, not just a provenance check. The point that keeps this cheap is that it needs no change to
-the index: results are ranked by containment straight from the records, and any richer convenience a
-consumer wants (filtering, expanding a match to every copy, language or license facets) is a lookup keyed
-by the content hash, never a wider record or a scan of the whole corpus.
+Everything downstream is the consumer's: storing the fingerprints, looking a query's fingerprints up,
+ranking candidates by containment, pruning boilerplate, and resolving a content hash back to packages and
+paths. Cavil does all of that in the database. Keeping only the primitives here means the expensive,
+corpus-sized index is owned where it is queried, and this distribution stays a deterministic fingerprint
+source with nothing on disk of its own to maintain.
 
 ## What deliberately stays the same
 

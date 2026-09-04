@@ -9,7 +9,7 @@ use base qw( Exporter );
 our @EXPORT_OK = qw( wasm_caller_memory );
 
 # ABSTRACT: Interface to WebAssembly Memory
-our $VERSION = '0.23'; # VERSION
+our $VERSION = '0.24'; # VERSION
 
 
 sub wasm_caller_memory
@@ -64,7 +64,7 @@ Wasm::Memory - Interface to WebAssembly Memory
 
 =head1 VERSION
 
-version 0.23
+version 0.24
 
 =head1 SYNOPSIS
 
@@ -105,8 +105,8 @@ Use WebAssembly memory from Perl in callback from WebAssembly:
  {
    # this just uses Platypus to create a utility function
    # to convert a pointer to a C string into a Perl string.
-   use FFI::Platypus 1.00;
-   my $ffi = FFI::Platypus->new( api => 1 );
+   use FFI::Platypus 2.00;
+   my $ffi = FFI::Platypus->new( api => 2 );
    $ffi->attach_cast( 'cstring' => 'opaque' => 'string' );
  }
  
@@ -196,7 +196,7 @@ Graham Ollis <plicease@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2020-2022 by Graham Ollis.
+This software is copyright (c) 2020-2026 by Graham Ollis.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

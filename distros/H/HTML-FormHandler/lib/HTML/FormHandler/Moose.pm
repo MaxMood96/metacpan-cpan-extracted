@@ -1,6 +1,6 @@
 package  HTML::FormHandler::Moose;
 # ABSTRACT: to add FormHandler sugar
-$HTML::FormHandler::Moose::VERSION = '0.40068';
+$HTML::FormHandler::Moose::VERSION = '0.410001';
 use Moose;
 use Moose::Exporter;
 use Moose::Util::MetaRole;
@@ -76,7 +76,7 @@ HTML::FormHandler::Moose - to add FormHandler sugar
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

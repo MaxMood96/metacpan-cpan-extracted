@@ -40,15 +40,9 @@ void     matcher_set_tombstones(Matcher* m, AV* ids);
 void     matcher_set_generation(Matcher* m, UV generation);
 UV       matcher_generation(Matcher* m);
 
-// Fingerprints (snippet provenance). FpSegment is opaque to Perl (a blessed pointer).
-class FpSegment;
-AV*        fp_fingerprint_file(const char* path, int k, int w);   // [[fp, sline, eline], ...]
-SV*        fp_content_hash(const char* path);                     // 32-hex content hash
-HV*        fp_build(AV* files, const char* out_path, int k, int w, int dedup);
-FpSegment* fp_open(const char* path);                             // NULL on failure
-void       fp_destroy(FpSegment* s);
-AV*        fp_score(FpSegment* s, AV* query_fps, int top_n, double min_containment, UV max_df);    // [[hash, hits, containment, of, regions], ...]
-int        fp_verify(FpSegment* s, const char* path);
+// Fingerprints (snippet provenance): winnow a file, or hash its content.
+AV* fp_fingerprint_file(const char* path, int k, int w);   // [[fp, sline, eline], ...]
+SV* fp_content_hash(const char* path);                     // 32-hex content hash
 
 // Bag
 Bag* pattern_init_bag();

@@ -14,9 +14,10 @@ All AI-assisted code changes will be identified in the commit messages
 as "Co-Authored-By" or "Assisted-By", and will have a "Signed-off-by"
 line from the maintainer who reviewed and agrees to the changes.
 
-In all of the cases so far, the actual changes to the module were
-made by the maintainer.  The only AI-generated code used are test
-cases, and these were reviewed and modified by the maintainer.
+The actual changes were made by the maintainer.  AI-recommended
+patches to the module have had significant modifications by the
+maintainer.  The only AI-generated code used are test cases, and these
+were reviewed and modified by the maintainer.
 
 Contributors may submit AI-generated bug reports and pull requests, so
 long as they are clearly identified as such, with a human taking

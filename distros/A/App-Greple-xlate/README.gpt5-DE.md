@@ -10,11 +10,11 @@ App::Greple::xlate - Übersetzungsunterstützungsmodul für greple
 
 # VERSION
 
-Version 2.01
+Version 2.02
 
 # DESCRIPTION
 
-**Greple** **xlate**-Modul findet gewünschte Textblöcke und ersetzt sie durch den übersetzten Text. Die primäre Engine ist GPT-5.5 (`llm/gpt5.pm`), die den Befehl [llm](https://llm.datasette.io/) aufruft; DeepL (`deepl.pm`) und ältere auf **gpty** basierende Engines sind ebenfalls enthalten.
+**Greple** **xlate**-Modul findet gewünschte Textblöcke und ersetzt sie durch den übersetzten Text. Die primäre Engine ist GPT-5.6 Terra (`llm/gpt5.pm`), die den [llm](https://llm.datasette.io/)-Befehl aufruft; DeepL (`deepl.pm`) und ältere auf **gpty** basierende Engines sind ebenfalls enthalten.
 
 Übersetzungen werden pro Datei zwischengespeichert, sodass das erneute Ausführen eines Befehls für unveränderten Text nichts kostet. Wenn ein Dokument bearbeitet wird, werden nur die geänderten Absätze erneut an die API gesendet; eine kontextbewusste Engine erhält außerdem die umgebenden Übersetzungen, den rohen Quelltext um die Änderung herum und die vorherige Version des bearbeiteten Absatzes, sodass die neue Übersetzung die etablierte Wortwahl beibehält (siehe **--xlate-context-window**). Vertrauliche Zeichenketten können vor der Übertragung verborgen werden (siehe ["ANONYMIZATION AND TEMPLATES"](#anonymization-and-templates)).
 
@@ -81,13 +81,15 @@ Komplexe Muster können mit einem durch Backslash maskierten Zeilenumbruch über
 
 Wie der Text durch Maskierung transformiert wird, kann mit der Option **--xlate-mask** gesehen werden.
 
+Maskierungsplatzhalter sind wohlgeformte selbstschließende XML-Tags wie `<m id="1" />`. JSON-basierte LLM-Engines erhalten die Tags in ihren Eingabe-Arrays. Für DeepL wird eine Anfrage mit Marker-Tags maskiert und in ein temporäres Wurzelelement `<xlate>` eingeschlossen, wobei die XML-Tag-Verarbeitung aktiviert und jede Markerkategorie als nicht trennendes Tag registriert wird. Der Wrapper wird entfernt, bevor die Platzhalter validiert und wiederhergestellt werden.
+
 Maskierung schützt Markup davor, übersetzt zu werden. Um sensible Zeichenfolgen vor dem Übersetzungsdienst selbst zu verbergen, siehe ["ANONYMIZATION AND TEMPLATES"](#anonymization-and-templates); beides kann zusammen verwendet werden.
 
 Diese Schnittstelle ist experimentell und kann sich in Zukunft ändern.
 
 # ANONYMIZATION AND TEMPLATES
 
-Sensible Zeichenketten können verborgen werden, bevor sie an die Übersetzungs-API gesendet werden, und in der Ausgabe wiederhergestellt werden. Drei Quellen für Anonymisierungsregeln stehen zur Verfügung: eine Wörterbuchdatei (**--xlate-anonymize**), Inline-Markierungen im Dokument selbst (**--xlate-anonymize-mark**) und YAML-Front-Matter-Werte (**--xlate-frontmatter**). Jede Zeichenkette wird während der Übertragung durch ein Kategorie-Tag wie `<person id=1 />` ersetzt. Das Ziel der Verschleierung ist nur die API-Übertragung: lokale Cache-Dateien speichern wiederhergestellten Klartext. Verwenden Sie **--xlate-dryrun**, um genau zu prüfen, was übertragen würde.
+Sensible Zeichenketten können verborgen werden, bevor sie an die Übersetzungs-API gesendet werden, und in der Ausgabe wiederhergestellt werden. Drei Quellen für Anonymisierungsregeln stehen zur Verfügung: eine Wörterbuchdatei (**--xlate-anonymize**), Inline-Markierungen im Dokument selbst (**--xlate-anonymize-mark**) und YAML-Front-Matter-Werte (**--xlate-frontmatter**). Jede Zeichenkette wird während der Übertragung durch ein Kategorie-Tag wie `<person id="1" />` ersetzt. Das Ziel der Verschleierung ist nur die API-Übertragung: lokale Cache-Dateien speichern wiederhergestellten Klartext. Verwenden Sie **--xlate-dryrun**, um genau zu prüfen, was übertragen würde.
 
 Definieren Sie bei Formulardokumenten (Quartalsberichte und dergleichen) die Akteure im Voraus und verweisen Sie im Haupttext auf sie:
 
@@ -140,7 +142,7 @@ Schließen Sie embedz-Blöcke von der Übersetzung aus, wenn ein Dokument sie en
 
     Derzeit sind die folgenden Engines verfügbar
 
-    - **gpt5**: gpt-5.5 (via the `llm` command)
+    - **gpt5**: gpt-5.6-terra (via the `llm` command)
     - **deepl**: DeepL API (via the `deepl` command)
     - **gpt3**: gpt-3.5-turbo (legacy, via the `gpty` command)
     - **gpt4o**: gpt-4o-mini (legacy, via the `gpty` command)
@@ -238,7 +240,7 @@ Schließen Sie embedz-Blöcke von der Übersetzung aus, wenn ein Dokument sie en
 
 - **--xlate-prompt**=_text_
 
-    Geben Sie einen benutzerdefinierten Prompt an, der an die Übersetzungs-Engine gesendet werden soll. Diese Option ist für die LLM-Engines (`gpt3`, `gpt4o`, `gpt5`) verfügbar, jedoch nicht für DeepL. Sie können das Übersetzungsverhalten anpassen, indem Sie dem KI-Modell spezifische Anweisungen geben. Wenn der Prompt `%s` enthält, wird er durch den Namen der Zielsprache ersetzt.
+    Geben Sie einen benutzerdefinierten Prompt an, der an die Übersetzungs-Engine gesendet werden soll. Diese Option ist für die LLM-Engines (`gpt3`, `gpt4o`, `gpt5`) verfügbar, jedoch nicht für DeepL. Sie können das Übersetzungsverhalten anpassen, indem Sie dem KI-Modell spezifische Anweisungen geben. Wenn der Prompt `%s` enthält, wird er durch den Namen der Zielsprache ersetzt. Für die LLM-gestützte Engine `gpt5` wird das Dokument separat als JSON-Anfrage bereitgestellt, deren Mitglied `input` das zu übersetzende Array ist und deren optionales Mitglied `context` Referenzdaten enthält. Eine feste Anweisung, die diese Mitglieder als Dokumentdaten und nicht als Befehle behandelt, wird auch bei Verwendung eines benutzerdefinierten Prompts angehängt.
 
 - **--xlate-context**=_text_
 
@@ -247,7 +249,7 @@ Schließen Sie embedz-Blöcke von der Übersetzung aus, wenn ein Dokument sie en
 - **--xlate-context-window**=_n_
 
     (Context-aware engines only, e.g. `gpt5` on the llm backend)
-    Anzahl der umgebenden übersetzten Blöcke, die beim erneuten Übersetzen geänderter Blöcke als Referenzkontext übergeben werden (Standard: 2). Der Kontext umfasst außerdem den unverarbeiteten Quelltext um den geänderten Bereich (Überschriften, Listenstruktur, Beschriftungen) und, sofern verfügbar, die aus dem Cache wiederhergestellte vorherige Version des geänderten Textes, sodass unveränderte Formulierungen erhalten bleiben. Setzen Sie den Wert auf 0, um kontextbewusste Übersetzung vollständig zu deaktivieren. Beachten Sie, dass jeder geänderte Bereich in einem eigenen API-Aufruf übersetzt wird und der Kontext bis zu etwa 8000 Zeichen zum System-Prompt hinzufügen kann; kontextbewusste Übersetzung tauscht daher etwas zusätzliche Kosten gegen Konsistenz ein.
+    Anzahl der umgebenden übersetzten Blöcke, die beim erneuten Übersetzen geänderter Blöcke als Referenzkontext übergeben werden (Standard: 2). Der Kontext umfasst außerdem den unverarbeiteten Quelltext um den geänderten Bereich (Überschriften, Listenstruktur, Beschriftungen) und, sofern verfügbar, die aus dem Cache wiederhergestellte vorherige Version des geänderten Textes, sodass unveränderte Formulierungen erhalten bleiben. Setzen Sie den Wert auf 0, um kontextbewusste Übersetzung vollständig zu deaktivieren. Beachten Sie, dass jeder geänderte Bereich in einem eigenen API-Aufruf übersetzt wird und der Kontext bis zu etwa 8000 Zeichen zur JSON-Benutzeranfrage hinzufügen kann; kontextbewusste Übersetzung tauscht daher etwas zusätzliche Kosten gegen Konsistenz ein. Aus dem Dokument abgeleiteter Kontext wird aus dem System-Prompt herausgehalten.
 
 - **--xlate-cache-seed**=_file_
 
@@ -260,7 +262,7 @@ Schließen Sie embedz-Blöcke von der Übersetzung aus, wenn ein Dokument sie en
         [ { "category": "person",  "text": "山田太郎" },
           { "category": "company", "regex": "アクメ(株式会社)?" } ]
 
-    oder in einem einfachen Zeilenformat (`category pattern`, `/.../` für Regex). Jedes Element wird durch ein Kategorie-Tag wie `<person id=1 />` ersetzt; dieselbe Zeichenfolge erhält immer dasselbe Tag, sodass das Modell nachverfolgen kann, wer wer ist. Unbekannte JSON-Felder werden ignoriert, sodass Generatoren (z. B. ein lokales LLM, das Entitäten extrahiert) eigene Annotationen hinzufügen können. Kategorie `lit` ist reserviert. Lokale Cache-Dateien speichern weiterhin wiederhergestellten Klartext: Das Ziel der Verschleierung ist ausschließlich die API-Übertragung.
+    oder in einem einfachen Zeilenformat (`category pattern`, `/.../` für Regex). Jedes Element wird durch ein Kategorie-Tag wie `<person id="1" />` ersetzt; dieselbe Zeichenfolge erhält immer dasselbe Tag, sodass das Modell nachverfolgen kann, wer wer ist. Unbekannte JSON-Felder werden ignoriert, sodass Generatoren (z. B. ein lokales LLM, das Entitäten extrahiert) eigene Annotationen hinzufügen können. Kategorie `lit` ist reserviert. Lokale Cache-Dateien speichern weiterhin wiederhergestellten Klartext: Das Ziel der Verschleierung ist ausschließlich die API-Übertragung.
 
     Ein Wörterbuch kann von einem externen Tool erzeugt werden – zum Beispiel von einem lokalen Modell, das sensible Entitäten extrahiert:
 
@@ -303,6 +305,10 @@ Schließen Sie embedz-Blöcke von der Übersetzung aus, wenn ein Dokument sie en
 - **--**\[**no-**\]**xlate-progress** (Default: True)
 
     Sehen Sie das Übersetzungsergebnis in Echtzeit in der STDERR-Ausgabe. Die `From`-Payload wird so angezeigt, wie sie nach Anonymisierung und Maskierung übertragen wurde.
+
+- **--xlate-review**
+
+    Zeigen Sie bei einem eins-zu-eins geänderten Block den kleinsten zusammenhängenden geänderten Bereich im alten und neuen Quelltext, gefolgt vom entsprechenden Bereich in der alten und neuen Übersetzung. Der Bericht wird nach STDERR geschrieben, verursacht keinen zusätzlichen API-Aufruf und entfällt, wenn alte und neue Blöcke nicht eindeutig zugeordnet werden können.
 
 - **--xlate-stripe**
 

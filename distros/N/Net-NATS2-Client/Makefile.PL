@@ -33,7 +33,7 @@ WriteMakefile(
         provides => $provides,
     },
     MIN_PERL_VERSION => '5.10.1',
-    PREREQ_PM        => {'IO::Socket::INET' => 0, 'JSON' => 0, 'MIME::Base64' => 0, 'URI' => 0,},
+    PREREQ_PM        => {'IO::Socket::INET' => 0, 'JSON' => 0, 'MIME::Base64' => 0,},
     dist => {
         TAR         => 'COPYFILE_DISABLE=1 tar',
         TARFLAGS    => 'cvf',

@@ -80,11 +80,14 @@ subtest 'dictionary anonymization end to end' => sub {
     is(scalar @calls, 1, 'one call');
     my $payload = $calls[0]{stdin};
     my $sys = sys_of($calls[0]);
+    my $request = JSON::PP->new->decode($payload);
+    my $context = JSON::PP->new->canonical->encode($request->{context});
     unlike($payload, qr/yamada taro/, 'payload has no real name');
-    like($payload, qr/<person id=1 \/>/, 'payload uses category tag');
-    unlike($sys, qr/yamada taro/, 'context sections have no real name');
-    unlike($sys, qr/acme corporation/, 'context sections have no company');
-    like($sys, qr/<person id=1 \/>/, 'context uses the same tag');
+    like($payload, qr/<person id=\\"1\\" \/>/, 'payload uses category tag');
+    unlike($sys, qr/yamada taro/, 'system prompt has no real name');
+    unlike($sys, qr/acme corporation/, 'system prompt has no company');
+    unlike($sys, qr/<person id="1" \/>/, 'system prompt has no document tag');
+    like($context, qr/<person id=\\"1\\" \/>/, 'context uses the same tag');
     like($r->stdout, qr/yamada taro CAME BACK ONCE MORE/,
          'restored name stays lowercase; only surrounding text upcased');
 };
@@ -106,10 +109,12 @@ END
     my $r = run_xlate($doc, '--xlate-anonymize-mark=');
     is($r->status, 0, 'run succeeds');
     my @calls = stub_calls($log);
-    my $payload = join '',
-        map { join '', @{ JSON::PP->new->decode($_->{stdin}) } } @calls;
+    my $payload = join '', map {
+        my $request = JSON::PP->new->decode($_->{stdin});
+        join '', @{$request->{input}};
+    } @calls;
     unlike($payload, qr/suzuki hanako/, 'marked name gone everywhere');
-    like($payload, qr/\{\{ person\("<person id=1 \/>"\) \}\}/,
+    like($payload, qr/\{\{ person\("<person id="1" \/>"\) \}\}/,
          'mark syntax survives around the tag');
     like($r->stdout, qr/suzuki hanako ANSWERS THE PHONE/,
          'unmarked occurrence restored too');
@@ -132,7 +137,7 @@ END
     is($r->status, 0, 'run succeeds');
     my @calls = stub_calls($log);
     my $payload = join '', map $_->{stdin}, @calls;
-    like($payload, qr/<lit id=1 \/>/, 'literal escaped');
+    like($payload, qr/<lit id=\\"1\\" \/>/, 'literal escaped');
     like($r->stdout, qr/LITERAL <person id=1 \/> APPEARS|literal <person id=1 \/> appears/i,
          'literal restored exactly');
 };
@@ -153,8 +158,8 @@ END
     is($r->status, 0, 'run succeeds');
     my @calls = stub_calls($log);
     my $payload = join '', map $_->{stdin}, @calls;
-    like($payload, qr/<m id=1 \/>/, 'maskfile layer applied');
-    like($payload, qr/<person id=1 \/>/, 'anonymize layer applied');
+    like($payload, qr/<m id=\\"1\\" \/>/, 'maskfile layer applied');
+    like($payload, qr/<person id=\\"1\\" \/>/, 'anonymize layer applied');
     unlike($payload, qr/yamada taro|C<verbatim>/, 'both hidden');
     like($r->stdout, qr/C<verbatim>/, 'maskfile restored');
     like($r->stdout, qr/YAMADA TARO|yamada taro/i, 'name restored');
@@ -171,7 +176,7 @@ subtest 'dryrun previews the anonymized form' => sub {
     unlike($r->stdout, qr/TRANSLATION ERROR/, 'no error marker on cache miss');
     like($r->stdout, qr/yamada taro visited acme corporation/,
          'original text passes through');
-    like($r->stdout, qr/<person id=1 \/> visited <company id=1 \/>/,
+    like($r->stdout, qr/<person id="1" \/> visited <company id="1" \/>/,
          'From preview shows the anonymized payload');
     my $after = do { open my $fh, '<', $cache or die; local $/; <$fh> };
     is($after, $before, 'cache untouched by dryrun');
@@ -182,8 +187,8 @@ subtest 'dryrun with cache=clear does not truncate the cache file' => sub {
     my $cache = "$doc.xlate-gpt5-EN-US.json";
     write_file($doc, "yamada taro visited acme corporation\n");
     write_file($cache, JSON::PP->new->canonical->encode(
-        [ [ "<person id=1 /> visited <company id=1 />" =>
-            "<PERSON ID=1 /> VISITED <COMPANY ID=1 />" ] ]));
+        [ [ '<person id="1" /> visited <company id="1" />' =>
+            '<person id="1" /> VISITED <company id="1" />' ] ]));
     my $before = do { open my $fh, '<', $cache or die; local $/; <$fh> };
     my $r = run_xlate($doc, '--xlate-dryrun', '--xlate-cache=clear',
                       "--xlate-anonymize=$dict");
@@ -200,7 +205,7 @@ subtest 'progress From display shows the masked form' => sub {
     my $r = run_xlate($doc, "--xlate-anonymize=$dict");
     is($r->status, 0, 'run succeeds');
     my($from) = $r->stdout =~ /^\[xlate\.pm\] From:\n(.*)$/m;
-    like($from, qr/<person id=1 \/>/, 'From line shows the masked payload');
+    like($from, qr/<person id="1" \/>/, 'From line shows the masked payload');
     unlike($from, qr/yamada taro/, 'From line has no plaintext secret');
 };
 

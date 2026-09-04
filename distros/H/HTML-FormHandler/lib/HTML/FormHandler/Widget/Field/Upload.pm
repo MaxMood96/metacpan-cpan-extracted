@@ -1,6 +1,6 @@
 package HTML::FormHandler::Widget::Field::Upload;
 # ABSTRACT: update field rendering widget
-$HTML::FormHandler::Widget::Field::Upload::VERSION = '0.40068';
+$HTML::FormHandler::Widget::Field::Upload::VERSION = '0.410001';
 use Moose::Role;
 use HTML::FormHandler::Render::Util ('process_attrs');
 
@@ -41,7 +41,7 @@ HTML::FormHandler::Widget::Field::Upload - update field rendering widget
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

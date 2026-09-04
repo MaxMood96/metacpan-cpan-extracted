@@ -16,7 +16,7 @@ subtest 'legacy path unchanged' => sub {
     my $m = App::Greple::xlate::Mask->new(pattern => ['C<[^>]*>']);
     my @t = ("see C<foo> and C<foo> here\n");
     $m->mask(@t);
-    is($t[0], "see <m id=1 /> and <m id=2 /> here\n",
+    is($t[0], "see <m id=\"1\" /> and <m id=\"2\" /> here\n",
        'per-occurrence numbering');
     $m->unmask(@t);
     is($t[0], "see C<foo> and C<foo> here\n", 'restored');
@@ -29,9 +29,9 @@ subtest 'stable numbering with categories' => sub {
     my @t = ("山田太郎はアクメ株式会社の山田太郎である\n",
              "翌日、山田太郎が来た\n");
     $m->mask(@t);
-    is($t[0], "<person id=1 />は<company id=1 />の<person id=1 />である\n",
+    is($t[0], "<person id=\"1\" />は<company id=\"1\" />の<person id=\"1\" />である\n",
        'same string same tag; per-category counters');
-    is($t[1], "翌日、<person id=1 />が来た\n", 'stable across texts');
+    is($t[1], "翌日、<person id=\"1\" />が来た\n", 'stable across texts');
     $m->unmask(@t);
     is($t[0], "山田太郎はアクメ株式会社の山田太郎である\n", 'restored 0');
     is($t[1], "翌日、山田太郎が来た\n", 'restored 1');
@@ -44,7 +44,7 @@ subtest 'stable numbering persists across mask/reset cycles' => sub {
     $m->mask(@a); $m->unmask(@a); $m->reset;
     my @b = ("また山田太郎です\n");
     $m->mask(@b);
-    like($b[0], qr/<person id=1 \/>/, 'same id after reset');
+    like($b[0], qr/<person id="1" \/>/, 'same id after reset');
     $m->unmask(@b); $m->reset;
 };
 
@@ -55,7 +55,7 @@ subtest 'reference mode is not verified' => sub {
     my @context = ("文脈にも山田太郎がいる\n");
     $m->mask(@payload);
     $m->mask_reference(@context);
-    like($context[0], qr/<person id=1 \/>/, 'context masked with same tag');
+    like($context[0], qr/<person id="1" \/>/, 'context masked with same tag');
     # 応答は本文のみ。文脈のタグが応答に無くても die しない
     my @resp = ($payload[0]);
     ok(!trap { $m->unmask(@resp) }, 'unmask verifies payload tags only');
@@ -74,15 +74,48 @@ subtest 'missing tracked tag dies' => sub {
     $m->reset;
 };
 
+subtest 'stable mode verifies exact payload tag counts' => sub {
+    my $m = App::Greple::xlate::Mask->new(STABLE => 1);
+    $m->add_rule(person => quotemeta('山田太郎'));
+    my @t = ("山田太郎と山田太郎\n");
+    $m->mask(@t);
+    is($t[0], "<person id=\"1\" />と<person id=\"1\" />\n",
+       'same stable tag occurs twice in the payload');
+    my @ok = @t;
+    ok(!trap { $m->unmask(@ok) }, 'matching occurrence count succeeds');
+    is($ok[0], "山田太郎と山田太郎\n", 'both occurrences restored');
+
+    $m->reset;
+    @t = ("山田太郎です\n");
+    $m->mask(@t);
+    my @dup = ("<person id=\"1\" />と<person id=\"1\" />です\n");
+    like(trap { $m->unmask(@dup) }, qr/count mismatch \(expected 1, got 2\)/,
+         'duplicated payload tag dies');
+    $m->reset;
+};
+
+subtest 'reference-only stable tag must not leak into output' => sub {
+    my $m = App::Greple::xlate::Mask->new(STABLE => 1);
+    $m->add_rule(person => quotemeta('山田太郎'));
+    my @payload = ("本文です\n");
+    my @context = ("文脈には山田太郎がいる\n");
+    $m->mask(@payload);
+    $m->mask_reference(@context);
+    my @resp = ("本文に<person id=\"1\" />を追加した\n");
+    like(trap { $m->unmask(@resp) }, qr/count mismatch \(expected 0, got 1\)/,
+         'tag copied from context is rejected');
+    $m->reset;
+};
+
 subtest 'escape layer round trip with nesting' => sub {
     my $m = App::Greple::xlate::Mask->new(STABLE => 1);
     $m->add_escape_rule;
     $m->add_rule(person => quotemeta('山田太郎'));
     my @t = ("原文に <person id=1 /> というリテラルと山田太郎がいる\n");
     $m->mask(@t);
-    like($t[0], qr/<lit id=1 \/>/, 'tag-shaped literal escaped first');
+    like($t[0], qr/<lit id="1" \/>/, 'tag-shaped literal escaped first');
     unlike($t[0], qr/山田太郎/, 'real name is gone from payload');
-    is($t[0], "原文に <lit id=1 /> というリテラルと<person id=1 />がいる\n",
+    is($t[0], "原文に <lit id=\"1\" /> というリテラルと<person id=\"1\" />がいる\n",
        'literal and name each got their own tag without collision');
     $m->unmask(@t);
     is($t[0], "原文に <person id=1 /> というリテラルと山田太郎がいる\n",
@@ -112,7 +145,7 @@ END
     $m->load_anonymize_file($f);
     my @t = ("山田太郎はアクメ株式会社にいた。アクメの件。\n");
     $m->mask(@t);
-    is($t[0], "<person id=1 />は<company id=1 />にいた。<company id=2 />の件。\n",
+    is($t[0], "<person id=\"1\" />は<company id=\"1\" />にいた。<company id=\"2\" />の件。\n",
        'literal and regex rules from JSON');
     $m->unmask(@t); $m->reset;
 };
@@ -148,7 +181,7 @@ END
     $m->load_anonymize_file($f);
     my @t = ("山田太郎とアクメ株式会社\n");
     $m->mask(@t);
-    is($t[0], "<person id=1 />と<company id=1 />\n", 'line format rules');
+    is($t[0], "<person id=\"1\" />と<company id=\"1\" />\n", 'line format rules');
     $m->unmask(@t); $m->reset;
 };
 
@@ -187,7 +220,7 @@ subtest 'dictionary: line continuation' => sub {
     $m->load_anonymize_file($f);
     my @t = ("meet Very Long\nName today\n");
     $m->mask(@t);
-    like($t[0], qr/<person id=1 \/>/, 'continued literal pattern matches');
+    like($t[0], qr/<person id="1" \/>/, 'continued literal pattern matches');
     $m->unmask(@t);
     is($t[0], "meet Very Long\nName today\n", 'restored');
     $m->reset;

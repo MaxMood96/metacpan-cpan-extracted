@@ -1,7 +1,7 @@
 use v5.40;
 use experimental 'class';
 #
-class Alien::Xrepo::Base v0.9.2 {
+class Alien::Xrepo::Base v0.9.4 {
     use Alien::Xrepo;
     use Path::Tiny;
     use Exporter qw[import];
@@ -144,9 +144,10 @@ class Alien::Xrepo::Base v0.9.2 {
         my $meta = CPAN::Meta->load_file('META.json');
         say sprintf 'Creating new Build script for %s %s (%s)', $meta->name, $meta->version, $alien_class;
         my $perl5lib = join( $Config{path_sep}, @INC );
-        path('Build')->spew_raw( sprintf <<~'EOF', $^X, $perl5lib, __PACKAGE__, $alien_class );
+        my $sep      = $Config{path_sep};
+        path('Build')->spew_raw( sprintf <<~'EOF', $^X, $sep, $perl5lib, __PACKAGE__, $alien_class );
             #!%s
-            BEGIN { $ENV{PERL5LIB} = '%s' }
+            use lib split /\%s/, '%s';
             use lib 'lib';
             use %s;
             Alien::Xrepo::Base::Build('%s');
@@ -165,8 +166,8 @@ class Alien::Xrepo::Base v0.9.2 {
         }
         Alien::Xrepo::Base::Builder->new( alien_class => $alien_class, action => $action, argv => \@ARGV )->execute();
     }
-    class #
-    Alien::Xrepo::Base::Builder v0.9.2 {
+    class    #
+        Alien::Xrepo::Base::Builder v0.9.4 {
         use CPAN::Meta;
         use ExtUtils::Install qw[install];
         use ExtUtils::InstallPaths;
@@ -223,6 +224,60 @@ class Alien::Xrepo::Base v0.9.2 {
             path('MYMETA.yml')->remove;
         }
 
+        method _global_cache() {
+            my $global_cache = $ENV{ALIEN_XREPO_CACHE};
+            unless ($global_cache) {
+                require File::ShareDir;
+                $global_cache = eval { File::ShareDir::dist_dir('Alien-Xmake') };
+                unless ($global_cache) {
+                    eval {
+                        require Alien::Xmake;
+                        $global_cache = Alien::Xmake->new->bin_dir;
+                    };
+                }
+                unless ($global_cache) {
+                    require Config;
+                    my $sitelib = $Config::Config{installsitelib} || $Config::Config{sitelib};
+                    $global_cache = path($sitelib)->child( 'auto', 'share', 'dist', 'Alien-Xmake' )->stringify;
+                }
+            }
+            return path($global_cache)->child('packages')->absolute;
+        }
+
+        method ACTION_clean_cache() {
+            say 'Cleaning global Xrepo package cache...';
+            my $global_cache = $self->_global_cache();
+            if ( $global_cache->exists ) {
+                my $repo = Alien::Xrepo->new( root => $global_cache->stringify, verbose => $verbose );
+                $repo->clean();
+                say "Cache at $global_cache has been cleaned.";
+            }
+            else {
+                say "No cache found at $global_cache, nothing to clean.";
+            }
+        }
+
+        # Need to include the directory copy helper
+        method _copy_directory ( $src, $dest ) {
+            my $src_path  = path($src)->absolute;
+            my $dest_path = path($dest)->absolute;
+            return unless $src_path->is_dir;
+            $dest_path->mkpath;
+
+            my $iter = $src_path->iterator( { recurse => 1 } );
+            while ( my $p = $iter->() ) {
+                next if $p eq $src_path;    # Skip root
+                my $rel    = $p->relative($src_path);
+                my $target = $dest_path->child($rel);
+                if ( $p->is_dir ) {
+                    $target->mkpath;
+                } else {
+                    $p->copy($target) or die "Failed to copy $p to $target: $!";
+                    $target->chmod( $p->stat->mode | 0600 );
+                }
+            }
+        }
+
         method _copy_libs() {
             my $src_root = path('lib');
             return unless $src_root->exists;
@@ -245,18 +300,39 @@ class Alien::Xrepo::Base v0.9.2 {
             my $dist_name = $meta->name;
             my $share_dir = path('blib/lib/auto/share/dist')->child($dist_name)->absolute;
             $share_dir->mkpath;
-            my $repo = Alien::Xrepo->new( root => $share_dir->stringify, verbose => $verbose );
-            say "Installing @pkgs via Xrepo into $share_dir";
-            my $make_rel = sub ($p) {
-                return undef unless defined $p;
-                my $path = path($p);
-                return $path->relative($share_dir)->stringify if $share_dir->subsumes($path);
-                return $path->stringify;
-            };
+
+            # 1. Establish the global Build Cache for Alien::Xrepo
+            my $global_cache = $self->_global_cache();
+            $global_cache->mkpath;
+
+            my $repo = Alien::Xrepo->new( root => $global_cache->stringify, verbose => $verbose );
+            say "Using shared Xrepo build cache at $global_cache";
+
             my %out;
             for my $pkg (@pkgs) {
-                say "Installing $pkg via Xrepo into $share_dir";
+                say "Installing $pkg (and its dependencies) into global cache...";
                 my $info = $repo->install( $pkg, undef, %opts );
+
+                # 2. Extract just the target package into the Alien's distribution share_dir
+                my $pkg_share = $share_dir->child($pkg);
+                $pkg_share->mkpath;
+
+                say "Copying finalized $pkg artifacts from cache to $pkg_share...";
+                $self->_copy_directory( $info->installdir, $pkg_share );
+
+                # 3. Construct relative paths so ConfigData maps everything to $pkg_share
+                my $make_rel = sub ($p) {
+                    return undef unless defined $p;
+                    my $orig = path($p);
+                    my $orig_inst = path($info->installdir);
+                    # If the file came from the cache, map it to our new local copy
+                    if ($orig_inst->subsumes($orig) || $orig eq $orig_inst) {
+                        return path($pkg)->child($orig->relative($orig_inst))->stringify;
+                    }
+                    # Keep system/external paths absolute
+                    return $orig->stringify;
+                };
+
                 $out{$pkg} = {
                     version     => $info->version,
                     kind        => $info->kind,
@@ -266,31 +342,14 @@ class Alien::Xrepo::Base v0.9.2 {
                     linkdirs    => [ map { $make_rel->($_) } @{ $info->linkdirs    // [] } ],
                     bindirs     => [ map { $make_rel->($_) } @{ $info->bindirs     // [] } ],
                     libpath     => $make_rel->( $info->libpath ),
-                    installdir  => $make_rel->( $info->installdir ),
+                    installdir  => $pkg, # The ConfigData $make_abs will prepend $share_dir later
                     license     => $info->license,
                     shared      => $info->shared ? 1 : 0,
                     static      => $info->static ? 1 : 0
                 };
             }
-            $self->_prune_store( $repo, $share_dir, \@pkgs, \%opts );
-            return \%out;
-        }
 
-        # `xrepo install` pulls the whole build toolchain the package drags in (python, meson,
-        # ninja, cmake, pkgconf, etc.) but we only need the resulting shared libraries and headers.
-        method _prune_store ( $repo, $share_dir, $pkgs, $opts ) {
-            my $export_dir = path($share_dir)->parent->child( $share_dir->basename . '-prune' . $$ )->absolute;
-            $export_dir->remove_tree if $export_dir->exists;
-            $export_dir->mkpath;
-            say "Exporting shared @$pkgs into $export_dir";
-            $repo->export( $_, undef, %$opts, packagedir => $export_dir->stringify, shallow => 1 ) for @$pkgs;
-            return unless $export_dir->exists && $export_dir->children;
-            $share_dir->remove_tree;
-            $share_dir->mkpath;
-            for my $entry ( $export_dir->children ) {
-                $entry->move( $share_dir->child( $entry->basename ) ) or die "Could not move $entry: $!";
-            }
-            $export_dir->remove_tree;
+            return \%out;
         }
 
         method _write_config_data($data) {
@@ -350,9 +409,9 @@ class Alien::Xrepo::Base v0.9.2 {
             $target_config->spew_utf8($content);
             say "Generated $target_config";
         }
-    };
-    class #
-    Alien::Xrepo::Base::Alt v0.9.2 {
+        };
+    class    #
+        Alien::Xrepo::Base::Alt v0.9.4 {
         field $base : param;
         field $pkg  : param;
         method package_names ()      { $base->package_names }
@@ -374,7 +433,7 @@ class Alien::Xrepo::Base v0.9.2 {
         method install_type ()       { $base->install_type($pkg) }
         method split_flags ($flags)    { $base->split_flags( $flags, $pkg ) }
         method find_header ($filename) { $base->find_header( $filename, $pkg ) }
-    }
+        }
     }
     #
     1;

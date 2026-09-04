@@ -1,6 +1,6 @@
 package HTML::FormHandler::Widget::Field::NoRender;
 # ABSTRACT: no rendering widget
-$HTML::FormHandler::Widget::Field::NoRender::VERSION = '0.40068';
+$HTML::FormHandler::Widget::Field::NoRender::VERSION = '0.410001';
 use Moose::Role;
 
 
@@ -21,7 +21,7 @@ HTML::FormHandler::Widget::Field::NoRender - no rendering widget
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 

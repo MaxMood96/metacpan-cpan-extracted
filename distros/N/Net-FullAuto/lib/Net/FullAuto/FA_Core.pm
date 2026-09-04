@@ -16927,7 +16927,16 @@ sub work_dirs
          &handle_error($stderr,'-2','__cleanup__') if $stderr;
          ($output,$stderr)=$cmd_handle->cmd(
             "cd \"".${$work_dirs}{_tmp}."\"");
-         &handle_error($stderr,'-2','__cleanup__') if $stderr;
+         if ($stderr) {
+            my $substring="cd \"${$work_dirs}{_tmp}\"";
+            my $count=0;
+            my $pos=0;
+            while (($pos = index($stderr, $substring, $pos)) != -1) {
+               $count++;
+               $pos+=length($substring);
+            }
+            &handle_error($stderr,'-2','__cleanup__') if $count!=2;
+         }
          if (ref $localhost eq 'GLOB') {
             ($curdir,$stderr)=
                &Net::FullAuto::FA_Core::cmd($localhost,'pwd');
@@ -16956,7 +16965,16 @@ sub work_dirs
          }
          ($output,$stderr)=$cmd_handle->cmd(
             'cd '."\"$pwd\"");
-         &handle_error($stderr,'-2','__cleanup__') if $stderr;
+         if ($stderr) {
+            my $substring="cd \"$pwd\"";
+            my $count=0;
+            my $pos=0;
+            while (($pos = index($stderr, $substring, $pos)) != -1) {
+               $count++;
+               $pos+=length($substring);
+            }
+            &handle_error($stderr,'-2','__cleanup__') if $count!=2;
+         }
       } ${$work_dirs}{_lcd}=${$work_dirs}{_tmp_lcd}
          =$localhost->{_work_dirs}->{_tmp} if ref $localhost eq 'GLOB';
       ${$work_dirs}{_pre_lcd}='';
@@ -19237,32 +19255,62 @@ print $Net::FullAuto::FA_Core::LOG
                   $sshport.=$id."'".$Net::FullAuto::FA_Core::Hosts{
                      $hostlabel}{'IdentityFile'}."'".' ';
                }
-               print "\nSFTP CONNECT: ",
+               if ($spawn eq 'bash') {
+                  print "\nSFTP CONNECT BASH: ",
+                     $Net::FullAuto::FA_Core::gbp->('bash'),
+                     'script -q -c \'',
                      $Net::FullAuto::FA_Core::gbp->('sftp'),'sftp ',
-                     "${sshport}$sftploginid\@$host at Line: ",
+                     "${sshport}$sftploginid\@$host'",
+                     ' /dev/null'," at Line: ",
                      __LINE__,"\n\n"
                   if !$Net::FullAuto::FA_Core::cron &&
                   $Net::FullAuto::FA_Core::debug;
-               print $Net::FullAuto::FA_Core::LOG
-                     "\nSFTP CONNECT: ",
+                  print $Net::FullAuto::FA_Core::LOG
+                     "\nSFTP CONNECT BASH: ",
+                     $Net::FullAuto::FA_Core::gbp->('bash'),
+                     'script -q -c \'',
                      $Net::FullAuto::FA_Core::gbp->('sftp'),'sftp ',
-                     "${sshport}$sftploginid\@$host at Line: ",
+                     "${sshport}$sftploginid\@$host'",
+                     ' /dev/null'," at Line: ",
                      __LINE__,"\n\n"
                   if $Net::FullAuto::FA_Core::log &&
                   -1<index $Net::FullAuto::FA_Core::LOG,'*';
-               if ($spawn eq 'bash') {
+
                   ($ftp_handle,$ftp_pid)=&Net::FullAuto::FA_Core::pty_do_cmd(
                         [$Net::FullAuto::FA_Core::gbp->('bash').
-                        'bash','-lc',$Net::FullAuto::FA_Core::gbp->('sftp').
-                        'sftp '."${sshport}$sftploginid\@$host",'',
+                        'bash','-ilc',$Net::FullAuto::FA_Core::gbp->('script').
+                        'script -q -c \''.$Net::FullAuto::FA_Core::gbp->('sftp').
+                        'sftp '."${sshport}$sftploginid\@$host' /dev/null",'',
                         $Net::FullAuto::FA_Core::slave])
                         or &Net::FullAuto::FA_Core::handle_error(
                         "couldn't launch ftp subprocess");
                   $ftp_handle=Net::Telnet->new(Fhopen => $ftp_handle,
                         Timeout => $timeout);
                } else {
-                  $ftp_handle->print($Net::FullAuto::FA_Core::gbp->('sftp').
-                        'sftp '."${sshport}$sftploginid\@$host");
+                  print "\nSFTP CONNECT SIMPLE: ",
+                     $Net::FullAuto::FA_Core::gbp->('script'),
+                     'script -q -c \'',
+                     $Net::FullAuto::FA_Core::gbp->('sftp'),'sftp ',
+                     "${sshport}$sftploginid\@$host' /dev/null at Line: ",
+                     __LINE__,"\n\n"
+                  if !$Net::FullAuto::FA_Core::cron &&
+                  $Net::FullAuto::FA_Core::debug;
+                  print $Net::FullAuto::FA_Core::LOG
+                     "\nSFTP CONNECT SIMPLE: ",
+                     $Net::FullAuto::FA_Core::gbp->('script'),
+                     'script -q -c \'',
+                     $Net::FullAuto::FA_Core::gbp->('sftp'),'sftp ',
+                     "${sshport}$sftploginid\@$host' /dev/null at Line: ",
+                     __LINE__,"\n\n"
+                  if $Net::FullAuto::FA_Core::log &&
+                  -1<index $Net::FullAuto::FA_Core::LOG,'*';
+
+                  $ftp_handle->print(
+                        $Net::FullAuto::FA_Core::gbp->('script').
+                        'script -q -c \''.
+                        $Net::FullAuto::FA_Core::gbp->('sftp').
+                        'sftp '."${sshport}$sftploginid\@$host'".
+                        ' /dev/null');
                }
                FH: foreach my $hlabel (
                      keys %Net::FullAuto::FA_Core::Processes) {
@@ -27971,7 +28019,7 @@ print $Net::FullAuto::FA_Core::LOG
                                  $cmd_pid=$proxy->{_cmd_pid};
                               } else {
                                  my $v='v';
-                                 print "\nSSH CONNECT: ",
+                                 print "\nSSH CONNECT IDENTITYFILE PORT: ",
                                     $Net::FullAuto::FA_Core::gbp->('ssh'),
                                     "ssh -$v -i\'$i\' -p$sshport ".
                                     "$sshloginid\@$host",
@@ -27979,7 +28027,7 @@ print $Net::FullAuto::FA_Core::LOG
                                     if !$Net::FullAuto::FA_Core::cron &&
                                     $Net::FullAuto::FA_Core::debug;
                                  print $Net::FullAuto::FA_Core::LOG
-                                    "\nSSH CONNECT: ",
+                                    "\nSSH CONNECT IDENTITYFILE PORT: ",
                                     $Net::FullAuto::FA_Core::gbp->('ssh'),
                                     "ssh -$v -i\'$i\' -p$sshport ".
                                     "$sshloginid\@$host",
@@ -28011,33 +28059,41 @@ print $Net::FullAuto::FA_Core::LOG
                            } else {
                               if (-1<index $stderr,'/dev/tty: No') {
                                  my $v='v';
-                                 print "\nSSH CONNECT: ",
+                                 print "\nSSH CONNECT PORT BASH NO TTY: ",
                                     $Net::FullAuto::FA_Core::gbp->('bash'),
-                                    'bash','-ic',
+                                    'bash -ilc "',
+                                    $Net::FullAuto::FA_Core::gbp->('script').
+                                    'script -q -c \''.
                                     $Net::FullAuto::FA_Core::gbp->('ssh'),
-                                    "ssh -$v -p$sshport $sshloginid\@$host",
+                                    "ssh -$v -p$sshport $sshloginid\@$host'",
+                                    ' /dev/null"',
                                     " at Line: ",__LINE__,"\n\n"
                                     if !$Net::FullAuto::FA_Core::cron &&
                                     $Net::FullAuto::FA_Core::debug;
                                  print $Net::FullAuto::FA_Core::LOG
-                                    "\nSSH CONNECT: ",
+                                    "\nSSH CONNECT PORT BASH NO TTY: ",
                                     $Net::FullAuto::FA_Core::gbp->('bash'),
-                                    'bash','-ic',
+                                    'bash -ilc "',
+                                    $Net::FullAuto::FA_Core::gbp->('script').
+                                    'script -q -c \''.
                                     $Net::FullAuto::FA_Core::gbp->('ssh'),
-                                    "ssh -$v -p$sshport $sshloginid\@$host",
+                                    "ssh -$v -p$sshport $sshloginid\@$host'",
+                                    ' /dev/null"',
                                     " at Line: ",__LINE__,"\n\n"
                                     if $Net::FullAuto::FA_Core::log &&
                                     -1<index $Net::FullAuto::FA_Core::LOG,'*';
                                  ($cmd_handle,$cmd_pid)=
                                     &Net::FullAuto::FA_Core::pty_do_cmd(
                                     [$Net::FullAuto::FA_Core::gbp->('bash').
-                                     'bash','-ic',
+                                    'bash','-ilc',
+                                    $Net::FullAuto::FA_Core::gbp->('script').
+                                    'script -q -c \''.
                                     $Net::FullAuto::FA_Core::gbp->('ssh').
-                                     "ssh -$v -p$sshport $sshloginid\@$host",
-                                     '',$Net::FullAuto::FA_Core::slave])
-                                     or (&release_fa_lock(6543) &&
-                                         &Net::FullAuto::FA_Core::handle_error(
-                                         "couldn't launch ssh subprocess"));
+                                    "ssh -$v -p$sshport $sshloginid\@$host'".
+                                    ' /dev/null','',
+                                    $Net::FullAuto::FA_Core::slave])
+                                    or &Net::FullAuto::FA_Core::handle_error(
+                                    "couldn't launch ssh subprocess");
                               } elsif ($proxy) {
                                  my $v='v';
                                  if (exists $Hosts{$hostlabel}{'IdentityFile'}
@@ -28085,25 +28141,33 @@ print $Net::FullAuto::FA_Core::LOG
                                  }
                               } else {
                                  my $v='v';
-                                 print "\nSSH CONNECT: ",
+                                 print "\nSSH CONNECT PLAIN PORT: ",
+                                    $Net::FullAuto::FA_Core::gbp->('script').
+                                    'script -q -c \''.
                                     $Net::FullAuto::FA_Core::gbp->('ssh'),
-                                    "ssh -$v -p$sshport $sshloginid\@$host",
+                                    "ssh -$v -p$sshport $sshloginid\@$host'",
+                                    ' /dev/null',
                                     " at Line: ",__LINE__,"\n\n"
                                     if !$Net::FullAuto::FA_Core::cron &&
                                     $Net::FullAuto::FA_Core::debug;
                                  print $Net::FullAuto::FA_Core::LOG
-                                    "\nSSH CONNECT: ",
+                                    "\nSSH CONNECT PLAIN PORT: ",
+                                    $Net::FullAuto::FA_Core::gbp->('script').
+                                    'script -q -c \''.
                                     $Net::FullAuto::FA_Core::gbp->('ssh'),
-                                    "ssh -$v -p$sshport $sshloginid\@$host",
+                                    "ssh -$v -p$sshport $sshloginid\@$host'",
+                                    ' /dev/null',
                                     " at Line: ",__LINE__,"\n\n"
                                     if $Net::FullAuto::FA_Core::log &&
                                     -1<index $Net::FullAuto::FA_Core::LOG,'*';
                                  ($cmd_handle,$cmd_pid)=
                                     &Net::FullAuto::FA_Core::pty_do_cmd(
-                                    [$Net::FullAuto::FA_Core::gbp->('ssh').
-                                    "ssh","-$v","-p$sshport",
-                                    "$sshloginid\@$host",
-                                    $Net::FullAuto::FA_Core::slave])
+                                    [$Net::FullAuto::FA_Core::gbp->('script').
+                                    'script -q -c \''.
+                                    $Net::FullAuto::FA_Core::gbp->('ssh').
+                                    "ssh -$v -p$sshport $sshloginid\@$host'".
+                                    ' /dev/null',
+                                    '',$Net::FullAuto::FA_Core::slave])
                                     or &Net::FullAuto::FA_Core::handle_error(
                                     "couldn't launch ssh subprocess");
                               }
@@ -28162,14 +28226,14 @@ print $Net::FullAuto::FA_Core::LOG
                                  " $sshloginid\@$host");
                               $cmd_pid=$proxy->{_cmd_pid};
                            } else {
-                              print "\nSSH CONNECT: ",
+                              print "\nSSH IDENTITY CONNECT: ",
                                  $Net::FullAuto::FA_Core::gbp->('ssh'),
                                  "ssh -v -i\'$i\' $sshloginid\@$host",
                                  " at Line: ",__LINE__,"\n\n"
                                  if !$Net::FullAuto::FA_Core::cron &&
                                  $Net::FullAuto::FA_Core::debug;
                               print $Net::FullAuto::FA_Core::LOG
-                                 "\nSSH CONNECT: ",
+                                 "\nSSH IDENTITY CONNECT: ",
                                  $Net::FullAuto::FA_Core::gbp->('ssh'),
                                  "ssh -v -i\'$i\' $sshloginid\@$host",
                                  " at Line: ",__LINE__,"\n\n"
@@ -28199,7 +28263,7 @@ print $Net::FullAuto::FA_Core::LOG
                         } else {
                            if (-1<index $stderr,'/dev/tty: No') {
                               my $v='v';
-                              print "\nSSH CONNECT: ",
+                              print "\nSSH BASH CONNECT: ",
                                  $Net::FullAuto::FA_Core::gbp->('bash'),
                                  'bash','-ic',
                                  $Net::FullAuto::FA_Core::gbp->('ssh'),
@@ -28208,7 +28272,7 @@ print $Net::FullAuto::FA_Core::LOG
                                  if !$Net::FullAuto::FA_Core::cron &&
                                  $Net::FullAuto::FA_Core::debug;
                               print $Net::FullAuto::FA_Core::LOG
-                                 "\nSSH CONNECT: ",
+                                 "\nSSH BASH CONNECT: ",
                                  $Net::FullAuto::FA_Core::gbp->('bash'),
                                  'bash','-ic',
                                  $Net::FullAuto::FA_Core::gbp->('ssh'),
@@ -28244,26 +28308,30 @@ print $Net::FullAuto::FA_Core::LOG
                               $cmd_pid=$proxy->{_cmd_pid};
                            } else {
                               my $v='v';
-                              print "\nSSH CONNECT: ",
+                              print "\nSSH CONNECT PLAIN: ",
+                                 $Net::FullAuto::FA_Core::gbp->('script').
+                                 'script -q -c \''.
                                  $Net::FullAuto::FA_Core::gbp->('ssh'),
-                                 "ssh -$v $sshloginid\@$host",
+                                 "ssh -$v $sshloginid\@$host'",' /dev/null',
                                  " at Line: ",__LINE__,"\n\n"
                                  if !$Net::FullAuto::FA_Core::cron &&
                                  $Net::FullAuto::FA_Core::debug;
                               print $Net::FullAuto::FA_Core::LOG
-                                 "\nSSH CONNECT: ",
-                                 $Net::FullAuto::FA_Core::gbp->('bash'),
-                                 'bash','-ic',
+                                 "\nSSH CONNECT PLAIN: ",
+                                 $Net::FullAuto::FA_Core::gbp->('script').
+                                 'script -q -c \''.
                                  $Net::FullAuto::FA_Core::gbp->('ssh'),
-                                 "ssh -$v $sshloginid\@$host",
+                                 "ssh -$v $sshloginid\@$host'",' /dev/null',
                                  " at Line: ",__LINE__,"\n\n"
                                  if $Net::FullAuto::FA_Core::log &&
                                  -1<index $Net::FullAuto::FA_Core::LOG,'*';
                               ($cmd_handle,$cmd_pid)=
                                  &Net::FullAuto::FA_Core::pty_do_cmd(
-                                 [$Net::FullAuto::FA_Core::gbp->('ssh').
-                                 "ssh","-$v","$sshloginid\@$host",
-                                 $Net::FullAuto::FA_Core::slave])
+                                 [$Net::FullAuto::FA_Core::gbp->('script').
+                                 'script -q -c \''.
+                                 $Net::FullAuto::FA_Core::gbp->('ssh').
+                                 "ssh -$v $sshloginid\@$host'".' /dev/null',
+                                 '',$Net::FullAuto::FA_Core::slave])
                                  or &Net::FullAuto::FA_Core::handle_error(
                                  "couldn't launch ssh subprocess");
                            }

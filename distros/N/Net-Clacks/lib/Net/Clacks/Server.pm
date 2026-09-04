@@ -6,7 +6,7 @@ use diagnostics;
 use mro 'c3';
 use English qw(-no_match_vars);
 use Carp qw[carp croak confess cluck longmess shortmess];
-our $VERSION = 37;
+our $VERSION = 38;
 use autodie qw( close );
 use Array::Contains;
 use utf8;
@@ -124,13 +124,15 @@ sub run($self) {
 
         $self->runOnce();
 
+        # The throttle is applied as the select() timeout inside
+        # _clientInput(), NOT as a sleep here. Same knobs, same units, same
+        # idle CPU - but the wait is cancelled the instant a client sends
+        # something or a new one connects, which a sleep can never be. See
+        # the note at the select() call.
         if($self->{workCount}) {
             $self->{usleep} = 0;
         } elsif($self->{usleep} < $self->{config}->{throttle}->{maxsleep}) {
             $self->{usleep} += $self->{config}->{throttle}->{step};
-        }
-        if($self->{usleep}) {
-            sleep($self->{usleep} / 1000);
         }
     }
 
@@ -163,8 +165,16 @@ sub runOnce($self) {
     $self->_disconnectClients();
 
     if(!(scalar keys %{$self->{clients}})) {
-        # No clients to handle, let's sleep and try again later
-        sleep(0.1);
+        # Nobody connected, so there is no client input phase to run - but
+        # this used to be a flat sleep(0.1), which meant an idle server sat
+        # awake doing nothing ten times a second and STILL made the first
+        # connection of the day wait up to a tenth of a second. Wait on the
+        # listeners instead: the accept in the next pass then happens the
+        # moment somebody knocks, and a quiet server costs one wakeup per
+        # timeout rather than ten per second.
+        my $idle = $self->{usleep} / 1000; # usleep is in milliseconds
+        $idle = 0.5 if($idle < 0.5);
+        $self->{selector}->can_read($idle);
         return $self->{workCount};
     }
 
@@ -738,6 +748,28 @@ sub _init($self) {
     }
 
     $self->{tcpsockets} = \@tcpsockets;
+
+    #
+    # THE LISTENERS GO INTO THE SELECTOR TOO.
+    #
+    # Not so that select() accepts for us - _addNewClients() still drains each
+    # listen queue itself - but so that an incoming CONNECTION is something
+    # select() can wake up on. Without them in here, select() only ever waited
+    # on already-connected clients, a brand new connection was found purely by
+    # polling accept() once per pass, and the loop therefore could not afford
+    # to wait for long. That is what the throttle sleep in run() was paying
+    # for, and it made every existing client wait too.
+    #
+    # With them in here the wait is cancellable by anything that matters, so
+    # run() can let the idle timeout grow without costing anybody latency.
+    #
+    # Keyed by the stringified ref, which is unique per socket. NOT
+    # contains(): it only accepts scalars and dies on a reference.
+    $self->{listenerlookup} = {};
+    foreach my $listener (@tcpsockets) {
+        $self->{selector}->add($listener);
+        $self->{listenerlookup}->{$listener} = 1;
+    }
 
     # Need to ignore SIGPIPE, this can screw us over in certain circumstances
     # while writing to the network. We can only detect certain types of disconnects
@@ -1355,21 +1387,55 @@ sub _clientInput($self) {
     my $now = $self->_getTime();
 
     # **** READ FROM CLIENTS ****
+    #
+    # {outbuffer}, not {buffer}. {buffer} is the INBOUND partial-line
+    # accumulator (filled a character at a time further down, and reported as
+    # INBUFFER_LENGTH by CLIENTLIST), so this test used to shorten the
+    # timeout when a client was midway through sending us a line - and never
+    # fired for the case it is named after and exists for, which is output we
+    # are still holding.
+    #
     my $hasoutbufferwork = 0;
     foreach my $cid (keys %{$self->{clients}}) {
-        if(length($self->{clients}->{$cid}->{buffer}) > 0) {
+        if(length($self->{clients}->{$cid}->{outbuffer}) > 0) {
             # Found some work to do
             $hasoutbufferwork = 1;
             last;
         }
     }
+    #
+    # HOW LONG WE ARE WILLING TO WAIT HERE IS THE ONLY THROTTLE THERE IS.
+    #
+    # run() used to sleep() on top of this select, which is the one way of
+    # idling that cannot be interrupted: during that sleep the process was
+    # waiting on nothing, and a request that had already arrived sat in the
+    # kernel buffer until the loop came back around. The throttle now
+    # lengthens THIS timeout instead. It buys exactly the same idle CPU and
+    # costs nothing, because a byte from any client - or a connect on any
+    # listener, which is why they are in the selector - returns immediately.
+    #
+    # 0.5s remains the floor, so a server that is merely between requests
+    # behaves precisely as it always did; throttle.maxsleep only ever extends
+    # the wait beyond that, once genuinely idle.
+    #
     my $selecttimeout = 0.5; # Half a second
+    my $throttled = $self->{usleep} / 1000; # usleep is in milliseconds
+    if($throttled > $selecttimeout) {
+        $selecttimeout = $throttled;
+    }
     if($hasoutbufferwork) {
+        # We are holding data a client has not taken yet: come back promptly
+        # and try the write again.
         $selecttimeout = 0.05;
     }
 
     my @inclients = $self->{selector}->can_read($selecttimeout);
     foreach my $clientsocket (@inclients) {
+        # A readable LISTENER means a pending connection, which is
+        # _addNewClients()' job, not ours. It is in the selector only so that
+        # a connect can cancel the wait above.
+        next if($self->{listenerlookup}->{$clientsocket});
+
         my $cid = $clientsocket->_getClientID();
 
         # Skip if client already marked for removal or doesn't exist

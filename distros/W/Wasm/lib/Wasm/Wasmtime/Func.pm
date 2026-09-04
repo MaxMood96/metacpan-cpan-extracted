@@ -8,7 +8,7 @@ use Ref::Util qw( is_blessed_ref is_plain_arrayref );
 use Wasm::Wasmtime::FFI;
 use Wasm::Wasmtime::FuncType;
 use Wasm::Wasmtime::Trap;
-use FFI::C::Util qw( set_array_count addressof );
+use FFI::C::Util qw( addressof set_array_count );
 use Sub::Install;
 use Carp ();
 use constant is_func => 1;
@@ -17,111 +17,131 @@ use overload
   '&{}' => sub { my $self = shift; sub { $self->call(@_) } },
   bool => sub { 1 },
   fallback => 1;
-  ;
 
 # ABSTRACT: Wasmtime function class
-our $VERSION = '0.23'; # VERSION
+our $VERSION = '0.24'; # VERSION
 
 
-$ffi_prefix = 'wasm_func_';
-$ffi->load_custom_type('::PtrObject' => 'wasm_func_t' => __PACKAGE__);
+my $val_array_from_ptr = sub {
+  my($ptr, $n) = @_;
+  return undef unless $n;
+  my $array = $ffi->cast('opaque', 'wasmtime_val_array_t', $ptr);
+  set_array_count($array, $n);
+  $array;
+};
+
+my $set_val = sub {
+  my($slot, $kind, $value) = @_;
+  if($kind eq 'i32')    { $slot->of->i32($value) }
+  elsif($kind eq 'i64') { $slot->of->i64($value) }
+  elsif($kind eq 'f32') { $slot->of->f32($value) }
+  elsif($kind eq 'f64') { $slot->of->f64($value) }
+  else { Carp::croak("cannot marshal WebAssembly value of type $kind") }
+  $slot->kind($Wasm::Wasmtime::FFI::VAL_KIND_NUM{$kind});
+};
 
 
-$ffi->attach( [ wasmtime_func_new => 'new' ] => ['wasm_store_t', 'wasm_functype_t', '(opaque,opaque,opaque)->opaque'] => 'wasm_func_t' => sub {
+$ffi->attach( [ wasmtime_func_new => 'new' ] => ['opaque', 'wasm_functype_t', '(opaque,opaque,opaque,size_t,opaque,size_t)->opaque', 'opaque', 'opaque', 'wasmtime_func_t'] => 'void' => sub {
   my $xsub = shift;
   my $class = shift;
-  if(is_blessed_ref $_[0] && $_[0]->isa('Wasm::Wasmtime::Store'))
-  {
-    my $store = shift;
-    my($functype, $cb) = is_plain_arrayref($_[0])
-       ? (Wasm::Wasmtime::FuncType->new($_[0], $_[1]), $_[2])
-       : @_;
 
-    my $param_arity  = scalar $functype->params;
-    my $result_arity = scalar$functype->results;
+  Carp::croak("Wasm::Wasmtime::Func->new requires a Wasm::Wasmtime::Store")
+    unless is_blessed_ref($_[0]) && $_[0]->isa('Wasm::Wasmtime::Store');
+  my $store = shift;
 
-    require Wasm::Wasmtime::Caller;
-    my $wrapper = $ffi->closure(sub {
-      my($caller, $params, $results) = @_;
-      $caller = Wasm::Wasmtime::Caller->new($caller);
-      unshift @Wasm::Wasmtime::Caller::callers, $caller;
+  my($functype, $cb) = is_plain_arrayref($_[0])
+     ? (Wasm::Wasmtime::FuncType->new($_[0], $_[1]), $_[2])
+     : @_;
 
-      my @args = $param_arity ? do {
-        my $args = Wasm::Wasmtime::ValVec->from_c($params);
-        $args->to_perl;
-      } : ();
+  my @result_types = $functype->results;
+  my $param_arity  = scalar $functype->params;
+  my $result_arity = scalar @result_types;
 
-      local $@ = '';
-      my @ret = eval {
-        $cb->(@args);
-      };
-      if(my $error = $@)
+  require Wasm::Wasmtime::Caller;
+
+  my $closure = $ffi->closure(sub {
+    my(undef, $caller_ptr, $args_ptr, $nargs, $res_ptr, $nres) = @_;
+
+    my $caller = Wasm::Wasmtime::Caller->new($caller_ptr, $store);
+    unshift @Wasm::Wasmtime::Caller::callers, $caller;
+
+    my @args;
+    if($nargs)
+    {
+      my $array = $val_array_from_ptr->($args_ptr, $nargs);
+      @args = map { $_->to_perl } @$array;
+    }
+
+    local $@ = '';
+    my @ret = eval { $cb->(@args) };
+    if(my $error = $@)
+    {
+      shift @Wasm::Wasmtime::Caller::callers;
+      delete $caller->{ptr};
+      my $trap = is_blessed_ref($error) && $error->isa('Wasm::Wasmtime::Trap')
+        ? $error
+        : Wasm::Wasmtime::Trap->new("$error");
+      return delete $trap->{ptr};
+    }
+
+    if($nres)
+    {
+      my $array = $val_array_from_ptr->($res_ptr, $nres);
+      foreach my $i (0..$nres-1)
       {
-        my $trap = is_blessed_ref $error && $error->isa('Wasm::Wasmtime::Trap')
-          ? $error
-          : Wasm::Wasmtime::Trap->new($store, "$error\0");
-        delete $caller->{ptr};
-        shift @Wasm::Wasmtime::Caller::callers;
-        return delete $trap->{ptr};
+        $set_val->($array->[$i], $result_types[$i]->kind, $ret[$i]);
       }
-      else
-      {
-        if($result_arity)
-        {
-          $results = Wasm::Wasmtime::ValVec->from_c($results);
-          my @types = $functype->results;
-          foreach my $i (0..$#types)
-          {
-            my $kind = $types[$i]->kind;
-            my $result = $results->get($i);
-            $result->kind($types[$i]->kind_num);
-            $result->of->$kind(shift @ret);
-          }
-        }
-        delete $caller->{ptr};
-        shift @Wasm::Wasmtime::Caller::callers;
-        return undef;
-      }
-    });
-    my $self = $xsub->($store, $functype, $wrapper);
-    $self->{store} = $store;
-    $self->{wrapper} = $wrapper;
-    return $self;
-  }
-  else
-  {
-    my ($ptr, $owner) = @_;
-    bless {
-      ptr     => $ptr,
-      owner   => $owner,
-    }, $class;
-  }
+    }
+
+    shift @Wasm::Wasmtime::Caller::callers;
+    delete $caller->{ptr};
+    return undef;
+  });
+
+  my $data = Wasm::Wasmtime::FuncData->new;
+  $xsub->($store->context, $functype, $closure, undef, undef, $data);
+
+  bless {
+    data     => $data,
+    store    => $store,
+    closure  => $closure,
+    functype => $functype,
+  }, $class;
 });
 
 
-$ffi->attach( call => ['wasm_func_t', 'record(Wasm::Wasmtime::Vec)*', 'record(Wasm::Wasmtime::Vec)*'] => 'wasm_trap_t' => sub {
+$ffi->attach( [ wasmtime_func_call => 'call' ] => ['opaque', 'wasmtime_func_t', 'opaque', 'size_t', 'opaque', 'size_t', 'opaque*'] => 'wasmtime_error_t' => sub {
   my $xsub = shift;
   my $self = shift;
-  my @params = $self->type->params;
-  my $args = Wasm::Wasmtime::ValVec->from_perl(\@_, \@params);
-  my $results = $self->result_arity ? Wasm::Wasmtime::ValVec->new($self->result_arity) : undef;
 
-  my $args_vec = Wasm::Wasmtime::Vec->new(
-    size => scalar @params,
-    data => defined $args ? addressof($args) : undef,
+  my $functype    = $self->type;
+  my @param_types = $functype->params;
+  my @result_types = $functype->results;
+
+  my $args = @param_types
+    ? Wasm::Wasmtime::ValArray->from_perl([@_], \@param_types)
+    : undef;
+  my $results = @result_types
+    ? Wasm::Wasmtime::ValArray->new(scalar @result_types)
+    : undef;
+
+  my $trap;
+  my $error = $xsub->(
+    $self->context, $self->{data},
+    $args ? addressof($args) : undef, scalar @param_types,
+    $results ? addressof($results) : undef, scalar @result_types,
+    \$trap,
   );
 
-  my $results_vec = Wasm::Wasmtime::Vec->new(
-    size => $self->result_arity,
-    data => defined $results ? addressof($results) : undef,
-  );
+  # A host function invoked directly returns its failure as an error rather
+  # than via the trap out-parameter; surface both as a trap for consistency
+  # with how WebAssembly-side traps are reported.
+  die Wasm::Wasmtime::Trap->from_error($error) if $error;
+  die Wasm::Wasmtime::Trap->new($trap) if $trap;
 
-  my $trap = $xsub->($self, $args_vec, $results_vec);
-
-  die $trap if $trap;
   return unless defined $results;
-  my @results = $results->to_perl;
-  wantarray ? @results : $results[0]; ## no critic (Community::Wantarray)
+  my @out = $results->to_perl;
+  wantarray ? @out : $out[0];  ## no critic (Community::Wantarray)
 });
 
 
@@ -142,27 +162,20 @@ sub attach
 }
 
 
-$ffi->attach( type => ['wasm_func_t'] => 'wasm_functype_t' => sub {
+$ffi->attach( [ wasmtime_func_type => '_type' ] => ['opaque', 'wasmtime_func_t'] => 'wasm_functype_t' => sub {
   my($xsub, $self) = @_;
-  my $type = $xsub->($self);
-  $type->{owner} = $self->{owner} || $self;
-  $type;
+  $xsub->($self->context, $self->{data});
 });
 
+sub type
+{
+  my($self) = @_;
+  $self->{functype} ||= $self->_type;
+}
 
-$ffi->attach( param_arity => ['wasm_func_t'] => 'size_t' => sub {
-  my($xsub, $self) = @_;
-  $xsub->($self);
-});
 
-
-$ffi->attach( result_arity => ['wasm_func_t'] => 'size_t' => sub {
-  my($xsub, $self) = @_;
-  $xsub->($self);
-});
-
-__PACKAGE__->_cast(0);
-_generate_destroy();
+sub param_arity  { scalar shift->type->params }
+sub result_arity { scalar shift->type->results }
 
 1;
 
@@ -178,7 +191,7 @@ Wasm::Wasmtime::Func - Wasmtime function class
 
 =head1 VERSION
 
-version 0.23
+version 0.24
 
 =head1 SYNOPSIS
 
@@ -253,13 +266,9 @@ signature.
  my @results = $func->call(@params);
  my @results = $func->(@params);
 
-Calls the function instance.  This can be used to call either Perl functions created
-with C<new> as above, or call WebAssembly functions from Perl.  As a convenience you
-can call the function by using the function instance like a code reference.
-
-If there is a trap during the call it will throw an exception.  In list context all
-of the results are returned as a list.  In scalar context just the first result (if
-any) is returned.
+Calls the function instance.  If there is a trap during the call it will throw an
+exception.  In list context all of the results are returned as a list.  In scalar
+context just the first result (if any) is returned.
 
 =head2 attach
 
@@ -283,7 +292,7 @@ Returns the number of arguments the function takes.
 
 =head2 result_arity
 
- my $num = $func->param_arity;
+ my $num = $func->result_arity;
 
 Returns the number of results the function returns.
 
@@ -303,7 +312,7 @@ Graham Ollis <plicease@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2020-2022 by Graham Ollis.
+This software is copyright (c) 2020-2026 by Graham Ollis.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

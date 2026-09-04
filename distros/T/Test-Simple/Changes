@@ -4,6 +4,10 @@
 * distributions can be found further down in the file.                         *
 ********************************************************************************
 
+1.302225  2026-09-03 10:23:35-07:00 America/Los_Angeles
+
+    - Name the failing check when an IPC abort escapes a capture block in t/Test2/modules/IPC/Driver/Files.t. The bare "die 255" reported only its own line, and the message went to a captured STDERR that was then discarded, so smoke failures carried no diagnostic at all. [github #1091]
+
 1.302224  2026-08-24 12:47:02-07:00 America/Los_Angeles
 
     - Allow the subtest tests to pass with Perl core's more accurate line-number reporting (Richard Leach) [github #1090]

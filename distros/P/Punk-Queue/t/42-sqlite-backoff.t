@@ -29,7 +29,7 @@ EOF
                      env => { PUNK_QUEUE_NO_HM_ABI => 1 });
 
     # all four children up before any work exists
-    my $deadline = time + 20;
+    my $deadline = time + 60;
     while (time < $deadline) {
         last if grep({ $_->{role} eq 'child' }
                      @{ $q->list_workers->{workers} }) == 4;
@@ -66,12 +66,25 @@ EOF
 {
     my ($q, $file) = make_queue();
     my $app = task_app("dbi:SQLite:dbname=$file");
-    my $id = $q->enqueue(add => [3, 3], delay => 3);
 
     my $h = pq_start(['worker', '--app', $app, '--interval', '30'],
                      env => { PUNK_QUEUE_NO_HM_ABI => 1 });
 
-    my $lim = Time::HiRes::time() + 20;
+    # The pool is up and idle before the delayed job exists, because the
+    # lag below has to measure the wakeup and nothing else. Enqueueing
+    # first made a slow box's worker boot part of the measurement: three
+    # seconds of delay were spent starting a perl, the job was already
+    # overdue when the first poll ran, and a healthy clamp read as late.
+    my $lim = time + 60;
+    while (time < $lim) {
+        last if grep { $_->{role} eq 'child' }
+                @{ $q->list_workers->{workers} };
+        select undef, undef, undef, 0.1;
+    }
+
+    my $id = $q->enqueue(add => [3, 3], delay => 3);
+
+    $lim = Time::HiRes::time() + 60;
     my $done_at;
     while (Time::HiRes::time() < $lim) {
         if ($q->job_info($id)->{state} eq 'finished') {
@@ -84,8 +97,11 @@ EOF
     my $info = $q->job_info($id);
     my $lag = $info->{started} - $info->{delayed};
     ok($lag >= 0, 'not early');
-    ok($lag < 5, sprintf 'and not a full interval late (%.2fs lag) - '
-                       . 'the horizon clamp woke the worker', $lag);
+    # half the interval, not a stopwatch: the claim is that the sleep was
+    # cut short, and anything under 15s on a 30s interval proves it
+    # whatever the box was doing at the time.
+    ok($lag < 15, sprintf 'and not a full interval late (%.2fs lag) - '
+                        . 'the horizon clamp woke the worker', $lag);
 
     my ($code) = pq_finish($h, 'TERM');
     is($code, 0, 'clean shutdown');

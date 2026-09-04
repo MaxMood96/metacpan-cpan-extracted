@@ -6,12 +6,8 @@ use warnings;
 use Carp ();
 use Punk ();
 
-our $VERSION = '0.42';
+our $VERSION = '0.43';
 
-# A read handle on a spilled part, or undef when the bytes are in memory.
-# Perl rather than XS because making a filehandle in XS is a glob dance for
-# something `open` does in one line - and the rest of this class is XS, so
-# this is the only reason the module is loaded at all.
 sub fh {
     my ($self) = @_;
     my $path = $self->path;

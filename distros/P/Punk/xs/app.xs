@@ -33,6 +33,7 @@ new(class, ...)
         (void)hv_stores(hooks, K_BEFORE_D, newRV_noinc((SV *)newAV()));
         (void)hv_stores(hooks, K_AFTER_D,  newRV_noinc((SV *)newAV()));
         (void)hv_stores(hooks, K_BEFORE_RN, newRV_noinc((SV *)newAV()));
+        (void)hv_stores(hooks, K_AFTER_RES, newRV_noinc((SV *)newAV()));
         (void)hv_stores(h, K_HOOKS,      newRV_noinc((SV *)hooks));
         (void)hv_stores(h, K_MIDDLEWARE, newRV_noinc((SV *)newAV()));
         (void)hv_stores(h, K_HELPERS,    newRV_noinc((SV *)newHV()));
@@ -102,6 +103,7 @@ route(self, method, path, target, guards = &PL_sv_undef, opts = &PL_sv_undef)
                     && !strEQ(k, K_MAX_BODY) && !strEQ(k, K_SITEMAP)
                     && !strEQ(k, K_ETAG) && !strEQ(k, K_IDEMPOTENT)
                     && !strEQ(k, K_LAST_MODIFIED)
+                    && !strEQ(k, K_RATE_LIMIT)
                     && !strEQ(k, K_NAME))
                     croak("Punk: unknown route option '%s'", k);
             }
@@ -252,6 +254,64 @@ route(self, method, path, target, guards = &PL_sv_undef, opts = &PL_sv_undef)
                 av_push(app_av(aTHX_ h, K_VALIDATE_ROUTES),
                         newRV_noinc((SV *)rec));
             }
+            /* rate_limit: this route's own budget, on the machinery the
+             * `rate_limit` keyword already uses. The keyword is one policy
+             * for a path prefix, which is the right shape for "the whole
+             * API" and the wrong one for "/login gets five tries a minute" -
+             * the routes an attacker retries are exactly the ones that need
+             * a budget of their own.
+             *
+             * The spec is checked here so a typo fails on the line that
+             * wrote it; it is compiled into a guard at to_app, before the
+             * `validate` guard, so a refused request never parses a body. */
+            vp = hv_fetchs(oh, K_RATE_LIMIT, 0);
+            if (vp && *vp && SvOK(*vp)) {
+                HV *spec = NULL;
+                if (SvROK(*vp) && SvTYPE(SvRV(*vp)) == SVt_PVHV) {
+                    HV *in = (HV *)SvRV(*vp);
+                    HE *rhe;
+                    hv_iterinit(in);
+                    while ((rhe = hv_iternext(in))) {
+                        STRLEN rkl; const char *rk = HePV(rhe, rkl);
+                        if (strEQ(rk, "for"))
+                            croak("Punk: rate_limit on %s %s takes no `for` "
+                                  "- the route is the scope",
+                                  SvPV_nolen(method), SvPV_nolen(path));
+                        if (!(strEQ(rk, "limit") || strEQ(rk, "window")
+                              || strEQ(rk, "by") || strEQ(rk, "tag")))
+                            croak("Punk: unknown rate_limit option '%s' on "
+                                  "%s %s", rk, SvPV_nolen(method),
+                                  SvPV_nolen(path));
+                    }
+                    spec = newHVhv(in);
+                }
+                else if (SvROK(*vp))
+                    croak("Punk: rate_limit on %s %s takes a hashref of "
+                          "options or a count, not a %s",
+                          SvPV_nolen(method), SvPV_nolen(path),
+                          sv_reftype(SvRV(*vp), 0));
+                else if (SvTRUE(*vp)) {
+                    /* the count shorthand: `rate_limit => 5` is five a
+                     * minute, the window every other spelling defaults to */
+                    if (!looks_like_number(*vp) || SvIV(*vp) <= 0)
+                        croak("Punk: rate_limit on %s %s takes a positive "
+                              "count or a hashref of options, not '%s'",
+                              SvPV_nolen(method), SvPV_nolen(path),
+                              SvPV_nolen(*vp));
+                    spec = newHV();
+                    (void)hv_stores(spec, "limit", newSViv(SvIV(*vp)));
+                }
+                /* rate_limit => 0 is what a route says by saying nothing */
+                if (spec) {
+                    HV *rec = newHV();
+                    (void)hv_stores(rec, K_METHOD, newSVsv(method));
+                    (void)hv_stores(rec, K_PATH,   newSVsv(path));
+                    (void)hv_stores(rec, K_RATE_LIMIT,
+                                    newRV_noinc((SV *)spec));
+                    av_push(app_av(aTHX_ h, K_RL_ROUTES),
+                            newRV_noinc((SV *)rec));
+                }
+            }
         }
         argv[0] = sv_2mortal(newSVpvs(K_METHOD)); argv[1] = method;
         argv[2] = sv_2mortal(newSVpvs(K_PATH));   argv[3] = path;
@@ -301,19 +361,50 @@ websocket(self, path, target, opts = &PL_sv_undef, guards = &PL_sv_undef)
         HV *h = app_hv(aTHX_ self);
         static const char *known[] =
             { "protocols", "max_message_size", "write_buffer_limit", K_BLOCKING,
-              K_NAME };
+              K_NAME, "origin" };
         HV *oh;
         SV *argv[8], *r; HE *he; HV *rec;
+        SV *origin = NULL;
         pk_spec_split(aTHX_ "websocket", path, &target, &opts);
         oh = (SvROK(opts) && SvTYPE(SvRV(opts)) == SVt_PVHV)
              ? (HV *)SvRV(opts) : NULL;
         if (oh) {
             hv_iterinit(oh);
             while ((he = hv_iternext(oh))) {
-                STRLEN kl; const char *k = HePV(he, kl); int ok = 0, i;
-                for (i = 0; i < 5; i++)
+                STRLEN kl; const char *k = HePV(he, kl); int ok = 0;
+                size_t i;
+                for (i = 0; i < sizeof known / sizeof *known; i++)
                     if (strEQ(k, known[i])) { ok = 1; break; }
                 if (!ok) croak("Punk: unknown websocket option(s) %s", k);
+            }
+        }
+        /* `origin` is normalised at boot into the one shape the handshake
+         * reads: a false scalar (checked off), a coderef, or an arrayref of
+         * lowercased allow entries. undef is refused rather than read as off,
+         * because the value usually arrives from configuration and a missing
+         * key must not quietly take the check away. */
+        {
+            SV **ov = oh ? hv_fetchs(oh, "origin", 0) : NULL;
+            if (ov && *ov) {
+                SV *v = *ov;
+                if (!SvOK(v))
+                    croak("Punk: websocket origin is undef - spell it 0 to "
+                          "serve any origin, or name the ones you answer as");
+                else if (SvROK(v) && SvTYPE(SvRV(v)) == SVt_PVCV)
+                    origin = newSVsv(v);
+                else if (SvROK(v) && SvTYPE(SvRV(v)) == SVt_PVAV)
+                    origin = newRV_noinc(
+                        (SV *)pk_host_allow_av(aTHX_ v, "websocket origin"));
+                else if (!SvTRUE(v))
+                    origin = newSViv(0);
+                else {
+                    AV *one = (AV *)sv_2mortal((SV *)newAV());
+                    SV *wrap;
+                    av_push(one, newSVsv(v));
+                    wrap = sv_2mortal(newRV_inc((SV *)one));
+                    origin = newRV_noinc(
+                        (SV *)pk_host_allow_av(aTHX_ wrap, "websocket origin"));
+                }
             }
         }
         /* $self->route('GET', $path, $target, $guards || []) */
@@ -344,6 +435,7 @@ websocket(self, path, target, opts = &PL_sv_undef, guards = &PL_sv_undef)
              * an application may be reusing between declarations. */
             HV *copy = oh ? newHVhv(oh) : newHV();
             (void)hv_delete(copy, K_NAME, (I32)strlen(K_NAME), G_DISCARD);
+            if (origin) (void)hv_stores(copy, "origin", origin);
             (void)hv_stores(rec, K_OPTS, newRV_noinc((SV *)copy));
         }
         av_push(app_av(aTHX_ h, K_WS_ROUTES), newRV_noinc((SV *)rec));
@@ -1397,7 +1489,7 @@ hook(self, name, code)
         SV **slot = hv_fetch(hooks, n, (I32)nl, 0);
         if (!(slot && *slot && SvROK(*slot) && SvTYPE(SvRV(*slot)) == SVt_PVAV))
             croak("Punk: unknown hook '%s' (before_request, before_dispatch, "
-                  "after_dispatch, before_render)", n);
+                  "after_dispatch, after_response, before_render)", n);
         av_push((AV *)SvRV(*slot), newSVsv(code));
         RETVAL = newSVsv(self);
     }
@@ -2117,35 +2209,8 @@ host(self, ...)
                 const char *k = SvPV_const(ST(oi), kl);
                 SV *v = ST(oi + 1);
                 if (kl == 5 && memEQ(k, "allow", 5)) {
-                    AV *in, *out;
-                    SSize_t ai, an;
-                    if (!(SvROK(v) && SvTYPE(SvRV(v)) == SVt_PVAV))
-                        croak("Punk: host allow needs an arrayref of "
-                              "hostnames");
-                    in  = (AV *)SvRV(v);
-                    out = (AV *)sv_2mortal((SV *)newAV());
-                    an  = av_len(in) + 1;
-                    for (ai = 0; ai < an; ai++) {
-                        SV **e = av_fetch(in, ai, 0);
-                        STRLEN el, j;
-                        const char *ep;
-                        SV *low;
-                        char *lp;
-                        if (!(e && *e && SvOK(*e) && SvCUR(*e)))
-                            croak("Punk: host allow entries are hostnames");
-                        ep  = SvPV_const(*e, el);
-                        low = sv_2mortal(newSVpvn(ep, el));
-                        lp  = SvPVX(low);
-                        for (j = 0; j < el; j++)
-                            if (lp[j] >= 'A' && lp[j] <= 'Z') lp[j] += 32;
-                        if (!pk_host_entry_ok(lp, el))
-                            croak("Punk: host allow entry '%.*s' is not a "
-                                  "hostname - labels of [a-z0-9-], an "
-                                  "optional leading *. and an optional "
-                                  ":port", (int)el, ep);
-                        av_push(out, SvREFCNT_inc_simple_NN(low));
-                    }
-                    (void)hv_stores(h, "host_allow", newRV_inc((SV *)out));
+                    AV *out = pk_host_allow_av(aTHX_ v, "host allow");
+                    (void)hv_stores(h, "host_allow", newRV_noinc((SV *)out));
                 }
                 else croak("Punk: host does not understand '%.*s'",
                            (int)kl, k);

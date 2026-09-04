@@ -1,6 +1,6 @@
 package HTML::FormHandler::Widget::Wrapper::Base;
 # ABSTRACT: common methods for widget wrappers
-$HTML::FormHandler::Widget::Wrapper::Base::VERSION = '0.40068';
+$HTML::FormHandler::Widget::Wrapper::Base::VERSION = '0.410001';
 use Moose::Role;
 use HTML::FormHandler::Render::Util ('process_attrs');
 
@@ -100,7 +100,7 @@ sub b3_label_left_inline {
 
     my $label = $self->get_checkbox_label;
     my $id = $self->id;
-    my $output .= qq{<label class="checkbox-inline" for="$id">\n$label\n$rendered_widget</label>};
+    my $output = qq{<label class="checkbox-inline" for="$id">\n$label\n$rendered_widget</label>};
     return $output;
 }
 
@@ -120,7 +120,7 @@ sub label_left {
 
     my $label = $self->get_checkbox_label;
     my $id = $self->id;
-    my $output .= qq{<label class="checkbox" for="$id">\n$label\n$rendered_widget</label>};
+    my $output = qq{<label class="checkbox" for="$id">\n$label\n$rendered_widget</label>};
     return $output;
 }
 
@@ -129,7 +129,7 @@ sub label_right {
 
     my $label = $self->get_checkbox_label;
     my $id = $self->id;
-    my $output .= qq{<label class="checkbox" for="$id">$rendered_widget\n$label\n</label>};
+    my $output = qq{<label class="checkbox" for="$id">$rendered_widget\n$label\n</label>};
     return $output;
 }
 
@@ -200,7 +200,7 @@ HTML::FormHandler::Widget::Wrapper::Base - common methods for widget wrappers
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 DESCRIPTION
 

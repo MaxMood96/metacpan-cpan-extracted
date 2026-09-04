@@ -31,4 +31,10 @@ ok my $data = $res->decoded_content, 'decoded_content';
 cmp_deeply $c->log->msgs, [ { level => 'debug', message => re('^Saving the HTML to ') } ], 'log messages from ChromePDF'
   or diag(explain [ $c->log->msgs ] );
 
+ok my $view = $c->view("ChromePDF"), 'got view object';
+ok my $mech = $view->mech, 'got mech object';
+if ($mech) {
+    $mech->close;
+}
+
 done_testing;

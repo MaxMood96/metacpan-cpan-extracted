@@ -1,5 +1,6 @@
 package HTML::FormHandler::Field::RequestToken;
-$HTML::FormHandler::Field::RequestToken::VERSION = '0.40068';
+# ABSTRACT: Hidden text field which contains a unique time-stamped token
+$HTML::FormHandler::Field::RequestToken::VERSION = '0.410001';
 use HTML::FormHandler::Moose;
 extends 'HTML::FormHandler::Field::Hidden';
 
@@ -117,11 +118,11 @@ __END__
 
 =head1 NAME
 
-HTML::FormHandler::Field::RequestToken
+HTML::FormHandler::Field::RequestToken - Hidden text field which contains a unique time-stamped token
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 
@@ -137,11 +138,6 @@ This field is for preventing CSRF attacks.  It contains
 an encrypted token containing an expiration time for the form.
 No data needs to be persisted in the user's session or on the
 server.
-
-=head1 NAME
-
-HTML::FormHandler::Field::RequestToken - Hidden text field which contains
-a unique time-stamped token
 
 =head1 ATTRIBUTES
 

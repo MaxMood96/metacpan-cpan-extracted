@@ -266,4 +266,59 @@ static void pk_spec_split(pTHX_ const char *what, SV *path,
     else      SvREFCNT_dec((SV *)o);
 }
 
+/* "METHOD PATH" -> the compiled record, as a mortal HV.
+ *
+ * A route option is recorded at declaration as { method, path, ... } and
+ * compiled at to_app onto the record the router built, which is the only
+ * place the guards AV lives. Every option that becomes a guard needs the
+ * same lookup, so it is written once; `what` names the option in the two
+ * croaks, which are both "the application declared this against a route
+ * that does not exist". */
+static HV *pk_route_index(pTHX_ SV *self, const char *what) {
+    HV *h = (HV *)SvRV(self);
+    SV **rop = hv_fetchs(h, K_ROUTER, 0);
+    SV *recs_rv;
+    AV *recs;
+    HV *by;
+    SSize_t ri, rn;
+    if (!(rop && *rop && SvOK(*rop)))
+        croak("Punk: %s routes with no router", what);
+    recs_rv = pcx_call_meth(aTHX_ *rop, "records", NULL, 0, 1);
+    if (!(recs_rv && SvROK(recs_rv) && SvTYPE(SvRV(recs_rv)) == SVt_PVAV)) {
+        if (recs_rv) SvREFCNT_dec(recs_rv);
+        croak("Punk: %s routes but no compiled records", what);
+    }
+    sv_2mortal(recs_rv);
+    recs = (AV *)SvRV(recs_rv);
+    by = (HV *)sv_2mortal((SV *)newHV());
+    rn = av_len(recs) + 1;
+    for (ri = 0; ri < rn; ri++) {
+        SV **rp = av_fetch(recs, ri, 0);
+        HV *rec;
+        SV **m, **p, *key;
+        if (!(rp && *rp && SvROK(*rp) && SvTYPE(SvRV(*rp)) == SVt_PVHV))
+            continue;
+        rec = (HV *)SvRV(*rp);
+        m = hv_fetchs(rec, K_METHOD, 0);
+        p = hv_fetchs(rec, K_PATH, 0);
+        if (!(m && *m && p && *p)) continue;
+        key = sv_2mortal(newSVsv(*m));
+        sv_catpvs(key, " ");
+        sv_catsv(key, *p);
+        (void)hv_store_ent(by, key, newSVsv(*rp), 0);
+    }
+    return by;
+}
+
+/* Append a guard closure to a compiled record's guards, vivifying the AV.
+ * Takes the +1 the caller holds. */
+static void pk_route_guard_push(pTHX_ HV *rec, SV *guard) {
+    SV **gp = hv_fetchs(rec, K_GUARDS, 0);
+    if (!(gp && *gp && SvROK(*gp) && SvTYPE(SvRV(*gp)) == SVt_PVAV)) {
+        (void)hv_stores(rec, K_GUARDS, newRV_noinc((SV *)newAV()));
+        gp = hv_fetchs(rec, K_GUARDS, 0);
+    }
+    av_push((AV *)SvRV(*gp), guard);
+}
+
 #endif /* PUNK_APP_H */

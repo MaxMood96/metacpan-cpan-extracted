@@ -1,0 +1,25 @@
+# Copyright (c) 2026 Yuki Kimoto
+# MIT License
+
+class UV::Handle : pointer {
+  
+  allow UV::Loop;
+  
+  use UV::Callback::Close;
+  use UV::Loop;
+  
+  use Resource::UV;
+  use UV::Resource::UV;
+  
+  # Fields
+  has close_cb : rw UV::Callback::Close;
+  
+  has loop : ro UV::Loop;
+  
+  # Instance Methods
+  native method close_safe : void ($close_cb : UV::Callback::Close = undef);
+  
+  native method get_type : int ();
+  
+  native method DESTROY : void ();
+}

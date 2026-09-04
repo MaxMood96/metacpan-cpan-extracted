@@ -87,7 +87,7 @@ is $rv->validate(
   'identify a fake bot';
 
 
-ok !!%store && scalar($store{Default}->%*) == 1, 'non-empty cache';
+ok !!%store && scalar(keys $store{Default}->%*) == 1, 'non-empty cache';
 
 is
   $rv->validate(
@@ -97,7 +97,7 @@ is
   undef,
   'unknown UA (same address as fake but not cached result)';
 
-ok !!%store && scalar($store{Default}->%*) == 1, 'non-empty cache';
+ok !!%store && scalar(keys $store{Default}->%*) == 1, 'non-empty cache';
 
 is
   $rv->validate(
@@ -107,7 +107,7 @@ is
   [ "google" => "googlebot" ],
   'validate';
 
-ok !!%store && scalar($store{Default}->%*) == 2, 'non-empty cache';
+ok !!%store && scalar(keys $store{Default}->%*) == 2, 'non-empty cache';
 
 is
   $rv->validate(
@@ -117,6 +117,6 @@ is
   [ "google" => "googlebot" ],
   'validate';
 
-ok !!%store && scalar($store{Default}->%*) == 2, 'non-empty cache';
+ok !!%store && scalar(keys $store{Default}->%*) == 2, 'non-empty cache';
 
 done_testing;

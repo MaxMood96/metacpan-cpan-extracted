@@ -20,7 +20,7 @@ plan skip_all => 'DBI and DBD::SQLite required' unless has_dbd();
 {
     local $ENV{PUNK_QUEUE_NO_HM_ABI} = 1;
     my ($q) = make_queue();
-    $q->task(snooze => sub { sleep 30; 'woke' });
+    $q->task(snooze => sub { sleep 60; 'woke' });
     my $id = $q->enqueue('snooze', [], timeout => 1, attempts => 1);
 
     my $t0 = Time::HiRes::time();
@@ -30,7 +30,11 @@ plan skip_all => 'DBI and DBD::SQLite required' unless has_dbd();
     my $j = $q->job_info($id);
     is($j->{state}, 'failed', 'the job failed');
     like($j->{result}, qr/job timed out/, 'with the timeout message');
-    ok($took < 10, "and promptly, not after the sleep ($took)");
+    # the gap between the timeout and the sleep is the whole assertion, so
+    # it is drawn wide: a stalled smoker took 14s over a 1s alarm and was
+    # still nowhere near having sat out the task.
+    ok($took < 30, sprintf 'and promptly, not after the sleep (%.2fs)',
+                           $took);
     is($ENV{PUNK_QUEUE_NO_HM_ABI}, 1, '(off-loop path)');
 }
 

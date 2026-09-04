@@ -39,8 +39,17 @@ sub pq_run {
 }
 
 # Start punk-queue in the background. Returns { pid, out (path) }.
+#
+# A worker gets a short graceful window unless the caller asked for one:
+# the production default is 60s, which is longer than pq_finish waits, so
+# a child that is slow to notice its SIGTERM turned a test failure into a
+# harness abort. Ten seconds is still far more than a test job needs.
 sub pq_start {
     my ($args, %opts) = @_;
+    if (@$args && $args->[0] eq 'worker'
+        && !grep { $_ eq '--graceful-timeout' } @$args) {
+        $args = [ @$args, '--graceful-timeout', '10' ];
+    }
     my $out = File::Temp->new(TEMPLATE => 'pqoutXXXXXX', TMPDIR => 1,
                               UNLINK => 0);
     my $pid = fork // die "fork: $!";
@@ -57,7 +66,7 @@ sub pq_start {
 # Signal and reap a pq_start handle. Returns (exit_code, stdout_lines).
 sub pq_finish {
     my ($h, $sig, %opts) = @_;
-    my $timeout = $opts{timeout} // 30;
+    my $timeout = $opts{timeout} // 45;
     kill $sig, $h->{pid} if $sig;
     my $deadline = time + $timeout;
     my $reaped;

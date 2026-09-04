@@ -80,6 +80,8 @@ static int pk_require_once(pTHX_ const char *mod, int fatal) {
 #define K_BEFORE_D   "before_dispatch"
 #define K_AFTER_D    "after_dispatch"
 #define K_BEFORE_RN  "before_render"
+#define K_AFTER_RES  "after_response"
+#define K_AFTER_RES_C "after_response_c"  /* compiled chain, on the app */
 #define K_MIDDLEWARE "middleware"
 #define K_HELPERS    "helpers"
 #define K_KEYWORDS   "keywords"    /* plugin-installed DSL keywords */
@@ -151,6 +153,8 @@ static int pk_require_once(pTHX_ const char *mod, int fatal) {
 #define K_CGET     "conditional_get"   /* the plugin's on-switch */
 #define K_IDEMPOTENT "idempotent"
 #define K_IDEM_ROUTES "idempotent_routes"
+#define K_RATE_LIMIT  "rate_limit"      /* the route option and the keyword */
+#define K_RL_ROUTES   "rate_limit_routes"
 #define K_IDEM     "idempotency"       /* the plugin's config */
 #define K_NAME     "name"               /* the route option and the record key */
 #define K_NAMED_ROUTES "named_routes"   /* accumulated { method, path, name } */

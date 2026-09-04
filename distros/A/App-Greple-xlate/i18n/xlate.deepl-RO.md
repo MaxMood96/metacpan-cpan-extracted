@@ -10,11 +10,11 @@ App::Greple::xlate - modul de suport pentru traducere pentru Greple
 
 # VERSION
 
-Version 2.01
+Version 2.02
 
 # DESCRIPTION
 
-**Greple** **xlate** modulul identifică blocurile de text dorite și le înlocuiește cu textul tradus. Motorul principal este GPT-5.5 (`llm/gpt5.pm`), care apelează comanda [llm](https://llm.datasette.io/); Sunt incluse, de asemenea, DeepL (`deepl.pm`) și motoarele vechi bazate pe **gpty**.
+**Greple** **xlate** modulul găsește blocurile de text dorite și le înlocuiește cu textul tradus. Motorul principal este GPT-5.6 Terra (`llm/gpt5.pm`), care apelează comanda [llm](https://llm.datasette.io/); sunt incluse, de asemenea, DeepL (`deepl.pm`) și motoarele vechi bazate pe **gpty**.
 
 Traducerile sunt stocate în cache pentru fiecare fișier, astfel încât rulați din nou o comandă nu implică costuri suplimentare pentru textul nemodificat. Când un document este editat, doar paragrafele modificate sunt trimise din nou către API; un motor sensibil la context primește, de asemenea, traducerile din jur, textul sursă brut din jurul modificării și versiunea anterioară a paragrafului editat, astfel încât noua traducere păstrează formularea stabilită (vezi **--xlate-context-window**). Șirurile sensibile pot fi ascunse înainte de transmitere (vezi ["ANONYMIZATION AND TEMPLATES"](#anonymization-and-templates)).
 
@@ -81,13 +81,15 @@ Modelele complexe pot fi scrise pe mai multe linii, cu caracterul de linie nouă
 
 Modul în care textul este transformat prin mascare poate fi văzut prin opțiunea **--xlate-mask**.
 
+Marcatorii de substituție sunt etichete XML auto-închise, bine formate, precum `<m id="1" />`. Motoarele LLM bazate pe JSON primesc etichetele în matricile lor de intrare. Pentru DeepL, o cerere care conține etichete de marcator este escapată și încadrată într-o `<xlate>`rădăcină temporară, cu gestionarea etichetelor XML activată și fiecare categorie de marcator înregistrată ca etichetă care nu se împarte. Învelișul este eliminat înainte ca substituenții să fie validați și restabiliți.
+
 Mascarea protejează marcajul împotriva traducerii. Pentru a ascunde șirurile sensibile chiar de serviciul de traducere, consultați ["ANONYMIZATION AND TEMPLATES"](#anonymization-and-templates); ambele opțiuni pot fi utilizate împreună.
 
 Această interfață este experimentală și poate fi modificată în viitor.
 
 # ANONYMIZATION AND TEMPLATES
 
-Șirurile sensibile pot fi ascunse înainte de a fi trimise către API-ul de traducere și restabilite în rezultatul final. Sunt disponibile trei surse de reguli de anonimizare: un fișier dicționar (**--xlate-anonymize**), marcaje încorporate în documentul propriu-zis (**--xlate-anonymize-mark**) și valori din secțiunea de antet YAML (**--xlate-frontmatter**). Fiecare șir este înlocuit cu o etichetă de categorie, cum ar fi `<person id=1 />`, în timpul transmiterii. Ascunderea vizează doar transmiterea către API: fișierele din cache-ul local stochează textul simplu restaurat. Utilizați **--xlate-dryrun** pentru a verifica exact ce ar fi transmis.
+Șirurile sensibile pot fi ascunse înainte de a fi trimise către API-ul de traducere și restabilite în ieșire. Sunt disponibile trei surse de reguli de anonimizare: un fișier dicționar (**--xlate-anonymize**), marcaje încorporate în documentul propriu-zis (**--xlate-anonymize-mark**) și valori din secțiunea de antet YAML (**--xlate-frontmatter**). Fiecare șir este înlocuit cu o etichetă de categorie, cum ar fi  `<person id="1" />`în timpul transmiterii. Obiectivul ascunderii vizează exclusiv transmisia către API: fișierele din cache-ul local stochează textul simplu restaurat. Utilizați  **--xlate-dryrun**pentru a verifica exact ce ar fi transmis.
 
 Pentru documentele de tip formular (rapoarte trimestriale și altele asemenea), definiți actorii de la început și faceți referire la ei în corpul textului:
 
@@ -140,7 +142,7 @@ Excludeți blocurile embedz din traducere atunci când un document le conține:
 
     În acest moment, sunt disponibile următoarele motoare
 
-    - **gpt5**: gpt-5.5 (via the `llm` command)
+    - **gpt5**: gpt-5.6-terra (via the `llm` command)
     - **deepl**: DeepL API (via the `deepl` command)
     - **gpt3**: gpt-3.5-turbo (legacy, via the `gpty` command)
     - **gpt4o**: gpt-4o-mini (legacy, via the `gpty` command)
@@ -238,7 +240,7 @@ Excludeți blocurile embedz din traducere atunci când un document le conține:
 
 - **--xlate-prompt**=_text_
 
-    Specificați o solicitare personalizată care să fie trimisă motorului de traducere. Această opțiune este disponibilă pentru motoarele LLM (`gpt3`, `gpt4o`, `gpt5`), dar nu și pentru DeepL. Puteți personaliza comportamentul traducerii oferind instrucțiuni specifice modelului de IA. Dacă promptul conține `%s`, acesta va fi înlocuit cu numele limbii țintă.
+    Specificați o solicitare personalizată care să fie trimisă motorului de traducere. Această opțiune este disponibilă pentru motoarele LLM (`gpt3`, `gpt4o`, `gpt5`), dar nu și pentru DeepL. Puteți personaliza comportamentul traducerii oferind instrucțiuni specifice modelului de IA. Dacă promptul conține `%s`, acesta va fi înlocuit cu numele limbii țintă. Pentru motorul `gpt5` bazat pe LLM, documentul este furnizat separat sub forma unei solicitări JSON al cărei element `input` reprezintă matricea care urmează să fie tradusă, iar elementul opțional `context` conține date de referință. O instrucțiune fixă care tratează acești membri ca date ale documentului, nu ca comenzi, este adăugată chiar și atunci când se utilizează o solicitare personalizată.
 
 - **--xlate-context**=_text_
 
@@ -247,7 +249,7 @@ Excludeți blocurile embedz din traducere atunci când un document le conține:
 - **--xlate-context-window**=_n_
 
     (Context-aware engines only, e.g. `gpt5` on the llm backend)
-    Numărul de blocuri traduse înconjurătoare transmise ca context de referință la retraducerea blocurilor modificate (implicit 2). Contextul include, de asemenea, textul sursă brut din jurul regiunii modificate (titluri, structura listei, legende) și, atunci când este disponibilă, versiunea anterioară a textului modificat recuperată din cache, astfel încât formularea nemodificată să fie păstrată. Setați la 0 pentru a dezactiva complet traducerea bazată pe context. Rețineți că fiecare regiune modificată este tradusă într-un apel API separat, iar contextul poate adăuga până la aproximativ 8000 de caractere la promptul sistemului, astfel încât traducerea bazată pe context implică un cost suplimentar în schimbul consecvenței.
+    Numărul de blocuri traduse înconjurătoare transmise ca context de referință la retraducerea blocurilor modificate (implicit 2). Contextul include, de asemenea, textul sursă brut din jurul regiunii modificate (titluri, structura listei, legende) și, atunci când este disponibilă, versiunea anterioară a textului modificat recuperată din cache, astfel încât formularea neschimbată să fie păstrată. Setați la 0 pentru a dezactiva complet traducerea bazată pe context. Rețineți că fiecare regiune modificată este tradusă printr-un apel API separat, iar contextul poate adăuga până la aproximativ 8000 de caractere la solicitarea JSON a utilizatorului; astfel, traducerea bazată pe context implică un cost suplimentar în schimbul consecvenței. Contextul derivat din document este exclus din promptul sistemului.
 
 - **--xlate-cache-seed**=_file_
 
@@ -260,7 +262,7 @@ Excludeți blocurile embedz din traducere atunci când un document le conține:
         [ { "category": "person",  "text": "山田太郎" },
           { "category": "company", "regex": "アクメ(株式会社)?" } ]
 
-    sau într-un format simplu pe linii (`category pattern`, `/.../` pentru expresii regulate). Fiecare element este înlocuit cu o etichetă de categorie, cum ar fi `<person id=1 />`; același șir primește întotdeauna aceeași etichetă, astfel încât modelul să poată ține evidența identității fiecăruia. Câmpurile JSON necunoscute sunt ignorate, astfel încât generatoarele (de exemplu, un LLM local care extrage entități) pot adăuga propriile adnotări. Categoria `lit` este rezervată. Fișierele din cache-ul local stochează în continuare textul simplu restaurat: obiectivul ascunderii vizează doar transmiterea prin API.
+    sau într-un format simplu de linie (`category pattern`,  `/.../`pentru expresii regulate). Fiecare element este înlocuit cu o etichetă de categorie, cum ar fi `<person id="1" />`; același șir primește întotdeauna aceeași etichetă, astfel încât modelul să poată ține evidența identității fiecăruia. Câmpurile JSON necunoscute sunt ignorate, astfel încât generatoarele (de exemplu, un LLM local care extrage entități) pot adăuga propriile adnotări. Categoria  `lit`este rezervată. Fișierele din cache-ul local stochează în continuare textul simplu restaurat: ascunderea vizează doar transmiterea prin API.
 
     Un dicționar poate fi generat de un instrument extern — de exemplu, un model local care extrage entități sensibile:
 
@@ -303,6 +305,10 @@ Excludeți blocurile embedz din traducere atunci când un document le conține:
 - **--**\[**no-**\]**xlate-progress** (Default: True)
 
     Vedeți rezultatul traducerii în timp real în ieșirea STDERR. Datele `From` sunt afișate așa cum sunt transmise, după anonimizare și mascare.
+
+- **--xlate-review**
+
+    Pentru un bloc modificat unu-la-unu, afișați cel mai mic interval contiguu modificat din sursa veche și cea nouă, urmat de intervalul corespunzător din traducerea veche și cea nouă. Raportul este scris în STDERR, nu efectuează niciun apel API suplimentar și este omis atunci când blocurile vechi și noi nu pot fi împerecheate fără ambiguitate.
 
 - **--xlate-stripe**
 

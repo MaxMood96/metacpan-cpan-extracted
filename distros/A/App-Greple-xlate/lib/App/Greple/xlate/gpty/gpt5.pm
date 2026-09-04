@@ -1,6 +1,6 @@
 package App::Greple::xlate::gpty::gpt5;
 
-our $VERSION = "2.01";
+our $VERSION = "2.02";
 
 =head1 NAME
 
@@ -245,7 +245,7 @@ my %param = (
               prompt => <<END
 Translate the following JSON array into %s.
 For each input array element, output only the corresponding translated element at the same array index.
-If an element is a blank string or an XML-style marker tag (e.g., "<m id=1 />"), leave it unchanged and do not translate it.
+Leave blank strings unchanged. Within every element, preserve XML-style marker tags (e.g., '<m id="1" />') exactly and translate only the surrounding text.
 Do not output the original (pre-translation) text under any circumstances.
 The number and order of output elements must always match the input exactly: output element n must correspond to input element n.
 Output only the translated elements or unchanged tags/blank strings as a JSON array.

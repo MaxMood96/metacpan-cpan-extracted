@@ -43,7 +43,7 @@ for my $p (@paths) {
         # bounded like the drain above. A count that never arrives still
         # fails, just after the wait rather than before it.
         my $ws;
-        $deadline = time + 15;
+        $deadline = time + 60;
         while (time < $deadline) {
             $ws = $q->list_workers;
             last if $ws->{total} == 3;
@@ -72,7 +72,7 @@ for my $p (@paths) {
     my $h = pq_start(['worker', '--app', $app, '-j', '1'],
                      env => { PUNK_QUEUE_NO_HM_ABI => 1 });
 
-    my $deadline = time + 15;
+    my $deadline = time + 60;
     my @before;
     while (time < $deadline) {
         @before = map { $_->{pid} }
@@ -85,7 +85,10 @@ for my $p (@paths) {
 
     kill 'HUP', $h->{pid};
 
-    $deadline = time + 15;
+    # a recycle is an exit and a spawn, and the spawn is a fresh perl:
+    # the window has to hold both on a box that is not idle, or the poll
+    # ends in the gap between them and reports no child at all.
+    $deadline = time + 60;
     my @after;
     while (time < $deadline) {
         @after = map { $_->{pid} }

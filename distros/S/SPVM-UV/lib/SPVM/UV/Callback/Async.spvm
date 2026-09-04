@@ -1,0 +1,10 @@
+# Copyright (c) 2026 Yuki Kimoto
+# MIT License
+
+class UV::Callback::Async : interface_t {
+  
+  use UV::Handle::Async;
+  
+  required method : void ($uv_async : UV::Handle::Async);
+  
+}

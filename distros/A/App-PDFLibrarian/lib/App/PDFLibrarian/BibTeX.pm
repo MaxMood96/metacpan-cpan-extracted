@@ -19,7 +19,7 @@ use strict;
 use warnings;
 
 package App::PDFLibrarian::BibTeX;
-$App::PDFLibrarian::BibTeX::VERSION = '6.2.3';
+$App::PDFLibrarian::BibTeX::VERSION = '6.2.4';
 use parent 'Exporter';
 
 use Capture::Tiny;

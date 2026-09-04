@@ -1,0 +1,10 @@
+# Copyright (c) 2026 Yuki Kimoto
+# MIT License
+
+class UV::Callback::Timer : interface_t {
+  
+  use UV::Handle::Timer;
+  
+  required method : void ($uv_timer : UV::Handle::Timer);
+  
+}

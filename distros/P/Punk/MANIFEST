@@ -67,6 +67,7 @@ ignore.txt
 include/pk_abi.h
 include/punk/pk_abi_impl.h
 include/punk/punk_accept.h
+include/punk/punk_afterres.h
 include/punk/punk_app.h
 include/punk/punk_asset.h
 include/punk/punk_auth.h
@@ -260,12 +261,14 @@ t/0121-scope.t
 t/0122-mount.t
 t/0130-not-found.t
 t/0131-before-request.t
+t/0132-after-response.t
 t/0200-context.t
 t/0210-response.t
 t/0211-respond-to.t
 t/0220-cookie.t
 t/0221-cookie-signed.t
 t/0230-max-body.t
+t/0240-body-stream.t
 t/0300-views.t
 t/0301-stencil-abi.t
 t/0302-render-layout.t
@@ -329,6 +332,8 @@ t/1003-awaitable-conformance.t
 t/1050-asyncawait.t
 t/1010-ws-codec.t
 t/1011-ws-live.t
+t/1012-ws-origin.t
+t/1013-after-response-live.t
 t/1020-sse.t
 t/1030-room-bus.t
 t/1031-sse-bus.t
@@ -358,6 +363,7 @@ t/1210-proxy-parse.t
 t/1211-proxy.t
 t/1220-ratelimit.t
 t/1221-proxy-ratelimit.t
+t/1222-route-ratelimit.t
 t/1230-log.t
 t/1240-ua.t
 t/1300-generate.t

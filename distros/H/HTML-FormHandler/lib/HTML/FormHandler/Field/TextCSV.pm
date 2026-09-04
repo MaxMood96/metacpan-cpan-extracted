@@ -1,6 +1,6 @@
 package HTML::FormHandler::Field::TextCSV;
 # ABSTRACT: CSV Text field from multiple
-$HTML::FormHandler::Field::TextCSV::VERSION = '0.40068';
+$HTML::FormHandler::Field::TextCSV::VERSION = '0.410001';
 use HTML::FormHandler::Moose;
 extends 'HTML::FormHandler::Field::Text';
 
@@ -53,7 +53,7 @@ HTML::FormHandler::Field::TextCSV - CSV Text field from multiple
 
 =head1 VERSION
 
-version 0.40068
+version 0.410001
 
 =head1 SYNOPSIS
 
