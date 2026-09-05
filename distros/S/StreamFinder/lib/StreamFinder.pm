@@ -158,6 +158,11 @@ zeno.fm radio stations and podcasts (L<StreamFinder::Zeno>),
 and L<StreamFinder::Anystream> - search any (other) webpage URL (not supported 
 by any of the other submodules) for streams.  
 
+NOTE:  StreamFinder::Youtube now supports returning a pair of "DASH" format 
+streams if the new "-formatv" option is specified with a DASH (video-only) 
+format specifier coupled with an DASH (audio-only format specifier as the 
+argument for the incumbant "-format" option.
+
 NOTE:  StreamFinder::Odysee has been removed as it is now no longer possible 
 to play stream URLs on their site because they now require their javascript- 
 based browser-player to access (and they don't seem to provide a Youtube 
@@ -539,7 +544,7 @@ use strict;
 use warnings;
 use vars qw(@ISA @EXPORT $VERSION);
 
-our $VERSION = '2.70';
+our $VERSION = '2.71';
 our $DEBUG = 0;
 
 require Exporter;

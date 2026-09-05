@@ -22,13 +22,13 @@ use base qw(Number::Phone::StubCountry);
 use strict;
 use warnings;
 use utf8;
-our $VERSION = 1.20260610205502;
+our $VERSION = 1.20260904101549;
 
 my $formatters = [
                 {
-                  'format' => '$1',
+                  'format' => '$1 $2 $3',
                   'leading_digits' => '[2-9]',
-                  'pattern' => '(\\d{6})'
+                  'pattern' => '(\\d{2})(\\d{2})(\\d{2})'
                 }
               ];
 
@@ -64,12 +64,7 @@ my $validators = {
           )\\d\\d
         )',
                 'toll_free' => '80[257-9]\\d{3}',
-                'voip' => '
-          (?:
-            6[0-36]|
-            88
-          )\\d{4}
-        '
+                'voip' => '6[0-36]\\d{4}'
               };
 my $timezones = {
                '' => [

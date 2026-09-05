@@ -1,0 +1,13 @@
+bin/slimpack
+Changes
+lib/App/SlimPacker.pm
+LICENSE
+Makefile.PL
+MANIFEST
+README.md
+t/bundle.t
+t/cli.t
+t/deps.t
+t/minify.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

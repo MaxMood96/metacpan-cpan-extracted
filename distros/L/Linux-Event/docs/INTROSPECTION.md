@@ -37,15 +37,27 @@ $loop->reset_stats;
 
 Here `n` is the number of managed public objects and `r` is the native fd
 registry capacity. No introspection method runs implicitly during dispatch.
-Queries enumerate the authoritative native Timer heap, watcher ownership, and
-existing Signal, Wakeup, and resolver registries. There is no duplicate
-managed-object registry to update during attachment or dispatch.
+Queries enumerate authoritative native ownership structures such as the timer
+heap, fd registry, signal/event services, and resolver state. There is no
+duplicate managed-object registry to update during attachment or dispatch.
 
 ## Managed objects
 
-`count`, `has`, `objects`, and `census` describe public Stream, Listener,
-Datagram, Timer, Signal, Wakeup, and Process objects. Opaque registrations
-returned by `watch()` and private helper objects are not managed objects.
+`count`, `has`, `objects`, and `census` describe the current public resource
+objects:
+
+- `Linux::Event::IO::Pipe`
+- `Linux::Event::IO::TTY`
+- `Linux::Event::IO::Sock::Stream`
+- `Linux::Event::IO::Sock::Listener`
+- `Linux::Event::IO::Sock::Dgram`
+- `Linux::Event::Kernel::Timer`
+- `Linux::Event::Kernel::Signal`
+- `Linux::Event::Kernel::Event`
+- `Linux::Event::Kernel::Process`
+
+Opaque registrations returned by `watch()` and private helper objects are not
+managed public objects.
 
 `has($object)` requires exact reference identity and current ownership by that
 Loop. A terminal, detached, expired, cancelled, failed, or exited object is not
@@ -56,15 +68,21 @@ order is deliberately unspecified.
 
 ```perl
 {
+    pipe     => 0,
+    tty      => 0,
     stream   => 0,
     listener => 0,
-    datagram => 0,
+    dgram    => 0,
     timer    => 0,
     signal   => 0,
-    wakeup   => 0,
+    event    => 0,
     process  => 0,
 }
 ```
+
+`stream` is the public `IO::Sock::Stream` type. Pipe and TTY have distinct
+entries because they are distinct public resources even though they share the
+same private ordered-byte engine.
 
 ## Object inspection
 
@@ -84,16 +102,23 @@ Registered objects also include `state` and type-specific fields:
 
 | Type | Additional fields |
 | --- | --- |
-| stream | `fd`, `local`, `peer`, `transport`, `pending_bytes`, `read_paused`, `read_eof`, `write_ended`, `write_blocked` |
+| pipe | `fd`, `read_fd`, `write_fd`, `pending_bytes`, `read_paused`, `read_eof`, `read_closed`, `write_ended`, `write_blocked` |
+| tty | `fd`, `read_fd`, `write_fd`, `pending_bytes`, `read_paused`, `read_eof`, `read_closed`, `write_ended`, `write_blocked` |
+| stream | the ordered-byte fields above plus `local`, `peer`, `transport` |
 | listener | `fd`, `host`, `port`, `path`, `family`, `paused`, `accepted` |
-| datagram | `fd`, `local`, `peer`, `connected`, `pending_bytes`, `pending_datagrams`, `read_paused` |
+| dgram | `fd`, `local`, `peer`, `connected`, `pending_bytes`, `pending_datagrams`, `read_paused` |
 | timer | `deadline`, `interval`, `expirations` |
 | signal | `signals` |
-| wakeup | no additional fields in the first API |
+| event | no additional fields |
 | process | `pid`, `pending_stdin_bytes` |
 
-The hash is a snapshot. Address values are immutable Address objects; changing
-the returned hash does not change the inspected object.
+The hash is a snapshot. Address values are immutable `Linux::Event::Address`
+objects; changing the returned hash does not change the inspected object.
+
+For ordered-byte leaves with separate read and write handles, `fd` may be
+undefined while `read_fd` and `write_fd` identify the directional
+registrations. Socket address and transport fields appear only for
+`IO::Sock::Stream` objects.
 
 ## Native resources
 
@@ -102,7 +127,7 @@ the returned hash does not change the inspected object.
 ```perl
 {
     epoll_fd                 => 3,
-    timer_fd                 => 5,       # undef until first Timer
+    timer_fd                 => 5,       # undef until first Kernel::Timer
     registered_fds           => 4,
     public_registrations     => 1,
     internal_registrations   => 3,
@@ -114,7 +139,7 @@ the returned hash does not change the inspected object.
 }
 ```
 
-Internal registrations back managed objects and services such as timerfd,
+Internal registrations back public resources and services such as timerfd,
 signalfd, resolver eventfd, pidfd, and sockets. A registration created directly
 with public `watch()` is reported separately. `timer_fd` is `undef` until the
 Loop first creates its shared timer source.

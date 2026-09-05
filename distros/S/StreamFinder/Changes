@@ -878,3 +878,10 @@ Revision history for StreamFinder
         their streams outside of their javascript-based web-browser player and 
         no longer providing a backup Youtube URL (in other words, more 
         internet encrapification).
+2.71    2026/09/04
+        - StreamFinder::Anystream - Do not try to fetch streams from Youtube 
+        pages as these will normally be handled by StreamFinder::Youtube 
+        before falling through to here (wastes a bunch of compute time when 
+        no streams matching the specified Youtube format(s) are found).
+        - StreamFinder::Youtube - Fix some Perl "nanny-warnings" and add the 
+        v2.70 "dash" video extension option "-formatv" to the POD docs.

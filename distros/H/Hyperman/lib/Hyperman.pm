@@ -4,7 +4,7 @@ use 5.010;
 use strict;
 use warnings;
 
-our $VERSION = '0.42';
+our $VERSION = '0.43';
 
 require XSLoader;
 XSLoader::load('Hyperman', $VERSION);
@@ -220,6 +220,54 @@ run-time option. B<On Windows every body takes the file>, whatever its size.
 divert on and the decoder wants the octets contiguous, so a
 C<Transfer-Encoding: chunked> request still accumulates in memory and is still
 bounded by C<max_body>.
+
+=back
+
+=head2 Expect: 100-continue
+
+A client with a large body to send may ask permission first - C<Expect:
+100-continue> - and wait for an interim C<100 Continue> before spending the
+upload. Hyperman answers, and nothing is required of the application: this is
+transport, and it is over before the app is called.
+
+    POST /upload HTTP/1.1
+    Content-Length: 104857600
+    Expect: 100-continue
+                                    <- HTTP/1.1 100 Continue
+    ...the body                     -> and only now
+
+The permission is worth having because a server that never answers does not
+break such a client, it B<stalls> it - for however long that client waits
+before giving up and sending anyway, which is a second in curl and in most of
+the Java clients, on every request.
+
+The B<refusal> is worth more. C<max_body> is decided on the headers, so a
+request declaring more than the ceiling is answered C<413> with the client
+still waiting - it never sends the body, and the worker never reads it. The
+same is true of the ordinary refusals in front of an upload: whatever answers
+before the body is what the client gets.
+
+The details, none of which an application sees:
+
+=over 4
+
+=item * The interim response is sent B<once per request>, and only when the
+body is not already here. A request that arrives whole is answered with its
+final status instead, which RFC 9110 allows and every client handles.
+
+=item * An expectation this server does not understand - anything that is not
+exactly C<100-continue> - is C<417 Expectation Failed> rather than a silence
+the client would read as a stall.
+
+=item * An C<Expect> from an B<HTTP/1.0> client is ignored, as RFC 9110
+requires: it is not waiting for an interim response and would read one as the
+response itself.
+
+=item * C<HTTP_EXPECT> is still in C<$env>. The header the client sent is not
+hidden, and an application that wants to know it was asked can look.
+
+=item * HTTP/2 has no 100-continue handshake of this kind; the h2 path is
+unaffected.
 
 =back
 

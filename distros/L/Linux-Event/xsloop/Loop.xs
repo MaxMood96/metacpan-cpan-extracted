@@ -1842,7 +1842,7 @@ run_for(loop_obj, seconds)
     }
     LEAVE;
 
-MODULE = Linux::Event::Loop    PACKAGE = Linux::Event::Timer::_Descriptor
+MODULE = Linux::Event::Loop    PACKAGE = Linux::Event::Kernel::Timer::_Descriptor
 PROTOTYPES: DISABLE
 
 SV *
@@ -1874,7 +1874,7 @@ DESTROY(descriptor_obj)
         sv_setiv(SvRV(descriptor_obj), 0);
     }
 
-MODULE = Linux::Event::Loop    PACKAGE = Linux::Event::Timer
+MODULE = Linux::Event::Loop    PACKAGE = Linux::Event::Kernel::Timer
 PROTOTYPES: DISABLE
 
 SV *

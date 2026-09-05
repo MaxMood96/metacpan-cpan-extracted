@@ -5,11 +5,12 @@ use Test::More;
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC SOL_SOCKET SO_SNDBUF);
 
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 {
     package T::WriteEngineReader;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) {
         my $state = $stream->data;
         $state->{received} .= $bytes;
@@ -20,7 +21,7 @@ use Linux::Event::Stream;
 
 {
     package T::WriteEngineWriter;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub stream_options ($class) {
         return high_watermark => 4096, low_watermark => 1024;
     }
@@ -55,7 +56,7 @@ my $writer = T::WriteEngineWriter->new(
     data => $state,
 );
 
-isa_ok($writer->{xs_state}, 'Linux::Event::Stream::XSState');
+isa_ok($writer->{xs_state}, 'Linux::Event::_ByteStream::State');
 ok(!$writer->write($payload), 'large write enters native backpressure');
 ok($writer->pending_bytes > 0, 'native queue reports pending bytes');
 ok($writer->is_write_blocked, 'native blocked state is visible');

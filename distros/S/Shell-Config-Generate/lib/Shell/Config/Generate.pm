@@ -8,7 +8,7 @@ use Carp qw( croak );
 use Exporter ();
 
 # ABSTRACT: Portably generate config for any shell
-our $VERSION = '0.34'; # VERSION
+our $VERSION = '0.35'; # VERSION
 
 
 sub new
@@ -152,6 +152,44 @@ sub _value_escape_powershell
   $value =~ s/(["'`\$#()])/`$1/g;
   $value =~ s/([\0\a\b\f\r\n\t])/$ps{$1}/eg;
   $value;
+}
+
+sub _quote_word_sh
+{
+  "'" . _value_escape_sh(shift) . "'";
+}
+
+sub _quote_word_csh
+{
+  "'" . _value_escape_csh(shift) . "'";
+}
+
+sub _quote_word_fish
+{
+  "'" . _value_escape_fish(shift) . "'";
+}
+
+sub _quote_word_win32
+{
+  my $value = _value_escape_win32(shift);
+  $value =~ /\s/ ? qq{"$value"} : $value;
+}
+
+sub _quote_word_powershell
+{
+  my $value = shift() . '';
+  $value =~ s/(')/''/g;
+  "'$value'";
+}
+
+
+sub unset
+{
+  my($self, $name) = @_;
+
+  push @{ $self->{commands} }, ['unset', $name];
+
+  $self;
 }
 
 
@@ -333,6 +371,35 @@ sub _generate
       }
     }
 
+    elsif($command eq 'unset')
+    {
+      my($name) = @$args;
+      if($shell->is_c)
+      {
+        $buffer .= "unsetenv $name;\n";
+      }
+      elsif($shell->is_fish)
+      {
+        $buffer .= "set -e $name;\n";
+      }
+      elsif($shell->is_bourne)
+      {
+        $buffer .= "unset $name;\n";
+      }
+      elsif($shell->is_cmd || $shell->is_command)
+      {
+        $buffer .= "set $name=\n";
+      }
+      elsif($shell->is_power)
+      {
+        $buffer .= "Remove-Item -Path Env:\\$name -ErrorAction SilentlyContinue\n";
+      }
+      else
+      {
+        croak 'don\'t know how to "unset" with ' . $shell->name;
+      }
+    }
+
     elsif($command eq 'comment')
     {
       if($shell->is_unix || $shell->is_power)
@@ -351,25 +418,62 @@ sub _generate
 
     elsif($command eq 'alias')
     {
+      my($alias, $cmd) = @$args;
+      my @words = ref($cmd) eq 'ARRAY' ? @$cmd : ();
+
       if($shell->is_bourne)
       {
-        $buffer .= "alias $args->[0]=\"$args->[1]\";\n";
+        my $value = @words ? join(' ', map { _quote_word_sh($_) } @words) : $cmd;
+        $buffer .= "alias $alias=\"$value\";\n";
       }
       elsif($shell->is_c)
       {
-        $buffer .= "alias $args->[0] $args->[1];\n";
+        my $value;
+        if(@words)
+        {
+          for(@words)
+          {
+            croak "cannot generate alias '$alias' for " . $shell->name
+              . ": word '$_' contains a space, which is not supported"
+              . " for alias commands on csh/tcsh"
+              if /\s/;
+          }
+          $value = join ' ', map { _quote_word_csh($_) } @words;
+        }
+        else
+        {
+          $value = $cmd;
+        }
+        $buffer .= "alias $alias $value;\n";
       }
       elsif($shell->is_cmd || $shell->is_command)
       {
-        $buffer .= "DOSKEY $args->[0]=$args->[1] \$*\n";
+        my $value = @words ? join(' ', map { _quote_word_win32($_) } @words) : $cmd;
+        $buffer .= "DOSKEY $alias=$value \$*\n";
       }
       elsif($shell->is_power)
       {
-        $buffer .= sprintf("function %s { %s \$args }\n", $args->[0], _value_escape_powershell($args->[1]));
+        if(@words)
+        {
+          my $value = join ' ', map { _quote_word_powershell($_) } @words;
+          $buffer .= sprintf("function %s { & %s \$args }\n", $alias, $value);
+        }
+        else
+        {
+          $buffer .= sprintf("function %s { %s \$args }\n", $alias, _value_escape_powershell($cmd));
+        }
       }
       elsif($shell->is_fish)
       {
-        $buffer .= "alias $args->[0] '$args->[1]';\n";
+        if(@words)
+        {
+          my $value = join ' ', map { _quote_word_fish($_) } @words;
+          $buffer .= "alias $alias \"$value\";\n";
+        }
+        else
+        {
+          $buffer .= "alias $alias '$cmd';\n";
+        }
       }
       else
       {
@@ -435,7 +539,7 @@ Shell::Config::Generate - Portably generate config for any shell
 
 =head1 VERSION
 
-version 0.34
+version 0.35
 
 =head1 SYNOPSIS
 
@@ -674,11 +778,34 @@ first line of the config:
 Turn off the echo off (that is do not put anything at the beginning of
 the config) for DOS/Windows configurations (C<command.com> or C<cmd.exe>).
 
+=head2 unset
+
+ $config->unset( $name );
+
+Unset (remove) an environment variable.
+
 =head2 set_alias
 
  $config->set_alias( $alias => $command )
+ $config->set_alias( $alias => \@command )
 
 Sets the given alias to the given command.
+
+C<$command> may also be given as an array reference of words
+(a command name followed by its arguments).  This works just
+like the plain string form, except that each word is quoted
+individually, so any spaces embedded in a word will be preserved
+as part of that word instead of being treated as a word separator.
+
+B<note> that C<csh> and C<tcsh> aliases work by splicing the
+alias text back into the command line and splitting it again on
+whitespace, with no surviving quoting mechanism, so embedded
+spaces in a word cannot be protected on those shells even when
+C<$command> is given as an array reference.  Rather than silently
+generating an alias that will not work as expected, C<generate>
+and C<generate_file> will throw an exception with a helpful
+message if any word contains a space and the target shell is
+C<csh> or C<tcsh>.
 
 Caveat:
 some older shells do not support aliases, such as
@@ -837,7 +964,7 @@ mohawk
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2017 by Graham Ollis.
+This software is copyright (c) 2017-2026 by Graham Ollis.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

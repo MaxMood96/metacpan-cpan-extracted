@@ -3,12 +3,12 @@ use v5.36;
 use strict;
 use warnings;
 
-use Linux::Event::Datagram;
+use Linux::Event::IO::Sock::Dgram;
 use Linux::Event::Loop;
 
 {
     package Example::UdpClient;
-    use parent 'Linux::Event::Datagram';
+    use parent 'Linux::Event::IO::Sock::Dgram';
 
     sub on_ready ($socket) {
         $socket->send($socket->data->{message});

@@ -1,0 +1,532 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use File::Find;
+use File::Temp qw(tempdir);
+use Getopt::Long ();
+use FindBin;
+use lib "$FindBin::Bin/../lib";
+# App::SlimPacker (and PPI) is loaded lazily: only pack/bundle need it. The
+# fetch-only subcommands (trace/packlists-for/tree) must run without PPI.
+
+# slimpack — build a fatpacked, minified standalone Perl script.
+#
+# By default ('pack') drives the whole fatpack pipeline internally by calling
+# App::FatPacker's methods (no shelling out to the fatpack binary):
+#
+#   1. trace       — run the boot script, record every module it loads
+#   2. core filter — drop core modules via Module::CoreList
+#   3. packlists   — map the surviving modules to their .packlist files
+#   4. tree        — copy module sources into a (temporary) fatlib/
+#   5. bundle      — minify + inline plugins + emit the standalone script
+#
+# Each step is also exposed as a subcommand with the same arguments as fatpack:
+#   slimpack [pack] [options] script
+#   slimpack trace [--to=FILE|--to-stderr] [--use=MODULE] script
+#   slimpack packlists-for MODULE...
+#   slimpack tree [PACKLIST ...]
+#   slimpack bundle [options] script       (minify+bundle only; uses --lib/--fatlib)
+
+my %O;   # shared bundler options
+
+sub _load_fatpacker {
+    eval { require App::FatPacker; 1 } or die
+        "slimpack: this needs App::FatPacker; install it from CPAN\n";
+    return App::FatPacker->new;
+}
+
+sub _load_slimpacker {
+    require App::SlimPacker;
+    App::SlimPacker->import(qw(process perl_switches inline_plugins module_deps plugin_search_paths));
+}
+
+# ---------------------------------------------------------------- pack ----
+sub cmd_pack {
+    my (@args) = @_;
+    my $script = shift @args;
+
+    my $fp = _load_fatpacker;
+    _load_slimpacker;
+
+    # 1. trace (slurp from STDOUT)
+    my $trace = $fp->trace(args => [$script, @args]);
+    my @modules = grep { length } split /\r?\n/, $trace;
+
+    # 2. drop core modules (is_core expects the "Foo::Bar" form)
+    require Module::CoreList;
+    my @noncore;
+    for my $m (@modules) {
+        (my $name = $m) =~ s{/}{::}g;
+        $name =~ s{\.pm$}{};
+        push @noncore, $m unless Module::CoreList::is_core($name);
+    }
+    @modules = @noncore;
+
+    # 3+4. packlists -> tree, into a temp dir we throw away. Debian- and
+    # hand-installed modules have no .packlist, so any noncore dep that fatpack
+    # couldn't resolve is copied from its @INC path instead.
+    my $tmp = tempdir(CLEANUP => 1);
+    my $fatlib = "$tmp/fatlib";
+    my @packlists = $fp->packlists_containing(\@modules);
+    $fp->packlists_to_tree($fatlib, \@packlists);
+    _bundle_unpacklisted($fp, $fatlib, $_) for @modules;
+
+    # 5. bundle from that temp fatlib
+    local $O{fatlib} = $fatlib;
+    return cmd_bundle($script);
+}
+
+# Copy modules that fatpack couldn't locate a .packlist for into the fatlib,
+# resolving each from its real @INC path. Recurses into any dependency of those
+# modules that is loadable, non-core, and likewise missing a reachable packlist.
+my (%resolved, %copying);
+# Normalize a module name or module-path (e.g. `File::HomeDir`, `File/HomeDir.pm`)
+# to the filename form used in @INC lookups and as a fatlib-relative target path.
+sub _mod_to_path {
+    my ($mod) = @_;
+    $mod =~ s{::}{/}g;
+    $mod =~ s{\.pm$}{};
+    return "$mod.pm";
+}
+
+sub _bundle_unpacklisted {
+    my ($fp, $fatlib, $mod) = @_;
+
+    my $path = _mod_to_path($mod);
+    return if $copying{$path}++;         # break cycles
+    my $file;
+    if (exists $resolved{$path}) {
+        $file = $resolved{$path};
+    } else {
+        local @INC = ('lib', @INC);
+        my $ok = eval { require $path; 1 };
+        $file = $ok ? $INC{$path} : undef;
+        $resolved{$path} = $file || '';
+    }
+    my $target = "$fatlib/$path";
+    if ($file && -f $file && !-f $target) {
+        require File::Basename; require File::Path; require File::Copy;
+        File::Path::mkpath(File::Basename::dirname($target));
+        File::Copy::copy($file, $target)
+            or warn "slimpack: cannot copy $file: $!\n";
+        my $src = do { local $/; open my $fh, '<', $file or die "Cannot read $file: $!"; <$fh> };
+        for my $dep (module_deps($src)) {
+            require Module::CoreList;
+            next if Module::CoreList::is_core($dep);
+            local $SIG{__WARN__} = sub {};
+            my ($dpath) = $fp->packlists_containing([$dep]);
+            _bundle_unpacklisted($fp, $fatlib, $dep) unless $dpath;
+        }
+    }
+    delete $copying{$path};
+}
+
+# --------------------------------------------------------------- trace ----
+sub cmd_trace {
+    my (@args) = @_;
+
+    my $fp = _load_fatpacker;
+
+    my @use;
+    my ($file, $to_stderr);
+    Getopt::Long::Configure('no_ignorecase');
+    Getopt::Long::GetOptionsFromArray(\@args,
+        'to=s'      => \$file,
+        'to-stderr' => \$to_stderr,
+        'use=s'     => \@use,
+    ) or exit 2;
+    die "slimpack trace: --to and --to-stderr are mutually exclusive\n"
+        if $file && $to_stderr;
+
+    my $script = shift @args;
+    die "slimpack trace: missing boot script\n" unless defined $script;
+
+    $file ||= 'fatpacker.trace';
+    if (!$to_stderr and -e $file) {
+        unlink $file or die "Couldn't remove old trace file: $!";
+    }
+    my $arg = $to_stderr ? '>&STDERR' : ">>${file}";
+    $fp->trace(use => \@use, args => [$script, @args], output => $arg);
+}
+
+# --------------------------------------------------------- packlists ----
+sub cmd_packlists_for {
+    my (@args) = @_;
+    my $fp = _load_fatpacker;
+    # Normalise module names (Carp, File::HomeDir) to the path form
+    # (Carp.pm, File/HomeDir.pm) that FatPacker's require expects; bare
+    # `require "Carp"` would otherwise fail to locate the module.
+    my @paths = map { _mod_to_path($_) } @args;
+    my @packlists = $fp->packlists_containing(\@paths);
+    print "$_\n" for @packlists;
+}
+
+# ---------------------------------------------------------------- tree ----
+sub cmd_tree {
+    my (@args) = @_;
+    my $fp = _load_fatpacker;
+    $fp->packlists_to_tree($O{fatlib}, \@args);
+}
+
+# ------------------------------------------------------------- bundle ----
+sub cmd_bundle {
+    my ($script) = @_;
+
+    _load_slimpacker;
+    my $lib    = $O{lib};
+    my $fatlib = $O{fatlib};
+    my $have_program = @{$O{e}||[]} || @{$O{E}||[]};
+    die "slimpack bundle: missing boot script\n"
+        if !defined $script && !$have_program;
+    if (defined $script && $have_program) {
+        warn "slimpack: ignoring script $script (using -e/-E)\n";
+    }
+
+    my @pm_files;
+    File::Find::find({ wanted => sub {
+        return unless /\.pm$/;
+        push @pm_files, $File::Find::name;
+    }, no_chdir => 1 }, grep { -d } ($fatlib, $lib));
+
+    my $boot_text = _boot_text($script);
+    my $strip_re = qr{^(?:\Q$lib\E|\Q$fatlib\E)/}x;
+
+    # lib class index for plugin inlining
+    my %classes;
+    for my $path (@pm_files) {
+        next unless $path =~ m{^\Q$lib\E/};
+        (my $cp = $path) =~ s/$strip_re//;
+        $cp =~ s{/}{::}g;
+        $cp =~ s{\.pm$}{};
+        $classes{$cp} = 1;
+    }
+
+    # Decide which files to bundle
+    my @paths_to_bundle;
+    if ($O{bundle_lib_all}) {
+        @paths_to_bundle = sort @pm_files;
+    } else {
+        my (%lib_path, %fatlib_mod);
+        for my $path (@pm_files) {
+            (my $mod = $path) =~ s/$strip_re//;
+            $mod =~ s{/}{::}g;
+            $mod =~ s{\.pm$}{};
+            if ($path =~ m{^\Q$fatlib\E/}) {
+                $fatlib_mod{$mod} = 1;
+            } elsif ($path =~ m{^\Q$lib\E/}) {
+                $lib_path{$mod} = $path;
+            }
+        }
+        my %to_bundle;
+        for my $path (@pm_files) {
+            next unless $path =~ m{^\Q$fatlib\E/};
+            $to_bundle{$path} = 1;
+        }
+        my %seen;
+        my @unresolved;
+        # When inline_plugins is on, the plugin-finder module (e.g.
+        # Module::Pluggable) is replaced in the boot text by static `require`s of
+        # the actual plugin classes, so we must NOT bundle the finder (nor chase
+        # it through the $INC fallback) — that would bloat the bundle and defeat
+        # the inlining.
+        my %inlined_finder;
+        if ($O{inline_plugins}) {
+            my $searched = plugin_search_paths($boot_text);
+            if (%$searched) {
+                %inlined_finder = map { $_ => 1 } qw(Module::Pluggable);
+            }
+        }
+        my $enqueue;
+        $enqueue = sub {
+            my ($mod) = @_;
+            return if $seen{$mod}++;
+            return if $inlined_finder{$mod};
+            require Module::CoreList;
+            return if Module::CoreList::is_core($mod);
+            my $path = $lib_path{$mod};
+            if (!defined $path) {
+                if ($fatlib_mod{$mod}) {
+                    return;
+                }
+                # Module has no .packlist (Debian/hand-installed): copy it from
+                # @INC into the fatlib so it still gets bundled.
+                my $fp = _load_fatpacker;
+                _bundle_unpacklisted($fp, $fatlib, $mod);
+                my $copied = "$fatlib/" . _mod_to_path($mod);
+                if (-f $copied) {
+                    $fatlib_mod{$mod} = 1;
+                    $to_bundle{$copied} = 1;
+                    my $src = do { local $/; open my $fh, '<', $copied or die "Cannot read $copied: $!"; <$fh> };
+                    $enqueue->($_) for module_deps($src);
+                } else {
+                    push @unresolved, $mod;
+                }
+                return;
+            }
+            return if $to_bundle{$path};
+            $to_bundle{$path} = 1;
+            my $src = do { local $/; open my $fh, '<', $path or die "Cannot read $path: $!"; <$fh> };
+            $enqueue->($_) for module_deps($src);
+        };
+        $enqueue->($_) for module_deps($boot_text);
+        if ($O{inline_plugins}) {
+            my $searched = plugin_search_paths($boot_text);
+            if (%$searched) {
+                for my $ns (sort keys %$searched) {
+                    for my $cp (sort grep { m{^\Q$ns\E::[^:]+$} } keys %classes) {
+                        $enqueue->($cp);
+                    }
+                }
+            }
+        }
+        if (@unresolved) {
+            my @genuine;
+            require Module::CoreList;
+            for my $mod (@unresolved) {
+                (my $name = $mod) =~ s{/}{::}g;
+                $name =~ s{\.pm$}{};
+                push @genuine, $mod unless Module::CoreList::is_core($name);
+            }
+            if (@genuine) {
+                warn "slimpack: unresolved dependencies: @genuine\n";
+            }
+        }
+        @paths_to_bundle = sort keys %to_bundle;
+    }
+
+    # path -> meta for rename decision and %INC keys
+    my %meta;
+    for my $path (@paths_to_bundle) {
+        my $is_fatlib = ($path =~ m{^\Q$fatlib\E/});
+        (my $inc = $path) =~ s/$strip_re//;
+        $meta{$path} = { fatlib => $is_fatlib, inc_key => $inc };
+    }
+
+    my @modules;
+    for my $path (@paths_to_bundle) {
+        open my $fh, '<', $path or die "Cannot read $path: $!";
+        my $src = do { local $/; <$fh> };
+        close $fh;
+        my $out = $O{no_minify} ? $src : process($src, rename => $O{no_rename} ? 0 : !$meta{$path}{fatlib});
+        $out =~ s/^#!\S+//;
+        push @modules, $out;
+    }
+
+    my $main = $boot_text;
+    $main = process($main) unless $O{no_minify};
+    $main =~ s/^#!\S+//;
+    $main =~ s{use lib[^;]+;}{}g;
+    $main = inline_plugins($main, \%classes) if $O{inline_plugins};
+
+    # Lazy @INC hook (mirrors App::FatPacker): bundled module sources are
+    # evaluated exactly when `require`d, so intra-module dependency ordering is
+    # preserved instead of emitting everything top-to-bottom eagerly.
+    my @inc_entries = map { $meta{$_}{inc_key} } @paths_to_bundle;
+    my %code_by_file;
+    @code_by_file{@inc_entries} = @modules;
+
+    use B qw(perlstring);
+    my $out = "#!/usr/bin/perl\n";
+    $out .= "BEGIN{\n";
+    $out .= "  my \%sl = (\n";
+    for my $inc (@inc_entries) {
+        $out .= "    " . perlstring($inc) . " => " . perlstring($code_by_file{$inc}) . ",\n";
+    }
+    $out .= "  );\n";
+    $out .= "  my \$class = 'SlimPacked::' . (0+%sl);\n";
+    $out .= "  no strict 'refs';\n";
+    $out .= "  *{(\$class).'::INC'} = sub {\n";
+    $out .= "    my (\$self, \$file) = \@_;\n";
+    $out .= "    return unless my \$code = \$sl{\$file};\n";
+    $out .= "    open my \$fh, '<', \\\$code or die \"slimpack load \$file: \$!\";\n";
+    $out .= "    return \$fh;\n";
+    $out .= "  };\n";
+    $out .= "  unshift \@INC, bless \\%sl, \$class;\n";
+    $out .= "}\n";
+    $out .= $main;
+
+    if ($O{output} eq '-') {
+        print $out;
+    } else {
+        open my $fh, '>', $O{output} or die "Cannot write $O{output}: $!";
+        print $fh $out;
+        close $fh;
+        chmod 0755, $O{output};
+    }
+}
+
+sub _boot_text {
+    my ($script) = @_;
+    if (@{$O{e}||[]} || @{$O{E}||[]}) {
+        return perl_switches($O{m}||[], $O{M}||[], $O{e}||[], $O{E}||[]);
+    }
+    open my $fh, '<', $script or die "Cannot read boot script $script: $!";
+    my $content = do { local $/; <$fh> };
+    close $fh;
+    return perl_switches($O{m}||[], $O{M}||[], []) . $content;
+}
+
+sub _usage {
+    return <<'USAGE';
+slimpack — build a fatpacked, minified standalone Perl script.
+
+By default ('pack') runs the whole pipeline by calling App::FatPacker:
+trace the script, drop core modules, resolve packlists, copy to a temp
+fatlib, then minify + inline plugins and emit the standalone script.
+
+Usage: slimpack [OPTIONS] [COMMAND]
+
+Commands:
+  (default)   [OPTIONS] script       full pipeline: trace, drop core, packlists,
+                                     tree into a temp fatlib, bundle
+  trace       [--to=FILE|--to-stderr] [--use=MODULE] script
+  packlists-for MODULE...
+  tree        [PACKLIST ...]
+  bundle      [OPTIONS] script       minify + bundle only (uses --lib/--fatlib)
+
+Options (pack and bundle):
+  -o, --output FILE    write the bundled script to FILE (default: a.out)
+  --lib DIR            project .pm sources (default: lib)
+  --fatlib DIR         fatpacked module tree (default: fatlib; pack uses a temp one)
+  --no-minify          bundle verbatim, skipping the PPI minification pass
+  --no-rename          minify but leave variable names untouched
+  --no-inline-plugins  keep Module::Pluggable as a runtime dependency
+  --bundle-lib-all     include every .pm under --lib, even if unreferenced
+  -m/-M/-e/-E          build the boot program from perl-binary switches
+USAGE
+}
+
+# ---------------------------------------------------------------------------
+# Dispatch
+# ---------------------------------------------------------------------------
+my $subcmd = 'pack';
+if (@ARGV && $ARGV[0] =~ /^(?:pack|trace|packlists-for|tree|bundle)$/) {
+    $subcmd = $ARGV[0];
+    shift @ARGV;
+}
+
+# Global bundler options are parsed here, before dispatch, so they work on
+# pack and bundle. trace / packlists-for / tree parse their own options.
+%O = (lib => 'lib', fatlib => 'fatlib', output => 'a.out',
+      inline_plugins => 1, no_minify => 0, bundle_lib_all => 0,
+      no_rename => 0,
+      m => [], M => [], e => [], E => []);
+
+if ($subcmd eq 'pack' or $subcmd eq 'bundle') {
+    Getopt::Long::Configure('no_ignorecase');
+    my $ok = Getopt::Long::GetOptionsFromArray(\@ARGV,
+        'lib=s'             => \$O{lib},
+        'fatlib=s'          => \$O{fatlib},
+        'o|output=s'        => \$O{output},
+        'no-minify'         => \$O{no_minify},
+        'no-rename'         => \$O{no_rename},
+        'no-inline-plugins' => sub { $O{inline_plugins} = 0 },
+        'bundle-lib-all'    => \$O{bundle_lib_all},
+        'm=s@'              => $O{m},
+        'M=s@'              => $O{M},
+        'e=s@'              => $O{e},
+        'E=s@'              => $O{E},
+        'help'              => \my $help,
+    ) or exit 2;
+    if ($help) { print _usage(); exit 0; }
+}
+
+if ($subcmd eq 'pack') {
+    cmd_pack(@ARGV);
+} elsif ($subcmd eq 'trace') {
+    cmd_trace(@ARGV);
+} elsif ($subcmd eq 'packlists-for') {
+    cmd_packlists_for(@ARGV);
+} elsif ($subcmd eq 'tree') {
+    cmd_tree(@ARGV);
+} elsif ($subcmd eq 'bundle') {
+    cmd_bundle(@ARGV);
+}
+
+=head1 NAME
+
+slimpack - build a fatpacked, minified standalone Perl script
+
+=head1 SYNOPSIS
+
+  slimpack [options] script
+  slimpack [options] -e/-E 'code' [-m/-M module ...]
+  slimpack trace   [--to=FILE|--to-stderr] [--use=MODULE] script
+  slimpack packlists-for MODULE...
+  slimpack tree    [PACKLIST ...]
+  slimpack bundle  [options] script
+
+=head1 DESCRIPTION
+
+By default (C<pack>) slimpack drives the whole fatpack pipeline internally by
+calling App::FatPacker's methods: it traces the boot script, drops core modules
+with Module::CoreList, resolves their packlists, copies the module sources into
+a temporary fatlib, then minifies and inlines plugins and emits a single
+standalone C<#!/usr/bin/perl> script.
+
+Each pipeline step is also exposed as its own subcommand with the same arguments
+as fatpack, so the individual steps can be run by hand.
+
+=head1 OPTIONS
+
+=over 8
+
+=item -o, --output FILE
+
+Write the bundled script to FILE (default a.out; use C<-> for stdout).
+
+=item --lib DIR
+
+Project C<.pm> sources (default C<lib>).
+
+=item --fatlib DIR
+
+Fatpacked module tree (default C<fatlib>; C<pack> uses a temporary one).
+
+=item --no-minify
+
+Bundle modules and boot program verbatim, skipping the PPI minification pass.
+
+=item --no-rename
+
+Minify but leave variable names untouched (perl C<process(..., rename => 0)>).
+The default minifies and renames C<my> variables.
+
+=item --no-inline-plugins
+
+Keep Module::Pluggable as a runtime dependency instead of inlining plugins.
+
+=item --bundle-lib-all
+
+Include every C<.pm> under --lib, even if not referenced. By default only
+statically-reachable lib modules are bundled; fatlib is always fully included.
+
+=item -m MODULE
+
+Use MODULE with no imports (like perl C<-m>).
+
+=item -M MODULE[=list]
+
+Use MODULE, optional import list or version (like perl C<-M>).
+
+=item -e CODE
+
+Code to bundle; may be repeated (like perl C<-e>).
+
+=item -E CODE
+
+Same as C<-e>, but enables all features (like perl C<-E>).
+
+=back
+
+=head1 AUTHOR
+
+Nicolas Mendoza E<lt>mendoza@pvv.ntnu.noE<gt>
+
+=head1 LICENSE
+
+Artistic License 2.0.
+
+=head1 SEE ALSO
+
+App::FatPacker, fatpack, App::SlimPacker

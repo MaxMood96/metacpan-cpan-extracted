@@ -5,31 +5,46 @@ use Test::More;
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 {
     package T::API::Raw;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) { }
 }
 
 {
     package T::API::Missing;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
 }
 
 {
     package T::API::FramedMissing;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Delimiter', "\n";
 }
 
 {
     package T::API::FramedMixed;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Delimiter', "\n";
     sub on_data ($stream, $bytes) { }
     sub on_message ($stream, $message) { }
+}
+
+{
+    package T::API::GenericSocketOptions;
+    use parent 'Linux::Event::IO::Pipe';
+    sub socket_options ($class) { return keepalive => 1 }
+    sub on_data ($stream, $bytes) { }
+}
+
+{
+    package T::API::GenericSocketHook;
+    use parent 'Linux::Event::IO::Pipe';
+    sub configure_socket ($stream, $fh, $role, $peer) { }
+    sub on_data ($stream, $bytes) { }
 }
 
 my $loop = Linux::Event::Loop->new;
@@ -64,17 +79,23 @@ sub construction_error ($class, @extra) {
     return ($made, $error);
 }
 
-my ($made, $error) = construction_error('Linux::Event::Stream');
-ok(!$made, 'base Stream class cannot be constructed');
-like($error, qr/base class/, 'base-class error is clear');
+my ($made, $error) = construction_error('Linux::Event::_ByteStream');
+ok(!$made, 'private ordered-byte implementation base cannot be constructed');
+like($error, qr/private implementation base.*public ordered-byte leaf/,
+    'private Stream implementation-base error points to the public model');
+
+($made, $error) = construction_error('Linux::Event::_Socket::Stream');
+ok(!$made, 'private stream-socket implementation base cannot be constructed');
+like($error, qr/private implementation base.*IO::Sock::Stream/,
+    'private Socket implementation-base error points to the public leaf');
 
 ($made, $error) = construction_error('T::API::Missing');
-ok(!$made, 'raw subclass must define on_data');
-like($error, qr/must define on_data/, 'missing raw callback error is clear');
+ok(!$made, 'raw subclass requires on_data');
+like($error, qr/requires on_data/, 'missing raw callback error is clear');
 
 ($made, $error) = construction_error('T::API::FramedMissing');
 ok(!$made, 'framed subclass must define on_message');
-like($error, qr/does not define on_message/, 'missing framed callback error is clear');
+like($error, qr/requires on_message/, 'missing framed callback error is clear');
 
 ($made, $error) = construction_error('T::API::FramedMixed');
 ok(!$made, 'framed subclass cannot also define on_data');
@@ -86,5 +107,17 @@ like($error, qr/cannot define on_data/, 'mixed-mode error is clear');
 ok(!$made, 'old per-object callback and transport options are rejected');
 like($error, qr/unknown options: on_data, read_size/,
     'constructor identifies removed object-configured options');
+
+for my $case (
+    ['T::API::GenericSocketOptions', qr/defines socket_options.*stream-socket class/],
+    ['T::API::GenericSocketHook', qr/defines configure_socket.*stream-socket class/],
+) {
+    pipe(my $read, my $write) or die "pipe: $!";
+    my $made = eval { $case->[0]->new(read_fh => $read); 1 };
+    ok(!$made, "$case->[0] rejects misplaced socket policy");
+    like($@, $case->[1], 'ordered-byte/socket boundary mistake fails loudly');
+    close $read;
+    close $write;
+}
 
 done_testing;

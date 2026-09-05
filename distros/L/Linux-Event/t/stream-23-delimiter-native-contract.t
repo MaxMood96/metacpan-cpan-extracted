@@ -8,7 +8,7 @@ use Linux::Event::Loop;
 
 {
     package T::IncludedDelimiterStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Delimiter', '<X>', include_delimiter => 1;
     sub on_message ($stream, $message) {
         $stream->data->{got} = $message;
@@ -18,7 +18,7 @@ use Linux::Event::Loop;
 
 {
     package T::BangParentStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Delimiter', '!';
     sub on_message ($stream, $message) {
         $stream->data->{got} = "parent:$message";

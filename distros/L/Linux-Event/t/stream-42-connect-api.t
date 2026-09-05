@@ -6,12 +6,20 @@ use Socket qw(AF_UNIX);
 
 use Linux::Event::Error;
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 {
     package T::ConnectProbeStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) { }
+}
+
+{
+    package T::ConnectProbeTransport;
+    sub _stream_transport_bind ($self, $fd) {
+        die 'transport must not bind before a connection succeeds';
+    }
 }
 
 my $loop = Linux::Event::Loop->new;
@@ -71,6 +79,19 @@ like(exception(sub {
         loop => $loop, unix => '/tmp/not-used', surprise => 1,
     );
 }), qr/unknown options: surprise/, 'unknown options are rejected');
+like(exception(sub {
+    T::ConnectProbeStream->connect(
+        host => '127.0.0.1', port => 1, transport => {},
+    );
+}), qr/transport must be an object implementing _stream_transport_bind/,
+    'public connect transport receives a public validation error');
+my $transport = bless {}, 'T::ConnectProbeTransport';
+my $pending = T::ConnectProbeStream->connect(
+    host => '127.0.0.1', port => 1, transport => $transport,
+);
+is($pending->transport, $transport,
+    'connect retains an explicit public transport provider');
+$pending->close;
 
 my $error = Linux::Event::Error->new(
     type      => 'connect',

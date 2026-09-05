@@ -73,7 +73,7 @@ static les_descriptor *
 les_descriptor_from_sv(SV *object)
 {
     if (!SvROK(object) || !sv_derived_from(object,
-            "Linux::Event::Signal::_Descriptor"))
+            "Linux::Event::Kernel::Signal::_Descriptor"))
         croak("not a Signal descriptor object");
     return INT2PTR(les_descriptor *, SvIV(SvRV(object)));
 }
@@ -82,7 +82,7 @@ static les_service *
 les_service_from_sv(SV *object)
 {
     if (!SvROK(object) || !sv_derived_from(object,
-            "Linux::Event::Signal::_Service"))
+            "Linux::Event::Kernel::Signal::_Service"))
         croak("not a Signal service object");
     return INT2PTR(les_service *, SvIV(SvRV(object)));
 }
@@ -90,7 +90,7 @@ les_service_from_sv(SV *object)
 static les_signal *
 les_signal_from_sv(SV *object)
 {
-    if (!SvROK(object) || !sv_derived_from(object, "Linux::Event::Signal"))
+    if (!SvROK(object) || !sv_derived_from(object, "Linux::Event::Kernel::Signal"))
         croak("not a Signal object");
     return INT2PTR(les_signal *, SvIV(SvRV(object)));
 }
@@ -486,7 +486,7 @@ les_service_destroy(les_service *service)
     free(service);
 }
 
-MODULE = Linux::Event::Signal    PACKAGE = Linux::Event::Signal::_Descriptor
+MODULE = Linux::Event::Kernel::Signal    PACKAGE = Linux::Event::Kernel::Signal::_Descriptor
 PROTOTYPES: DISABLE
 
 SV *
@@ -518,7 +518,7 @@ DESTROY(descriptor_obj)
         sv_setiv(SvRV(descriptor_obj), 0);
     }
 
-MODULE = Linux::Event::Signal    PACKAGE = Linux::Event::Signal::_Service
+MODULE = Linux::Event::Kernel::Signal    PACKAGE = Linux::Event::Kernel::Signal::_Service
 PROTOTYPES: DISABLE
 
 SV *
@@ -612,7 +612,7 @@ stats(service_obj)
   OUTPUT:
     RETVAL
 
-MODULE = Linux::Event::Signal    PACKAGE = Linux::Event::Signal
+MODULE = Linux::Event::Kernel::Signal    PACKAGE = Linux::Event::Kernel::Signal
 PROTOTYPES: DISABLE
 
 SV *

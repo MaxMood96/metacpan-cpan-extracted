@@ -123,10 +123,11 @@ die "warmup values must be non-negative\n"
 die "threshold-percent must be non-negative\n" if $threshold_percent < 0;
 
 require Linux::Event;
-require Linux::Event::Listener;
+require Linux::Event::IO::Sock::Listener;
 require Linux::Event::Loop;
-require Linux::Event::Stream;
-require Linux::Event::Timer;
+require Linux::Event::IO::Sock::Stream;
+require Linux::Event::IO::Sock::Stream;
+require Linux::Event::Kernel::Timer;
 define_benchmark_classes();
 
 my %configuration = (
@@ -258,19 +259,19 @@ sub define_benchmark_classes () {
     if (eval { require Linux::Event::Framer; 1 }) {
         $framer_declaration = q{use Linux::Event::Framer 'Delimiter', "\n";};
     } else {
-        require Linux::Event::Stream::Framer;
+        require Linux::Event::IO::Sock::Stream::Framer;
         $framer_declaration
-            = q{use Linux::Event::Stream::Framer 'Delimiter', "\n";};
+            = q{use Linux::Event::IO::Sock::Stream::Framer 'Delimiter', "\n";};
     }
 
     my $source = qq{
         package Linux::Event::Bench::Regression::Raw;
-        use parent -norequire, 'Linux::Event::Stream';
+        use parent -norequire, 'Linux::Event::IO::Sock::Stream';
         sub on_data (\$stream, \$bytes) { \$stream->write(\$bytes) }
         sub on_error (\$stream, \$error) { die "raw Stream error: \$error\\n" }
 
         package Linux::Event::Bench::Regression::Framed;
-        use parent -norequire, 'Linux::Event::Stream';
+        use parent -norequire, 'Linux::Event::IO::Sock::Stream';
         $framer_declaration
         sub on_message (\$stream, \$message) { \$stream->send(\$message) }
         sub on_error (\$stream, \$error) { die "framed Stream error: \$error\\n" }
@@ -280,23 +281,23 @@ sub define_benchmark_classes () {
         sub stream_options (\$class) { return idle_timeout => 3_600 }
 
         package Linux::Event::Bench::Regression::Timer;
-        use parent -norequire, 'Linux::Event::Timer';
+        use parent -norequire, 'Linux::Event::Kernel::Timer';
         sub on_timer (\$timer) { main::timer_expired(\$timer) }
 
         package Linux::Event::Bench::Regression::ConnectionServer;
-        use parent -norequire, 'Linux::Event::Stream';
+        use parent -norequire, 'Linux::Event::IO::Sock::Stream';
         sub on_data (\$stream, \$bytes) { return }
         sub on_ready (\$stream) { main::connection_server_ready(\$stream) }
         sub on_error (\$stream, \$error) { die "server Stream error: \$error\\n" }
 
         package Linux::Event::Bench::Regression::ConnectionListener;
-        use parent -norequire, 'Linux::Event::Listener';
+        use parent -norequire, 'Linux::Event::IO::Sock::Listener';
         sub on_error (\$listener, \$error) {
             die "Listener error: \$error\\n";
         }
 
         package Linux::Event::Bench::Regression::ConnectionClient;
-        use parent -norequire, 'Linux::Event::Stream';
+        use parent -norequire, 'Linux::Event::IO::Sock::Stream';
         sub on_data (\$stream, \$bytes) { return }
         sub on_ready (\$stream) { main::connection_client_ready(\$stream) }
         sub on_error (\$stream, \$error) { die "client Stream error: \$error\\n" }

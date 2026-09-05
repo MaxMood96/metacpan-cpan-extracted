@@ -10,12 +10,13 @@ use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 use Time::HiRes qw(time clock_gettime CLOCK_PROCESS_CPUTIME_ID);
 
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 use Linux::Event::TLS;
 
 {
     package Linux::Event::TLS::Bench::Echo;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) {
         $stream->write($bytes)
             or die "benchmark echo entered backpressure\n";
@@ -25,7 +26,7 @@ use Linux::Event::TLS;
 
 {
     package Linux::Event::TLS::Bench::Client;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_transport_ready ($stream) { main::client_ready($stream) }
     sub on_data ($stream, $bytes) { main::client_data($stream, $bytes) }
     sub on_error ($stream, $error) { die "client Stream error: $error\n" }
@@ -106,7 +107,7 @@ if (defined $json_file) {
     close $json_fh or die "close $json_file: $!\n";
 }
 
-say "\nBoth rows use Linux::Event::Stream on AF_UNIX socketpairs.";
+say "\nBoth rows use Linux::Event::IO::Sock::Stream on AF_UNIX socketpairs.";
 say "The TLS row uses verified protocol machinery with local test identity";
 say "and excludes construction/handshake from the timed message interval.";
 

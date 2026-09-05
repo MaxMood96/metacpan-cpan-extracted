@@ -5,11 +5,11 @@ use Test::More;
 use Socket qw(AF_INET SOCK_STREAM inet_aton pack_sockaddr_in);
 
 use Linux::Event::Loop;
-use Linux::Event::Listener;
+use Linux::Event::IO::Sock::Listener;
 
 {
     package T::BatchStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_ready ($stream) {
         push @{ $stream->data->{accepted} }, $stream;
         $stream->loop->stop
@@ -20,7 +20,7 @@ use Linux::Event::Listener;
 
 my $loop = Linux::Event::Loop->new;
 my $state = { accepted => [], target => 7 };
-my $listener = Linux::Event::Listener->new(
+my $listener = Linux::Event::IO::Sock::Listener->new(
     stream_class => 'T::BatchStream',
     loop => $loop, host => '127.0.0.1', port => 0, data => $state,
     max_accept_per_tick => 2,

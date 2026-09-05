@@ -9,14 +9,14 @@ use Scalar::Util qw(blessed);
 use Test::More;
 
 use Linux::Event::Loop;
-use Linux::Event::Process;
+use Linux::Event::Kernel::Process;
 
 our ($OUTPUT, @ERRORS);
 $OUTPUT = '';
 
 {
     package T::MergedProcess;
-    use parent 'Linux::Event::Process';
+    use parent 'Linux::Event::Kernel::Process';
     sub on_stdout ($self, $bytes) { $main::OUTPUT .= $bytes }
     sub on_exit ($self) { $self->loop->stop }
 }
@@ -42,7 +42,7 @@ like($OUTPUT, qr/merged/, 'stderr can be merged into asynchronous stdout');
 
 {
     package T::FileProcess;
-    use parent 'Linux::Event::Process';
+    use parent 'Linux::Event::Kernel::Process';
     sub on_exit ($self) { $self->loop->stop }
 }
 
@@ -85,7 +85,7 @@ close $descriptor_file;
 
 {
     package T::BrokenPipeProcess;
-    use parent 'Linux::Event::Process';
+    use parent 'Linux::Event::Kernel::Process';
     sub on_error ($self, $error) { push @main::ERRORS, $error }
     sub on_exit ($self) { $self->loop->stop }
 }
@@ -106,7 +106,7 @@ ok($pipe_process->exited, 'parent remains alive and observes child exit');
 
 {
     package T::ThrowingExit;
-    use parent 'Linux::Event::Process';
+    use parent 'Linux::Event::Kernel::Process';
     sub on_exit ($self) { die "exit callback failed\n" }
 }
 
@@ -123,7 +123,7 @@ is($throwing->loop, undef,
 our $THROWING_OUTPUT_EXIT = 0;
 {
     package T::ThrowingOutput;
-    use parent 'Linux::Event::Process';
+    use parent 'Linux::Event::Kernel::Process';
     sub on_stdout ($self, $bytes) { die "stdout callback failed\n" }
     sub on_exit ($self) { $main::THROWING_OUTPUT_EXIT++ }
 }

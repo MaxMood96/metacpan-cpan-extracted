@@ -21,6 +21,7 @@ t/anova.t
 t/aoh2hoa.t
 t/aoh2hoh.t
 t/aov.t
+t/arg.crash.regressions.t
 t/assign.HoH.t
 t/assign.t
 t/avals.t
@@ -47,6 +48,9 @@ t/cor_test.pearson.ci.R.t
 t/cor_test.spearman.R.R
 t/cor_test.spearman.R.t
 t/cor_test.tails.t
+t/coxph.R.R
+t/coxph.R.t
+t/croak.leaks.t
 t/croak.messages.t
 t/csort.AoA.t
 t/csort.HoH.t

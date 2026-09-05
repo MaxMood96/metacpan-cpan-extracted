@@ -1,12 +1,4 @@
-/*
- * Linux::Event::Stream internal connection deadline helper
- * =============================================
- *
- * Connection policy and candidate management remain in Perl because they run
- * once per connection. Linux-specific timerfd mechanics live here so Connect
- * can provide deadlines and deferred terminal delivery without blocking the
- * reactor or adding a general scheduler to XSLoop.
- */
+/* Linux::Event private nonblocking connection timerfd helpers. */
 
 #include "EXTERN.h"
 #include "perl.h"
@@ -39,7 +31,7 @@ lec_timer_value(double seconds, struct itimerspec *timer)
     timer->it_value.tv_nsec = nanoseconds;
 }
 
-MODULE = Linux::Event::Stream::_Connection    PACKAGE = Linux::Event::Stream::_Connection
+MODULE = Linux::Event::_Socket::Connection    PACKAGE = Linux::Event::_Socket::Connection
 PROTOTYPES: DISABLE
 
 int
@@ -49,7 +41,7 @@ _timerfd_new(CLASS)
     (void)CLASS;
     RETVAL = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
     if (RETVAL < 0)
-        croak("timerfd_create for Stream connection failed: %s", strerror(errno));
+        croak("timerfd_create for socket connection failed: %s", strerror(errno));
   OUTPUT:
     RETVAL
 
@@ -64,7 +56,7 @@ _timerfd_arm(CLASS, fd, seconds)
     (void)CLASS;
     lec_timer_value(seconds, &timer);
     if (timerfd_settime(fd, 0, &timer, NULL) != 0)
-        croak("timerfd_settime for Stream connection failed: %s", strerror(errno));
+        croak("timerfd_settime for socket connection failed: %s", strerror(errno));
 
 void
 _timerfd_consume(CLASS, fd)
@@ -79,7 +71,7 @@ _timerfd_consume(CLASS, fd)
         count = read(fd, &expirations, sizeof(expirations));
     } while (count < 0 && errno == EINTR);
     if (count < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
-        croak("read Stream connection timerfd failed: %s", strerror(errno));
+        croak("read socket connection timerfd failed: %s", strerror(errno));
 
 void
 _timerfd_close(CLASS, fd)

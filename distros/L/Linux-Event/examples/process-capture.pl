@@ -3,12 +3,12 @@ use v5.36;
 use strict;
 use warnings;
 
+use Linux::Event::Kernel::Process;
 use Linux::Event::Loop;
-use Linux::Event::Process;
 
 {
     package Example::CapturedProcess;
-    use parent 'Linux::Event::Process';
+    use parent 'Linux::Event::Kernel::Process';
 
     sub on_stdout ($process, $bytes) {
         $process->data->{stdout} .= $bytes;

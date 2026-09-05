@@ -6,14 +6,15 @@ use Fcntl qw(F_GETFD F_GETFL FD_CLOEXEC O_NONBLOCK);
 use Socket qw(AF_INET SOCK_STREAM inet_aton pack_sockaddr_in);
 
 use Linux::Event::Loop;
-use Linux::Event::Listener;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Listener;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 our ($LOOP, $STATE);
 
 {
     package T::AcceptedTCPListener;
-    use parent 'Linux::Event::Listener';
+    use parent 'Linux::Event::IO::Sock::Listener';
 
     sub on_accept ($listener, $stream) {
         my $state = $listener->data;
@@ -26,7 +27,7 @@ our ($LOOP, $STATE);
 
 {
     package T::AcceptedTCPStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
 
     sub on_ready ($stream) {
         my $state = $stream->data;

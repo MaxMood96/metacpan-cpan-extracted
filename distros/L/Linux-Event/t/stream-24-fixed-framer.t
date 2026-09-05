@@ -8,7 +8,7 @@ use Linux::Event::Loop;
 
 {
     package T::FixedFourStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Fixed', size => 4;
     sub stream_options ($class) { return read_size => 3 }
     sub on_message ($stream, $message) {

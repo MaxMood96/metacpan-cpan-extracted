@@ -6,13 +6,13 @@ use Test::More;
 use POSIX qw(SIGUSR1 SIGUSR2);
 
 use Linux::Event::Loop;
-use Linux::Event::Signal;
+use Linux::Event::Kernel::Signal;
 
 our (@EVENTS, $EXPECTED, $LOOP);
 
 {
     package T::Signal::Collect;
-    use parent 'Linux::Event::Signal';
+    use parent 'Linux::Event::Kernel::Signal';
     sub on_signal ($signal, $number, $count) {
         push @main::EVENTS, [$signal->data, $number, $count];
         $main::LOOP->stop if @main::EVENTS >= $main::EXPECTED;

@@ -5,10 +5,11 @@ use Test::More;
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 
 use Linux::Event::Loop;
+use Linux::Event::Framer::Varint ();
 
 {
     package T::VarintStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Varint';
     sub stream_options ($class) { return read_size => 1 }
     sub on_message ($stream, $message) {
@@ -24,7 +25,7 @@ use Linux::Event::Loop;
 
 {
     package T::VarintPrefixStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Varint', include_prefix => 1;
     sub on_message ($stream, $message) {
         $stream->data->{got} = $message;
@@ -34,7 +35,7 @@ use Linux::Event::Loop;
 
 {
     package T::VarintLimitedStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Varint', max_frame => 3;
     sub on_message ($stream, $message) {
         Test::More::fail('oversized Varint frame must not emit');
@@ -55,6 +56,19 @@ sub varint_frame ($payload) {
         push @bytes, $byte;
     } while ($value);
     return pack('C*', @bytes) . $payload;
+}
+
+{
+    my $definition = Linux::Event::Framer::Varint->_build_definition;
+    for my $length (
+        0, 1, 2, 126, 127, 128, 255, 256, 16_383, 16_384,
+        65_535, 65_536, 200_000,
+    ) {
+        my $payload = 'x' x $length;
+        is($definition->{frame}->($definition->{native}, $payload),
+            varint_frame($payload),
+            "Varint prefix is byte-equivalent at $length");
+    }
 }
 
 sub read_exact ($fh, $wanted) {

@@ -9,7 +9,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-MODULE = Linux::Event::Datagram    PACKAGE = Linux::Event::Datagram
+MODULE = Linux::Event::_Socket::Dgram    PACKAGE = Linux::Event::_Socket::Dgram
 
 PROTOTYPES: DISABLE
 
@@ -88,10 +88,13 @@ _send_packet(fd, payload, address = &PL_sv_undef)
         address_bytes = SvPVbyte(address, address_length);
     do {
         if (address_bytes) {
-            sent = sendto(fd, payload_bytes, payload_length, MSG_DONTWAIT | MSG_NOSIGNAL,
-                (const struct sockaddr *)address_bytes, (socklen_t)address_length);
+            sent = sendto(fd, payload_bytes, payload_length,
+                MSG_DONTWAIT | MSG_NOSIGNAL,
+                (const struct sockaddr *)address_bytes,
+                (socklen_t)address_length);
         } else {
-            sent = send(fd, payload_bytes, payload_length, MSG_DONTWAIT | MSG_NOSIGNAL);
+            sent = send(fd, payload_bytes, payload_length,
+                MSG_DONTWAIT | MSG_NOSIGNAL);
         }
     } while (sent < 0 && errno == EINTR);
     if (sent < 0)

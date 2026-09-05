@@ -1,3 +1,15 @@
+v0.36  2026-09-04Z
+    - Fixed generation with displayname on identifiers that already exist
+    - Added support for character names as tagnames
+    - Code cleanup
+    - Added support for RRGGBB colour values in colour generation
+    - Added support for Convert::Color, Math::BigRat, and Math::BigFloat
+    - Updated API for Data::Identifier::Interface::Simple
+    - Updated notes on (experimental) interfaces
+    - Allow updating some aspects of registered identifiers
+    - Enforce displaycolour to be an object
+    - Added recommends to Data::URIID::Colour
+
 v0.35  2026-08-16Z
     - Corrected calculation of displaynames from Data::TagDB::Tag objects
     - Workaround a bug in I18N::LangTags::List

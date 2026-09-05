@@ -5,12 +5,12 @@ use Test::More;
 use Scalar::Util qw(weaken);
 
 use Linux::Event::Loop;
-use Linux::Event::Wakeup;
+use Linux::Event::Kernel::Event;
 
 our ($VICTIM, $OWNER_STATE_DESTROYED);
 
 {
-    package Linux::Event::Wakeup::_OwnerState;
+    package Linux::Event::Kernel::Event::_OwnerState;
     sub DESTROY ($self) { $main::OWNER_STATE_DESTROYED++ }
 }
 
@@ -23,8 +23,8 @@ our ($VICTIM, $OWNER_STATE_DESTROYED);
 
 {
     package T::ErrorWakeup;
-    use parent 'Linux::Event::Wakeup';
-    sub on_wakeup ($wakeup, $count) {
+    use parent 'Linux::Event::Kernel::Event';
+    sub on_event ($wakeup, $count) {
         $main::VICTIM->cancel;
         die "Wakeup callback failed\n";
     }
@@ -32,8 +32,8 @@ our ($VICTIM, $OWNER_STATE_DESTROYED);
 
 {
     package T::ReleaseWakeup;
-    use parent 'Linux::Event::Wakeup';
-    sub on_wakeup ($wakeup, $count) { return }
+    use parent 'Linux::Event::Kernel::Event';
+    sub on_event ($wakeup, $count) { return }
 }
 
 subtest 'Wakeup exception completes outer Loop cleanup' => sub {

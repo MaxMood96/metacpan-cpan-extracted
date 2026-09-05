@@ -1,4 +1,4 @@
-package Dist::Zilla::Plugin::MetaConfig 6.037;
+package Dist::Zilla::Plugin::MetaConfig 6.038;
 # ABSTRACT: summarize Dist::Zilla configuration into distmeta
 
 use Moose;
@@ -76,7 +76,7 @@ Dist::Zilla::Plugin::MetaConfig - summarize Dist::Zilla configuration into distm
 
 =head1 VERSION
 
-version 6.037
+version 6.038
 
 =head1 DESCRIPTION
 

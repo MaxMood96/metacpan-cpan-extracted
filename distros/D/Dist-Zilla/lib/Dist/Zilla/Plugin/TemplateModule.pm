@@ -1,4 +1,4 @@
-package Dist::Zilla::Plugin::TemplateModule 6.037;
+package Dist::Zilla::Plugin::TemplateModule 6.038;
 # ABSTRACT: a simple module-from-template plugin
 
 use Moose;
@@ -110,7 +110,7 @@ Dist::Zilla::Plugin::TemplateModule - a simple module-from-template plugin
 
 =head1 VERSION
 
-version 6.037
+version 6.038
 
 =head1 DESCRIPTION
 

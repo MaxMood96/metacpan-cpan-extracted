@@ -9,7 +9,7 @@ use Linux::Event::Loop;
 
 {
     package T::SharedVarintStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Varint';
     sub on_message ($stream, $message) {
         $stream->data->{got} = $message;

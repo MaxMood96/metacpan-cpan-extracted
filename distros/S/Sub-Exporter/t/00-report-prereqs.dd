@@ -7,7 +7,10 @@ do { my $x = {
        'develop' => {
                       'requires' => {
                                       'Encode' => '0',
-                                      'Test::More' => '0',
+                                      'File::Spec' => '0',
+                                      'IO::Handle' => '0',
+                                      'IPC::Open3' => '0',
+                                      'Test::More' => '0.94',
                                       'Test::Pod' => '1.41'
                                     }
                     },
@@ -15,7 +18,7 @@ do { my $x = {
                       'requires' => {
                                       'Carp' => '0',
                                       'Data::OptList' => '0.100',
-                                      'Params::Util' => '0.14',
+                                      'Params::SomeUtil' => '0.14',
                                       'Sub::Install' => '0.92',
                                       'perl' => '5.012',
                                       'strict' => '0',

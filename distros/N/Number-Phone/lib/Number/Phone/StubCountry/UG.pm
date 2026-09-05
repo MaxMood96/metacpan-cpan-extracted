@@ -22,30 +22,34 @@ use base qw(Number::Phone::StubCountry);
 use strict;
 use warnings;
 use utf8;
-our $VERSION = 1.20260610205505;
+our $VERSION = 1.20260904101551;
 
 my $formatters = [
                 {
                   'format' => '$1 $2',
-                  'leading_digits' => '2024',
+                  'leading_digits' => '20240',
                   'national_rule' => '0$1',
                   'pattern' => '(\\d{4})(\\d{5})'
                 },
                 {
                   'format' => '$1 $2',
                   'leading_digits' => '
-            [27-9]|
+            20(?:
+              [0135-7]|
+              2[5-9]
+            )|
             4(?:
               6[45]|
               [7-9]
-            )
+            )|
+            [7-9]
           ',
                   'national_rule' => '0$1',
                   'pattern' => '(\\d{3})(\\d{6})'
                 },
                 {
                   'format' => '$1 $2',
-                  'leading_digits' => '[34]',
+                  'leading_digits' => '[2-4]',
                   'national_rule' => '0$1',
                   'pattern' => '(\\d{2})(\\d{7})'
                 }
@@ -55,7 +59,7 @@ my $validators = {
                 'fixed_line' => '
           20(?:
             (?:
-              240|
+              24[09]|
               30[67]
             )\\d|
             6(?:
@@ -77,7 +81,7 @@ my $validators = {
                 'geographic' => '
           20(?:
             (?:
-              240|
+              24[09]|
               30[67]
             )\\d|
             6(?:
@@ -97,11 +101,14 @@ my $validators = {
           )\\d{5}
         ',
                 'mobile' => '
-          72[48]0\\d{5}|
+          7(?:
+            28|
+            34
+          )0\\d{5}|
           7(?:
             [014-8]\\d|
-            2[0167]|
-            3[016]|
+            2[01467]|
+            3[0167]|
             9[0-589]
           )\\d{6}
         ',
@@ -112,19 +119,19 @@ my $validators = {
                 'voip' => ''
               };
 my %areanames = ();
-$areanames{en} = {"256464", "Mubende",
-"256465", "Masindi",
-"256486", "Kabale\/Rukungiri\/Kisoro",
+$areanames{en} = {"256486", "Kabale\/Rukungiri\/Kisoro",
+"25643", "Jinja",
+"256485", "Mbarara",
 "256473", "Lira",
 "256471", "Gulu",
-"25645", "Mbale",
-"25646", "Mityana",
-"25641", "Kampala",
-"256485", "Mbarara",
 "256483", "Fort\ Portal",
+"256464", "Mubende",
 "256481", "Masaka",
-"25643", "Jinja",
-"256476", "Arua",};
+"25641", "Kampala",
+"25645", "Mbale",
+"256476", "Arua",
+"25646", "Mityana",
+"256465", "Masindi",};
 my $timezones = {
                '' => [
                        'Africa/Kampala'

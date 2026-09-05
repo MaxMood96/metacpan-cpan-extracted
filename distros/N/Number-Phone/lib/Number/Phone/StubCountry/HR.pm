@@ -22,7 +22,7 @@ use base qw(Number::Phone::StubCountry);
 use strict;
 use warnings;
 use utf8;
-our $VERSION = 1.20260610205503;
+our $VERSION = 1.20260904101550;
 
 my $formatters = [
                 {
@@ -124,25 +124,25 @@ my $validators = {
               };
 my %areanames = ();
 $areanames{en} = {"38552", "Istra",
-"38522", "Šibenik\-Knin",
-"38540", "Međimurje",
 "38520", "Dubrovnik\-Neretva",
-"38521", "Split\-Dalmatia",
-"38534", "Požega\-Slavonia",
-"38551", "Primorsko\-goranska",
-"38533", "Virovitica\-Podravina",
+"38523", "Zadar",
 "38547", "Karlovac",
-"38549", "Krapina\-Zagorje",
-"38542", "Varaždin",
-"38544", "Sisak\-Moslavina",
-"38543", "Bjelovar\-Bilogora",
-"38548", "Koprivnica\-Križevci",
-"38532", "Vukovar\-Srijem",
-"3851", "Zagreb",
 "38535", "Brod\-Posavina",
+"38522", "Šibenik\-Knin",
 "38553", "Lika\-Senj",
 "38531", "Osijek\-Baranja",
-"38523", "Zadar",};
+"3851", "Zagreb",
+"38551", "Primorsko\-goranska",
+"38544", "Sisak\-Moslavina",
+"38533", "Virovitica\-Podravina",
+"38549", "Krapina\-Zagorje",
+"38532", "Vukovar\-Srijem",
+"38521", "Split\-Dalmatia",
+"38534", "Požega\-Slavonia",
+"38548", "Koprivnica\-Križevci",
+"38540", "Međimurje",
+"38543", "Bjelovar\-Bilogora",
+"38542", "Varaždin",};
 my $timezones = {
                '' => [
                        'Europe/Zagreb'

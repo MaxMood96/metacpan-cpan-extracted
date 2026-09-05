@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.105';
+our $VERSION = '0.111';
 
 use overload '""' => 'as_string', fallback => 1;
 
@@ -74,10 +74,11 @@ Linux::Event::Error - structured Linux::Event failure details
 
 =head1 DESCRIPTION
 
-Stream, Listener, Datagram, and Process pass this object to C<on_error>;
-constructor-time setup failures may throw it. C<type>, C<operation>,
-C<errno>, and C<message> are the common fields. Other accessors expose context
-only when it applies to the specific operation.
+Linux::Event I/O and Kernel resource leaves pass this object to C<on_error>
+where that resource supports an error callback; constructor-time setup failures
+may also throw it. C<type>, C<operation>, C<errno>, and C<message> are the
+common fields. Other accessors expose context only when it applies to the
+specific operation.
 
 Errors stringify to a concise diagnostic such as
 C<connect: Connection refused (errno=111)>. Do not parse the string; use the
@@ -106,7 +107,7 @@ to the particular error are undefined.
 
 =head2 fatal
 
-True when a Listener failure has made the Listener unusable.
+True when a stream listener failure has made the listener unusable.
 
 =head2 host / port / path / family
 
@@ -119,9 +120,9 @@ Return outbound connection-attempt and resolver details when available.
 =head2 timeout / deadline
 
 Return the configured relative duration and expired absolute monotonic deadline
-for established Stream timeout errors. C<timeout> is undefined for an explicit
-absolute operation deadline and both values are undefined for unrelated error
-types.
+for established ordered-byte timeout errors. C<timeout> is undefined for an
+explicit absolute operation deadline and both values are undefined for
+unrelated error types.
 
 =head2 as_string
 

@@ -4,11 +4,11 @@ use warnings;
 use Test::More;
 
 use Linux::Event::Loop;
-use Linux::Event::Process;
+use Linux::Event::Kernel::Process;
 
 {
     package T::LimitedStdinProcess;
-    use parent 'Linux::Event::Process';
+    use parent 'Linux::Event::Kernel::Process';
     sub process_options ($class) {
         return max_pending_stdin => 4096,
             stdin_high_watermark => 2048,

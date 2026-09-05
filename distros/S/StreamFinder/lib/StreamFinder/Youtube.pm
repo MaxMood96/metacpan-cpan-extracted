@@ -108,7 +108,13 @@ for non-Youtube sites, including videos embedded in IFRAME tags and even
 Rumble.com videos found in some non-Youtube sites (L<StreamFinder::Rumble> 
 required).  See the I<-noiframes> and I<-youtubeonly> flags below for limiting 
 this feature.  Also note:  these videos, etc. are handled here and not 
-by L<StreamFinder::Anystream>.
+by L<StreamFinder::Anystream>.  
+
+NEW:  StreamFinder::Youtube now supports return "DASH" video streams as pairs 
+of streams (an audio-only stream paired with a video-only stream) for media-
+players such as Fauxdacious Mediaplayer that are capable of combining them 
+live while streaming in order to take advantage of Youtube's many modern 
+audio/video format options!  See the new "-formatv" option below.
 
 NOTE:  Streamfinder now strongly recommends using yt-dlp over youtube-dl for 
 extracting streams, and it is now the default app. used.
@@ -116,8 +122,7 @@ extracting streams, and it is now the default app. used.
 Depends:  
 
 L<URI::Escape>, L<HTML::Entities>, L<LWP::UserAgent>, 
-and the separate application program:  yt-dlp, or a compatable program 
-such as youtube-dl.
+and the separate application program:  yt-dlp.
 
 =head1 SUBROUTINES/METHODS
 
@@ -126,17 +131,18 @@ such as youtube-dl.
 =item B<new>(I<ID>|I<url> [, I<-debug> [ => 0|1|2 ]] 
 [, I<-secure> [ => 0|1 ]] 
 [, I<-fast> [ => 0|1 ]] 
-[, I<-format> => "youtube-dl format specification" ] 
-[, I<-format-fallback> => "youtube-dl format specification (2nd try)" ] 
+[, I<-format> => "yt-dlp format specification" ] 
+[, I<-formatv> => "yt-dlp DASH video-only format specification" ] 
+[, I<-format-fallback> => "yt-dlp format specification (2nd try)" ] 
 [, I<-formatonly> [ => 0|1 ]] [, I<-noiframes> [ => 0|1 ]] 
 [, I<-youtubeonly> [ => 0|1 ]] 
 [, I<-user-agent> => "user-agent string"] 
 [, I<-userid> => "youtube-user-id", I<-userpw> => "password"] 
-[, I<-youtube-dl> => "youtube-dl program"] 
-[, I<-youtube-dl-args> => "youtube-dl arguments"] 
-[, I<-youtube-dl-add-args> => "youtube-dl additional arguments"])
+[, I<-youtube-dl> => "yt-dlp"] 
+[, I<-youtube-dl-args> => "yt-dlp arguments"] 
+[, I<-youtube-dl-add-args> => "yt-dlp additional arguments"])
 
-Accepts a youtube.com video ID, or any full URL that yt-dlp (youtube-dl) 
+Accepts a youtube.com video ID, or any full URL that yt-dlp 
 supports and creates and returns a new video object, or I<undef> if the URL 
 is not a youtube-supported video URL or no streams are found.  The URL can 
 be the full URL, 
@@ -152,15 +158,26 @@ the "first" video returned will normally be from the "Uploads" group.
 Channels and users' urls must currently be specified as full URLs, as 
 just specifying an ID will be interpreted as a specific B<video-id>!
 
-If I<-format> is specified, it should be a valid "I<youtube-dl -f>" format 
-string (see the youtube-dl manpage for details).  Examples:  
+If I<-format> is specified, it should be a valid "I<yt-dlp -f>" format 
+string (see the yt-dlp manpage for details).  Examples:  
 "I<mp4[height<=720]/best[height<=720]>" which limits videos to 720p, or 
 "bestaudio" to download only audio streams.
 Default is "B<best>", but if no streams are found, it then tries all, 
 unless I<-formatonly> is specified.
 
+If I<-formatv> is also specified, it should be a valid "I<yt-dlp -f>" 
+"DASH video-only format string (see the yt-dlp manpage for details) and 
+should be combined with an audio-only format string value for the 
+"I<-format>" option, ie: B<-format => "bestaudio", 
+-formatv => "bv[height<=720][vbr<=3500]">.  There is no default value.
+
+DASH streams will be returned as a pairs of streams separated by "|" in 
+the order:  "[audio-stream]|[video-stream]", which one's media-player will 
+need to be able to parse.  Fauxdacious Mediaplayer handles these and 
+combines them inline to produce higher-quality video playback!
+
 If I<-format-fallback> is specified, it should be a valid 
-"I<youtube-dl -f>" format string (see the yt-dlp manpage for details), and 
+"I<yt-dlp -f>" format string (see the yt-dlp manpage for details), and 
 will be used if no streams matching the I<-format> are found.  
 Default is "B<bestaudio>".
 
@@ -173,7 +190,7 @@ yt-dlp is called again with either the -F I<-format-fallback>
 can find).  Default is 0 (false / unset).
 
 If I<-formats_by_url> is specified, it should be a valid hash-ref. of url 
-patterns to match (keys) and valid "I<youtube-dl -f>" format strings.  
+patterns to match (keys) and valid "I<yt-dlp -f>" format strings.  
 This allows for overriding the I<-format> option for URLs (ie. certain 
 non-Youtube ones that provide different formats), particularly useful 
 when I<-formatonly> is also specified.
@@ -712,13 +729,13 @@ DO_YTDL:
 	$ytdlArgs .= ' -f "' . $ytformat . '" '  unless ($ytformat =~ /^a(?:ny|ll)$/i);
 	my $try = 0;
 	my (@ytdldata, @ytStreams);
-	my $wasdashfmt = 0;
+	my $wasdashfmt = '';
 
 RETRYIT:
 	$_ = '';
 	my $cmd = '';
 	print STDERR "====== (RE)TRYIT: TRY=$try= getdash=$wasdashfmt=\n"  if ($DEBUG);
-	unless ($wasdashfmt == 1) {   #RESET STREAMS UNLESS LOOKING FOR 2ND PART OF DASH STREAM:
+	unless ($wasdashfmt eq '1') {   #RESET STREAMS UNLESS LOOKING FOR 2ND PART OF DASH STREAM:
 		$self->{'streams'} = [];
 		$self->{'cnt'} = 0;
 	}
@@ -738,13 +755,13 @@ RETRYIT:
 		$try++;
 		if (defined $self->{'format-fallback'} && $self->{'format-fallback'}) {
 			print STDERR "..1a:No ($ytformat) streams found, try again with ($$self{'format-fallback'})...\n"  if ($DEBUG);
-			$wasdashfmt = shift (@ytStreams)  if ($wasdashfmt == 1 && scalar(@ytStreams) > 0);
+			$wasdashfmt = shift (@ytStreams)  if ($wasdashfmt eq '1' && scalar(@ytStreams) > 0);
 			@ytStreams = ();  #RESET HERE CASE WE HAVE AUDIO STREAM FROM DASH FORMAT!
 			goto RETRYIT  if ($ytdlArgs =~ s/\-f\s+\"[^\"]+\"/\-f \"$$self{'format-fallback'}\"/);
 		}
 		unless ($self->{'formatonly'}) {
 			print STDERR "..1b:No ($ytformat) streams found, try again for any (audio, etc.)...\n"  if ($DEBUG);
-			$wasdashfmt = shift (@ytStreams)  if ($wasdashfmt == 1 && scalar(@ytStreams) > 0);
+			$wasdashfmt = shift (@ytStreams)  if ($wasdashfmt eq '1' && scalar(@ytStreams) > 0);
 			@ytStreams = ();  #RESET HERE CASE WE HAVE AUDIO STREAM FROM DASH FORMAT!
 			goto RETRYIT  if ($ytdlArgs =~ s/\-f\s+\"[^\"]+\"//);
 		}
@@ -801,10 +818,10 @@ RETRYIT:
 	push @{$self->{'streams'}}, @ytStreams;
 	$self->{'cnt'} = scalar @{$self->{'streams'}};
 	print STDERR "-STREAM COUNT=".$self->{'cnt'}."= FMTS=".join('|',@fmtsfound)."= ICON=".$self->{'iconurl'}."=\n"  if ($DEBUG);
-	if ($try == 0 && $wasdashfmt == 0 && $self->{'cnt'} > 0 && defined($self->{'formatv'})) {
+	if ($try == 0 && $wasdashfmt eq '' && $self->{'cnt'} > 0 && defined($self->{'formatv'})) {
 		#NOW LOOK FOR A CORRESPONDING DASH VIDEO STREAM:
 		print STDERR "..1:Now try for dash video stream ($$self{'formatv'})...\n"  if ($DEBUG);
-		$wasdashfmt = 1;
+		$wasdashfmt = '1';
 		$ytformat = $self->{'formatv'};
 		goto RETRYIT  if ($ytdlArgs =~ s/\-f\s+\"[^\"]+\"/\-f \"$ytformat\"/);
 	}
@@ -813,13 +830,13 @@ RETRYIT:
 		$self->{'formatv'} = undef;  #DON'T LOOK FOR DASH VIDEO IN FALLBACK TRIES!
 		if (defined $self->{'format-fallback'}) {
 			print STDERR "..2a:No ($ytformat) streams found, try again with ($$self{'format-fallback'})...\n"  if ($DEBUG);
-			$wasdashfmt = shift (@ytStreams)  if ($wasdashfmt == 1 && scalar(@ytStreams) > 0);
+			$wasdashfmt = shift (@ytStreams)  if ($wasdashfmt eq '1' && scalar(@ytStreams) > 0);
 			@ytStreams = ();  #RESET HERE CASE WE HAVE AUDIO STREAM FROM DASH FORMAT!
 			goto RETRYIT  if ($ytdlArgs =~ s/\-f\s+\"[^\"]+\"/\-f \"$$self{'format-fallback'}\"/);
 		}
 		unless (defined($self->{'formatonly'}) && $self->{'formatonly'}) {
 			print STDERR "..2b:No ($ytformat) streams found, try again for any (audio, etc.)...\n"  if ($DEBUG);
-			$wasdashfmt = shift (@ytStreams)  if ($wasdashfmt == 1 && scalar(@ytStreams) > 0);
+			$wasdashfmt = shift (@ytStreams)  if ($wasdashfmt eq '1' && scalar(@ytStreams) > 0);
 			@ytStreams = ();  #RESET HERE CASE WE HAVE AUDIO STREAM FROM DASH FORMAT!
 			goto RETRYIT  if ($ytdlArgs =~ s/\-f\s+\"[^\"]+\"//);
 		}
@@ -896,7 +913,7 @@ RETRYPAGE:
 			goto RETRYPAGE;
 		}
 	}
-	if ($self->{'cnt'} <= 0 && $wasdashfmt && $wasdashfmt != 1) {
+	if ($self->{'cnt'} <= 0 && $wasdashfmt && $wasdashfmt ne '1') {
 		@{$self->{'streams'}} = ($wasdashfmt);  #FALLBACK TO ANY RESIDUAL DASH AUDIO-STREAM (from formatv).
 		$self->{'cnt'} = 1;
 	}

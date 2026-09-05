@@ -10,7 +10,7 @@ use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 
 use Linux::Event;
 use Linux::Event::Loop;
-use Linux::Event::Process;
+use Linux::Event::Kernel::Process;
 
 my $processes = 1_000;
 my @concurrency = (1, 8, 32);
@@ -37,7 +37,7 @@ die "program must be executable\n" if !-x $program;
 
 {
     package BenchProcess;
-    use parent 'Linux::Event::Process';
+    use parent 'Linux::Event::Kernel::Process';
 
     sub on_exit ($process) {
         my $run = $process->data;

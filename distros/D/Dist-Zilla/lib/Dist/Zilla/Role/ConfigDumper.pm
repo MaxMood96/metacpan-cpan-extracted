@@ -1,4 +1,4 @@
-package Dist::Zilla::Role::ConfigDumper 6.037;
+package Dist::Zilla::Role::ConfigDumper 6.038;
 # ABSTRACT: something that can dump its (public, simplified) configuration
 
 use Moose::Role;
@@ -23,7 +23,7 @@ Dist::Zilla::Role::ConfigDumper - something that can dump its (public, simplifie
 
 =head1 VERSION
 
-version 6.037
+version 6.038
 
 =head1 PERL VERSION
 

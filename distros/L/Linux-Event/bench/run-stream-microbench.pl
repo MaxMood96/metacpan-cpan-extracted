@@ -9,11 +9,12 @@ use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Time::HiRes qw(time clock_gettime CLOCK_PROCESS_CPUTIME_ID);
 
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 {
     package Linux::Event::Bench::RawEchoStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) {
         $stream->write($bytes)
             or die "microbenchmark unexpectedly hit Stream backpressure\n";

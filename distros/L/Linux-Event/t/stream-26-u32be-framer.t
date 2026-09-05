@@ -8,7 +8,7 @@ use Linux::Event::Loop;
 
 {
     package T::U32BEStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'U32BE';
     sub stream_options ($class) { return read_size => 3 }
     sub on_message ($stream, $message) {

@@ -6,15 +6,16 @@ use FindBin qw($Bin);
 use Scalar::Util qw(refaddr);
 
 use Linux::Event::Loop;
-use Linux::Event::Listener;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Listener;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 use Linux::Event::TLS;
 
 our ($LOOP, $STATE, $CLIENT_ID);
 
 {
     package T::IntegratedTLSServer;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::TLS
         cert_file => "$FindBin::Bin/tls-certs/server-cert.pem",
         key_file  => "$FindBin::Bin/tls-certs/server-key.pem",
@@ -40,7 +41,7 @@ our ($LOOP, $STATE, $CLIENT_ID);
 
 {
     package T::IntegratedTLSListener;
-    use parent 'Linux::Event::Listener';
+    use parent 'Linux::Event::IO::Sock::Listener';
 
     sub on_error ($listener, $error) {
         $main::STATE->{error} = "$error";
@@ -57,7 +58,7 @@ our ($LOOP, $STATE, $CLIENT_ID);
 
 {
     package T::IntegratedTLSClient;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::TLS
         ca_file => "$FindBin::Bin/tls-certs/server-cert.pem",
         alpn    => ['les-integrated/1'];

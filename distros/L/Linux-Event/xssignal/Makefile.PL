@@ -4,8 +4,8 @@ use Config;
 use ExtUtils::MakeMaker;
 
 WriteMakefile(
-    NAME             => 'Linux::Event::Signal',
-    VERSION_FROM     => '../lib/Linux/Event/Signal.pm',
+    NAME             => 'Linux::Event::Kernel::Signal',
+    VERSION_FROM     => '../lib/Linux/Event/Kernel/Signal.pm',
     ABSTRACT         => 'Subclass-defined signalfd handling for Linux::Event',
     AUTHOR           => 'Joshua S. Day <hax@cpan.org>',
     LICENSE          => 'perl_5',

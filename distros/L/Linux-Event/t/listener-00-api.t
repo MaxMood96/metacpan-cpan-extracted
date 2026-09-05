@@ -7,13 +7,14 @@ use Scalar::Util qw(blessed);
 
 use Linux::Event::Address;
 use Linux::Event::Error;
-use Linux::Event::Listener;
+use Linux::Event::IO::Sock::Listener;
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 {
     package T::ListenerProbeStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) { }
     sub on_listener_error ($class, $listener, $error) {
         $main::STREAM_LISTENER_ERROR_CALLED++;
@@ -22,7 +23,7 @@ use Linux::Event::Stream;
 
 {
     package T::RecoveringListener;
-    use parent 'Linux::Event::Listener';
+    use parent 'Linux::Event::IO::Sock::Listener';
     sub on_error ($listener, $error) {
         $main::LISTENER_ERROR = $error;
         return;
@@ -35,45 +36,45 @@ my $loop = Linux::Event::Loop->new;
 
 ok(!T::ListenerProbeStream->can('listen'),
     'Stream does not expose Listener construction');
-ok(!Linux::Event::Listener->can('cancel'),
+ok(!Linux::Event::IO::Sock::Listener->can('cancel'),
     'Listener has one close operation and no compatibility alias');
 
-like(exception(sub { Linux::Event::Listener->new(
+like(exception(sub { Linux::Event::IO::Sock::Listener->new(
     stream_class => 'T::ListenerProbeStream', loop => $loop,
 ) }),
     qr/exactly one socket source/, 'one socket source is required');
 like(exception(sub {
-    Linux::Event::Listener->new(
+    Linux::Event::IO::Sock::Listener->new(
         stream_class => 'T::ListenerProbeStream',
         loop => $loop, host => '127.0.0.1', port => 0, unix => '/unused',
     );
 }), qr/exactly one socket source/, 'mixed socket sources are rejected');
 like(exception(sub {
-    Linux::Event::Listener->new(
+    Linux::Event::IO::Sock::Listener->new(
         stream_class => 'T::ListenerProbeStream',
         loop => $loop, host => '127.0.0.1',
     );
 }), qr/port must be an integer/, 'TCP source requires a port');
 like(exception(sub {
-    Linux::Event::Listener->new(
+    Linux::Event::IO::Sock::Listener->new(
         stream_class => 'T::ListenerProbeStream',
         loop => $loop, host => "127.0.0.1\0.invalid", port => 0,
     );
 }), qr/without NUL bytes/, 'host containing a NUL byte is rejected');
 like(exception(sub {
-    Linux::Event::Listener->new(
+    Linux::Event::IO::Sock::Listener->new(
         stream_class => 'T::ListenerProbeStream',
         loop => $loop, unix => "/tmp/linux-event\0.sock",
     );
 }), qr/without NUL bytes/, 'Unix path containing a NUL byte is rejected');
 like(exception(sub {
-    Linux::Event::Listener->new(
+    Linux::Event::IO::Sock::Listener->new(
         stream_class => 'T::ListenerProbeStream',
         loop => $loop, host => '127.0.0.1', port => 70_000,
     );
 }), qr/port must be at most 65535/, 'out-of-range port is rejected');
 like(exception(sub {
-    Linux::Event::Listener->new(
+    Linux::Event::IO::Sock::Listener->new(
         stream_class => 'T::ListenerProbeStream',
         loop => $loop, host => '127.0.0.1', port => 0,
         edge_triggered => 1, max_accept_per_tick => 1,
@@ -81,13 +82,13 @@ like(exception(sub {
 }), qr/requires max_accept_per_tick => 0/,
     'bounded accept drain cannot be edge-triggered');
 like(exception(sub {
-    Linux::Event::Listener->new(
+    Linux::Event::IO::Sock::Listener->new(
         stream_class => 'T::ListenerProbeStream',
         loop => $loop, host => '127.0.0.1', port => 0, surprise => 1,
     );
 }), qr/unknown options: surprise/, 'unknown options are rejected');
 like(exception(sub {
-    Linux::Event::Listener->new(
+    Linux::Event::IO::Sock::Listener->new(
         stream_class => 'T::ListenerProbeStream',
         loop => $loop, host => '127.0.0.1', port => 0, permissions => 0600,
     );
@@ -95,7 +96,7 @@ like(exception(sub {
     'source-specific options cannot silently affect another mode');
 
 my $v6only_error = eval {
-    Linux::Event::Listener->new(
+    Linux::Event::IO::Sock::Listener->new(
         stream_class => 'T::ListenerProbeStream',
         host         => '127.0.0.1',
         port         => 0,
@@ -127,7 +128,7 @@ ok(!$error->fatal, 'Error exposes fatality');
 is("$error", 'accept: Too many open files (errno=24)',
     'Error stringifies with operation and errno');
 
-my $fatal_listener = Linux::Event::Listener->new(
+my $fatal_listener = Linux::Event::IO::Sock::Listener->new(
     stream_class => 'T::ListenerProbeStream',
     host => '127.0.0.1', port => 0,
 );

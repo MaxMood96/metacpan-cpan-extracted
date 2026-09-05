@@ -22,7 +22,7 @@ use base qw(Number::Phone::StubCountry);
 use strict;
 use warnings;
 use utf8;
-our $VERSION = 1.20260610205505;
+our $VERSION = 1.20260904101552;
 
 my $formatters = [
                 {
@@ -83,24 +83,24 @@ my $validators = {
                 'voip' => ''
               };
 my %areanames = ();
-$areanames{en} = {"383280", "Gjilan",
-"38338", "Prishtina",
-"38328", "Mitrovica",
-"38329", "Prizren",
-"383390", "Gjakova",
-"38339", "Peja",
-"383290", "Ferizaj",};
-$areanames{sr} = {"383390", "Ђаковица",
-"38329", "Призрен",
-"383290", "Урошевац",
-"38339", "Пећ",
+$areanames{sr} = {"38328", "Косовска\ Митровица",
 "38338", "Приштина",
-"383280", "Гњилане",
-"38328", "Косовска\ Митровица",};
-$areanames{sq} = {"38328", "Mitrovicë",
-"38338", "Prishtinë",
-"38339", "Pejë",
-"383390", "Gjakovë",};
+"383390", "Ђаковица",
+"383290", "Урошевац",
+"38329", "Призрен",
+"38339", "Пећ",
+"383280", "Гњилане",};
+$areanames{en} = {"383280", "Gjilan",
+"38329", "Prizren",
+"38339", "Peja",
+"383390", "Gjakova",
+"383290", "Ferizaj",
+"38338", "Prishtina",
+"38328", "Mitrovica",};
+$areanames{sq} = {"38338", "Prishtinë",
+"38328", "Mitrovicë",
+"383390", "Gjakovë",
+"38339", "Pejë",};
 my $timezones = {
                '' => [
                        'Europe/Belgrade'

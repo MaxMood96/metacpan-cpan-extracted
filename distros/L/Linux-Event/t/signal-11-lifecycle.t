@@ -6,13 +6,13 @@ use Test::More;
 use POSIX qw(SIG_BLOCK SIG_UNBLOCK SIGUSR1 SIGUSR2);
 
 use Linux::Event::Loop;
-use Linux::Event::Signal;
+use Linux::Event::Kernel::Signal;
 
 our ($CALLS, $LOOP, $VICTIM, $VISIBLE_AFTER_CANCEL, $DESTROYED);
 
 {
     package T::Signal::CancelOthers;
-    use parent 'Linux::Event::Signal';
+    use parent 'Linux::Event::Kernel::Signal';
     sub on_signal ($signal, $number, $count) {
         $main::CALLS++;
         $main::VICTIM->cancel;
@@ -24,7 +24,7 @@ our ($CALLS, $LOOP, $VICTIM, $VISIBLE_AFTER_CANCEL, $DESTROYED);
 
 {
     package T::Signal::Victim;
-    use parent 'Linux::Event::Signal';
+    use parent 'Linux::Event::Kernel::Signal';
     sub on_signal ($signal, $number, $count) { $main::CALLS += 100 }
 }
 
@@ -36,7 +36,7 @@ our ($CALLS, $LOOP, $VICTIM, $VISIBLE_AFTER_CANCEL, $DESTROYED);
 
 {
     package T::Signal::Dies;
-    use parent 'Linux::Event::Signal';
+    use parent 'Linux::Event::Kernel::Signal';
     sub on_signal ($signal, $number, $count) { die "Signal callback failure\n" }
 }
 

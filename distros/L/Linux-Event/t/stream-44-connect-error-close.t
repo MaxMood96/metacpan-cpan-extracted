@@ -7,13 +7,14 @@ use Socket qw(AF_UNIX SOCK_STREAM SOMAXCONN pack_sockaddr_un);
 
 use Linux::Event::Error;
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 our ($LOOP, $ERROR, $READY, $CALLS);
 
 {
     package T::FailedClientStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_ready ($stream) { $main::READY++ }
     sub on_data ($stream, $bytes) { }
     sub on_error ($stream, $error) {
@@ -39,7 +40,7 @@ is($READY // 0, 0, 'failure does not call on_ready');
 our $THROW_CLOSE = 0;
 {
     package T::ThrowingErrorStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) { }
     sub on_error ($stream, $error) { die "stream error callback failed\n" }
     sub on_close ($stream) { $main::THROW_CLOSE++ }
@@ -59,7 +60,7 @@ is($THROW_CLOSE, 1,
 
 {
     package T::ClosedClientStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_ready ($stream) { $main::CALLS++ }
     sub on_data ($stream, $bytes) { }
     sub on_error ($stream, $error) { $main::CALLS++ }

@@ -3,7 +3,7 @@ our $AUTHORITY = 'cpan:GENE';
 
 # ABSTRACT: Provide access to hundreds of chord progressions
 
-our $VERSION = '0.0400';
+our $VERSION = '0.0500';
 
 use strict;
 use warnings;
@@ -13,22 +13,22 @@ use File::ShareDir qw(dist_dir);
 use Music::Scales qw(get_scale_notes);
 use Exporter 'import';
 
+our $share_file = eval { dist_dir('Music-Dataset-ChordProgressions') . '/Chord-Progressions.csv' };
+
 our @EXPORT = qw(
     as_file
     as_list
     as_hash
     transpose
+    $share_file
 );
 
 
 
 sub as_file {
-    my $file = eval { dist_dir('Music-Dataset-ChordProgressions') . '/Chord-Progressions.csv' };
-
-    $file = 'share/Chord-Progressions.csv'
-        unless $file && -e $file;
-
-    return $file;
+    $share_file = 'share/Chord-Progressions.csv'
+        unless $share_file && -e $share_file;
+    return $share_file;
 }
 
 
@@ -99,7 +99,7 @@ Music::Dataset::ChordProgressions - Provide access to hundreds of chord progress
 
 =head1 VERSION
 
-version 0.0400
+version 0.0500
 
 =head1 SYNOPSIS
 
@@ -175,11 +175,11 @@ L<Text::CSV_XS>
 
 =head1 AUTHOR
 
-Gene Boggs <gene@cpan.org>
+Gene Boggs <gene.boggs@gmail.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2021-2023 by Gene Boggs.
+This software is copyright (c) 2021-2026 by Gene Boggs.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

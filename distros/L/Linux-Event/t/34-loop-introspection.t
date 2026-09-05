@@ -5,12 +5,12 @@ use Test::More;
 use Scalar::Util qw(refaddr);
 
 use Linux::Event::Loop;
-use Linux::Event::Timer;
-use Linux::Event::Datagram;
+use Linux::Event::Kernel::Timer;
+use Linux::Event::IO::Sock::Dgram;
 
 {
     package T::IntrospectionTimer;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     sub on_timer ($timer) {
         my $state = $timer->data;
         $state->{running_in_callback} = $timer->loop->running;
@@ -58,10 +58,10 @@ is(refaddr($objects->[0]), refaddr($timer), 'objects returns the exact object');
 is_deeply(
     $loop->census,
     {
-        stream => 0, listener => 0, datagram => 0, timer => 1,
-        signal => 0, wakeup => 0, process => 0,
+        pipe => 0, tty => 0, stream => 0, listener => 0, dgram => 0,
+        timer => 1, signal => 0, event => 0, process => 0,
     },
-    'census includes stable zero-valued type keys',
+    'census includes stable public zero-valued type keys',
 );
 
 my $inspection = $loop->inspect($timer);
@@ -73,7 +73,8 @@ ok(exists $inspection->{deadline}, 'Timer inspection has deadline');
 is($inspection->{interval}, 0, 'Timer inspection has interval');
 is($inspection->{expirations}, 0, 'Timer inspection has expirations');
 
-my $internal = Linux::Event::Datagram::_ReadyTimer->new(after => 60);
+# Private helper used only to verify that backing timers are not public objects.
+my $internal = Linux::Event::_Socket::Dgram::_ReadyTimer->new(after => 60);
 $loop->add($internal);
 is($loop->count, 1, 'internal Timer is excluded from managed objects');
 

@@ -6,11 +6,11 @@ use Test::More;
 use POSIX qw(SIGKILL SIGSTOP SIGUSR1 SIGUSR2);
 
 use Linux::Event::Loop;
-use Linux::Event::Signal;
+use Linux::Event::Kernel::Signal;
 
 {
     package T::Signal::Basic;
-    use parent 'Linux::Event::Signal';
+    use parent 'Linux::Event::Kernel::Signal';
     sub on_signal ($signal, $number, $count) { return }
 }
 
@@ -21,10 +21,10 @@ use Linux::Event::Signal;
 
 {
     package T::Signal::Missing;
-    use parent 'Linux::Event::Signal';
+    use parent 'Linux::Event::Kernel::Signal';
 }
 
-like(exception(sub { Linux::Event::Signal->new(signals => SIGUSR1) }),
+like(exception(sub { Linux::Event::Kernel::Signal->new(signals => SIGUSR1) }),
     qr/abstract base class/, 'base Signal is abstract');
 like(exception(sub { T::Signal::Missing->new(signals => SIGUSR1) }),
     qr/must define on_signal/, 'concrete Signal requires on_signal');
@@ -57,7 +57,7 @@ my $signal = T::Signal::Inherited->new(
     signals => [SIGUSR1, SIGUSR2, SIGUSR1], data => $data,
 );
 isa_ok($signal, 'T::Signal::Inherited');
-isa_ok($signal, 'Linux::Event::Signal');
+isa_ok($signal, 'Linux::Event::Kernel::Signal');
 is_deeply($signal->signals, [SIGUSR1, SIGUSR2],
     'duplicates are removed in first-occurrence order');
 is($signal->state, 'unattached', 'new Signal starts unattached');

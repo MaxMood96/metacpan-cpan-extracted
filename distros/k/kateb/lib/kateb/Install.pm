@@ -1,5 +1,5 @@
 package kateb::Install;
-$kateb::Install::VERSION = '1.1.0';
+$kateb::Install::VERSION = '1.2.1';
 
 use strict;
 use warnings;
@@ -194,6 +194,14 @@ sub _do {
 		_copy_fonts( $target_dir, $archive_file );
 		$local_data->{installedVersions}->{$font_name} = $version;
 		say $c{bgreen} . $font_name . $c{reset} . " installed. version: " . $c{bgreen} . $version . $c{reset};
+	} elsif ($font_name eq 'nastaliq')
+	{
+		my $url = $info->$font_name($version);
+		my $archive_file = catfile($cache_dir, "IranNastaliq-Web.ttf");
+		_download( $url, $archive_file ) ? print "\t[Downloaded]\n" : print "\t[Failed]\n";
+		_copy_fonts( $target_dir, $archive_file );
+		$local_data->{installedVersions}->{$font_name} = $version;
+		say $c{bgreen} . $font_name . $c{reset} . " installed. version: " . $c{bgreen} . $version . $c{reset};
 	} else
 	{
 		my $url = $info->$font_name($version);
@@ -248,7 +256,7 @@ sub _online_version {
 	my $version;
 	eval
 	{
-		$version = $tags->[0]->{name};
+		$version = $tags->[0]->{tag_name} || $tags->[0]->{name};
 	}; if ($@)
 	{
 		say "$c{bred}github API rate limit exceeded. This limit is 50 times per hour, plz try again in about an hour$c{reset}";
@@ -330,8 +338,16 @@ sub _unzip {
 			$zip->extractMember( $file, catfile($cache_dir, $file_name) );
 			push @extracted_fonts, catfile($cache_dir, $file_name);
 		}
-	}
-	else
+	} elsif ($font_name =~ /^arad$/)
+	{
+	    # m{^main/static/ttf/.*\.ttf$} && ! /Dots/
+		foreach my $file (grep { m{main/static/ttf/(?!.*Dots).*\.ttf$}g } $zip->memberNames())
+		{
+			my ($volume, $directories, $file_name) = File::Spec->splitpath($file);
+			$zip->extractMember( $file, catfile($cache_dir, $file_name) );
+			push @extracted_fonts, catfile($cache_dir, $file_name);
+		}
+	} else
 	{
 		foreach my $file (grep { m"^((?!/).)*\.ttf$"g } $zip->memberNames())
 		{

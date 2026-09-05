@@ -1,5 +1,10 @@
 Change history for LWP-MediaTypes
 
+6.05      2026-09-04 17:14:25Z
+    - Drop the Test::Fatal test prerequisite, which now requires perl v5.12,
+      so the distribution keeps its declared perl 5.6.2 support (GH#16)
+    - Remove Authority section from dist.ini (GH#4) (Olaf Alders)
+
 6.04      2019-03-20 13:01:15Z
     - Full release of changes in 6.03
 

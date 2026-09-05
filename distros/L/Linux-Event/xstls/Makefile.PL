@@ -23,14 +23,14 @@ die "Linux::Event TLS support requires OpenSSL 1.1.1 or newer, including "
 WriteMakefile(
     NAME             => 'Linux::Event::TLS',
     VERSION_FROM     => '../lib/Linux/Event/TLS.pm',
-    ABSTRACT         => 'OpenSSL transport provider for Linux::Event::Stream',
+    ABSTRACT         => 'OpenSSL transport for Linux::Event stream sockets',
     AUTHOR           => 'Joshua S. Day <hax@cpan.org>',
     LICENSE          => 'perl_5',
     MIN_PERL_VERSION => '5.036000',
     PM               => {},
     XS               => { 'TLS.xs' => 'TLS.c' },
     OBJECT           => 'TLS$(OBJ_EXT)',
-    INC              => '-I../xsstream',
+    INC              => '-I../xsbytestream',
     LIBS             => ['-lssl -lcrypto'],
     clean            => { FILES => 'TLS.c' },
 );

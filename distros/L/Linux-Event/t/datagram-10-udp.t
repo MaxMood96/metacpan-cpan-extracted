@@ -4,14 +4,14 @@ use warnings;
 
 use Test::More;
 
-use Linux::Event::Datagram;
+use Linux::Event::IO::Sock::Dgram;
 use Linux::Event::Loop;
 
 our (@SERVER_PACKETS, @CLIENT_PACKETS, @READY, @ERRORS);
 
 {
     package T::Datagram::Server;
-    use parent 'Linux::Event::Datagram';
+    use parent 'Linux::Event::IO::Sock::Dgram';
     sub on_datagram ($self, $payload, $peer) {
         push @main::SERVER_PACKETS, [$payload, $peer->family, $peer->port];
         $self->send("reply:$payload", to => $peer);
@@ -21,7 +21,7 @@ our (@SERVER_PACKETS, @CLIENT_PACKETS, @READY, @ERRORS);
 
 {
     package T::Datagram::Client;
-    use parent 'Linux::Event::Datagram';
+    use parent 'Linux::Event::IO::Sock::Dgram';
     sub on_ready ($self) {
         push @main::READY, $self->peer->family;
         $self->send('one');

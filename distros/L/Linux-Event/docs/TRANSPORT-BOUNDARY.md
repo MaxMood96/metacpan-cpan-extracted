@@ -1,36 +1,73 @@
-# Stream transport boundary
+# Ordered-byte transport boundary
 
-`Linux::Event::Stream` owns byte-stream semantics: framing, output ordering,
-backpressure, hard queue limits, read pause, EOF, half-close, errors, and
-protocol transitions. It must not own TLS policy. `Linux::Event::Loop`
-continues to own only descriptor readiness.
+The private ordered-byte engine owns application byte semantics: buffering,
+framing, output ordering, backpressure, queue limits, read pause, EOF,
+directional lifecycle, established deadlines, errors, and protocol
+transitions.
 
-The native transport boundary introduced in 0.100_014 separates those roles.
-Version 0.100_015 publishes its exact-version provider ABI. Applications now
-declare TLS on a Stream subclass; Stream creates the appropriate provider when
-the connection is acquired.
+`Linux::Event::Loop` owns descriptor readiness. A transport provider owns the
+mechanics that move bytes between the ordered-byte engine and the underlying
+resource.
 
-## Current provider
+For ordinary `IO::Pipe`, `IO::TTY`, and plain `IO::Sock::Stream` objects the
+transport is the native plain path. `Linux::Event::TLS` supplies the current
+non-plain transport for stream sockets.
 
-Every ordinary Stream uses the native `plain` provider. It implements:
+## Why transport is private
 
-- byte reads from the owned fd;
-- immediate byte writes;
-- vectored draining of queued output;
-- writable half-close.
+Transport is an implementation capability, not a public resource identity.
+Applications should subclass the completed Linux resource leaf:
 
-The plain path remains specialized in XS. It performs one predictable provider
-identity check and then issues `read`, `write`, `writev`, or `shutdown`
-directly. It does not make Perl method calls or pay a general callback dispatch
-on each syscall.
+```text
+IO::Pipe
+IO::TTY
+IO::Sock::Stream
+```
 
-`transport_name()` reports `plain` for a live ordinary Stream. `transport()`
-returns the configured non-plain provider, if any, and
-`is_transport_ready()` reports asynchronous provider setup.
+rather than choose an internal transport class.
+
+This keeps several concerns separate:
+
+```text
+Loop readiness
+    -> byte transport
+    -> ordered-byte buffering/framing
+    -> application protocol callback
+```
+
+For TLS stream sockets:
+
+```text
+socket readiness
+    -> OpenSSL transport
+    -> plaintext ordered-byte framing
+    -> application protocol callback
+```
+
+## Plain transport
+
+The plain path performs direct descriptor operations:
+
+- `read` from the readable descriptor;
+- immediate `write` to the writable descriptor;
+- `writev` draining of queued output;
+- resource-specific writable completion where supported.
+
+For `IO::Sock::Stream`, graceful writable completion maps to kernel
+`shutdown(SHUT_WR)` where appropriate. Shared non-socket descriptors do not
+receive invented socket half-close semantics.
+
+The plain path is specialized in XS. After the minimal provider identity check,
+it issues the direct syscall path without Perl method dispatch or a generic
+callback on each operation.
+
+`transport_name()` reports `plain` for an active ordinary transport.
+`transport()` exposes the configured private non-plain provider where one
+exists, and `is_transport_ready()` reports asynchronous provider readiness.
 
 ## Native operation contract
 
-Each provider operation returns a byte count plus one transport status:
+A native transport operation reports byte progress plus one status:
 
 | Status | Meaning |
 |---|---|
@@ -39,115 +76,138 @@ Each provider operation returns a byte count plus one transport status:
 | `WANT_READ` | Retry after readable readiness |
 | `WANT_WRITE` | Retry after writable readiness |
 | `INTERRUPT` | Mechanical interruption; retry immediately |
-| `ERROR` | Terminal transport failure with an error value |
+| `ERROR` | Terminal transport failure |
 
-The distinction between `WANT_READ` and `WANT_WRITE` is required for TLS:
-`SSL_read` may need writable readiness and `SSL_write` may need readable
-readiness. Treating both as ordinary fd EAGAIN would deadlock valid handshakes.
+`WANT_READ` and `WANT_WRITE` are distinct because TLS operations can require
+readiness opposite to the application operation: `SSL_read` can need writable
+readiness and `SSL_write` can need readable readiness.
 
-The provider also owns writable shutdown. This moved the final direct socket
-operation out of Perl and keeps `end()` transport-neutral.
+The provider also participates in graceful writable shutdown so the public
+`end()` operation can remain ordered-byte lifecycle rather than OpenSSL policy.
 
-## TLS behavior
+## TLS policy
 
-`Linux::Event::TLS` is the distribution's focused OpenSSL transport, not a
-framer and not a reactor-core feature. Application code declares its policy on the
-Stream type:
+`Linux::Event::TLS` is an OpenSSL transport for
+`Linux::Event::IO::Sock::Stream`. It is not a framer and not a second socket
+hierarchy.
 
 ```perl
-package GatewayStream;
-use parent 'Linux::Event::Stream';
+package GatewayConnection;
+use parent 'Linux::Event::IO::Sock::Stream';
 use Linux::Event::TLS
-    verify => 1,              # default
-    alpn   => ['http/1.1'];   # optional
+    verify => 1,
+    alpn   => ['http/1.1'];
 
-package main;
-my $stream = GatewayStream->connect(
-    loop => $loop,                # optional: attach immediately
-    host => 'gateway.discord.gg', # required
-    port => 443,                  # required
-    data => $state,               # optional
+my $connection = GatewayConnection->connect(
+    loop => $loop,
+    host => 'gateway.example.test',
+    port => 443,
 );
 ```
 
-`connect()` selects the client TLS role and uses its host for SNI and hostname
-verification by default. Listener selects the server role when it accepts a
-TLS-declared `stream_class`; that class must declare `cert_file` and
-`key_file`, which Listener preflights during construction. Each acquisition
-creates a fresh stateful provider internally.
+Outbound `connect()` selects client TLS semantics. A
+`Linux::Event::IO::Sock::Listener` selects server semantics for an accepted
+TLS-declared `stream_class`. Server classes declare `cert_file` and `key_file`,
+which are validated before the listener begins accepting traffic.
 
-The initial provider supplies:
+Each connection receives independent native OpenSSL state.
+
+## TLS behavior
+
+The provider supplies:
 
 - nonblocking client and server handshakes;
-- mandatory client certificate-chain and hostname verification by default;
-- SNI and configurable ALPN, including selected-ALPN reporting;
-- `WANT_READ` and `WANT_WRITE` interest changes without write spin;
-- plaintext input delivery through the existing raw/native-framer engine;
+- client certificate-chain and hostname verification by default;
+- SNI and configurable ALPN;
+- `WANT_READ` / `WANT_WRITE` readiness switching;
+- plaintext delivery through the existing raw/framed ordered-byte engine;
 - ordered plaintext output through the existing segmented queue;
-- preservation of high/low watermarks and `max_pending_bytes` semantics;
-- OpenSSL-owned encrypted/decrypted buffering under Stream read and output
-  bounds;
-- clean TLS close-notify for writable shutdown;
-- typed handshake, verification, read, write, and shutdown errors;
-- `MSG_NOSIGNAL` socket writes that preserve application `SIGPIPE` policy;
-- idempotent close behavior and explicit rejection of encrypted detach.
+- the same high/low watermark and hard output-limit policy;
+- clean TLS close notification for graceful writable shutdown;
+- typed handshake, verification, read, write, and shutdown failures;
+- SIGPIPE-safe socket writes using Linux `MSG_NOSIGNAL`;
+- explicit rejection of bare-descriptor detach while encrypted provider state
+  remains active.
 
-TLS defaults to a 10-second handshake deadline and a 5-second
-shutdown deadline. Zero disables either deadline. One TLS-owned timerfd watcher
-is created when a deadline is first needed, disarmed after handshake, reused
-for shutdown, and destroyed with the Stream. Ordinary plain Streams allocate
-no deadline fd or watcher.
+Framers always see plaintext. TLS encryption and framing are intentionally
+different layers.
 
-Established idle, read, write, and explicit operation deadlines begin only
-after the provider reports ready. They are Stream policy, not provider policy,
-and use the Loop's shared Timer scheduler rather than the TLS deadline fd.
-Successful TLS plaintext reads and writes update the same optional native
-activity timestamps as the plain transport. Handshake control traffic does not
-start or reset established policy.
+## Readiness
 
-For an accepted TLS connection, Listener's optional `on_accept` callback runs
-after Stream construction and Loop attachment but before TLS transport
-readiness. Stream `on_ready` remains the callback for successful handshake and
-application-protocol readiness.
+A plain stream socket becomes application-ready after connection establishment.
+A TLS-declared stream socket becomes application-ready only after the handshake
+and required verification have succeeded.
 
-Clean peer `close_notify` enters ordinary EOF handling. Socket EOF without
-`close_notify` is instead a typed TLS read error. Native counters and
-the plain-versus-TLS benchmark expose both outcomes and the transport's
-handshake/read/write/shutdown activity without changing the ABI.
+A listener's `on_accept` callback runs after the accepted stream-socket object
+is constructed and attached. For TLS, that occurs before application
+`on_ready`; the latter remains the notification that encrypted transport is
+usable by the application protocol.
 
-Application read pause must not prevent TLS control traffic needed to complete
-a write or shutdown. A provider may continue handshake/control processing while
-withholding plaintext callbacks. Any plaintext retained during pause remains
-subject to Stream input limits.
+## Read pause and TLS control traffic
 
-## STARTTLS and transport replacement
+Application `pause_read()` suppresses plaintext application delivery. It must
+not prevent TLS control traffic required to finish a handshake, write, or clean
+shutdown.
 
-Protocol replacement and transport replacement are different operations.
-`transition_to()` changes framing/callback behavior while retaining the current
-transport. The planned generic `replace_transport()` operation will change the
-transport while retaining Stream protocol state.
+A provider can therefore request read/write readiness needed for its own
+protocol progress while the ordered-byte engine continues withholding paused
+plaintext callbacks. Any retained plaintext remains subject to the same input
+limits.
 
-A STARTTLS boundary may already have encrypted handshake bytes in the same
-kernel read as the plaintext upgrade response. The replacement operation must
-therefore accept an explicit untouched suffix and hand it to the new transport
-as ciphertext, never to the old or new plaintext parser. It must validate and
-allocate everything before changing live state.
+## EOF and shutdown
 
-Transport replacement will initially require an empty plaintext output queue.
-That makes the boundary unambiguous: the application writes and drains the
-plaintext upgrade response, then installs TLS. Relaxing this rule would require
-per-segment transport ownership and is not justified without a real protocol
-that needs it.
+A clean TLS peer `close_notify` enters ordinary readable EOF lifecycle.
+Underlying stream-socket EOF without the required TLS close semantics is a
+typed TLS read failure rather than silently pretending the encrypted protocol
+closed cleanly.
 
-## Dependency boundary
+`end()` drains accepted plaintext output and then performs provider-specific
+graceful writable shutdown. `close()` remains immediate.
 
-The Linux-Event distribution builds TLS and therefore requires OpenSSL 1.1.1
-or newer development files. The dependency remains mechanically isolated:
-`Linux::Event::TLS` is its own native extension, while the reactor and plain
-Stream extensions do not link OpenSSL. An ordinary plain Stream allocates no TLS state, calls no
-OpenSSL code, and retains its specialized direct-syscall path.
+## Deadline ownership
 
-The common native contract is exact-versioned. Stream retains the provider
-object so its native operations table and OpenSSL state remain alive until
-connection destruction. The TLS extension includes the canonical ABI header
-from the Stream extension rather than carrying a second copy.
+Deadline ownership follows lifecycle boundaries:
+
+```text
+stream-socket resolve/connect
+    -> TLS handshake
+    -> established ordered-byte idle/read/write/operation deadlines
+    -> TLS graceful shutdown
+```
+
+Connection acquisition owns the first deadline. TLS owns handshake and shutdown
+timeouts. Established ordered-byte policy begins only after the provider
+reports application readiness.
+
+Successful TLS plaintext progress updates the same optional activity timestamps
+as the plain transport. Handshake control traffic does not start or reset
+established inactivity policy.
+
+See `ORDERED-BYTE-DEADLINES.md` for established deadline behavior.
+
+## Protocol transitions
+
+`transition_to()` changes application protocol callbacks/framing while retaining
+the existing byte transport. It does not recreate the socket, remove TLS, or
+change resource identity.
+
+Transport replacement is not part of the current public API. This document
+describes the implemented transport boundary only; a future upgrade mechanism
+must define ciphertext/plaintext ownership explicitly before being exposed.
+
+## Dependency isolation
+
+Linux::Event builds the TLS extension against OpenSSL 1.1.1 or newer. The
+mechanical dependency is isolated in the TLS native extension. The reactor and
+plain ordered-byte native extension do not link OpenSSL.
+
+An ordinary plain Pipe, TTY, or stream socket allocates no TLS state, calls no
+OpenSSL code, and retains the direct-syscall path.
+
+The native transport contract is versioned with the distribution. The
+ordered-byte state retains the provider object so its operations table and
+native context outlive every in-flight operation.
+
+Native headers retain `stream` terminology for the ordered-byte engine, while
+XS package names use the private `_ByteStream` taxonomy. Neither defines a
+second public Stream API.

@@ -5,14 +5,15 @@ use Test::More;
 use Scalar::Util qw(refaddr);
 
 use Linux::Event::Loop;
-use Linux::Event::Listener;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Listener;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 our ($LOOP, $CLIENT_ID, $READY, $REPLY, $SERVER_PEER, $ERROR);
 
 {
     package T::AutomaticEcho;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Delimiter', "\n";
 
     sub on_message ($stream, $message) {
@@ -28,7 +29,7 @@ our ($LOOP, $CLIENT_ID, $READY, $REPLY, $SERVER_PEER, $ERROR);
 
 {
     package T::AutomaticClient;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Delimiter', "\n";
 
     sub on_ready ($stream) {
@@ -50,12 +51,12 @@ our ($LOOP, $CLIENT_ID, $READY, $REPLY, $SERVER_PEER, $ERROR);
 }
 
 $LOOP = Linux::Event::Loop->new;
-my $listener = Linux::Event::Listener->new(
+my $listener = Linux::Event::IO::Sock::Listener->new(
     stream_class => 'T::AutomaticEcho',
     host => '127.0.0.1',
     port => 0,
 );
-isa_ok($listener, 'Linux::Event::Listener');
+isa_ok($listener, 'Linux::Event::IO::Sock::Listener');
 is($listener->state, 'unattached', 'Listener construction is detached');
 is($LOOP->add($listener), $listener, 'add returns the same Listener');
 is($listener->state, 'listening', 'add starts the Listener');

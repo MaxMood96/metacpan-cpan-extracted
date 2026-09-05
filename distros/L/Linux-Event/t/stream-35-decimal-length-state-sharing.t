@@ -9,7 +9,7 @@ use Linux::Event::Loop;
 
 {
     package T::SharedDecimalStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'DecimalLength';
     sub on_message ($stream, $message) {
         $stream->data->{got} = $message;

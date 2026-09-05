@@ -7,11 +7,11 @@ use POSIX qw(INFINITY NAN);
 use Time::HiRes qw(sleep);
 
 use Linux::Event::Loop;
-use Linux::Event::Timer;
+use Linux::Event::Kernel::Timer;
 
 {
     package T::Timer::Basic;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     sub on_timer ($timer) { return }
 }
 
@@ -22,10 +22,10 @@ use Linux::Event::Timer;
 
 {
     package T::Timer::Missing;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
 }
 
-like(exception(sub { Linux::Event::Timer->new(after => 1) }),
+like(exception(sub { Linux::Event::Kernel::Timer->new(after => 1) }),
     qr/abstract base class/, 'base Timer is abstract');
 like(exception(sub { T::Timer::Missing->new(after => 1) }),
     qr/must define on_timer/, 'concrete Timer requires on_timer');
@@ -53,7 +53,7 @@ my $loop = Linux::Event::Loop->new;
 my $data = { name => 'detached' };
 my $timer = T::Timer::Basic->new(after => 2, data => $data);
 isa_ok($timer, 'T::Timer::Basic');
-isa_ok($timer, 'Linux::Event::Timer');
+isa_ok($timer, 'Linux::Event::Kernel::Timer');
 is($timer->state, 'unattached', 'new Timer starts unattached');
 ok(!$timer->is_active, 'unattached Timer is not active');
 ok(!$timer->is_terminal, 'unattached Timer is not terminal');
@@ -67,7 +67,7 @@ is($loop->add($timer), $timer, 'Loop add returns the same Timer');
 is($timer->loop, $loop, 'attachment stores the Loop');
 is($timer->state, 'active', 'attached Timer is active');
 ok($timer->is_active, 'active predicate is true');
-ok(defined($timer->deadline) && $timer->deadline > Linux::Event::Timer->now,
+ok(defined($timer->deadline) && $timer->deadline > Linux::Event::Kernel::Timer->now,
     'attachment computes a future relative deadline');
 like(exception(sub { $loop->add($timer) }), qr/not unattached/,
     'Timer cannot be attached twice');
@@ -83,12 +83,12 @@ like(exception(sub { $timer->reschedule(after => 1) }),
 like(exception(sub { $timer->data({}) }), qr/terminal/,
     'terminal Timer cannot retain new data');
 
-my $now = Linux::Event::Timer->now;
+my $now = Linux::Event::Kernel::Timer->now;
 sleep 0.002;
-cmp_ok(Linux::Event::Timer->now, '>', $now,
+cmp_ok(Linux::Event::Kernel::Timer->now, '>', $now,
     'Timer now uses an advancing monotonic clock');
 
-my $absolute = Linux::Event::Timer->now + 5;
+my $absolute = Linux::Event::Kernel::Timer->now + 5;
 my $at = T::Timer::Inherited->new(at => $absolute, every => 2);
 cmp_ok(abs($at->deadline - $absolute), '<', 0.000_001,
     'detached absolute Timer exposes its deadline');

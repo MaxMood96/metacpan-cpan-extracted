@@ -1,8 +1,9 @@
-# Choosing a Stream framer
+# Choosing a framer
 
-TCP and Unix stream sockets deliver bytes, not messages. Choose framing from
-the protocol's wire format, then declare that framing once in the Stream
-subclass.
+Ordered byte resources deliver bytes, not application messages. This includes
+stream sockets, pipes, FIFOs, terminals, and PTYs. Choose framing from the
+protocol's wire format, then declare that framing once in the concrete
+Linux::Event ordered-byte subclass.
 
 ## Quick selection table
 
@@ -17,33 +18,52 @@ subclass.
 | ASCII digits, separator, payload | `DecimalLength` | RFC 6587 octet-counted syslog |
 | none of these | no framer; use `on_data` | application-specific parsing |
 
-Names are case-sensitive and are the exact final package components under
+Names are case-sensitive exact package components below
 `Linux::Event::Framer`.
 
-A connection whose wire format changes after a handshake or upgrade may use
-different Stream subclasses at different stages. Use `transition_to()` rather
-than forcing every stage into one parser; unread native bytes are preserved,
-and a raw stage can pass its unconsumed chunk suffix with `input => $bytes`.
+A resource whose wire protocol changes after negotiation may transition between
+loaded subclasses with `transition_to()`. The underlying Linux resource does
+not change: a stream socket remains a stream socket, a pipe remains a pipe.
+Unread native bytes are preserved, and a raw stage may pass its unconsumed
+suffix with `input => $bytes`.
 
 ## Delimiter
 
 Use this when a non-empty byte sequence ends each message:
 
 ```perl
-package CRLFStream;
-use parent 'Linux::Event::Stream';
+package CRLFConnection;
+use parent 'Linux::Event::IO::Sock::Stream';
 use Linux::Event::Framer 'Delimiter', "\r\n",
     max_frame => 1_048_576;
 
-sub on_message ($stream, $message) { $stream->send($message) }
+sub on_message ($self, $message) {
+    $self->send($message);
+}
 ```
 
-The delimiter may contain arbitrary bytes and may cross socket reads.
+The delimiter can contain arbitrary bytes and can cross kernel reads.
 `include_delimiter => 1` includes it in inbound messages. `send($payload)`
 appends it.
 
 There is deliberately no separate `line` alias. A line protocol states its
-actual wire delimiter directly, such as `"\n"` or `"\r\n"`.
+actual delimiter directly, such as `"\n"` or `"\r\n"`.
+
+The same declaration works for terminal line input:
+
+```perl
+package Console;
+use parent 'Linux::Event::IO::TTY';
+use Linux::Event::Framer 'Delimiter', "\n";
+```
+
+or a line-oriented child-process/FIFO pipe:
+
+```perl
+package PipeLines;
+use parent 'Linux::Event::IO::Pipe';
+use Linux::Event::Framer 'Delimiter', "\n";
+```
 
 ## Fixed
 
@@ -68,7 +88,7 @@ use Linux::Event::Framer 'LengthPrefix',
 ```
 
 `bytes` defaults to 4 and `endian` defaults to `big`. The encoded value is the
-payload length, not the prefix-plus-payload length.
+payload length, not the total prefix-plus-payload length.
 
 ## U32BE
 
@@ -80,7 +100,7 @@ use Linux::Event::Framer 'U32BE',
     max_frame => 16 * 1024 * 1024;
 ```
 
-It has the same wire form as `LengthPrefix` with `bytes => 4` and
+It has the same wire representation as `LengthPrefix` with `bytes => 4` and
 `endian => 'big'`.
 
 ## Netstring
@@ -93,7 +113,7 @@ use Linux::Event::Framer 'Netstring',
 ```
 
 `send('hello')` emits `5:hello,`. The parser rejects malformed decimal lengths,
-leading zeroes other than the canonical zero, and a missing trailing comma.
+noncanonical leading zeroes, and a missing trailing comma.
 
 ## Varint
 
@@ -105,7 +125,7 @@ use Linux::Event::Framer 'Varint',
     max_frame      => 1_048_576;
 ```
 
-Small messages use fewer prefix bytes. The parser rejects non-canonical,
+Small messages use fewer prefix bytes. The parser rejects noncanonical,
 overlong, or overflowing prefixes.
 
 ## DecimalLength
@@ -120,40 +140,40 @@ use Linux::Event::Framer 'DecimalLength',
 ```
 
 The separator must be one non-digit byte. The default wire form for `HELLO` is
-`5 HELLO`, which matches RFC 6587 octet-counted syslog.
+`5 HELLO`, matching RFC 6587 octet-counted syslog.
 
 ## If no built-in matches
 
-Do not force a protocol into the wrong framing family. Define a raw Stream and
-buffer or parse in `on_data`:
+Do not force an application protocol into the wrong framing family. Use raw
+ordered-byte delivery and retain parser state in `on_data`:
 
 ```perl
-package ProprietaryStream;
-use parent 'Linux::Event::Stream';
+package ProprietaryConnection;
+use parent 'Linux::Event::IO::Sock::Stream';
 
-sub on_data ($stream, $bytes) {
-    my $state = $stream->data;
+sub on_data ($self, $bytes) {
+    my $state = $self->data;
     $state->{buffer} .= $bytes;
-    # Parse as many complete application records as are available.
+    # Parse every complete application record now available.
 }
 ```
 
-This keeps application-specific state and policy in Perl without requiring a
-per-connection framer-object protocol. If a framing rule is broadly useful and
-profiling justifies it, add it to Linux::Event as a native built-in.
+This keeps application-specific parser policy in Perl without introducing a
+second general framer-object contract. If a framing rule is broadly useful and
+benchmarks justify native support, add it as a complete Linux::Event built-in.
 
 ## Safety limits
 
-Set `max_frame` for untrusted framed input. Stream also has a class-level
-`max_buffer` transport limit, defaulting to 8 MiB. The parser reports violations
-as `Linux::Event::Error` objects with type `framing`, invokes
-`on_error` when defined, and closes the Stream.
+Set `max_frame` for untrusted framed input. Ordered-byte classes also have a
+class-level `max_buffer` limit, defaulting to 8 MiB. Violations produce a
+`Linux::Event::Error` with type `framing`, invoke `on_error` when defined, and
+close through the normal resource lifecycle.
 
-Every built-in framer can use explicit `message_batch_size` policy with
+Any built-in framer can use explicit `message_batch_size` policy with
 `on_messages` when a pipelined workload benefits from fewer Perl callback
-crossings. Batching changes delivery shape, not wire framing, and never waits
-for future input to fill an array. See [`FRAMING.md`](FRAMING.md) for the exact
-flush and transition boundaries.
+crossings. Batching changes delivery shape, not the wire format, and partial
+batches flush at the end of the current native drain rather than waiting for
+future input.
 
-See [`FRAMING.md`](FRAMING.md) for the complete declaration and extension
-contract.
+See [`FRAMING.md`](FRAMING.md) for the complete declaration, transition,
+batching, and native-extension contract.

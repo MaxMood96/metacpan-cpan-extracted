@@ -56,7 +56,7 @@ subtest 'single_future() with Prefetch' => sub {
     # Verify prefetch worked through the single() path
     my $orders = $user->{_relationship_data}{orders};
     is(ref $orders, 'ARRAY', "Orders were prefetched during single() call");
-    is($orders->[0]{amount}, 99.99, "Related data is intact");
+    is(sprintf('%.2f', $orders->[0]{amount}), 99.99, "Related data is intact");
 };
 
 subtest 'single() returns undef on no match' => sub {

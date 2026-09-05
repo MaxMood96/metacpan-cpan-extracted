@@ -403,6 +403,14 @@ sub new
 	$self->{'albumartist'} = $url2fetch;
 	my $html = '';
 	print STDERR "-0(Anystream): URL=$url2fetch=\n"  if ($DEBUG);
+	if ($url2fetch =~ /\b(?:youtube\.|youtu.be|ytimg\.)\b/) {
+		#WE CAN'T EXTRACT STREAMS IN YOUTUBE PAGES, SO IF HERE, IT'S LIKELY
+		#BECAUSE StreamFinder::Youtube FAILED & IT FELL THROUGH TO US, SO
+		#JUST PUNT & DON'T WASTE ANY ORE TIME HERE ON IT!:
+		print STDERR "u:Anystream: We're a YOUTUBE page & StreamFinder::Youtube likely FAILED, so PUNT!\n"  if ($DEBUG);
+		return undef;
+	}
+
 	my $ua = LWP::UserAgent->new(@{$self->{'_userAgentOps'}});		
 	$ua->timeout($self->{'timeout'});
 	$ua->max_size(2048);  #LIMIT FETCH-SIZE TO AVOID INFINITELY DOWNLOADING A STREAM!

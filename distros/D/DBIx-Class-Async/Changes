@@ -1,5 +1,10 @@
 Revision history for DBIx::Class::Async
 
+v1.0.6   2026-09-05
+         [TEST SUITE]
+         - Fixed t/135-single.t to cover the issue #12 reported by @eserte.
+         - Added unit tests: t/changes.t and t/version.t
+
 v1.0.5   2026-07-13
          [POD CHANGES]
          - Used App:genstopwords v0.0.1 to generate .stopwords

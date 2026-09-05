@@ -1,5 +1,15 @@
 Revision history for Hyperman
 
+0.43	2026-09-04
+        - ADDS: Expect: 100-continue. A client asking permission before a
+          large body gets an interim 100 rather than a stall, and a body
+          over max_body is refused with 413 before it is sent.
+        - An expectation other than 100-continue is 417 Expectation
+          Failed; an Expect from an HTTP/1.0 client is ignored.
+        - FIX: a chunked request whose header block arrived in its own
+          packet was refused with 400. The scanner read "no chunk-size
+          bytes yet" as "no chunk-size".
+
 0.42	2026-09-02
         - A string failure raised out of a future kept its " at FILE line
           N." on perls before 5.14. The croak_sv shim raised the message

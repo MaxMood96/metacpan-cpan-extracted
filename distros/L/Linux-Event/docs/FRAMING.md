@@ -1,43 +1,70 @@
 # Native framing declarations
 
+Framing belongs to ordered byte I/O. It is not specifically a socket feature.
+The same framing declaration can be used by subclasses of:
+
+- `Linux::Event::IO::Pipe`
+- `Linux::Event::IO::TTY`
+- `Linux::Event::IO::Sock::Stream`
+
 ## Public model
 
-A framed Stream is a subclass with one declarative import and a named
-`on_message` callback:
+A framed type combines one concrete ordered-byte leaf, one declarative framer,
+and a named message callback:
 
 ```perl
-package MessageStream;
-use parent 'Linux::Event::Stream';
+package MessageConnection;
+use parent 'Linux::Event::IO::Sock::Stream';
 use Linux::Event::Framer 'LengthPrefix',
-    bytes => 4, endian => 'big', max_frame => 16 * 1024 * 1024;
+    bytes     => 4,
+    endian    => 'big',
+    max_frame => 16 * 1024 * 1024;
 
-sub on_message ($stream, $message) {
-    $stream->data->{messages}++;
-    $stream->send($message);
+sub on_message ($self, $message) {
+    $self->data->{messages}++;
+    $self->send($message);
 }
 ```
 
-The declaration must appear after `use parent`, making both inheritance and the
-protocol rule visible to readers. The import records immutable class metadata;
-it does not construct a framer object.
+The declaration must appear after `use parent`. The import records immutable
+class metadata; it does not construct a per-connection framer object.
 
-The first Stream construction resolves the declaration and inherited callback
-methods into a cached descriptor. Every connection of that class references
-the same descriptor while retaining independent input, scan, output-queue, and
-lifecycle state.
+The first construction of a concrete subclass resolves its declaration,
+callbacks, tuning policy, and native parser configuration into one cached
+private descriptor. Each object keeps only its changing parser, buffer, queue,
+and lifecycle state.
+
+## Framing pipes and terminals
+
+Nothing about a delimiter or length prefix requires a socket. For example, an
+interactive terminal can be line framed:
+
+```perl
+package Console;
+use parent 'Linux::Event::IO::TTY';
+use Linux::Event::Framer 'Delimiter', "\n";
+
+sub on_message ($self, $line) {
+    $self->write("You typed: $line\n");
+}
+```
+
+A child-process or application pipe can use the same delimiter or a binary
+length prefix. The underlying public leaf identifies the Linux resource;
+framing describes how an ordered byte sequence is divided into messages.
 
 ## Name resolution
 
-The name is validated as a single Perl package component and expanded as:
+The declaration name is validated as one Perl package component and expanded
+as:
 
 ```text
 Linux::Event::Framer::<Name>
 ```
 
-For example, `Delimiter` loads
-`Linux::Event::Framer::Delimiter`. There is no central keyword or alias
-table to keep synchronized. Misspelled or incorrectly cased names fail when the
-class is compiled.
+`Delimiter` therefore loads `Linux::Event::Framer::Delimiter`. There is no
+central alias table. Misspelled or incorrectly cased names fail during class
+compilation.
 
 ## Built-in wire contracts
 
@@ -51,19 +78,20 @@ class is compiled.
 | `Varint` | canonical unsigned LEB128 payload length | prepends canonical LEB128 length |
 | `DecimalLength` | ASCII length plus one separator byte | prepends decimal length and separator |
 
-All lengths and limits describe bytes. Inbound boundary detection and parser
-state machines run in XS. Outbound encoding is a named built-in function called
-by `send()`, after which bytes enter the native write engine.
+All lengths and limits are byte counts. Inbound boundary detection and parser
+state machines run in XS. Outbound encoding is the named built-in framing
+function used by `send()`, after which bytes enter the ordinary native write
+queue.
 
-## Common options
+## Limits
 
 Framers that accept `max_frame` reject larger inbound and outbound payloads.
 Length-prefix families may accept `include_prefix`; `Delimiter` accepts
-`include_delimiter`. These options change the message delivered to
-`on_message`, not the bytes consumed from the wire.
+`include_delimiter`. Those options affect the message passed to the callback,
+not the bytes consumed from the underlying resource.
 
-The class-level Stream option `max_buffer` is an additional hard bound on
-framed input storage. Its default is 8 MiB:
+The class-level ordered-byte option `max_buffer` is an independent hard bound
+on framed input storage. Its default is 8 MiB:
 
 ```perl
 sub stream_options ($class) {
@@ -71,143 +99,166 @@ sub stream_options ($class) {
 }
 ```
 
-Choose explicit limits for untrusted protocols rather than relying only on
-available process memory.
+Use explicit limits for untrusted protocols rather than relying on process
+memory availability.
 
-## Raw mode for application-specific protocols
+## Raw mode
 
-A subclass without a framer must define `on_data`. It receives byte chunks as
-the native read engine drains them:
+A readable ordered-byte subclass without a framer defines `on_data`:
 
 ```perl
-package RawProtocolStream;
-use parent 'Linux::Event::Stream';
+package RawConnection;
+use parent 'Linux::Event::IO::Sock::Stream';
 
-sub on_data ($stream, $bytes) {
-    my $state = $stream->data;
+sub on_data ($self, $bytes) {
+    my $state = $self->data;
     $state->{input} .= $bytes;
+
     while ($state->{input} =~ s/\A([^\n]*\n)//) {
         push @{ $state->{records} }, $1;
     }
 }
 ```
 
-Chunk boundaries are not protocol boundaries. The callback must retain partial
-state and may emit as many complete application records as are available.
+Read callback chunks are not protocol boundaries. A raw parser must retain
+partial application state itself.
 
-Arbitrary `next_frame` objects and the former native-backed Buffer view are not
-part of the API. This avoids a second framing contract, per-connection parser
-objects, repeated dynamic dispatch, and XS-to-Perl boundary crossings merely to
-ask where the next frame ends.
+Arbitrary `next_frame` parser objects and the former native-backed Buffer view
+are not public APIs. Native built-ins avoid per-connection parser objects,
+repeated dynamic dispatch, and XS-to-Perl calls whose only result would be a
+frame-boundary tuple.
 
 ## Inheritance
 
-A derived Stream inherits its nearest ancestor's framer declaration through
-normal Perl method resolution order. It may inherit or override named
-callbacks:
+A derived ordered-byte type inherits the nearest ancestor framer declaration
+through normal Perl MRO and may replace its named callbacks:
 
 ```perl
-package AuditedMessageStream;
-use parent 'MessageStream';
+package AuditedConnection;
+use parent 'MessageConnection';
 
-sub on_message ($stream, $message) {
-    push @{ $stream->data->{audit_log} }, length($message);
-    $stream->send($message);
+sub on_message ($self, $message) {
+    push @{ $self->data->{audit_log} }, length($message);
+    $self->send($message);
 }
 ```
 
-Each concrete subclass gets its own cached descriptor, so its resolved callback
-set is stable. It does not get a copy of immutable framing data per connection.
-A class may not declare two framers or combine `on_data` with framed mode.
+Each concrete subclass gets its own cached descriptor while immutable parser
+configuration is still shared rather than copied per object. A class cannot
+declare two framers or combine framed delivery with `on_data`.
 
-## Explicit message batches
+## Explicit message batching
 
-The ordinary API delivers one complete message at a time. A pipelined protocol
-may explicitly select bounded array delivery in its cached class policy:
+Ordinary framed delivery calls `on_message` once per complete message. A
+pipelined protocol can explicitly select bounded array delivery:
 
 ```perl
 sub stream_options ($class) {
     return message_batch_size => 32;
 }
 
-sub on_messages ($stream, $messages) {
-    process_message($stream, $_) for @$messages;
+sub on_messages ($self, $messages) {
+    process_message($self, $_) for @$messages;
 }
 ```
 
 `on_message` and `on_messages` are mutually exclusive. A positive
-`message_batch_size` requires `on_messages`; defining the method without the
-option is rejected. XS flushes a partial batch when the current read drain
-reaches EAGAIN, before EOF or a framing error, and when accumulated payload
-reaches the class `max_buffer`. It never waits for later input merely to fill
-the array.
+`message_batch_size` requires `on_messages`, and defining `on_messages` without
+the option is rejected.
 
-Pause, close, and `transition_to` take effect after the complete callback
-array. Consequently a negotiation protocol that must change type immediately
-after one particular message should retain ordinary `on_message` delivery.
+XS flushes a partial message batch when the current read drain reaches EAGAIN,
+before EOF or framing error, and when the aggregate input guard requires a
+flush. It never waits for a future readiness event merely to fill the configured
+count.
 
-## Changing framing on a live connection
+Pause, close, and protocol transition take effect at the selected callback
+boundary. A negotiation protocol that must change type immediately after one
+specific message should use ordinary `on_message` delivery.
 
-Negotiated and upgraded protocols may move between raw and framed Stream
-subclasses with `transition_to()`:
+## Raw callback batching
+
+Raw mode can set `read_batch_bytes` in `stream_options()` to combine successful
+native reads before calling `on_data`. A partial raw batch also flushes when the
+current drain ends; it does not wait for a future readiness event.
+
+Raw read batching and framed message batching are different policies and are
+validated accordingly.
+
+## Changing framing on a live resource
+
+A protocol may transition between loaded ordered-byte subclasses with
+`transition_to()`:
 
 ```perl
-$stream->transition_to('BinaryMessageStream', input => $remaining);
+$self->transition_to('BinaryProtocol', input => $remaining);
 ```
 
-Unread bytes already stored by a native framer are preserved automatically and
-reinterpreted under the target descriptor. The explicit `input` value is for a
-raw callback's unconsumed suffix. Native buffered bytes, when present, come
-first. This ordering supports a final old-protocol message followed immediately
-by pipelined new-protocol bytes in the same kernel read.
+Unread native bytes are preserved and interpreted using the target descriptor.
+The explicit `input` value represents an unconsumed suffix from a raw callback.
+Native buffered bytes, when present, precede that suffix.
 
-The old native parser stops after the callback that changes the descriptor.
-Complete target frames are then emitted without waiting for another readiness
-event. Read pause survives the transition and postpones this delivery until
-`resume_read()`.
+The old parser stops after the callback that changes the descriptor. Complete
+target frames already present in buffered input can then be delivered without
+waiting for another kernel readiness event. Read pause survives the transition
+and postpones delivery until `resume_read()`.
 
-The target class's `max_buffer` applies to all preserved bytes. An oversized
-transition fails atomically instead of partially replacing the parser.
-Existing queued output is not reframed; later `send()` calls use the target
-framer, preserving protocol-response ordering across an upgrade.
+The target `max_buffer` and output limits are checked before the descriptor swap
+is committed. Existing queued output is not reframed; later `send()` calls use
+the target framing rule.
+
+A transition changes application protocol policy, not the Linux resource. A
+connected stream socket remains a connected stream socket; a pipe remains a
+pipe.
+
+## Framing and serialization
+
+Framing and serialization are intentionally separate layers:
+
+```text
+bytes
+  -> buffering
+  -> framing
+  -> complete message bytes
+  -> codec / serialization
+  -> Perl value
+```
+
+`send()` performs framing, not arbitrary object serialization. A codec layer can
+be built above the completed message boundary without changing the native I/O
+engine.
 
 ## Adding a native built-in
 
-The public declaration loader derives the implementation package from its name,
-so adding a family does not require editing a keyword list. A complete built-in
-still requires both sides:
+A complete framing family requires:
 
-1. a `Linux::Event::Framer::<Name>` module that validates declaration
-   arguments and provides immutable native config plus outbound encoding;
-2. a corresponding XS parser mode that handles partial input, multiple frames,
-   limits, errors, pause/close reentrancy, and instrumentation;
-3. contract tests for wire encoding, split input, invalid input, limits,
-   independent per-connection state, and `send()`;
-4. a row in `bench/run-native-framers-microbench.pl`.
+1. a `Linux::Event::Framer::<Name>` module validating declaration arguments and
+   providing immutable native configuration plus outbound encoding;
+2. corresponding XS parser support for partial input, multiple messages,
+   limits, errors, and callback reentrancy;
+3. contract tests for encoding, split input, malformed input, limits,
+   per-object state independence, and `send()`;
+4. benchmark coverage in the native framer harness.
 
-The module's internal builder interface is distribution-internal and may change.
-Copying a module without implementing its native parser semantics is not a new
-framing family. Applications should use raw `on_data`; contributors should add
-generally useful families to Linux::Event with the XS implementation and tests.
+The module builder interface is distribution-internal. Copying a Perl module
+without implementing its matching native parser is not a new framing family.
+Applications with unusual protocols should use raw `on_data`; generally useful
+families can be added to Linux::Event with native implementation and tests.
 
 ## Error behavior
 
-Malformed or oversized input becomes a `Linux::Event::Error` with type
-`framing`. Stream stores it in `last_error`, invokes the cached `on_error`
-callback when present, and closes. Application callback exceptions are not
-silently converted or swallowed.
+Malformed or oversized input produces a `Linux::Event::Error` with type
+`framing`. The object stores it as `last_error`, invokes its cached `on_error`
+callback when present, and closes through the normal ordered-byte lifecycle.
+Application callback exceptions propagate rather than being silently converted.
 
 ## Performance model
 
-The descriptor stores immutable parser config and resolved named CVs once per
-class. XS appends bytes directly to per-connection native storage, finds every
-complete built-in frame available, and crosses into Perl only to deliver
-semantic messages or lifecycle errors. Explicit message batching can amortize
-that semantic crossing across several frames. The zero default preserves
-ordinary one-message delivery without constructing arrays. Native framing
-also removes per-read chunk scalars and per-frame parser calls whose only result
-would be a boundary tuple.
+Immutable parser configuration and named callback CVs are resolved once per
+concrete class. XS appends bytes directly to native per-object storage, finds
+all complete built-in frames available, and crosses into Perl only for semantic
+messages or lifecycle errors. Optional message batching can amortize that
+semantic crossing across several messages.
 
-Measure changes with `bench/run-framing-microbench.pl`,
-`bench/run-native-framers-microbench.pl`, the callback-batching throughput and
-fairness benchmarks, and the versioned lifecycle benchmark.
+Measure framing changes with the framing microbenchmarks, native-framer
+benchmarks, callback-batching throughput/fairness tests, and the lifecycle
+performance baseline under `bench/`.

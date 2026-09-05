@@ -8,7 +8,7 @@ use ExtUtils::MakeMaker;
 
 my %WriteMakefileArgs = (
   "ABSTRACT" => "Metapackage for using OpenMP in Perl",
-  "AUTHOR" => "oodler <oodler\@cpan.org>",
+  "AUTHOR" => "Brett Estrade <oodler\@cpan.org>",
   "CONFIGURE_REQUIRES" => {
     "ExtUtils::MakeMaker" => 0
   },
@@ -17,22 +17,16 @@ my %WriteMakefileArgs = (
   "NAME" => "OpenMP",
   "PREREQ_PM" => {
     "Alien::OpenMP" => 0,
-    "Inline::C" => 0,
-    "OpenMP::Environment" => 0,
-    "OpenMP::Simple" => 0
-  },
-  "TEST_REQUIRES" => {
-    "Alien::OpenMP" => 0,
-    "Digest::MD5" => 0,
-    "File::Temp" => 0,
+    "Inline" => 0,
     "Inline::C" => 0,
     "OpenMP::Environment" => 0,
     "OpenMP::Simple" => 0,
-    "Test::Exception" => 0,
-    "Test::More" => 0,
-    "Util::H2O::More" => 0
+    "perlomp" => "0.01"
   },
-  "VERSION" => "1.0.2",
+  "TEST_REQUIRES" => {
+    "Test::More" => 0
+  },
+  "VERSION" => "1.0.3",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -41,14 +35,12 @@ my %WriteMakefileArgs = (
 
 my %FallbackPrereqs = (
   "Alien::OpenMP" => 0,
-  "Digest::MD5" => 0,
-  "File::Temp" => 0,
+  "Inline" => 0,
   "Inline::C" => 0,
   "OpenMP::Environment" => 0,
   "OpenMP::Simple" => 0,
-  "Test::Exception" => 0,
   "Test::More" => 0,
-  "Util::H2O::More" => 0
+  "perlomp" => "0.01"
 );
 
 

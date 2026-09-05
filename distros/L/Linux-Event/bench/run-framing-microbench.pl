@@ -9,11 +9,12 @@ use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Time::HiRes qw(time clock_gettime CLOCK_PROCESS_CPUTIME_ID);
 
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 {
     package Linux::Event::Bench::RawDelimiterEcho;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) {
         my $state = $stream->data;
         $state->{buffer} .= $bytes;
@@ -30,7 +31,7 @@ use Linux::Event::Stream;
 
 {
     package Linux::Event::Bench::NativeDelimiterEcho;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Delimiter', "\x02END\x03";
     sub on_message ($stream, $message) {
         my $state = $stream->data;

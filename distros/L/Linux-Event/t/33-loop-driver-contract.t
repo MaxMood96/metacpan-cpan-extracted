@@ -4,11 +4,11 @@ use warnings;
 use Test::More;
 
 use Linux::Event::Loop;
-use Linux::Event::Timer;
+use Linux::Event::Kernel::Timer;
 
 {
     package T::StopRunOnceTimer;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     our $calls = 0;
     sub on_timer ($timer) {
         $calls++;
@@ -18,7 +18,7 @@ use Linux::Event::Timer;
 
 {
     package T::NestedRunStopTimer;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     sub on_timer ($timer) { $timer->loop->stop }
 }
 

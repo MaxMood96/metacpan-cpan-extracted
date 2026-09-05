@@ -1,4 +1,4 @@
-package Dist::Zilla::App::Command::authordeps 6.037;
+package Dist::Zilla::App::Command::authordeps 6.038;
 # ABSTRACT: List your distribution's author dependencies
 
 use Dist::Zilla::Pragmas;
@@ -67,7 +67,7 @@ Dist::Zilla::App::Command::authordeps - List your distribution's author dependen
 
 =head1 VERSION
 
-version 6.037
+version 6.038
 
 =head1 SYNOPSIS
 

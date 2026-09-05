@@ -6,12 +6,13 @@ use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 use FindBin qw($Bin);
 
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 use Linux::Event::TLS;
 
 {
     package T::TLSDeadline;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) { }
     sub on_error ($stream, $error) {
         $stream->data->{error} = $error;
@@ -21,7 +22,7 @@ use Linux::Event::TLS;
 
 {
     package T::TLSProbeClient;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_transport_ready ($stream) {
         $stream->data->{client_ready}++;
         $stream->write('ping');
@@ -38,7 +39,7 @@ use Linux::Event::TLS;
 
 {
     package T::TLSProbeServer;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_transport_ready ($stream) { $stream->data->{server_ready}++ }
     sub on_data ($stream, $bytes) { $stream->write('pong') }
     sub on_error ($stream, $error) {

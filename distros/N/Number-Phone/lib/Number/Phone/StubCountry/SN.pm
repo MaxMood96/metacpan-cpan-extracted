@@ -22,7 +22,7 @@ use base qw(Number::Phone::StubCountry);
 use strict;
 use warnings;
 use utf8;
-our $VERSION = 1.20260610205505;
+our $VERSION = 1.20260904101551;
 
 my $formatters = [
                 {
@@ -40,31 +40,15 @@ my $formatters = [
 my $validators = {
                 'fixed_line' => '
           3(?:
-            0(?:
-              1[0-2]|
-              80
-            )|
-            282|
-            3(?:
-              8[1-9]|
-              9[3-9]
-            )|
-            611
-          )\\d{5}
+            [026]\\d|
+            3[89]
+          )\\d{6}
         ',
                 'geographic' => '
           3(?:
-            0(?:
-              1[0-2]|
-              80
-            )|
-            282|
-            3(?:
-              8[1-9]|
-              9[3-9]
-            )|
-            611
-          )\\d{5}
+            [026]\\d|
+            3[89]
+          )\\d{6}
         ',
                 'mobile' => '
           7(?:
@@ -79,26 +63,14 @@ my $validators = {
                 'toll_free' => '800\\d{6}',
                 'voip' => '
           (?:
-            3(?:
-              392|
-              9[01]\\d
-            )\\d|
-            93(?:
-              3[13]0|
-              929
-            )
-          )\\d{4}
+            39|
+            93
+          )\\d{7}
         '
               };
 my %areanames = ();
-$areanames{en} = {"2213397", "Outside\ Dakar",
-"2213398", "Outside\ Dakar",
-"2213393", "Outside\ Dakar",
-"2213395", "Outside\ Dakar",
-"2213394", "Outside\ Dakar",
-"2213396", "Outside\ Dakar",
-"221338", "Dakar",
-"2213399", "Outside\ Dakar",};
+$areanames{en} = {"221338", "Dakar",
+"221339", "Outside\ Dakar",};
 my $timezones = {
                '' => [
                        'Africa/Dakar'

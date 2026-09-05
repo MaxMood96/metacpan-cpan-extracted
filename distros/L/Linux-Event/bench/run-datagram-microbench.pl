@@ -8,7 +8,7 @@ use JSON::PP;
 use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 
 use Linux::Event;
-use Linux::Event::Datagram;
+use Linux::Event::IO::Sock::Dgram;
 use Linux::Event::Loop;
 
 my $packets = 100_000;
@@ -35,7 +35,7 @@ die "modes must contain connected and/or unconnected\n"
 
 {
     package BenchDatagramServer;
-    use parent 'Linux::Event::Datagram';
+    use parent 'Linux::Event::IO::Sock::Dgram';
 
     sub on_datagram ($socket, $payload, $peer) {
         $socket->send($payload, to => $peer)
@@ -47,7 +47,7 @@ die "modes must contain connected and/or unconnected\n"
 
 {
     package BenchDatagramClient;
-    use parent 'Linux::Event::Datagram';
+    use parent 'Linux::Event::IO::Sock::Dgram';
 
     sub on_ready ($socket) {
         my $run = $socket->data;

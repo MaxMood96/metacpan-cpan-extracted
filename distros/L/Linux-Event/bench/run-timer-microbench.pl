@@ -14,11 +14,11 @@ use lib "$Bin/../blib/lib", "$Bin/../blib/arch", "$Bin/../lib";
 
 use Linux::Event;
 use Linux::Event::Loop;
-use Linux::Event::Timer;
+use Linux::Event::Kernel::Timer;
 
 {
     package Linux::Event::Bench::Timer;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     sub on_timer ($timer) {
         my $state = $timer->data;
         $state->{completed}++;

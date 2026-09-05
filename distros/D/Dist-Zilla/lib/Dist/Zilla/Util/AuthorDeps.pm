@@ -1,4 +1,4 @@
-package Dist::Zilla::Util::AuthorDeps 6.037;
+package Dist::Zilla::Util::AuthorDeps 6.038;
 # ABSTRACT: Utils for listing your distribution's author dependencies
 
 use Dist::Zilla::Pragmas;
@@ -219,7 +219,7 @@ Dist::Zilla::Util::AuthorDeps - Utils for listing your distribution's author dep
 
 =head1 VERSION
 
-version 6.037
+version 6.038
 
 =head1 PERL VERSION
 

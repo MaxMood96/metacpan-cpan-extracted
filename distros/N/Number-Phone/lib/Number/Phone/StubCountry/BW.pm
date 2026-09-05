@@ -22,7 +22,7 @@ use base qw(Number::Phone::StubCountry);
 use strict;
 use warnings;
 use utf8;
-our $VERSION = 1.20260610205500;
+our $VERSION = 1.20260904101548;
 
 my $formatters = [
                 {
@@ -150,46 +150,46 @@ my $validators = {
         '
               };
 my %areanames = ();
-$areanames{en} = {"26746", "Serowe",
-"267316", "Gaborone",
-"267654", "Kgalagadi",
-"267390", "Gaborone",
+$areanames{en} = {"26762", "Kasane",
+"267391", "Gaborone",
+"267534", "Lobatse",
 "26729", "Letlhakane\/Orapa",
+"26724", "Francistown",
+"267393", "Gaborone",
+"26758", "Jwaneng",
+"267316", "Gaborone",
+"267538", "Ramotswa",
+"267315", "Gaborone",
+"26746", "Serowe",
+"267395", "Gaborone",
+"267371", "Gaborone",
+"267319", "Gaborone",
+"267530", "Lobatse",
+"267313", "Gaborone",
+"267654", "Kgalagadi",
+"26754", "Barolong\/Ngwaketse",
 "26759", "Molepolole",
-"267310", "Gaborone\ \(outer\)",
-"26738", "Gaborone",
+"267312", "Gaborone",
+"26768", "Maun",
+"267651", "Kgalagadi",
+"26736", "Gaborone",
+"267390", "Gaborone",
+"26735", "Gaborone",
+"267318", "Gaborone",
 "26747", "Mahalapye",
+"267317", "Gaborone",
+"267659", "Gantsi",
+"267397", "Gaborone",
+"26757", "Mochudi",
+"26726", "Selebi\-Phikwe",
+"267310", "Gaborone\ \(outer\)",
 "267539", "Ramotswa",
 "267533", "Lobatse",
-"267315", "Gaborone",
-"26758", "Jwaneng",
-"267395", "Gaborone",
-"26754", "Barolong\/Ngwaketse",
-"26724", "Francistown",
-"267394", "Gaborone",
-"267371", "Gaborone",
-"267538", "Ramotswa",
-"267659", "Gantsi",
-"26757", "Mochudi",
-"267651", "Kgalagadi",
 "267370", "Gaborone",
-"26762", "Kasane",
 "26749", "Palapye",
-"26726", "Selebi\-Phikwe",
-"267530", "Lobatse",
-"267319", "Gaborone",
-"267313", "Gaborone",
+"267394", "Gaborone",
 "267392", "Gaborone",
-"267534", "Lobatse",
-"267317", "Gaborone",
-"267393", "Gaborone",
-"267391", "Gaborone",
-"26735", "Gaborone",
-"26736", "Gaborone",
-"267312", "Gaborone",
-"267397", "Gaborone",
-"26768", "Maun",
-"267318", "Gaborone",};
+"26738", "Gaborone",};
 my $timezones = {
                '' => [
                        'Africa/Gaborone'

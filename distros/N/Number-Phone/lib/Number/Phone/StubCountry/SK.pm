@@ -22,7 +22,7 @@ use base qw(Number::Phone::StubCountry);
 use strict;
 use warnings;
 use utf8;
-our $VERSION = 1.20260610205505;
+our $VERSION = 1.20260904101551;
 
 my $formatters = [
                 {
@@ -132,32 +132,32 @@ my $validators = {
         '
               };
 my %areanames = ();
-$areanames{en} = {"42137", "Nitra",
-"42144", "Liptovsky\ Mikulas",
-"42148", "Banska\ Bystrica",
-"42136", "Levice",
-"42135", "Nove\ Zamky",
-"42153", "Spisska\ Nova\ Ves",
-"421601", "Roznava",
-"42157", "Humenne",
-"42141", "Zilina",
+$areanames{en} = {"42143", "Martin",
 "42142", "Povazska\ Bystrica",
+"42157", "Humenne",
+"42138", "Topolcany",
+"42151", "Presov",
+"42144", "Liptovsky\ Mikulas",
+"42136", "Levice",
+"42141", "Zilina",
+"42154", "Bardejov",
+"42147", "Lucenec",
+"42152", "Poprad",
+"42153", "Spisska\ Nova\ Ves",
+"42135", "Nove\ Zamky",
+"4212", "Bratislava",
+"42148", "Banska\ Bystrica",
+"42134", "Senica",
 "42156", "Michalovce",
+"421601", "Roznava",
 "42155", "Kosice",
 "42133", "Trnava",
 "42132", "Trencin",
-"42143", "Martin",
-"42158", "Roznava",
-"42154", "Bardejov",
-"42131", "Dunajska\ Streda",
+"42137", "Nitra",
 "42145", "Zvolen",
 "42146", "Prievidza",
-"42152", "Poprad",
-"4212", "Bratislava",
-"42138", "Topolcany",
-"42151", "Presov",
-"42147", "Lucenec",
-"42134", "Senica",};
+"42158", "Roznava",
+"42131", "Dunajska\ Streda",};
 my $timezones = {
                '' => [
                        'Europe/Bratislava'

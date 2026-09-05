@@ -1,4 +1,4 @@
-package Dist::Zilla::App::Command::build 6.037;
+package Dist::Zilla::App::Command::build 6.038;
 # ABSTRACT: build your dist
 
 use Dist::Zilla::Pragmas;
@@ -124,7 +124,7 @@ Dist::Zilla::App::Command::build - build your dist
 
 =head1 VERSION
 
-version 6.037
+version 6.038
 
 =head1 SYNOPSIS
 

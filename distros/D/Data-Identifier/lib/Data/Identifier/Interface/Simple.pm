@@ -15,7 +15,7 @@ use Carp;
 
 use Data::Identifier;
 
-our $VERSION = v0.35;
+our $VERSION = v0.36;
 
 
 sub as {
@@ -35,6 +35,7 @@ sub ise {
     return $self->as('Data::Identifier')->ise(@args);
 }
 
+
 1;
 
 __END__
@@ -49,7 +50,7 @@ Data::Identifier::Interface::Simple - format independent identifier object
 
 =head1 VERSION
 
-version v0.35
+version v0.36
 
 =head1 SYNOPSIS
 
@@ -60,7 +61,11 @@ version v0.35
 This interface is for packages implementing some kind of identifier and/or objects having an identifier.
 
 B<Note:>
-This is an B<experimental> interface. It may be changed, renamed, or removed without notice.
+This is formally an B<experimental> interface.
+However, it become semi-stable (as of v0.36).
+It may be changed, but is most unlikely to be renamed or removed.
+
+See also L</FURTHER DIRECTIONS> for details.
 
 =head1 METHODS
 
@@ -95,6 +100,39 @@ The interface and options are the same as for L<Data::Identifier/ise>.
 The default implementation is equivalent to:
 
     return $obj->as('Data::Identifier')->ise(%opts);
+
+=head1 FURTHER DIRECTIONS
+
+=head2 FUTURE METHODS
+
+To be future-safe this interface reserves the following methods:
+C<displaycolour> (since v0.36),
+C<icontext> (since v0.36).
+
+Those methods may be used in the same or similar way as the corresponding methods in L<Data::Identifier>.
+
+Future versions of this module may provide default implementations.
+
+=head2 UNIVERSAL OPTIONS
+
+Currently methods are defined by their counterparts in L<Data::Identifier>.
+Future versions might clarify on this.
+
+Currently the options C<default>, and C<no_defaults> are considered universal options.
+They are most unlikely to be changed, or removed.
+
+In respect to future work the following other options are currently reserved:
+C<as> (since v0.36),
+C<autocreate> (since v0.36),
+C<context> (since v0.36),
+C<language> (since v0.36),
+C<language_tags> (since v0.36),
+C<listas> (since v0.36),
+C<list> (since v0.36),
+C<online> (since v0.36),
+C<rawtype> (since v0.36),
+C<so> (since v0.36),
+C<style> (since v0.36).
 
 =head1 AUTHOR
 

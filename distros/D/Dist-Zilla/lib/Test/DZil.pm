@@ -1,9 +1,9 @@
-package Test::DZil 6.037;
+package Test::DZil 6.038;
 # ABSTRACT: tools for testing Dist::Zilla plugins
 
 use Dist::Zilla::Pragmas;
 
-use Params::Util qw(_HASH0);
+use Params::SomeUtil qw(_HASH0);
 use JSON::MaybeXS;
 use Scalar::Util qw(blessed);
 use Test::Deep ();
@@ -253,7 +253,7 @@ Test::DZil - tools for testing Dist::Zilla plugins
 
 =head1 VERSION
 
-version 6.037
+version 6.038
 
 =head1 DESCRIPTION
 

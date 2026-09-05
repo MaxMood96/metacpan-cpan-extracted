@@ -1,4 +1,4 @@
-package Dist::Zilla 6.037;
+package Dist::Zilla 6.038;
 # ABSTRACT: distribution builder; installer not included!
 
 use Moose 0.92; # role composition fixes
@@ -896,7 +896,7 @@ Dist::Zilla - distribution builder; installer not included!
 
 =head1 VERSION
 
-version 6.037
+version 6.038
 
 =head1 DESCRIPTION
 
@@ -1177,7 +1177,7 @@ Ricardo SIGNES 😏 <cpan@semiotic.systems>
 
 =head1 CONTRIBUTORS
 
-=for stopwords Ævar Arnfjörð Bjarmason Alastair McGowan-Douglas Alceu Rodrigues de Freitas Junior Alexei Znamensky Alex Vandiver ambs Andrew Rodland Andy Jack Apocalypse ben hengst Bernardo Rechea Branislav Zahradník Brian Fraser Caleb Cushing Chase Whitener Chisel Christian Walde Christopher Bottoms J. Madsen Chris Weyl Cory G Watson csjewell Curtis Brandt Dagfinn Ilmari Mannsåker Damien KRotkine Dan Book Daniel Böhmer Danijel Tasov Dave Lambley O'Neill Rolsky David E. Wheeler Golden H. Adler Steinbrunner Zurborg Davor Cubranic Dimitar Petrov Doug Bell Elvin Aslanov Erik Carlsson Fayland Lam Felix Ostmann Florian Ragwitz Fred Moyer fREW Schmidt gardnerm Gianni Ceccarelli Graham Barr Knop Ollis Grzegorz Rożniecki Håkon Hægland Hans Dieter Pearcey Hunter McMillen Ivan Bessarabov Jakob Voss jantore Jérôme Quelin Jesse Luehrs Vincent JJ Merelo John Napiorkowski jonasbn Jonathan C. Otsuka Rockway Scott Duff Yu Karen Etheridge Kent Fredric Leon Timmermans Lucas Theisen Luc St-Louis Marcel Gruenauer Mark Flickinger Martin McGrath Mary Ehlers Mateu X Matthew Horsfall mauke Michael Conrad G. Schwern Jemmeson Mickey Nasriachi Mike Doherty Mohammad S Anwar Moritz Onken Neil Bowers Nickolay Platonov Nick Tonkin nperez Olivier Mengué Paul Cochrane Paulo Custodio Pedro Melo perlancar (@pc-office) Philippe Bruhat (BooK) raf Randy Stauner reneeb Ricardo Signes robertkrimen Rob Hoelz Robin Smidsrød Roy Ivy III Shawn M Moore Shlomi Fish Shoichi Kaji Smylers Steffen Schwigon Steven Haryanto Tatsuhiko Miyagawa Upasana Shukla Van Bugger Vyacheslav Matjukhin Yanick Champoux Yuval Kogman
+=for stopwords Ævar Arnfjörð Bjarmason Alastair McGowan-Douglas Alceu Rodrigues de Freitas Junior Alexei Znamensky Alex Vandiver ambs Andrew Rodland Andy Jack Apocalypse ben hengst Bernardo Rechea Branislav Zahradník Brian Fraser Caleb Cushing Chase Whitener Chisel Christian Walde Christopher Bottoms J. Madsen Chris Weyl Cory G Watson csjewell Curtis Brandt Dagfinn Ilmari Mannsåker Damien KRotkine Dan Book Daniel Böhmer Danijel Tasov Dave Lambley O'Neill Rolsky David E. Wheeler Golden H. Adler Steinbrunner Zurborg Davor Cubranic Dimitar Petrov Doug Bell Elvin Aslanov Erik Carlsson Fayland Lam Felix Ostmann Florian Ragwitz Fred Moyer fREW Schmidt gardnerm Gianni Ceccarelli Graham Barr Knop Ollis Grzegorz Rożniecki Håkon Hægland Hans Dieter Pearcey Hunter McMillen Ivan Bessarabov Jakob Voss jantore Jérôme Quelin Jesse Luehrs Vincent JJ Merelo John Napiorkowski jonasbn Jonathan C. Otsuka Rockway Scott Duff Yu Karen Etheridge Kent Fredric Leon Timmermans Lucas Theisen Luc St-Louis Marcel Gruenauer Mark Flickinger Martin McGrath Mary Ehlers Mateu X Matthew Horsfall mauke Michael Conrad G. Schwern Jemmeson Mickey Nasriachi Mike Doherty Mohammad S Anwar Moritz Onken Neil Bowers Nickolay Platonov Nick Tonkin nperez Olivier Mengué Paul Cochrane Paulo Custodio Pedro Melo perlancar (@pc-office) Philippe Bruhat (BooK) raf Randy Stauner reneeb Ricardo Signes robertkrimen Robert Rothenberg Rob Hoelz Robin Smidsrød Roy Ivy III Shawn M Moore Shlomi Fish Shoichi Kaji Smylers Steffen Schwigon Steven Haryanto Tatsuhiko Miyagawa Upasana Shukla Van Bugger Vyacheslav Matjukhin Yanick Champoux Yuval Kogman
 
 =over 4
 
@@ -1588,6 +1588,10 @@ Ricardo Signes <rjbs@semiotic.systems>
 =item *
 
 robertkrimen <robertkrimen@gmail.com>
+
+=item *
+
+Robert Rothenberg <rrwo@cpan.org>
 
 =item *
 

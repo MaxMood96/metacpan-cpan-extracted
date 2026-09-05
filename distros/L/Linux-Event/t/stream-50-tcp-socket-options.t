@@ -4,16 +4,17 @@ use warnings;
 
 use Test::More;
 
-use Linux::Event::Listener;
+use Linux::Event::IO::Sock::Listener;
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 our (@HOOKS, @ERRORS);
 
 {
     package T::ConfiguredServer;
-    use parent 'Linux::Event::Stream';
-    sub stream_options ($class) {
+    use parent 'Linux::Event::IO::Sock::Stream';
+    sub socket_options ($class) {
         return (
             tcp_nodelay       => 1,
             keepalive         => 1,
@@ -31,8 +32,8 @@ our (@HOOKS, @ERRORS);
 
 {
     package T::ConfiguredClient;
-    use parent 'Linux::Event::Stream';
-    sub stream_options ($class) { return tcp_nodelay => 1 }
+    use parent 'Linux::Event::IO::Sock::Stream';
+    sub socket_options ($class) { return tcp_nodelay => 1 }
     sub configure_socket ($self, $fh, $role, $address) {
         push @main::HOOKS, [$role, $address->family];
     }
@@ -56,7 +57,7 @@ our (@HOOKS, @ERRORS);
 
 {
     package T::ConfiguredListener;
-    use parent 'Linux::Event::Listener';
+    use parent 'Linux::Event::IO::Sock::Listener';
     sub on_accept ($self, $stream) {
         main::is($stream->tcp_nodelay, 1,
             'accepted Stream applies class TCP_NODELAY policy');

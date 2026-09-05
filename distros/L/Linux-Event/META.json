@@ -1,5 +1,5 @@
 {
-   "abstract" : "Linux-native reactor, streams, datagrams, and processes",
+   "abstract" : "Linux-native reactor, I/O, kernel events, and processes",
    "author" : [
       "Joshua S. Day <hax@cpan.org>"
    ],
@@ -20,21 +20,29 @@
       ],
       "package" : [
          "Linux::Event::_Registration",
+         "Linux::Event::_IO",
+         "Linux::Event::_ByteStream",
+         "Linux::Event::_ByteStream::Descriptor",
+         "Linux::Event::_Socket",
+         "Linux::Event::_Socket::Descriptor",
+         "Linux::Event::_Socket::Stream",
+         "Linux::Event::_Socket::Listener",
+         "Linux::Event::_Socket::Dgram",
+         "Linux::Event::_Socket::Connection",
+         "Linux::Event::_ByteStream::_Deadline",
+         "Linux::Event::_ByteStream::Descriptor::Native",
+         "Linux::Event::_ByteStream::State",
+         "Linux::Event::_ByteStream::TestSupport",
+         "Linux::Event::_Socket::Dgram::_ReadyTimer",
+         "Linux::Event::Kernel::Signal::_Descriptor",
+         "Linux::Event::Kernel::Signal::_Engine",
+         "Linux::Event::Kernel::Signal::_Service",
+         "Linux::Event::Kernel::Event::_OwnerState",
+         "Linux::Event::Kernel::Timer::_Descriptor",
          "Linux::Event::Loop::Introspection",
          "Linux::Event::_Resolver",
          "Linux::Event::_Resolver::_Native",
-         "Linux::Event::_SocketConfig",
-         "Linux::Event::Datagram::_ReadyTimer",
-         "Linux::Event::Signal::_Descriptor",
-         "Linux::Event::Signal::_Engine",
-         "Linux::Event::Signal::_Service",
-         "Linux::Event::Stream::_Connection",
-         "Linux::Event::Stream::_Deadline",
-         "Linux::Event::Stream::_Descriptor",
-         "Linux::Event::Stream::XSDescriptor",
-         "Linux::Event::Stream::XSState",
-         "Linux::Event::Timer::_Descriptor",
-         "Linux::Event::Wakeup::_OwnerState"
+         "Linux::Event::_SocketConfig"
       ]
    },
    "prereqs" : {
@@ -64,83 +72,103 @@
    "provides" : {
       "Linux::Event" : {
          "file" : "lib/Linux/Event.pm",
-         "version" : "0.105"
+         "version" : "0.111"
       },
       "Linux::Event::Address" : {
          "file" : "lib/Linux/Event/Address.pm",
-         "version" : "0.105"
-      },
-      "Linux::Event::Datagram" : {
-         "file" : "lib/Linux/Event/Datagram.pm",
-         "version" : "0.105"
+         "version" : "0.111"
       },
       "Linux::Event::Error" : {
          "file" : "lib/Linux/Event/Error.pm",
-         "version" : "0.105"
+         "version" : "0.111"
       },
       "Linux::Event::Framer" : {
          "file" : "lib/Linux/Event/Framer.pm",
-         "version" : "0.105"
+         "version" : "0.111"
       },
       "Linux::Event::Framer::DecimalLength" : {
          "file" : "lib/Linux/Event/Framer/DecimalLength.pm",
-         "version" : "0.105"
+         "version" : "0.111"
       },
       "Linux::Event::Framer::Delimiter" : {
          "file" : "lib/Linux/Event/Framer/Delimiter.pm",
-         "version" : "0.105"
+         "version" : "0.111"
       },
       "Linux::Event::Framer::Fixed" : {
          "file" : "lib/Linux/Event/Framer/Fixed.pm",
-         "version" : "0.105"
+         "version" : "0.111"
       },
       "Linux::Event::Framer::LengthPrefix" : {
          "file" : "lib/Linux/Event/Framer/LengthPrefix.pm",
-         "version" : "0.105"
+         "version" : "0.111"
       },
       "Linux::Event::Framer::Netstring" : {
          "file" : "lib/Linux/Event/Framer/Netstring.pm",
-         "version" : "0.105"
+         "version" : "0.111"
       },
       "Linux::Event::Framer::U32BE" : {
          "file" : "lib/Linux/Event/Framer/U32BE.pm",
-         "version" : "0.105"
+         "version" : "0.111"
       },
       "Linux::Event::Framer::Varint" : {
          "file" : "lib/Linux/Event/Framer/Varint.pm",
-         "version" : "0.105"
+         "version" : "0.111"
       },
-      "Linux::Event::Listener" : {
-         "file" : "lib/Linux/Event/Listener.pm",
-         "version" : "0.105"
+      "Linux::Event::IO" : {
+         "file" : "lib/Linux/Event/IO.pm",
+         "version" : "0.111"
+      },
+      "Linux::Event::IO::Pipe" : {
+         "file" : "lib/Linux/Event/IO/Pipe.pm",
+         "version" : "0.111"
+      },
+      "Linux::Event::IO::Sock" : {
+         "file" : "lib/Linux/Event/IO/Sock.pm",
+         "version" : "0.111"
+      },
+      "Linux::Event::IO::Sock::Dgram" : {
+         "file" : "lib/Linux/Event/IO/Sock/Dgram.pm",
+         "version" : "0.111"
+      },
+      "Linux::Event::IO::Sock::Listener" : {
+         "file" : "lib/Linux/Event/IO/Sock/Listener.pm",
+         "version" : "0.111"
+      },
+      "Linux::Event::IO::Sock::Stream" : {
+         "file" : "lib/Linux/Event/IO/Sock/Stream.pm",
+         "version" : "0.111"
+      },
+      "Linux::Event::IO::TTY" : {
+         "file" : "lib/Linux/Event/IO/TTY.pm",
+         "version" : "0.111"
+      },
+      "Linux::Event::Kernel" : {
+         "file" : "lib/Linux/Event/Kernel.pm",
+         "version" : "0.111"
+      },
+      "Linux::Event::Kernel::Event" : {
+         "file" : "lib/Linux/Event/Kernel/Event.pm",
+         "version" : "0.111"
+      },
+      "Linux::Event::Kernel::Process" : {
+         "file" : "lib/Linux/Event/Kernel/Process.pm",
+         "version" : "0.111"
+      },
+      "Linux::Event::Kernel::Signal" : {
+         "file" : "lib/Linux/Event/Kernel/Signal.pm",
+         "version" : "0.111"
+      },
+      "Linux::Event::Kernel::Timer" : {
+         "file" : "lib/Linux/Event/Kernel/Timer.pm",
+         "version" : "0.111"
       },
       "Linux::Event::Loop" : {
          "file" : "lib/Linux/Event/Loop.pm",
-         "version" : "0.105"
-      },
-      "Linux::Event::Process" : {
-         "file" : "lib/Linux/Event/Process.pm",
-         "version" : "0.105"
-      },
-      "Linux::Event::Signal" : {
-         "file" : "lib/Linux/Event/Signal.pm",
-         "version" : "0.105"
-      },
-      "Linux::Event::Stream" : {
-         "file" : "lib/Linux/Event/Stream.pm",
-         "version" : "0.105"
+         "version" : "0.111"
       },
       "Linux::Event::TLS" : {
          "file" : "lib/Linux/Event/TLS.pm",
-         "version" : "0.105"
-      },
-      "Linux::Event::Timer" : {
-         "file" : "lib/Linux/Event/Timer.pm",
-         "version" : "0.105"
-      },
-      "Linux::Event::Wakeup" : {
-         "file" : "lib/Linux/Event/Wakeup.pm",
-         "version" : "0.105"
+         "version" : "0.111"
       }
    },
    "release_status" : "stable",
@@ -155,6 +183,6 @@
          "web" : "https://github.com/haxmeister/perl-linux-event"
       }
    },
-   "version" : "0.105",
+   "version" : "0.111",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

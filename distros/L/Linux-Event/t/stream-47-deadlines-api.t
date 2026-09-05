@@ -6,11 +6,12 @@ use Test::More;
 use Socket qw(AF_UNIX SOCK_STREAM);
 
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 {
     package T::DeadlineDefaults;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
 
     sub stream_options ($class) {
         return (
@@ -25,7 +26,7 @@ use Linux::Event::Stream;
 
 {
     package T::DeadlineInvalid;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub stream_options ($class) { return (idle_timeout => -1) }
     sub on_data ($stream, $bytes) { return }
 }
@@ -118,7 +119,7 @@ sub pair () {
     my $loop = Linux::Event::Loop->new;
     $loop->add($stream);
     ok defined($stream->deadline), 'relative deadline becomes absolute at attach';
-    cmp_ok $stream->deadline, '>', Linux::Event::Timer->now,
+    cmp_ok $stream->deadline, '>', Linux::Event::Kernel::Timer->now,
         'constructor deadline starts from established attachment';
     $stream->clear_deadline;
     is $stream->deadline, undef, 'clear_deadline removes constructor deadline';
@@ -127,7 +128,7 @@ sub pair () {
     $stream->set_deadline(after => 7, operation => 'response');
     is $stream->deadline_operation, 'response',
         'set_deadline replaces the operation label';
-    cmp_ok $stream->deadline, '>', Linux::Event::Timer->now,
+    cmp_ok $stream->deadline, '>', Linux::Event::Kernel::Timer->now,
         'runtime relative deadline becomes absolute immediately';
     $stream->close;
     close $right;

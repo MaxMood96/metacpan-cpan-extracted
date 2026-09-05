@@ -31,7 +31,7 @@ extern char **environ;
 # ifdef __NR_pidfd_open
 #  define SYS_pidfd_open __NR_pidfd_open
 # else
-#  error "Linux::Event::Process requires Linux headers with pidfd_open"
+#  error "Linux::Event::Kernel::Process requires Linux headers with pidfd_open"
 # endif
 #endif
 
@@ -39,7 +39,7 @@ extern char **environ;
 # ifdef __NR_pidfd_send_signal
 #  define SYS_pidfd_send_signal __NR_pidfd_send_signal
 # else
-#  error "Linux::Event::Process requires Linux headers with pidfd_send_signal"
+#  error "Linux::Event::Kernel::Process requires Linux headers with pidfd_send_signal"
 # endif
 #endif
 
@@ -161,7 +161,7 @@ lep_duplicate_source(int source)
     return duplicate;
 }
 
-MODULE = Linux::Event::Process    PACKAGE = Linux::Event::Process
+MODULE = Linux::Event::Kernel::Process    PACKAGE = Linux::Event::Kernel::Process
 
 PROTOTYPES: DISABLE
 
@@ -360,6 +360,65 @@ _pidfd_reap(pidfd)
     }
   OUTPUT:
     RETVAL
+
+void
+_drain_pipe(self, callback, fd, read_size, maximum)
+    SV *self
+    SV *callback
+    int fd
+    UV read_size
+    UV maximum
+  PREINIT:
+    UV reads = 0;
+    int status = 0;
+    int saved_errno = 0;
+    ssize_t count;
+    SV *chunk;
+    char *buffer;
+  PPCODE:
+    if (!read_size || read_size > (UV)INT_MAX)
+        croak("native Process pipe read size is invalid");
+    while (!maximum || reads < maximum) {
+        ENTER;
+        SAVETMPS;
+        chunk = sv_2mortal(newSV((STRLEN)read_size));
+        SvPOK_only(chunk);
+        buffer = SvGROW(chunk, (STRLEN)read_size + 1);
+        do {
+            count = read(fd, buffer, (size_t)read_size);
+        } while (count < 0 && errno == EINTR);
+        if (count > 0) {
+            SvCUR_set(chunk, (STRLEN)count);
+            *SvEND(chunk) = '\0';
+            reads++;
+            if (SvOK(callback)) {
+                dSP;
+                PUSHMARK(SP);
+                EXTEND(SP, 2);
+                PUSHs(self);
+                PUSHs(chunk);
+                PUTBACK;
+                call_sv(callback, G_DISCARD | G_VOID);
+                SPAGAIN;
+                PUTBACK;
+            }
+            FREETMPS;
+            LEAVE;
+            continue;
+        }
+        if (count == 0) {
+            status = 1;
+        } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            status = 2;
+            saved_errno = errno;
+        }
+        FREETMPS;
+        LEAVE;
+        break;
+    }
+    EXTEND(SP, 2);
+    PUSHs(sv_2mortal(newSViv(status)));
+    PUSHs(sv_2mortal(newSViv(saved_errno)));
 
 void
 _write_pipe(fd, payload)

@@ -111,6 +111,12 @@ struct hm_conn {
                                    * completion lands            */
     unsigned char detached;       /* app took the socket (see hm_detach) */
     unsigned char accepts_gzip;   /* this request's Accept-Encoding    */
+    unsigned char cont_sent;      /* a 100 Continue has gone out for the
+                                   * request being read. Per request, and
+                                   * on the connection rather than on the
+                                   * stack, because the headers stay in rbuf
+                                   * and hm_process re-reads them on every
+                                   * readable event until the body is whole */
     hm_bsrc  bsrc;          /* streaming body being dripped, if any */
     int      last_status;   /* last response status/bytes (logging) */
     size_t   last_blen;
@@ -1100,6 +1106,54 @@ static int hm_ci_contains(const char *hay, size_t hl, const char *needle) {
     for (i = 0; i + nl <= hl; i++)
         if (hm_strncasecmp(hay + i, needle, nl) == 0) return 1;
     return 0;
+}
+
+/* ---- Expect: 100-continue (RFC 9110 10.1.1) -------------------------------
+ * A client that expects to send a large body may ask permission first and
+ * wait for an interim 100 before spending the upload. A server that never
+ * answers does not break such a client - it stalls it, for however long the
+ * client is prepared to wait (a second, in curl and in most of the Java
+ * clients) on every request. So the answer is worth having for its own sake,
+ * and the refusals are worth having more: a body over max_body is refused
+ * here, on the headers, rather than after the client has sent it all.
+ */
+#define HM_EXPECT_NONE     0
+#define HM_EXPECT_CONTINUE 1
+#define HM_EXPECT_OTHER    2
+
+/* The request line's HTTP version. Only "is it 1.1" is asked: 100-continue
+ * is an HTTP/1.1 expectation and a 1.0 client's Expect MUST be ignored. */
+static int hm_req_is_11(const char *head, size_t headlen) {
+    const char *eol = (const char *)memchr(head, '\r', headlen);
+    size_t ll = eol ? (size_t)(eol - head) : headlen;
+    return ll >= 8 && memcmp(head + ll - 8, "HTTP/1.1", 8) == 0;
+}
+
+/* Classify the Expect field. The value is a list, and 100-continue is the
+ * only member this server understands, so anything else - including
+ * 100-continue with something else beside it - is an expectation it cannot
+ * meet and earns a 417 rather than a silent promise it will not keep. */
+static int hm_expectation(const char *head, size_t headlen) {
+    size_t vl = 0;
+    const char *v;
+    if (!hm_req_is_11(head, headlen)) return HM_EXPECT_NONE;
+    v = hm_find_header(head, headlen, "expect", 6, &vl);
+    if (!v || !vl) return HM_EXPECT_NONE;
+    if (vl == 12 && hm_strncasecmp(v, "100-continue", 12) == 0)
+        return HM_EXPECT_CONTINUE;
+    return HM_EXPECT_OTHER;
+}
+
+/* Send the interim response, once per request. Called only where the headers
+ * have been accepted AND the body is not all here yet: a request already
+ * carrying its whole body is answered with its final status instead, which
+ * RFC 9110 allows and every client handles, and a request that is going to
+ * be refused is refused before this is ever reached. */
+static void hm_send_continue(hm_conn *c, int expect) {
+    static const char cont[] = "HTTP/1.1 100 Continue\r\n\r\n";
+    if (expect != HM_EXPECT_CONTINUE || c->cont_sent) return;
+    c->cont_sent = 1;
+    hm_wb_put(c, cont, sizeof(cont) - 1);
 }
 
 /* Percent-decode a path once (RFC 3875 PATH_INFO): %XX only, no '+'. */
@@ -2389,6 +2443,20 @@ static void hm_process(pTHX_ hm_conn *c) {
             c->keepalive = 0;
             break;
         }
+
+        /* An expectation this server cannot meet is refused now, on the
+         * headers alone - which is the answer the client asked for. */
+        int expect = hm_expectation(c->rbuf, headlen);
+        if (expect == HM_EXPECT_OTHER) {
+            static const char e417[] =
+                "HTTP/1.1 417 Expectation Failed\r\nContent-Length: 0\r\n"
+                "Connection: close\r\n\r\n";
+            hm_wb_put(c, e417, sizeof(e417) - 1);
+            c->keepalive = 0;
+            c->last_status = 417;
+            break;
+        }
+
         size_t body_consumed;   /* wire octets after the headers this request uses */
         if (clen < 0) {         /* chunked: validate, then decode in place */
             size_t enc = 0, dec = 0;
@@ -2419,6 +2487,7 @@ static void hm_process(pTHX_ hm_conn *c) {
                     hm_wb_put(c, e413, sizeof(e413) - 1);
                     c->keepalive = 0;
                 }
+                else hm_send_continue(c, expect);
                 break;
             }
             hm_chunked_compact(c->rbuf + bodystart);     /* -> dec octets @ bodystart */
@@ -2462,7 +2531,10 @@ static void hm_process(pTHX_ hm_conn *c) {
                         c->rlen -= (size_t)w;
                     }
                 }
-                if (c->spill_got < (long)clen) break;      /* await more */
+                if (c->spill_got < (long)clen) {           /* await more */
+                    hm_send_continue(c, expect);
+                    break;
+                }
                 if (lseek(c->spill_fd, 0, SEEK_SET) < 0) {
                     hm_close(aTHX_ loop, c); return;
                 }
@@ -2470,7 +2542,10 @@ static void hm_process(pTHX_ hm_conn *c) {
                 goto hm_have_body;
             }
         hm_no_spill:
-            if (c->rlen - bodystart < (size_t)clen) break;   /* await full body */
+            if (c->rlen - bodystart < (size_t)clen) {        /* await full body */
+                hm_send_continue(c, expect);
+                break;
+            }
             body_consumed = (size_t)clen;
         hm_have_body: ;
         }
@@ -2544,6 +2619,8 @@ static void hm_process(pTHX_ hm_conn *c) {
         memmove(c->rbuf, c->rbuf + consumed, c->rlen - consumed);
         c->rlen -= consumed;
         c->req_start = 0;
+        c->cont_sent = 0;       /* the next request on this connection asks
+                                 * for itself */
         served++;
         c->nreqs++;
         loop->requests++;

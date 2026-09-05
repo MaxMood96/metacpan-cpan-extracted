@@ -2,7 +2,6 @@
 
 use strict;
 use Test::More;
-use Test::Fatal;
 
 use LWP::MediaTypes;
 
@@ -47,10 +46,12 @@ for (@tests) {
     is("@enc", "@expectedEnc");
 }
 
+local $@;
+eval {
+    guess_media_type({});
+};
 like(
-    exception {
-        guess_media_type({});
-    },
+    $@,
     qr/Unable to determine filetype on unblessed refs/,
     "Cannot pass unblessed refs"
 );

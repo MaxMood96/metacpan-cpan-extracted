@@ -1,0 +1,24 @@
+Revision history for App-SlimPacker
+
+0.02  2026-09-05
+    - Minifier: never rename local/our globals (only my) so fully-qualified
+      $PKG::name references stay valid (fixes silent value loss)
+    - Minifier: fix bare-sigil Cast merge (print $fh $$source), package-globals
+      now guarded by the :: name check
+    - bundle: pull modules without a .packlist from @INC (Debian / hand-installed)
+    - bundle: never bundle core modules (Module::CoreList filter) even when a
+      bundled dep uses them
+    - bundle: normalise module-name arguments (Carp, File::HomeDir) to path form
+      for FatPacker's require
+    - Tests split into t/{minify,deps,bundle,cli}.t with subcommand-dispatch
+      coverage for the default 'pack' pipeline
+
+0.01  2026-09-04
+    - Initial release
+    - PPI-based minifier (process) with variable renaming
+    - CLI bundler (slimpack) with static dependency resolution
+    - Module::Pluggable search_path inlining
+    - Default 'pack' pipeline calls App::FatPacker's methods internally
+      (trace -> Module::CoreList filter -> packlists -> tree -> bundle)
+    - trace / packlists-for / tree / bundle exposed as subcommands
+      with the same arguments as fatpack

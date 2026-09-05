@@ -5,7 +5,7 @@ use warnings;
 use Test::More;
 use Scalar::Util qw(blessed);
 
-use Linux::Event::Datagram;
+use Linux::Event::IO::Sock::Dgram;
 use Linux::Event::Loop;
 
 sub exception ($code) {
@@ -13,19 +13,19 @@ sub exception ($code) {
     return eval { $code->(); 1 } ? '' : "$@";
 }
 
-like(exception(sub { Linux::Event::Datagram->new }), qr/abstract base class/,
-    'base Datagram class is abstract');
+like(exception(sub { Linux::Event::IO::Sock::Dgram->new }), qr/must define on_datagram/,
+    'public Dgram subclassing base requires on_datagram');
 
 {
     package T::Datagram::Missing;
-    use parent 'Linux::Event::Datagram';
+    use parent 'Linux::Event::IO::Sock::Dgram';
 }
 like(exception(sub { T::Datagram::Missing->new(host => '127.0.0.1', port => 0) }),
     qr/must define on_datagram/, 'on_datagram is required');
 
 {
     package T::Datagram::Basic;
-    use parent 'Linux::Event::Datagram';
+    use parent 'Linux::Event::IO::Sock::Dgram';
     sub on_datagram ($self, $payload, $peer) { }
 }
 
@@ -69,7 +69,7 @@ like(exception(sub { T::Datagram::Basic->new(
 our (@CONFIGURE_ROLES, $CONFIGURE_ADDRESS);
 {
     package T::Datagram::Configured;
-    use parent 'Linux::Event::Datagram';
+    use parent 'Linux::Event::IO::Sock::Dgram';
     sub on_datagram ($self, $payload, $peer) { }
     sub configure_socket ($self, $fh, $role, $address) {
         push @main::CONFIGURE_ROLES, $role;

@@ -6,3 +6,10 @@
 
 1.0.2	Sat Jul 20 09:07:09 PM UTC 2024
 	- update POD
+
+1.0.3	Sat Sep 05 09;07:09 PM UTC 2026
+	- added perlomp as a pre-req so
+	one may do,
+
+		perldoc perlomp
+

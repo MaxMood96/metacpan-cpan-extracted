@@ -9,7 +9,7 @@ use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 
 use Linux::Event;
 use Linux::Event::Loop;
-use Linux::Event::Wakeup;
+use Linux::Event::Kernel::Event;
 
 my $signals = 100_000;
 my @batch_sizes = (1, 16, 256);
@@ -33,9 +33,9 @@ die "batch sizes must be positive\n" if grep { $_ < 1 } @batch_sizes;
 
 {
     package BenchWakeup;
-    use parent 'Linux::Event::Wakeup';
+    use parent 'Linux::Event::Kernel::Event';
 
-    sub on_wakeup ($wakeup, $count) {
+    sub on_event ($wakeup, $count) {
         my $run = $wakeup->data;
         $run->{delivered} += $count;
         $run->{callbacks}++;

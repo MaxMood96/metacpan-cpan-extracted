@@ -24,7 +24,7 @@ BEGIN {
 
 {
     package T::ProbeNativeStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'ProbeNative';
     sub on_message ($stream, $message) {
         $stream->data->{got} = $message;
@@ -41,7 +41,7 @@ my $stream = T::ProbeNativeStream->new(loop => $loop, fh => $a, data => $state);
 is($stream->{descriptor}{framer}{package},
     'Linux::Event::Framer::ProbeNative',
     'declaration derives the implementation package from the exact name');
-is($stream->{descriptor}{native}{read_mode}, 3,
+is($stream->{descriptor}{framer}{native}{read_mode}, 3,
     'dynamically loaded declaration contributes native parser configuration');
 
 syswrite($b, 'OK');

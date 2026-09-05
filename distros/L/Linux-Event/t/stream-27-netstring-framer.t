@@ -8,7 +8,7 @@ use Linux::Event::Loop;
 
 {
     package T::NetstringStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Netstring';
     sub stream_options ($class) { return read_size => 2 }
     sub on_message ($stream, $message) {

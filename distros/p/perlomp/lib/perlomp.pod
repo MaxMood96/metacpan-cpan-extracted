@@ -1,0 +1,486 @@
+=head1 NAME
+
+perlomp - OpenMP programming from Perl
+
+=head1 SYNOPSIS
+
+Install this manual page:
+
+    cpanm perlomp
+    perldoc perlomp
+
+Install the full Perl OpenMP stack:
+
+    cpanm OpenMP
+
+A small Inline::C example using the convenience metapackage:
+
+    use strict;
+    use warnings;
+
+    use OpenMP;
+
+    use Inline (
+        C    => 'DATA',
+        with => qw/OpenMP::Simple/,
+    );
+
+    my $omp = OpenMP->new;
+    $omp->env->omp_num_threads = 4;
+    $omp->env->omp_schedule    = 'dynamic,4';
+    $omp->env->assert_omp_environment;
+
+    print "threads = ", threads_in_team(), "\n";
+
+    __DATA__
+    __C__
+
+    int threads_in_team() {
+        PerlOMP_GETENV_BASIC
+
+        int threads = 0;
+
+        #pragma omp parallel
+        {
+            #pragma omp single
+            threads = omp_get_num_threads();
+        }
+
+        return threads;
+    }
+
+=head1 DESCRIPTION
+
+OpenMP is a shared-memory parallel programming model implemented by C, C++,
+and Fortran compilers and runtimes. Perl does not interpret OpenMP directives
+itself. In Perl programs, OpenMP is normally used by calling compiled code,
+embedding C with L<Inline::C>, or launching an external program that was built
+with OpenMP support.
+
+The Perl OpenMP modules divide that job into a few small pieces:
+
+=over 4
+
+=item * L<OpenMP::Environment>
+
+Manages and validates the OpenMP-related values in C<%ENV>. Use it when Perl
+needs to select thread counts, scheduling, affinity, target-offload behavior,
+or other OpenMP runtime settings.
+
+=item * L<OpenMP::Simple>
+
+Provides L<Inline::C> with OpenMP compiler/linker configuration and a header
+containing C<PerlOMP_*> convenience macros and helper functions. It relies on
+L<Alien::OpenMP> for toolchain discovery.
+
+=item * L<OpenMP>
+
+The convenience metapackage. Installing it pulls together
+L<OpenMP::Environment>, L<OpenMP::Simple>, L<Inline::C>, and
+L<Alien::OpenMP>, and its object interface gives convenient access to an
+L<OpenMP::Environment> object.
+
+=back
+
+The useful mental model is:
+
+    OpenMP::Environment  -> manage and validate %ENV
+    OpenMP::Simple       -> compile/link Inline::C and apply selected values
+    OpenMP               -> install and tie the pieces together
+    Alien::OpenMP        -> discover the compiler/OpenMP runtime toolchain
+
+=head1 WHICH MODULE SHOULD I USE?
+
+=head2 I am launching an existing OpenMP executable
+
+Use L<OpenMP::Environment>. You do not need L<OpenMP::Simple> merely to set
+environment variables for a child process.
+
+    use OpenMP::Environment;
+
+    my $env = OpenMP::Environment->new;
+
+    $env->omp_num_threads = 16;
+    $env->omp_proc_bind   = 'close';
+    $env->omp_places      = 'cores';
+
+    $env->assert_omp_environment;
+
+    system '/path/to/openmp-program';
+
+A child started by C<system>, C<exec>, IPC code, or a scheduler launcher
+normally inherits the current process environment. This is the simplest case:
+the new executable sees the environment when it starts.
+
+=head2 I am writing OpenMP C inside a Perl program
+
+Use L<OpenMP::Simple> with L<Inline::C>. Add L<OpenMP::Environment> when you
+want a Perl API for setting and validating OpenMP controls.
+
+    use OpenMP::Simple;
+    use OpenMP::Environment;
+
+    use Inline (
+        C    => 'DATA',
+        with => qw/OpenMP::Simple/,
+    );
+
+    my $env = OpenMP::Environment->new;
+    $env->omp_num_threads = 8;
+    $env->omp_schedule    = 'guided,4';
+    $env->assert_omp_environment;
+
+    __DATA__
+    __C__
+
+    int work(void) {
+        PerlOMP_GETENV_BASIC
+
+        #pragma omp parallel
+        {
+            /* native C work */
+        }
+
+        return 1;
+    }
+
+=head2 I want the standard Perl OpenMP stack
+
+Install and use L<OpenMP>:
+
+    cpanm OpenMP
+
+    use OpenMP;
+
+    my $omp = OpenMP->new;
+    $omp->env->omp_num_threads = 8;
+
+L<OpenMP> is intentionally thin. Its main value is making the common set of
+Perl OpenMP dependencies easy to install and making examples less repetitive.
+
+=head1 OpenMP::Environment
+
+L<OpenMP::Environment> changes C<%ENV>; it does not implement OpenMP itself.
+Its accessors are lvalue-capable, so modern code can use normal assignment:
+
+    my $env = OpenMP::Environment->new;
+
+    $env->omp_num_threads = 8;
+    $env->omp_proc_bind   = 'spread';
+    $env->omp_places      = 'cores';
+
+Traditional getter/setter calls remain available:
+
+    $env->omp_num_threads(8);
+    my $threads = $env->omp_num_threads;
+    $env->unset_omp_num_threads;
+
+Compound lvalue operations are also supported where the resulting value is
+valid:
+
+    $env->omp_num_threads++;
+
+=head2 Validation
+
+The assignment API preserves compatibility with older releases. For stricter
+checking, validate a selected variable or the complete supported environment:
+
+    use OpenMP::Environment qw/:assert/;
+
+    $ENV{OMP_SCHEDULE} = 'nonmonotonic:dynamic,4';
+    assert omp_schedule;
+
+or:
+
+    $env->assert_omp_environment;
+
+Strict validation checks syntax and portable cross-variable relationships, but
+it deliberately does not probe the machine for CPU topology, NUMA layout,
+GPUs, allocator availability, or other runtime resources.
+
+=head2 Unsetting values
+
+Named unsetters are available on the object:
+
+    $env->unset_omp_schedule;
+
+There is also an optional functional DSL:
+
+    use OpenMP::Environment qw/:dsl/;
+
+    assert omp_num_threads;
+    unset  omp_num_threads;
+
+=head2 Common environment variables
+
+Frequently used OpenMP controls include:
+
+    OMP_NUM_THREADS
+    OMP_SCHEDULE
+    OMP_DYNAMIC
+    OMP_MAX_ACTIVE_LEVELS
+    OMP_PROC_BIND
+    OMP_PLACES
+    OMP_THREAD_LIMIT
+    OMP_STACKSIZE
+    OMP_WAIT_POLICY
+    OMP_DISPLAY_ENV
+    OMP_DISPLAY_AFFINITY
+    OMP_AFFINITY_FORMAT
+    OMP_TARGET_OFFLOAD
+    OMP_DEFAULT_DEVICE
+    OMP_NUM_TEAMS
+    OMP_TEAMS_THREAD_LIMIT
+    OMP_ALLOCATOR
+
+GNU libgomp also supplies C<GOMP_*> controls such as C<GOMP_CPU_AFFINITY>,
+C<GOMP_STACKSIZE>, C<GOMP_SPINCOUNT>, and C<GOMP_DEBUG>.
+
+Current L<OpenMP::Environment> documentation is aligned with the canonical
+OpenMP/GNU libgomp environment set documented by GCC 16.2, including OpenMP
+5.2-era syntax. Consult L<OpenMP::Environment> and
+L<OpenMP::Environment::Validation> for the authoritative list and the exact
+validation rules implemented by the installed release.
+
+=head1 OpenMP::Simple
+
+L<OpenMP::Simple> is a small L<Inline::C> configuration wrapper around
+L<Alien::OpenMP>. With:
+
+    use Inline (
+        C    => 'DATA',
+        with => qw/OpenMP::Simple/,
+    );
+
+it supplies the required OpenMP compiler/linker configuration and makes the
+C<openmp-simple.h> helpers available to the C source.
+
+You can also use it without the environment macros when all you need is an
+OpenMP-aware Inline::C toolchain:
+
+    int maximum_threads(void) {
+        return omp_get_max_threads();
+    }
+
+=head2 Applying C<%ENV> to an already loaded runtime
+
+An OpenMP runtime linked into the current Perl process may have initialized
+before Perl changes C<%ENV>. For settings that have corresponding OpenMP
+runtime setter functions, L<OpenMP::Simple> provides macros that re-read
+C<%ENV> and apply the values to the active runtime.
+
+The common bundle is:
+
+    PerlOMP_GETENV_BASIC
+
+which applies C<OMP_NUM_THREADS> and C<OMP_SCHEDULE>.
+
+Individual update macros include support for controls such as:
+
+    PerlOMP_UPDATE_WITH_ENV__NUM_THREADS
+    PerlOMP_UPDATE_WITH_ENV__SCHEDULE
+    PerlOMP_UPDATE_WITH_ENV__DYNAMIC
+    PerlOMP_UPDATE_WITH_ENV__NESTED
+    PerlOMP_UPDATE_WITH_ENV__MAX_ACTIVE_LEVELS
+    PerlOMP_UPDATE_WITH_ENV__DEFAULT_DEVICE
+    PerlOMP_UPDATE_WITH_ENV__NUM_TEAMS
+    PerlOMP_UPDATE_WITH_ENV__TEAMS_THREAD_LIMIT
+
+See L<OpenMP::Simple> for the exact macros available in the installed release.
+
+=head1 PROCESS STARTUP MATTERS
+
+This is one of the most important distinctions in Perl/OpenMP programs.
+
+For an external executable, changing C<%ENV> immediately before C<system> or
+C<exec> is normally sufficient because the child process initializes its own
+OpenMP runtime.
+
+For OpenMP code loaded into the current Perl interpreter through L<Inline::C>,
+XS, or another native interface, the OpenMP runtime may already have consumed
+some environment variables. Not every OpenMP setting has a runtime setter.
+
+If a setting must exist at runtime initialization, establish it before loading
+the OpenMP-enabled shared library. A C<BEGIN> block is one convenient way:
+
+    BEGIN {
+        $ENV{OMP_CANCELLATION} = 'TRUE';
+    }
+
+    use OpenMP::Simple;
+
+When a runtime setter exists, the corresponding C<PerlOMP_UPDATE_WITH_ENV__*>
+macro may be used instead.
+
+=head1 PERL DATA AND OPENMP THREADS
+
+OpenMP worker threads are native threads. Do not assume that arbitrary Perl
+API access from those worker threads is safe.
+
+A conservative design is:
+
+=over 4
+
+=item 1.
+
+Read or convert Perl scalars and arrays on the Perl/caller thread.
+
+=item 2.
+
+Place the data into native C storage.
+
+=item 3.
+
+Perform parallel work on the native data inside the OpenMP region.
+
+=item 4.
+
+Return to the Perl/caller thread before constructing or mutating Perl data
+structures.
+
+=back
+
+L<OpenMP::Simple> contains array counting, verification, and conversion helpers,
+but some parallel conversion helpers are explicitly more experimental than the
+basic environment/runtime macros. Read the installed L<OpenMP::Simple>
+documentation before relying on them across different Perl threading models.
+
+=head1 PORTABILITY
+
+The critical portability unit is the whole toolchain: the Perl installation,
+its configured C compiler, the compiler used for native extensions, and the
+OpenMP runtime must be compatible.
+
+L<Alien::OpenMP> is responsible for discovering and supplying the OpenMP build
+configuration used by L<OpenMP::Simple>. The L<OpenMP::Simple> distribution
+maintains a CI matrix spanning Linux/GCC, macOS/Clang with libomp, and Windows
+with Strawberry Perl. Exact tested versions change over time; use:
+
+    perldoc OpenMP::Simple
+
+and read C<PORTABILITY AND TESTED PLATFORMS> for the matrix belonging to the
+version you actually installed.
+
+=head1 INSTALLATION
+
+=head2 Install only this manual
+
+    cpanm perlomp
+
+This distribution is documentation-only at runtime. Installing it does not
+force installation of a compiler, OpenMP runtime, L<Inline::C>, or the Perl
+OpenMP stack.
+
+=head2 Install the complete convenience stack
+
+    cpanm OpenMP
+
+=head2 Install individual pieces
+
+    cpanm OpenMP::Environment
+    cpanm OpenMP::Simple
+    cpanm Alien::OpenMP
+
+This separation is useful on machines where you only need to manage the
+environment of an already-compiled OpenMP program.
+
+=head1 A PRACTICAL RECIPE
+
+For a new Perl program containing Inline::C OpenMP code, a good starting point
+is:
+
+=over 4
+
+=item 1.
+
+Install L<OpenMP>.
+
+=item 2.
+
+Use the L<OpenMP::Environment> object available through C<< $omp->env >> to set
+C<OMP_NUM_THREADS>, C<OMP_SCHEDULE>, affinity, and other controls.
+
+=item 3.
+
+Call C<assert_omp_environment> while developing or before launching expensive
+work.
+
+=item 4.
+
+Use C<with =E<gt> qw/OpenMP::Simple/> in the Inline::C configuration.
+
+=item 5.
+
+Use C<PerlOMP_GETENV_BASIC> or the individual update macros only for settings
+that should be refreshed after the OpenMP runtime is already loaded.
+
+=item 6.
+
+Keep native parallel regions focused on native C data whenever possible.
+
+=back
+
+=head1 DOCUMENTATION MAP
+
+    perldoc perlomp
+        High-level orientation and decision guide.
+
+    perldoc OpenMP
+        Convenience metapackage and its object interface.
+
+    perldoc OpenMP::Environment
+        Environment accessors, lvalues, unsetters, summary methods,
+        supported variables, and integration examples.
+
+    perldoc OpenMP::Environment::Validation
+        Detailed validation grammar and cross-variable rules.
+
+    perldoc OpenMP::Environment::Constants
+        Constants used by the assert/unset DSL.
+
+    perldoc OpenMP::Simple
+        Inline::C integration, runtime update macros, C helpers,
+        portability notes, tests, and examples.
+
+    perldoc Alien::OpenMP
+        OpenMP compiler/runtime discovery and build configuration.
+
+    perldoc Inline::C
+        Embedding C in Perl.
+
+=head1 WHAT THIS DOCUMENT IS NOT
+
+This is a guide to using OpenMP from Perl. It is not a replacement for the
+OpenMP specification, compiler documentation, or the detailed documentation of
+the modules above.
+
+OpenMP directives such as C<#pragma omp parallel>, scheduling semantics,
+reductions, tasks, synchronization, SIMD, target offload, and the OpenMP memory
+model are defined by OpenMP itself.
+
+=head1 SEE ALSO
+
+L<OpenMP>, L<OpenMP::Environment>, L<OpenMP::Environment::Validation>,
+L<OpenMP::Simple>, L<Alien::OpenMP>, L<Inline::C>,
+L<https://www.openmp.org/>, and
+L<https://gcc.gnu.org/onlinedocs/libgomp/>.
+
+The Perl OpenMP projects are collected at
+L<https://github.com/Perl-OpenMP>.
+
+=head1 VERSION
+
+version 0.01
+
+=head1 AUTHOR
+
+Brett Estrade E<lt>oodler@cpan.orgE<gt>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2026 Brett Estrade.
+
+This library is free software; you can redistribute it and/or modify it under
+the same terms as Perl itself.
+
+=cut

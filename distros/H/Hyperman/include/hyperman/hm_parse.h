@@ -153,7 +153,13 @@ static int hm_chunked_scan(const char *buf, size_t avail,
             size = (size << 4) | (unsigned)v;
             ndig++; i++;
         }
-        if (ndig == 0) return -1;                        /* missing chunk-size */
+        /* No digits. Malformed only if the bytes to say so are HERE: a
+         * chunk-size line that has not arrived yet is indistinguishable from
+         * a missing one by length alone, and calling it malformed refuses
+         * every chunked request whose header block lands in its own packet -
+         * which is every chunked request that waits for a 100-continue, and
+         * any other whose body simply follows a segment boundary. */
+        if (ndig == 0) return i >= avail ? 0 : -1;       /* need more / no size */
         while (i < avail && buf[i] != '\r') i++;         /* skip chunk-ext */
         if (i + 1 >= avail) return 0;
         if (buf[i] != '\r' || buf[i + 1] != '\n') return -1;

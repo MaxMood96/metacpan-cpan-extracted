@@ -5,7 +5,7 @@ use warnings;
 use Test::More;
 
 use Linux::Event::Loop;
-use Linux::Event::Timer;
+use Linux::Event::Kernel::Timer;
 
 our $DESTROYED = 0;
 our $FIRED = 0;
@@ -18,7 +18,7 @@ our $FIRED = 0;
 
 {
     package T::Timer::CancelSelf;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     sub on_timer ($timer) {
         my $data = $timer->data;
         $timer->cancel;
@@ -30,13 +30,13 @@ our $FIRED = 0;
 
 {
     package T::Timer::Victim;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     sub on_timer ($timer) { $main::FIRED++ }
 }
 
 {
     package T::Timer::Canceller;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     sub on_timer ($timer) {
         $timer->data->{victim}->cancel;
     }
@@ -44,19 +44,19 @@ our $FIRED = 0;
 
 {
     package T::Timer::Stop;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     sub on_timer ($timer) { $timer->loop->stop }
 }
 
 {
     package T::Timer::Dies;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     sub on_timer ($timer) { die "Timer callback failure\n" }
 }
 
 {
     package T::Timer::Retained;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     sub on_timer ($timer) {
         $main::FIRED++;
         $timer->loop->stop;
@@ -79,7 +79,7 @@ ok(!defined $cancel_self->data,
 
 $FIRED = 0;
 my $cross_loop = Linux::Event::Loop->new;
-my $same_deadline = Linux::Event::Timer->now + 0.005;
+my $same_deadline = Linux::Event::Kernel::Timer->now + 0.005;
 my $victim = T::Timer::Victim->new(at => $same_deadline);
 $cross_loop->add(T::Timer::Canceller->new(
     at => $same_deadline,

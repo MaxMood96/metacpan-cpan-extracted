@@ -6,7 +6,8 @@ use Socket qw(AF_UNIX SOCK_STREAM);
 use Test::More;
 
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 sub exception ($code) {
     local $@;
@@ -15,8 +16,8 @@ sub exception ($code) {
 
 {
     package T::BufferSocketStream;
-    use parent 'Linux::Event::Stream';
-    sub stream_options ($class) {
+    use parent 'Linux::Event::IO::Sock::Stream';
+    sub socket_options ($class) {
         return send_buffer => 32_768, receive_buffer => 32_768;
     }
     sub on_data ($self, $bytes) { }
@@ -39,8 +40,8 @@ close $right;
 
 {
     package T::InvalidUnixTCPStream;
-    use parent 'Linux::Event::Stream';
-    sub stream_options ($class) { return tcp_nodelay => 1 }
+    use parent 'Linux::Event::IO::Sock::Stream';
+    sub socket_options ($class) { return tcp_nodelay => 1 }
     sub on_data ($self, $bytes) { }
 }
 
@@ -53,13 +54,29 @@ close $tcp_right;
 
 {
     package T::InvalidSocketOption;
-    use parent 'Linux::Event::Stream';
-    sub stream_options ($class) { return keepalive => 2 }
+    use parent 'Linux::Event::IO::Sock::Stream';
+    sub socket_options ($class) { return keepalive => 2 }
     sub on_data ($self, $bytes) { }
 }
 like(exception(sub { T::InvalidSocketOption->_validate_accepted_configuration }),
     qr/keepalive must be zero or one/,
     'invalid class socket option fails descriptor construction');
+
+{
+    package T::FailingSocketConfiguration;
+    use parent 'Linux::Event::IO::Sock::Stream';
+    sub on_data ($self, $bytes) { }
+    sub configure_socket ($self, $fh, $role, $peer) { die "synthetic failure\n" }
+}
+
+socketpair(my $failed_left, my $failed_right, AF_UNIX, SOCK_STREAM, 0)
+    or die "socketpair: $!";
+like(exception(sub { T::FailingSocketConfiguration->new(fh => $failed_left) }),
+    qr/configure_socket: synthetic failure/,
+    'configure_socket failure propagates as a typed setup error');
+ok(!defined(fileno($failed_left)),
+    'configure_socket failure closes the adopted descriptor');
+close $failed_right;
 
 {
     package T::BrokenStreamLoop;

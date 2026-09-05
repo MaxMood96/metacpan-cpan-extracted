@@ -6,13 +6,13 @@ use Test::More;
 use FindBin qw($Bin);
 use Socket qw(AF_UNIX SOCK_STREAM);
 
-use Linux::Event::Listener;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Listener;
+use Linux::Event::IO::Sock::Stream;
 use Linux::Event::TLS;
 
 {
     package T::DeclaredTLSServer;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::TLS
         cert_file => "$FindBin::Bin/tls-certs/server-cert.pem",
         key_file  => "$FindBin::Bin/tls-certs/server-key.pem",
@@ -28,7 +28,7 @@ use Linux::Event::TLS;
 
 {
     package T::DeclaredTLSClient;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::TLS
         ca_file => "$FindBin::Bin/tls-certs/server-cert.pem",
         alpn    => ['declaration-test/1'];
@@ -38,7 +38,7 @@ use Linux::Event::TLS;
 
 {
     package T::TLSWithoutCertificate;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::TLS;
 
     sub on_data ($stream, $bytes) { return }
@@ -46,7 +46,7 @@ use Linux::Event::TLS;
 
 {
     package T::TLSWithUnreadableCertificate;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::TLS
         cert_file => "$FindBin::Bin/tls-certs/missing-cert.pem",
         key_file  => "$FindBin::Bin/tls-certs/missing-key.pem";
@@ -54,13 +54,13 @@ use Linux::Event::TLS;
     sub on_data ($stream, $bytes) { return }
 }
 
-my $listener = Linux::Event::Listener->new(
+my $listener = Linux::Event::IO::Sock::Listener->new(
     stream_class => 'T::InheritedTLSServer',
     host         => '127.0.0.1',
     port         => 0,
 );
 ok($listener->port > 0,
-    'Listener accepts an inherited TLS Stream declaration');
+    'Listener accepts an inherited TLS stream-socket declaration');
 $listener->close;
 
 my $client = T::DeclaredTLSClient->connect(
@@ -73,19 +73,19 @@ is($client->state, 'unattached',
 $client->close;
 
 my $ok = eval {
-    Linux::Event::Listener->new(
+    Linux::Event::IO::Sock::Listener->new(
         stream_class => 'T::TLSWithoutCertificate',
         host         => '127.0.0.1',
         port         => 0,
     );
     1;
 };
-ok(!$ok, 'accepted TLS Stream declaration requires a certificate');
+ok(!$ok, 'accepted TLS stream-socket declaration requires a certificate');
 like($@, qr/does not declare cert_file and key_file/,
     'missing server credential error identifies the declaration');
 
 $ok = eval {
-    Linux::Event::Listener->new(
+    Linux::Event::IO::Sock::Listener->new(
         stream_class => 'T::TLSWithUnreadableCertificate',
         host         => '127.0.0.1',
         port         => 0,
@@ -99,17 +99,17 @@ like($@, qr/(?:No such file or directory|failed to load TLS server identity)/,
 $ok = eval q{
     package T::TLSBeforeParent;
     use Linux::Event::TLS;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) { return }
     1;
 };
-ok(!$ok, 'TLS declaration requires Stream inheritance first');
-like($@, qr/must inherit from Linux::Event::Stream/,
+ok(!$ok, 'TLS declaration requires stream-socket inheritance first');
+like($@, qr/must be a Linux::Event IO stream-socket subclass/,
     'declaration-order error is explicit');
 
 $ok = eval q{
     package T::TLSUnknownOption;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::TLS imaginary => 1;
     sub on_data ($stream, $bytes) { return }
     1;
@@ -120,7 +120,7 @@ like($@, qr/unknown options: imaginary/,
 
 $ok = eval q{
     package T::TLSNulServerName;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::TLS server_name => "example.test\0.invalid";
     sub on_data ($stream, $bytes) { return }
     1;
@@ -131,7 +131,7 @@ like($@, qr/server_name must be a non-empty string without NUL bytes/,
 
 $ok = eval q{
     package T::TLSWideALPN;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::TLS alpn => ["\x{100}"];
     sub on_data ($stream, $bytes) { return }
     1;
@@ -142,7 +142,7 @@ like($@, qr/ALPN protocol must be a byte string/,
 
 $ok = eval q{
     package T::TLSHugeTimeout;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::TLS
         handshake_timeout =>
             '99999999999999999999999999999999999999999999999999';
@@ -154,28 +154,28 @@ like($@, qr/(?:finite number|supported timer range)/,
     'oversized TLS timeout fails during declaration');
 
 like(exception(sub { Linux::Event::TLS->client(
-    server_name => 'localhost', # required
-    verify      => 2,           # invalid
+    server_name => 'localhost',
+    verify      => 2,
 ) }), qr/verify must be 0 or 1/,
     'direct TLS client helper validates verification policy');
 like(exception(sub { Linux::Event::TLS->client(
-    server_name => '[]', # invalid after bracket normalization
+    server_name => '[]',
 ) }), qr/server_name must not be empty after removing brackets/,
     'direct TLS client helper rejects an empty normalized identity');
 like(exception(sub { Linux::Event::TLS->client(
-    server_name => 'localhost',                    # required
-    alpn => [map { 'x' x 255 } 1 .. 256],          # invalid total size
+    server_name => 'localhost',
+    alpn => [map { 'x' x 255 } 1 .. 256],
 ) }), qr/ALPN protocol list must not exceed 65535 bytes/,
     'TLS rejects an ALPN list that cannot fit its wire extension');
 like(exception(sub { Linux::Event::TLS->server(
-    cert_file => "/tmp/cert\0.pem", # invalid NUL
-    key_file  => '/tmp/key.pem',     # required
+    cert_file => "/tmp/cert\0.pem",
+    key_file  => '/tmp/key.pem',
 ) }), qr/cert_file must be a non-empty string without NUL bytes/,
     'direct TLS server helper rejects NUL in credential path');
 
 $ok = eval q{
     package T::TLSPairedCredential;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::TLS cert_file => '/tmp/certificate.pem';
     sub on_data ($stream, $bytes) { return }
     1;
@@ -186,13 +186,13 @@ like($@, qr/requires cert_file and key_file together/,
 
 $ok = eval q{
     package T::TLSDuplicateDeclaration;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::TLS;
     use Linux::Event::TLS;
     sub on_data ($stream, $bytes) { return }
     1;
 };
-ok(!$ok, 'Stream subclass rejects a duplicate TLS declaration');
+ok(!$ok, 'stream-socket subclass rejects a duplicate TLS declaration');
 like($@, qr/already declares TLS/,
     'duplicate TLS declaration error is explicit');
 

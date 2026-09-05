@@ -22,7 +22,7 @@ use base qw(Number::Phone::StubCountry);
 use strict;
 use warnings;
 use utf8;
-our $VERSION = 1.20260610205502;
+our $VERSION = 1.20260904101549;
 
 my $formatters = [
                 {
@@ -78,27 +78,27 @@ my $validators = {
                 'voip' => '98[23]\\d{6}'
               };
 my %areanames = ();
-$areanames{en} = {"21322", "Algiers",
-"21329", "Ghardaia\/Illizi\/Tamanrasset",
-"21341", "Oran",
+$areanames{en} = {"21339", "Skikda",
 "21327", "Chlef",
-"21338", "Annaba\/Skikda",
 "21326", "Bouira\/Tizi\ Ouzou",
-"21325", "Blida\/Médéa",
-"21334", "Béjaïa\/Jijel",
-"21321", "Algiers",
-"21333", "Batna\/Beskra",
-"21349", "Adrar\/Béchar\/Tindouf",
-"21344", "Blida",
 "21343", "Tlemcen",
-"21337", "Tebessa",
+"21334", "Béjaïa\/Jijel",
+"21349", "Adrar\/Béchar\/Tindouf",
+"21333", "Batna\/Beskra",
+"21338", "Annaba\/Skikda",
+"21344", "Blida",
+"21321", "Algiers",
 "21332", "El\ Oued",
-"21339", "Skikda",
-"21328", "Algiers",
-"21335", "Bordj\ Bou\ Arreridj",
+"21325", "Blida\/Médéa",
+"21329", "Ghardaia\/Illizi\/Tamanrasset",
+"21337", "Tebessa",
 "21324", "Boumerdès\/Tipaza",
+"21341", "Oran",
+"21323", "Algiers",
+"21328", "Algiers",
 "21331", "Constantine",
-"21323", "Algiers",};
+"21322", "Algiers",
+"21335", "Bordj\ Bou\ Arreridj",};
 my $timezones = {
                '' => [
                        'Europe/Paris'

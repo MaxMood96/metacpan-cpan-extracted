@@ -1,5 +1,9 @@
 Revision history for Sub-Exporter
 
+0.992     2026-09-05 16:47:10+09:30 Australia/Adelaide
+        - replace Params::Util with Params::SomeUtil
+        - docs: fix typo in tutorial (thanks, Kıvanç Yazan!)
+
 0.991     2023-11-23 20:32:17-05:00 America/New_York
         - make the requirement for perl v5.12.0 explicit; previously, it was
           only implicit because of prerequisites

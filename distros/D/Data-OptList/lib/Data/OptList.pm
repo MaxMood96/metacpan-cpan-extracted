@@ -1,10 +1,10 @@
 use strict;
 use warnings;
-package Data::OptList 0.114;
+package Data::OptList 0.115;
 # ABSTRACT: parse and validate simple name/value option pairs
 
 use List::Util ();
-use Params::Util ();
+use Params::SomeUtil ();
 use Sub::Install 0.921 ();
 
 #pod =head1 SYNOPSIS
@@ -108,7 +108,7 @@ use Sub::Install 0.921 ();
 #pod what kind(s) of refs may be values.  If an invalid value is found, an exception
 #pod is thrown.  If no value is passed for this argument, any reference is valid.
 #pod If C<must_be> specifies that values must be CODE, HASH, ARRAY, or SCALAR, then
-#pod Params::Util is used to check whether the given value can provide that
+#pod Params::SomeUtil is used to check whether the given value can provide that
 #pod interface.  Otherwise, it checks that the given value is an object of the kind.
 #pod
 #pod In other words:
@@ -124,10 +124,10 @@ use Sub::Install 0.921 ();
 my %test_for;
 BEGIN {
   %test_for = (
-    CODE   => \&Params::Util::_CODELIKE,  ## no critic
-    HASH   => \&Params::Util::_HASHLIKE,  ## no critic
-    ARRAY  => \&Params::Util::_ARRAYLIKE, ## no critic
-    SCALAR => \&Params::Util::_SCALAR0,   ## no critic
+    CODE   => \&Params::SomeUtil::_CODELIKE,  ## no critic
+    HASH   => \&Params::SomeUtil::_HASHLIKE,  ## no critic
+    ARRAY  => \&Params::SomeUtil::_ARRAYLIKE, ## no critic
+    SCALAR => \&Params::SomeUtil::_SCALAR0,   ## no critic
   );
 }
 
@@ -138,7 +138,7 @@ sub mkopt {
   my ($name_test, $is_a);
 
   if (@_) {
-    if (@_ == 1 and Params::Util::_HASHLIKE($_[0])) {
+    if (@_ == 1 and Params::SomeUtil::_HASHLIKE($_[0])) {
       ($moniker, $require_unique, $must_be, $name_test)
         = @{$_[0]}{ qw(moniker require_unique must_be name_test) };
     } else {
@@ -153,7 +153,7 @@ sub mkopt {
       my @checks = map {
           my $class = $_;
           $test_for{$class}
-          || sub { Params::Util::_INSTANCE($_[0], $class) }
+          || sub { Params::SomeUtil::_INSTANCE($_[0], $class) }
       } @$must_be;
 
       $is_a = (@checks == 1)
@@ -249,7 +249,7 @@ Data::OptList - parse and validate simple name/value option pairs
 
 =head1 VERSION
 
-version 0.114
+version 0.115
 
 =head1 SYNOPSIS
 
@@ -364,7 +364,7 @@ The C<must_be> parameter is either a scalar or array of scalars; it defines
 what kind(s) of refs may be values.  If an invalid value is found, an exception
 is thrown.  If no value is passed for this argument, any reference is valid.
 If C<must_be> specifies that values must be CODE, HASH, ARRAY, or SCALAR, then
-Params::Util is used to check whether the given value can provide that
+Params::SomeUtil is used to check whether the given value can provide that
 interface.  Otherwise, it checks that the given value is an object of the kind.
 
 In other words:

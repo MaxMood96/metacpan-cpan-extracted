@@ -1,8 +1,73 @@
-# Native architecture
+# Linux::Event architecture
 
-## Hot path
+This document describes the production architecture of Linux::Event. Public
+names describe completed Linux resources. Private implementation layers may be
+shared across those resources without becoming public base classes.
 
-The current steady-state readiness path is intentionally short:
+## Public semantic model
+
+```text
+Linux::Event
+|-- Loop
+|-- IO
+|   |-- Pipe
+|   |-- TTY
+|   `-- Sock
+|       |-- Stream
+|       |-- Listener
+|       `-- Dgram
+`-- Kernel
+    |-- Timer
+    |-- Signal
+    |-- Event
+    `-- Process
+```
+
+`Linux::Event::IO` and `Linux::Event::Kernel` are category namespaces, not
+constructible objects. The tree is a semantic taxonomy, not a literal Perl
+inheritance diagram.
+
+The public leaves are deliberately concrete:
+
+- `IO::Pipe` means ordered bytes over pipe/FIFO descriptors.
+- `IO::TTY` means ordered bytes over terminal or PTY descriptors.
+- `IO::Sock::Stream` means a connected Linux `SOCK_STREAM` socket.
+- `IO::Sock::Listener` means a listening `SOCK_STREAM` socket.
+- `IO::Sock::Dgram` means a Linux `SOCK_DGRAM` socket.
+- `Kernel::Timer` exposes timer scheduling semantics.
+- `Kernel::Signal` exposes signalfd signal semantics.
+- `Kernel::Event` exposes eventfd notification semantics.
+- `Kernel::Process` exposes pidfd/process lifecycle semantics.
+
+Address family is orthogonal to socket type. IPv4, IPv6, and Unix-domain
+stream sockets all use `IO::Sock::Stream`; UDP and Unix-domain datagrams use
+`IO::Sock::Dgram`.
+
+## Private implementation boundaries
+
+Private implementation packages include:
+
+```text
+Linux::Event::_IO
+Linux::Event::_ByteStream
+Linux::Event::_ByteStream::Descriptor
+Linux::Event::_Socket
+Linux::Event::_Socket::Stream
+Linux::Event::_Socket::Listener
+Linux::Event::_Socket::Dgram
+Linux::Event::_Socket::Descriptor
+```
+
+These are implementation boundaries only. Applications must not construct or
+subclass them.
+
+Private implementation and XS ABI surfaces use the same coherent taxonomy:
+leading-underscore packages for shared IO/socket mechanics and `Kernel::*` for
+kernel resources. They are not advertised as public modules.
+
+## Reactor hot path
+
+The steady-state readiness path is intentionally short:
 
 ```text
 epoll_wait()
@@ -17,60 +82,20 @@ le_watcher_t *
 XS dispatch
    |
    v
-one Perl callback
+semantic callback
 ```
 
-There is no fd-to-Perl-hash lookup in the hot dispatch path. The fd-indexed
-native registry remains for registration, replacement, cancellation, and
-lifetime management.
+There is no fd-to-Perl-hash lookup after `epoll_wait()` returns.
+`epoll_event.data.ptr` identifies the native watcher directly. The fd-indexed
+registry remains for registration, replacement, cancellation, ownership, and
+introspection.
 
-## Native loop state
+A plain coderef callback is retained as its CV rather than through an
+additional RV wrapper. The dispatcher uses bounded temporary scopes and
+rechecks watcher state after each callback so cancellation or replacement takes
+effect inside the current epoll batch.
 
-`le_loop_t` owns:
-
-- epoll fd
-- reusable `struct epoll_event` array
-- fd-indexed `le_watcher_t **` registry
-- stop state
-- callback-scope policy
-- watcher lifecycle lists used by optional reclaim diagnostics
-- cheap counters and optional timing buckets
-
-The default event array capacity is 8192.
-
-Normal raw registration uses `watch(fh => $fh)` or `watch(fd => $fd)`.
-That Perl-facing method resolves a handle to its integer fd once at construction
-and then enters the existing native registration path. It adds nothing to
-steady-state readiness dispatch. `watch_fd` remains the low-level positional
-entry point underneath it.
-
-## Native watcher state
-
-`le_watcher_t` contains the fd, epoll mask/flags, owning loop pointer, callback
-SV/CV references, optional accessor references, callback-mode flags, and
-benchmark/lifecycle state.
-
-`epoll_event.data.ptr` points directly at this structure, which avoids a
-registry lookup after `epoll_wait()` returns.
-
-## Callback representation
-
-When a callback is a plain coderef the XS layer stores the CV directly rather
-than retaining an extra RV wrapper. The fast path can therefore call the CV
-with minimal Perl-side construction.
-
-Normal callbacks receive the watcher handle. A no-argument mode exists for hot
-closures that capture their own state.
-
-## Temporary scopes
-
-The dispatcher shares an `ENTER`/`SAVETMPS` scope across a bounded group of
-callbacks while still running `FREETMPS` after each callback. The default scope
-limit is 128 callbacks, selected from benchmark sweeps as a stable balance.
-
-## Terminal-event semantics
-
-For an event containing terminal flags and normal readiness, dispatch order is:
+Terminal readiness is dispatched in this order:
 
 ```text
 EPOLLERR / EPOLLHUP / EPOLLRDHUP
@@ -78,285 +103,292 @@ EPOLLIN
 EPOLLOUT
 ```
 
-The watcher is re-checked after each callback so cancellation takes effect
-within the same returned epoll batch.
+A replacement registration updates epoll to the new native record and makes
+the old opaque handle inert. Cancelling a stale handle cannot remove a newer
+registration for a reused fd.
 
-Registering a new native record for an already registered fd uses one
-`EPOLL_CTL_MOD`, changes `epoll_event.data.ptr` to the new record, and marks the
-old handle inactive. Cancelling that old handle is harmless and cannot remove
-the replacement.
+## Loop ownership
 
-## Native registration lifetime
+`Linux::Event::Loop` owns:
 
-The public opaque handle is a stable registration token that refers to a native
-watcher while it is active. Epoll continues to store the watcher pointer
-directly. `cancel`/`unwatch_fd` removes the epoll registration, marks the token
-inert, and releases its retained Perl state immediately outside dispatch or
-after the active callback returns. Replacing an fd or destroying the Loop also
-makes every obsolete token inert, so native watcher or fd reuse cannot redirect
-an old handle to a new resource.
+- the epoll fd;
+- the reusable epoll event array;
+- native watcher records and fd registry;
+- stop and callback-scope state;
+- timer scheduler state;
+- private service registrations such as signalfd and resolver eventfd;
+- cheap counters and optional profiling timing.
 
-Experimental watcher reclamation can defer watcher reuse until a returned epoll
-batch has finished, avoiding reuse while an event array may still contain the
-old `data.ptr`.
+High-level objects attach directly to a Loop. There is no public generic
+Watcher object between a semantic resource and epoll. Raw `watch()` and
+`watch_fd()` return opaque native registration handles.
 
-The performance default keeps aggressive reclaim disabled because the memory
-savings measured in earlier experiments came with a throughput cost.
+One logical application object may own several kernel descriptors. For example,
+a pending stream-socket connection can own connection-attempt and deadline
+resources before the final connected socket is attached. Introspection reports
+the logical object and can separately report its backing native resources.
 
-## Profiling
+## Ordered-byte engine
 
-Cheap counters remain enabled. Nanosecond timing of epoll/callback/dispatch
-regions is opt-in because instrumentation itself changes the workload.
+`IO::Pipe`, `IO::TTY`, and `IO::Sock::Stream` share one private ordered-byte
+engine. The sharing is an implementation fact, not a public generic Stream
+class.
 
-## Benchmark-only native echo
+The engine owns:
 
-The XS source still contains a private native echo diagnostic used to decompose
-callback entry from Perl `sysread`/buffer/`syswrite` work. It is deliberately
-prefixed `_bench_` and is not an application API. Its result is what motivated
-the next Stream work: the larger remaining cost is above the reactor.
+- shared or split read/write descriptors;
+- nonblocking and close-on-exec preparation;
+- native read draining;
+- immediate writes and segmented queued output;
+- high/low watermark backpressure;
+- hard pending-output limits;
+- raw callback batching;
+- framed input storage and parsers;
+- framed message batching;
+- pause/resume state;
+- independent read and write lifecycle;
+- established idle/read/write deadlines;
+- explicit operation deadlines;
+- native consumer integration;
+- in-place protocol transitions.
 
-## Stream class descriptors
+One immutable descriptor is cached for each concrete subclass. It contains the
+resolved named callback CVs, tuning policy, framing definition, optional native
+consumer definition, and native descriptor object. Per-instance state contains
+only changing transport, fd, parser, queue, deadline, and lifecycle data.
 
-The higher-level Stream extension has a separate native state model. The first
-construction of a concrete `Linux::Event::Stream` subclass creates one immutable
-XS descriptor containing resolved named callbacks, read size, output
-watermarks, optional hard pending-output limit, framed-buffer limit, and native
-parser configuration.
+This preserves the performance reason Linux::Event uses subclass-defined
+policy: constructor closures and repeated method/configuration lookup are not
+added to each readiness event.
 
-Every connection's XS state retains that descriptor and owns only mutable fd,
-input/parser, output-queue, lifecycle, and counter state. A framed connection
-therefore does not copy callbacks, delimiters, prefix policy, or Stream policy
-settings into every allocation.
+### Native implementation
 
-The retained descriptor reference may be replaced explicitly by
-`transition_to()` while the mutable connection state stays in place. Parser
-loops snapshot their starting descriptor and stop after a callback changes it.
-The input driver then reinterprets the unread native suffix with the target
-descriptor. Raw targets receive the suffix as bytes; framed targets continue
-native boundary detection. This gives protocol upgrades a safe point without
-re-registering the fd or copying the output queue.
+The XS ordered-byte implementation is built from focused translation units:
 
-The connection state also holds a native transport operations table and
-provider context. The default `plain` identity is checked once per operation,
-then XS issues the original fd syscall directly. Non-plain providers can later
-map the same read, write, vectored-write, retry-direction, error, and writable
-shutdown operations to another byte transport. This keeps parsers, queues, and
-backpressure independent of encryption while avoiding a Perl callback or
-indirect function call on the ordinary syscall path.
+```text
+Stream.xs
+stream_state.c
+stream_transport.c
+stream_callbacks.c
+stream_input.c
+stream_delivery.c
+stream_consumer.c
+stream_read.c
+stream_write.c
+stream_transition.c
+framer_*.c
+```
 
-The segmented write queue checks a nonzero `max_pending_bytes` before copying a
-new unsent remainder. Overflow enters Perl only for the semantic typed-error
-and close transition; no over-limit segment is allocated. The zero/default
-case is one predictable native branch and otherwise follows the unchanged
-write path.
+These files link into one XS extension. Splitting source files does not create
+additional dynamic-loading or Perl dispatch boundaries.
 
-Raw input drains into a reusable native read buffer and crosses into Perl for
-`on_data`. Framed input drains directly into native connection storage, runs
-the built-in parser there, and crosses into Perl only for complete
-`on_message` values or semantic errors. Both paths recheck pause and close state
-after callbacks.
+The XS packages under `Linux::Event::_ByteStream::*` are private native ABI
+details. They do not define the public class hierarchy.
 
-The zero/default descriptor values retain those ordinary callback boundaries.
-A raw descriptor may instead set `read_batch_bytes`, in which case native
-storage combines successful reads and flushes at its byte bound or EAGAIN. A
-framed descriptor may set `message_batch_size` and cache `on_messages`; complete
-message SVs are then owned by one bounded AV until count, EAGAIN, EOF, error, or
-the aggregate byte guard flushes it. The AV is detached from native state
-before entering Perl, so callback exceptions cannot leave mortal values owned
-by the connection. Close clears any undispatched native aggregate.
+## Framing
 
-The Stream extension does not include private reactor headers. Loop passes
-watcher data directly to Stream's private readiness entry points, preserving a
-generic readiness core and an independently testable buffered Stream layer.
+Framing is an ordered-byte capability, not a socket capability. A delimiter,
+length-prefix, fixed-size, netstring, varint, or decimal-length parser is just as
+valid over a pipe or terminal input as over a stream socket.
 
-Stream's native implementation is one XS extension built from focused private
-translation units. `Stream.xs` contains only the Perl/native binding surface;
-`stream_read.c`, `stream_write.c`, `stream_transport.c`, `stream_input.c`,
-`stream_delivery.c`, `stream_transition.c`, and `stream_callbacks.c` own their
-named mechanisms. Each built-in framing family has a matching `framer_*.c`
-parser. `stream_internal.h` is the sole shared native state and helper contract.
-These files link into the same extension and introduce no additional Perl or
-dynamic-loading boundary.
+A raw descriptor caches `on_data`. A framed descriptor caches `on_message`, or
+`on_messages` when message batching is enabled. Native parsing crosses into
+Perl only at complete semantic delivery boundaries or errors.
 
-At the Perl layer, `Linux::Event::Stream` remains the public lifecycle object.
-The private `_Descriptor` module owns subclass declarations, option validation,
-callback resolution, and the immutable descriptor cache. The deliberately tiny
-deadline Timer type remains next to Stream's lifecycle methods rather than
-creating another implementation layer. Connection acquisition remains in the
-existing private `_Connection` engine. None of these source boundaries add
-public classes or change Stream identity.
+Serialization remains one layer above framing:
 
-## Public ownership layer
+```text
+bytes -> buffering -> framing -> message bytes -> codec -> Perl value
+```
 
-`Linux::Event::Loop->add()` accepts distribution objects that implement Loop
-attachment: Stream, Listener, Datagram, Timer, Signal, Wakeup, and Process.
-There is no public Watcher or IO base class and no generic Perl dispatcher. Raw
-`watch()` returns an opaque native handle. Every high-level object retains its
-concrete cached callbacks and private registrations.
+The codec layer is intentionally not conflated with kernel I/O or framing.
 
-An application object is one logical activity rather than one fd. A connecting
-Stream can own attempt and deadline registrations until connection completes,
-then retains the same public identity while its established socket is
-registered with the native Stream engine.
+## Protocol transitions
 
-The introspection layer enumerates the existing native Timer heap, watcher
-ownership, Signal service, Wakeup owner state, and resolver requests only when
-queried. It does not maintain a duplicate public-object registry. Queries
-validate ownership and lifecycle against each object's authoritative state.
-Native resource queries scan the existing fd registry; they do not mirror it
-in Perl. One private flag
-on a native registration distinguishes direct user `watch()` calls from the
-backing registrations owned by high-level objects, so liveness reports remain
-actionable instead of listing implementation fds twice. None of this work runs
-in readiness dispatch.
+`transition_to()` swaps the immutable ordered-byte descriptor while preserving
+the live native state, descriptors, unread input, queued output, backpressure,
+pause state, deadlines, and application data.
 
-## Timer scheduler layer
+The native transition validates the new descriptor before callbacks are
+allowed to continue. Buffered unread input is then interpreted using the new
+parser. The transition cannot change the underlying resource category or
+native consumer provider.
 
-Every Loop lazily creates one nonblocking, close-on-exec timerfd when its first
-Timer is attached. All active Timers on that Loop share the descriptor. An
-indexed native minimum heap orders nanosecond monotonic deadlines and permits
-O(log n) insertion, cancellation, and arbitrary rescheduling.
+A connected stream socket therefore remains a connected stream socket across a
+protocol transition; only its application protocol/framing class changes.
 
-Each Timer subclass contributes one immutable descriptor containing its
-resolved `on_timer` CV. Instances hold only mutable schedule, heap position,
-application data, lifecycle, and expiration count. The Loop retains active
-instances, so dropping an application reference does not cancel work.
+## Stream-socket layer
 
-The timerfd watcher enters a specialized native dispatch path. Equal deadlines
-use schedule sequence for FIFO order. Fixed-rate recurring timers advance from
-their previous deadline, coalescing missed intervals into one callback.
-Dispatch is capped at 1024 callbacks per batch, and immediate work created from
-inside a Timer callback is deferred to a later Loop turn.
+`Linux::Event::IO::Sock::Stream` adds socket-specific semantics around the
+private ordered-byte engine:
 
-Established Stream deadlines reuse this scheduler. A deadline-enabled Stream
-owns at most one private Timer containing a weak route back to the Stream. That
-heap entry always represents the earliest idle, read, write, or explicit
-operation deadline. Native Stream state records successful I/O timestamps only
-when inactivity tracking is enabled; progress never enters Perl merely to
-reschedule the heap. When an old deadline arrives, the private callback checks
-the latest snapshot and either expires the Stream or moves the same Timer.
-Ordinary Streams perform no activity clock reads, and pause, resume, EOF, and
-output drain skip deadline candidate rebuilding unless the corresponding read
-or write timeout is active.
+- socket type validation;
+- outbound nonblocking connection acquisition;
+- local and peer addresses;
+- socket option policy;
+- kernel `shutdown()` semantics;
+- optional TLS transport lifecycle.
 
-## Signal delivery layer
+Socket type and address family remain separate axes. A Unix-domain
+`SOCK_STREAM` and an Internet `SOCK_STREAM` use the same public leaf.
 
-Each Loop with Signal subscriptions owns one private nonblocking signalfd and a
-native per-number fan-out registry. Signal subclass callbacks are cached once.
-The raw lean watcher crosses into the Signal extension once per readiness,
-where complete signalfd batches are drained and aggregated before semantic
-callbacks enter Perl.
+### Outbound acquisition
 
-One Signal may register several numbers and several Signals on that Loop may
-register the same number. Dispatch snapshots subscribers so callbacks may
-cancel themselves or later subscribers safely. Reference counts keep a number
-in the shared mask until its last subscriber is gone. Original thread-mask
-membership is recorded and only entries changed by Linux::Event are restored.
+The private connection engine validates address modes, resolves hostnames when
+needed, creates nonblocking close-on-exec sockets, applies policy, and checks
+`SO_ERROR` after writable readiness.
 
-## Stream acquisition layer
+`MyConnection->connect()` creates the one application-visible stream-socket
+object before acquisition begins. The object is not replaced after success.
+Immediate success and immediate operational failure are still delivered through
+the Loop rather than reentrantly from the constructor.
 
-The private `Linux::Event::Stream::_Connection` engine owns outbound socket
-acquisition, while the public Stream owns the entire logical lifecycle. The
-engine validates address modes, stores candidate/attempt state, and checks
-`SO_ERROR` after writable readiness. Sockets are created with
-`SOCK_NONBLOCK | SOCK_CLOEXEC`.
+Hostname resolution uses a private native resolver service. Numeric, packed,
+and Unix addresses bypass DNS.
 
-A small adjacent XS extension owns only timerfd mechanics. It gives pending
-requests monotonic deadlines and ensures immediate success or operational
-failure is delivered from the loop rather than reentrantly inside the
-constructor. The attempt engine is intentionally a cold Perl path until
-profiling demonstrates a reason to move it.
+## TLS transport
 
-This private connection deadline helper remains separate from the public Timer
-scheduler in this release. Migrating connection and TLS deadlines to Timer is
-a later lifecycle change, not part of the Timer API itself.
+TLS is transport policy for `IO::Sock::Stream` subclasses. It does not create a
+second public socket hierarchy.
 
-`MyStream->connect()` creates one Stream and the private engine reports directly
-to it. During success, Stream binds native state to the connected fd. The
-application-visible object is never replaced.
+The native transport table lets the same buffering, framing, backpressure, and
+lifecycle machinery operate on plaintext while OpenSSL owns handshake,
+cryptography, verification, ALPN, retry direction, and close notification.
 
-Hostname resolution lives in the shared private `Linux::Event::_Resolver` XS
-extension used by Stream and Datagram. Two lazy native workers per Loop run
-`getaddrinfo` without touching Perl state, copy results to a native completion
-queue, and signal one eventfd. An ordinary raw Loop watcher drains that queue
-on the reactor thread. The connection engine interleaves
-IPv6/IPv4 candidates, starts pending alternatives at 250 ms intervals, and
-transfers only the first successful socket while closing every loser. Numeric,
-Unix, and packed addresses do not start the resolver.
+The plain transport retains a specialized direct syscall path; ordinary socket
+I/O does not pay a Perl callback or generic transport-object dispatch cost.
 
-## Listener acquisition layer
+## Listener layer
 
-`Linux::Event::Listener` owns inbound stream-socket acquisition. It creates TCP
-or filesystem Unix listeners, or adopts a caller-provided listening handle,
-then registers one read watcher for that listening descriptor. It never
-creates a watcher for an accepted connection.
+`Linux::Event::IO::Sock::Listener` is a separate public leaf because a listening
+socket has accept-oriented semantics rather than connected byte-stream
+semantics.
 
-Readiness enters a private Listener XS engine that drains `accept4()` with
-atomic `SOCK_NONBLOCK | SOCK_CLOEXEC`. Descriptor and packed-sockaddr pairs
-return to Perl for the cached private `_accept_client` construction method.
-Address text remains lazy through `Linux::Event::Address`; applications that
-do not inspect a peer avoid formatting it.
+The listener owns:
 
-Listener constructs its configured Stream subclass, attaches the Stream to the
-same Loop, invokes the optional public `on_accept($listener, $stream)`, and then
-reports a plain Stream ready. TLS Stream readiness waits for its handshake.
-Listener data is passed automatically to every accepted Stream. A TLS
-declaration on the Stream class selects a fresh server-side provider and is
-validated before Listener creates its socket. Listener does not create a
-temporary accepted-socket registration. An
-`on_accept` exception closes only that Stream and becomes a nonfatal callback
-Error. Resource accept errors pause listener readiness before the typed error
-callback so a readable backlog cannot create an error spin.
+- socket creation or adoption;
+- bind/listen configuration;
+- one read registration for the listening descriptor;
+- bounded `accept4()` draining;
+- accepted connection construction;
+- optional `on_accept` policy;
+- listener-specific error and cleanup behavior.
 
-## Socket policy layer
+Accepted descriptors are created with `SOCK_NONBLOCK | SOCK_CLOEXEC`. The
+listener constructs the configured `IO::Sock::Stream` subclass directly; it
+does not create a temporary accepted-socket watcher first.
 
-Common socket validation and `setsockopt` conversion live in a private
-cold-path module shared by Stream and Datagram. Stream copies cached class
-policy into one acquisition instance, applies constructor overrides, and
-configures every outbound candidate before bind/connect. Accepted and adopted
-Streams apply the same policy before native transport attachment. Listener
-separately owns listening-socket creation policy.
-
-The optional cached `configure_socket` callback follows built-in policy. It is
-outside steady-state I/O. Failures become typed `socket_configuration` values
-instead of silently changing candidate or transport behavior.
-
-## Wakeup layer
-
-Wakeup owns one nonblocking eventfd and raw lean registration. An ithread clone
-duplicates only the descriptor identity needed for `signal`; cancellation and
-destruction cannot redirect a stale fd number to an unrelated resource. Loop,
-watcher, callback descriptor, and data live in an owner-only state object that
-is skipped during ithread cloning. All other native resource objects also skip
-cloning.
-
-The private resolver eventfd is not implemented through public Wakeup because
-its native workers already own a typed C completion queue and cancellation
-table. Both paths share the same architectural rule: foreign threads publish
-data before writing eventfd, and Perl handles semantics only on the Loop
-thread.
+TLS server policy is validated before accepting traffic and each accepted
+connection receives independent OpenSSL connection state.
 
 ## Datagram layer
 
-Datagram uses a separate XS packet engine. One readiness call allocates one
-receive buffer and drains `recvmsg(MSG_DONTWAIT | MSG_TRUNC)` into a flat batch
-of payload, packed peer, original length, and truncation fields. Perl creates
-lazy Address values and invokes the cached semantic callback once per packet.
+`Linux::Event::IO::Sock::Dgram` uses a separate packet engine because datagram
+boundaries are semantic and must not be flattened into an ordered byte stream.
 
-Output uses `send` or `sendto` with `MSG_NOSIGNAL`. Queue segments are whole
-packets with separate byte and packet accounting. Connected hostname mode
-reuses the private resolver with `SOCK_DGRAM` hints but does not reuse Stream's
-byte buffers or TCP attempt race.
+Receive readiness drains `recvmsg(MSG_DONTWAIT | MSG_TRUNC)` into packet
+records containing payload, peer address, and truncation information. Output
+queues retain whole packets with independent byte and packet accounting.
+
+Connected hostname mode can reuse the resolver service with `SOCK_DGRAM` hints,
+but datagrams do not reuse the ordered-byte parser or stream connection race.
+
+## Pipe and TTY leaves
+
+`IO::Pipe` and `IO::TTY` use the ordered-byte engine but validate their actual
+resources at construction.
+
+`IO::Pipe` accepts pipe/FIFO descriptors. `IO::TTY` accepts terminal or PTY
+descriptors. Both may be read-only, write-only, or use distinct read and write
+descriptors when the logical facility supports that shape.
+
+This validation is deliberate: public leaf names should tell the truth about
+the underlying resource rather than act as arbitrary buffer-engine selectors.
+
+## Timer scheduler
+
+Every Loop lazily creates one nonblocking close-on-exec timerfd when its first
+scheduled timer is attached. Active timers share an indexed native minimum
+heap ordered by monotonic deadline.
+
+Each concrete `Kernel::Timer` subclass contributes one cached callback
+descriptor. Instances contain mutable schedule, heap position, application
+data, lifecycle, and expiration count.
+
+Equal deadlines preserve schedule order. Fixed-rate repeating timers advance
+from their prior deadline and coalesce missed intervals. Dispatch uses a bound
+so timer floods cannot monopolize a Loop turn.
+
+Established ordered-byte deadlines reuse the timer scheduler through a private
+timer object. Activity timestamps are enabled only when inactivity policy is
+active, so ordinary byte streams do not pay activity-clock overhead.
+
+## Signal layer
+
+`Kernel::Signal` uses one private nonblocking signalfd per Loop with a native
+fan-out registry. Several objects may subscribe to the same signal number and
+one object may subscribe to several numbers.
+
+The native service drains complete signalfd batches, aggregates counts, and
+then enters Perl at semantic callbacks. Subscriber snapshots permit safe
+self-cancellation or cross-cancellation during dispatch.
+
+Linux::Event records signal-mask state and restores only mask entries it
+changed when the last relevant subscription is removed.
+
+## Event layer
+
+`Kernel::Event` is backed by eventfd. The public callback is
+`on_event($event, $count)` and the public signaling operation retains eventfd
+counter semantics.
+
+The owning Loop and callback state remain interpreter-local. Supported foreign
+threads, forked children, or native code can signal the eventfd, while payloads
+remain in an explicit thread-safe queue or IPC mechanism owned by the
+application.
+
+`Linux::Event::Kernel::Event` directly hosts this eventfd machinery.
 
 ## Process layer
 
-Process constructs stdio pipes in Perl's owning interpreter, then one XS call
-uses `posix_spawnp` file actions and opens a pidfd. No Perl code executes in a
-post-fork child. The Loop may register pidfd, stdin, stdout, and stderr, all
-routed back to one Process object.
+`Kernel::Process` uses native process spawning and pidfd lifecycle tracking.
+No Perl executes in a post-fork child path.
 
-pidfd readiness uses `waitid(P_PIDFD)` for decoded exit identity. Pipe output
-is drained before `on_exit`; queued stdin uses a SIGPIPE-safe native write
-helper. Signals use `pidfd_send_signal`, avoiding numeric PID reuse. Setup
-failure after spawn kills and reaps the exact child before partial ownership is
-released.
+A Process can own pidfd, stdin, stdout, and stderr resources while remaining one
+logical application object. Output pipes use dedicated native draining,
+queued stdin uses SIGPIPE-safe writes, and signals use `pidfd_send_signal` so
+numeric PID reuse cannot target an unrelated process.
+
+Setup failure after spawn tears down the exact child before returning the
+failure.
+
+## Introspection
+
+Introspection queries authoritative native and service state only when asked.
+It does not maintain a duplicate public-object registry in readiness dispatch.
+
+Object, resource, liveness, census, and pressure queries derive their answers
+from existing Loop, timer, signal, resolver, and resource ownership state.
+Optional profiling adds timing instrumentation only when explicitly enabled.
+
+Public introspection types follow the IO/Kernel taxonomy: `pipe`, `tty`,
+`stream`, `listener`, `dgram`, `timer`, `signal`, `event`, and `process`.
+Here `stream` means `IO::Sock::Stream`; Pipe and TTY remain distinct public
+resource types even though they share the ordered-byte engine.
+
+## Performance constraints on architecture
+
+The architecture is intentionally constrained by measured performance:
+
+- no public generic dispatcher in the readiness hot path;
+- no constructor closure required for each semantic callback;
+- named subclass CVs are cached once per concrete type;
+- no fd-to-Perl-hash lookup after `epoll_wait()`;
+- framing and queue work stays native until semantic delivery;
+- the plain transport uses direct syscalls;
+- optional diagnostics and timing do not add ordinary hot-path bookkeeping;
+- source-code modularity must not create extra Perl or dynamic-loading layers.
+
+Public semantic correctness and implementation performance are therefore
+separate concerns: Linux::Event can present precise resource leaves while
+sharing aggressively optimized private machinery underneath them.

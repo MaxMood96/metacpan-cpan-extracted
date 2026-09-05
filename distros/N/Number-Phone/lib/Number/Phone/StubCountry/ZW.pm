@@ -22,31 +22,40 @@ use base qw(Number::Phone::StubCountry);
 use strict;
 use warnings;
 use utf8;
-our $VERSION = 1.20260610205505;
+our $VERSION = 1.20260904101552;
 
 my $formatters = [
                 {
                   'format' => '$1 $2',
                   'leading_digits' => '
+            1|
+            2(?:
+              0[0-36-9]|
+              29|
+              58
+            )|
+            67[0-46-9]|
+            (?:
+              55|
+              68
+            )[0-69]
+          ',
+                  'national_rule' => '0$1',
+                  'pattern' => '(\\d{2})(\\d{3,5})'
+                },
+                {
+                  'format' => '$1 $2',
+                  'leading_digits' => '
             2(?:
               0[45]|
-              2[278]|
-              [49]8
+              [27]|
+              48
             )|
-            3(?:
-              [09]8|
-              17
-            )|
-            6(?:
-              [29]8|
-              37|
-              75
-            )|
-            [23][78]|
+            37|
+            675|
             (?:
-              33|
-              5[15]|
-              6[68]
+              55|
+              68
             )[78]
           ',
                   'national_rule' => '0$1',
@@ -66,22 +75,21 @@ my $formatters = [
                 },
                 {
                   'format' => '$1 $2',
+                  'leading_digits' => '548',
+                  'national_rule' => '0$1',
+                  'pattern' => '(\\d{4})(\\d{3,5})'
+                },
+                {
+                  'format' => '$1 $2 $3',
+                  'leading_digits' => '29[013-9]',
+                  'national_rule' => '0$1',
+                  'pattern' => '(\\d{2})(\\d{3})(\\d{3,4})'
+                },
+                {
+                  'format' => '$1 $2',
                   'leading_digits' => '
-            2(?:
-              02[014]|
-              4|
-              [56]20|
-              [79]2
-            )|
-            392|
-            5(?:
-              42|
-              525
-            )|
-            6(?:
-              [16-8]21|
-              52[013]
-            )|
+            [256]|
+            39|
             8[13-59]
           ',
                   'national_rule' => '(0$1)',
@@ -95,18 +103,7 @@ my $formatters = [
                 },
                 {
                   'format' => '$1 $2 $3',
-                  'leading_digits' => '
-            2(?:
-              1[39]|
-              2[0157]|
-              [378]|
-              [56][14]
-            )|
-            3(?:
-              123|
-              29
-            )
-          ',
+                  'leading_digits' => '3',
                   'national_rule' => '0$1',
                   'pattern' => '(\\d{3})(\\d{3})(\\d{3,4})'
                 },
@@ -115,345 +112,141 @@ my $formatters = [
                   'leading_digits' => '8',
                   'national_rule' => '0$1',
                   'pattern' => '(\\d{4})(\\d{6})'
-                },
-                {
-                  'format' => '$1 $2',
-                  'leading_digits' => '
-            1|
-            2(?:
-              0[0-36-9]|
-              12|
-              29|
-              [56]
-            )|
-            3(?:
-              1[0-689]|
-              [24-6]
-            )|
-            5(?:
-              [0236-9]|
-              1[2-4]
-            )|
-            6(?:
-              [013-59]|
-              7[0-46-9]
-            )|
-            (?:
-              33|
-              55|
-              6[68]
-            )[0-69]|
-            (?:
-              29|
-              3[09]|
-              62
-            )[0-79]
-          ',
-                  'national_rule' => '0$1',
-                  'pattern' => '(\\d{2})(\\d{3,5})'
-                },
-                {
-                  'format' => '$1 $2 $3',
-                  'leading_digits' => '
-            29[013-9]|
-            39|
-            54
-          ',
-                  'national_rule' => '0$1',
-                  'pattern' => '(\\d{2})(\\d{3})(\\d{3,4})'
-                },
-                {
-                  'format' => '$1 $2',
-                  'leading_digits' => '
-            258|
-            5483
-          ',
-                  'national_rule' => '0$1',
-                  'pattern' => '(\\d{4})(\\d{3,5})'
                 }
               ];
 
 my $validators = {
                 'fixed_line' => '
           (?:
-            1(?:
-              (?:
-                3\\d|
-                9
-              )\\d|
-              [4-8]
-            )|
             2(?:
               (?:
                 (?:
-                  0(?:
-                    2[014]|
-                    5
-                  )|
-                  (?:
-                    2[0157]|
-                    31|
-                    84|
-                    9
-                  )\\d\\d|
-                  [56](?:
-                    [14]\\d\\d|
-                    20
-                  )|
-                  7(?:
-                    [089]|
-                    2[03]|
-                    [35]\\d\\d
-                  )
+                  02[014]|
+                  72[03]
                 )\\d|
-                4(?:
-                  2\\d\\d|
-                  8
-                )
+                48
               )\\d|
-              1(?:
-                2|
-                [39]\\d{4}
-              )
+              2(?:
+                [278]\\d|
+                92
+              )|
+              583
+            )|
+            (?:
+              37[56]|
+              6[78]21\\d
+            )\\d|
+            5(?:
+              483|
+              525\\d\\d
+            )
+          )\\d{3}|
+          (?:
+            2(?:
+              0\\d|
+              7[1-7]
+            )|
+            (?:
+              55|
+              6[78]
+            )\\d
+          )\\d{4}|
+          (?:
+            13|
+            2(?:
+              (?:
+                42|
+                9\\d
+              )\\d|
+              [56]20
             )|
             3(?:
-              (?:
-                123|
-                (?:
-                  29\\d|
-                  92
-                )\\d
-              )\\d\\d|
-              7(?:
-                [19]|
-                [56]\\d
-              )
+              123|
+              92\\d
             )|
-            5(?:
-              0|
-              1[2-478]|
-              26|
-              [37]2|
-              4(?:
-                2\\d{3}|
-                83
-              )|
-              5(?:
-                25\\d\\d|
-                [78]
-              )|
-              [689]\\d
-            )|
+            (?:
+              4|
+              542
+            )\\d|
             6(?:
-              (?:
-                [16-8]21|
-                28|
-                52[013]
-              )\\d\\d|
-              [39]
+              [16]21|
+              52[013]
             )|
             8(?:
               [1349]28|
               523
-            )\\d\\d
-          )\\d{3}|
-          (?:
-            4\\d\\d|
+            )|
             9[2-9]
-          )\\d{4,5}|
-          (?:
-            (?:
-              2(?:
-                (?:
-                  (?:
-                    0|
-                    8[146]
-                  )\\d|
-                  7[1-7]
-                )\\d|
-                2(?:
-                  [278]\\d|
-                  92
-                )|
-                58(?:
-                  2\\d|
-                  3
-                )
-              )|
-              3(?:
-                [26]|
-                9\\d{3}
-              )|
-              5(?:
-                4\\d|
-                5
-              )\\d\\d
-            )\\d|
-            6(?:
-              (?:
-                (?:
-                  [0-246]|
-                  [78]\\d
-                )\\d|
-                37
-              )\\d|
-              5[2-8]
-            )
-          )\\d\\d|
-          (?:
-            2(?:
-              [569]\\d|
-              8[2-57-9]
-            )|
-            3(?:
-              [013-59]\\d|
-              8[37]
-            )|
-            6[89]8
-          )\\d{3}
+          )\\d{5}
         ',
                 'geographic' => '
           (?:
-            1(?:
-              (?:
-                3\\d|
-                9
-              )\\d|
-              [4-8]
-            )|
             2(?:
               (?:
                 (?:
-                  0(?:
-                    2[014]|
-                    5
-                  )|
-                  (?:
-                    2[0157]|
-                    31|
-                    84|
-                    9
-                  )\\d\\d|
-                  [56](?:
-                    [14]\\d\\d|
-                    20
-                  )|
-                  7(?:
-                    [089]|
-                    2[03]|
-                    [35]\\d\\d
-                  )
+                  02[014]|
+                  72[03]
                 )\\d|
-                4(?:
-                  2\\d\\d|
-                  8
-                )
+                48
               )\\d|
-              1(?:
-                2|
-                [39]\\d{4}
-              )
+              2(?:
+                [278]\\d|
+                92
+              )|
+              583
+            )|
+            (?:
+              37[56]|
+              6[78]21\\d
+            )\\d|
+            5(?:
+              483|
+              525\\d\\d
+            )
+          )\\d{3}|
+          (?:
+            2(?:
+              0\\d|
+              7[1-7]
+            )|
+            (?:
+              55|
+              6[78]
+            )\\d
+          )\\d{4}|
+          (?:
+            13|
+            2(?:
+              (?:
+                42|
+                9\\d
+              )\\d|
+              [56]20
             )|
             3(?:
-              (?:
-                123|
-                (?:
-                  29\\d|
-                  92
-                )\\d
-              )\\d\\d|
-              7(?:
-                [19]|
-                [56]\\d
-              )
+              123|
+              92\\d
             )|
-            5(?:
-              0|
-              1[2-478]|
-              26|
-              [37]2|
-              4(?:
-                2\\d{3}|
-                83
-              )|
-              5(?:
-                25\\d\\d|
-                [78]
-              )|
-              [689]\\d
-            )|
+            (?:
+              4|
+              542
+            )\\d|
             6(?:
-              (?:
-                [16-8]21|
-                28|
-                52[013]
-              )\\d\\d|
-              [39]
+              [16]21|
+              52[013]
             )|
             8(?:
               [1349]28|
               523
-            )\\d\\d
-          )\\d{3}|
-          (?:
-            4\\d\\d|
+            )|
             9[2-9]
-          )\\d{4,5}|
-          (?:
-            (?:
-              2(?:
-                (?:
-                  (?:
-                    0|
-                    8[146]
-                  )\\d|
-                  7[1-7]
-                )\\d|
-                2(?:
-                  [278]\\d|
-                  92
-                )|
-                58(?:
-                  2\\d|
-                  3
-                )
-              )|
-              3(?:
-                [26]|
-                9\\d{3}
-              )|
-              5(?:
-                4\\d|
-                5
-              )\\d\\d
-            )\\d|
-            6(?:
-              (?:
-                (?:
-                  [0-246]|
-                  [78]\\d
-                )\\d|
-                37
-              )\\d|
-              5[2-8]
-            )
-          )\\d\\d|
-          (?:
-            2(?:
-              [569]\\d|
-              8[2-57-9]
-            )|
-            3(?:
-              [013-59]\\d|
-              8[37]
-            )|
-            6[89]8
-          )\\d{3}
+          )\\d{5}
         ',
                 'mobile' => '
           7(?:
             [1278]\\d|
-            3[1-9]
+            3[1-9]|
+            9[01]
           )\\d{6}
         ',
                 'pager' => '',
@@ -479,245 +272,178 @@ my $validators = {
         '
               };
 my %areanames = ();
-$areanames{en} = {"26315", "Binga",
-"26366219", "Christon\ Bank\/Concession\/Mazowe",
-"26368", "Kadoma",
-"263275219", "Mazowe",
-"263289", "Jotsholo",
-"26342722", "Chitungwiza",
-"263420107", "Norton",
-"2632021", "Dangamvura",
-"263376", "Glendale",
-"26324215", "Norton",
-"263292809", "Matopos",
-"263204", "Odzi",
-"2634", "Harare",
-"26327522", "Mt\.\ Darwin",
-"263392323", "Nyika",
-"263279", "Marondera",
-"263812835", "Dete",
-"26314", "Rutenga",
-"26359", "Gokwe",
-"26367", "Chinhoyi",
-"263420085", "Selous",
-"26367214", "Banket\/Mhangura",
-"26329", "Bulawayo",
-"263251", "Zvishavane",
-"26316", "West\ Nicholson",
-"26353", "Chegutu",
-"26323", "Chiredzi",
-"26342729", "Marondera",
-"263672136", "Trelawney",
-"26339230", "Gutu",
-"263542532", "Mvuma",
-"26366212", "Mount\ Darwin",
-"263518", "Mberengwa",
-"263921", "Northend",
-"26329252", "Luveve",
-"26350", "Shanagani",
-"263212", "Murambinda",
-"263512", "Zvishavane",
-"263517", "Mataga",
-"263292821", "Nyamandlovu",
-"2636821", "Kadoma\/Selous",
-"263383", "Matopose",
+$areanames{en} = {"263812847", "Binga",
+"2636520", "Beatrice",
 "263420108", "Norton",
-"263688", "Chakari",
-"263371", "Shamva",
-"263687", "Sanyati",
+"26329252", "Luveve",
+"26325207", "Headlands",
+"263542532", "Mvuma",
+"263842808", "West\ Nicholson",
+"263420109", "Norton",
+"263275219", "Mazowe",
 "2636523", "Marondera",
-"26332", "Mvuma",
+"26342722", "Chitungwiza",
+"26327541", "Mt\.\ Darwin",
+"263558", "Nkayi",
 "26365208", "Wedza",
 "26339234", "Jerera",
-"263842801", "Filabusi",
-"26327529", "Mt\.\ Darwin",
-"2639", "Bulawayo",
-"26331233", "Triangle",
-"263225", "Rusape",
-"263514", "Zvishavane",
-"263261", "Kariba",
-"263242", "Harare",
-"26327527", "Mt\.\ Darwin",
-"2639228", "Queensdale",
-"263248", "Birchenough\ Bridge",
-"26354252", "Shurugwi",
-"263949", "Nkulumane",
-"26356", "Chivhu",
-"26326", "Chimanimani",
-"26313", "Victoria\ Falls",
-"26327528", "Mt\.\ Darwin",
-"263254", "Gweru",
-"26339235", "Zvishavane",
-"263672192", "Darwendale",
-"263242150", "Beatrice",
-"263285", "Turkmine",
-"26327526", "Mt\.\ Darwin",
-"26320200", "Odzi",
-"26327541", "Mt\.\ Darwin",
-"263420109", "Norton",
-"263420106", "Norton",
-"26329246", "Bellevue",
-"263558", "Nkayi",
-"26342728", "Marondera",
-"263292807", "Kezi",
-"263312337", "Rutenga",
-"2632421", "Chitungwiza",
-"26339245", "Mashava",
 "263557", "Munyati",
-"263628", "Selous",
-"26342010", "Selous",
-"26366216", "Mvurwi",
-"26367215", "Murombedzi",
-"263206", "Mutare",
-"263292800", "Esigodini",
-"263292861", "Tsholotsho",
-"2632020", "Mutare",
-"26355", "Kwekwe",
-"26325", "Rusape",
-"263229", "Juliasdale",
-"263264", "Karoi",
-"26362", "Norton",
-"263387", "Nyamandhlovu",
-"263652080", "Macheke",
-"263213", "Victoria\ Falls",
-"263513", "Zvishavane",
-"26354", "Gweru",
-"263842835", "Collen\ Bawn",
-"26324214", "Arcturus",
-"263920", "Northend",
-"263612141", "Makuti",
-"26319", "Plumtree",
-"26366217", "Guruve",
-"263392308", "Chatsworth",
-"263924", "Hillside",
-"26355259", "Gokwe",
-"26324213", "Ruwa",
-"26368215", "Chegutu",
-"26366218", "Glendale",
-"263282", "Kezi",
-"26335", "Mashava",
-"263329", "Nyanga",
-"263288", "Esigodini",
-"263943", "Mabutewni",
-"263941", "Mabutewni",
-"2632583", "Nyazura",
-"263270", "Chitungwiza",
-"263287", "Tsholotsho",
-"26389280", "Plumtree",
-"263292802", "Shangani",
-"263274", "Arcturus",
-"26325207", "Headlands",
-"263262098", "Nyanga",
-"263220203", "Dangamvura",
-"26363", "Makuti",
-"263662137", "Shamva",
-"2632753", "Mt\.\ Darwin",
-"263284", "Gwanda",
-"26383", "Victoria\ Falls",
-"26368216", "Sanyati",
-"26360", "Mhangura",
-"263392366", "Mataga",
-"26334", "Jerera",
-"263277", "Mvurwi",
-"263812875", "Jotsholo",
-"263272", "Mutoko",
-"263698", "Trelawney",
-"2635483", "Lalapanzi",
-"263552557", "Munyati",
-"26325206", "Murambinda",
-"263278", "Murewa",
-"26336", "Ngundu",
-"263375", "Concession",
-"263956", "Luveve",
-"263637", "Chirundu",
-"26326208", "Juliasdale",
-"263552558", "Nkayi",
-"26361", "Kariba",
-"263420086", "Selous",
-"263420089", "Selous",
-"263221", "Murambinda",
-"26369", "Darwendale",
-"26357", "Centenary",
-"2635525", "Battle\ Fields\/Kwekwe\/Redcliff",
-"263219", "Plumtree",
-"26354212", "Chivhu",
-"2639226", "Queensdale",
-"26358", "Guruve",
-"26327525", "Mt\.\ Darwin",
-"263682189", "Chakari",
-"263672198", "Raffingora",
-"26327205", "Chimanimani",
-"263842808", "West\ Nicholson",
-"26327540", "Mt\.\ Darwin",
-"263220201", "Chikanga\/Mutare",
+"263392", "Masvingo",
 "2638128", "Baobab\/Hwange",
-"263946", "Bellevue",
-"263942", "Mabutewni",
-"26330", "Gutu",
-"26327204", "Chipinge",
-"263948", "Nkulumane",
-"26364", "Karoi",
-"263281", "Hwange",
-"263283", "Figtree",
-"26317", "Filabusi",
-"26327523", "Mt\.\ Darwin",
-"263317", "Checheche",
-"263398", "Lupane",
-"263947", "Bellevue",
-"263542548", "Lalapanzi",
-"26327203", "Birchenough\ Bridge",
-"263668", "Mutorashanga",
-"26333", "Triangle",
-"263420088", "Selous",
-"263292803", "Turkmine",
-"263205", "Pengalonga",
-"26327524", "Mt\.\ Darwin",
-"263667", "Raffingora",
-"26342723", "Chitungwiza",
-"26365213", "Mutoko",
-"263672196", "Mutorashanga",
-"26361215", "Karoi",
-"26385", "BeitBridge",
-"2632024", "Penhalonga",
-"2638428", "Gwanda",
-"263420110", "Norton",
-"263220202", "Mutare",
-"26365", "Beatrice",
 "263271", "Bindura",
-"263273", "Ruwa",
-"26318", "Dete",
-"263952", "Luveve",
-"263940", "Mabutewni",
-"263812856", "Lupane",
-"26326209", "Hauna",
-"26352", "Shurugwi",
-"26342009", "Selous",
-"263312370", "Ngundu",
-"26366210", "Bindura\/Centenary",
-"263227", "Chipinge",
-"263929", "Killarney",
-"263228", "Hauna",
-"263222", "Wedza",
-"263392380", "Nyaningwe",
-"263292804", "Figtree",
-"263612140", "Chirundu",
-"26331", "Chiredzi",
-"263308", "Chatsworth",
-"263379", "Macheke",
-"2632582", "Headlands",
+"26327524", "Mt\.\ Darwin",
+"26361215", "Karoi",
+"263548", "Lalapanzi",
 "2636521", "Murewa",
-"26339", "Masvingo",
-"263272046", "Chipangayi",
-"263272317", "Checheche",
-"263812847", "Binga",
-"263392360", "Mberengwa",
-"26366", "Banket",
-"263338", "Nyika",
-"263675", "Murombedzi",
-"263420087", "Selous",
-"263337", "Nyaningwe",
+"263542", "Gweru",
+"263552557", "Munyati",
+"26367215", "Murombedzi",
 "263252055", "Nyazura",
-"263286", "Beitbridge",};
+"263312370", "Ngundu",
+"2636821", "Kadoma\/Selous",
+"26320200", "Odzi",
+"26366213", "Banket",
+"263943", "Mabutewni",
+"26324215", "Norton",
+"26339245", "Mashava",
+"263612140", "Chirundu",
+"26368216", "Sanyati",
+"26367", "Chinhoyi",
+"26339230", "Gutu",
+"263947", "Bellevue",
+"263392308", "Chatsworth",
+"263248", "Birchenough\ Bridge",
+"263948", "Nkulumane",
+"263222", "Wedza",
+"26329246", "Bellevue",
+"263420087", "Selous",
+"26327527", "Mt\.\ Darwin",
+"2635525", "Battle\ Fields\/Kwekwe\/Redcliff",
+"263292807", "Kezi",
+"263652080", "Macheke",
+"263420110", "Norton",
+"263942", "Mabutewni",
+"263228", "Hauna",
+"263242", "Harare",
+"263227", "Chipinge",
+"263272317", "Checheche",
+"263420106", "Norton",
+"26327522", "Mt\.\ Darwin",
+"263920", "Northend",
+"26366219", "Christon\ Bank\/Concession\/Mazowe",
+"26339235", "Zvishavane",
+"263682189", "Chakari",
+"263940", "Mabutewni",
+"263274", "Arcturus",
+"26383", "Victoria\ Falls",
+"263292804", "Figtree",
+"263392323", "Nyika",
+"26367214", "Banket\/Mhangura",
+"26366216", "Mvurwi",
+"263242150", "Beatrice",
+"26385", "BeitBridge",
+"26354212", "Chivhu",
+"26327525", "Mt\.\ Darwin",
+"26366218", "Glendale",
+"263952", "Luveve",
+"263812835", "Dete",
+"26324214", "Arcturus",
+"26355259", "Gokwe",
+"26342010", "Selous",
+"263258", "Nyazura",
+"26327540", "Mt\.\ Darwin",
+"26365213", "Mutoko",
+"26355", "Kwekwe",
+"26327203", "Birchenough\ Bridge",
+"263312337", "Rutenga",
+"263292821", "Nyamandlovu",
+"26366211", "Banket",
+"263924", "Hillside",
+"2639228", "Queensdale",
+"2632620", "Chimanimani",
+"263612141", "Makuti",
+"26327526", "Mt\.\ Darwin",
+"26324213", "Ruwa",
+"263672198", "Raffingora",
+"26327204", "Chipinge",
+"26366215", "Banket",
+"26327528", "Mt\.\ Darwin",
+"263292800", "Esigodini",
+"263392366", "Mataga",
+"263277", "Mvurwi",
+"26342723", "Chitungwiza",
+"2632021", "Dangamvura",
+"263842801", "Filabusi",
+"263272", "Mutoko",
+"26326208", "Juliasdale",
+"2632753", "Mt\.\ Darwin",
+"26354252", "Shurugwi",
+"263272046", "Chipangayi",
+"263687", "Sanyati",
+"263688", "Chakari",
+"263375", "Concession",
+"26366217", "Guruve",
+"263376", "Glendale",
+"263842835", "Collen\ Bawn",
+"263205", "Pengalonga",
+"263292861", "Tsholotsho",
+"263206", "Mutare",
+"2633123", "Chiredzi",
+"263542548", "Lalapanzi",
+"26366212", "Mount\ Darwin",
+"263292809", "Matopos",
+"263420088", "Selous",
+"26389280", "Plumtree",
+"26327529", "Mt\.\ Darwin",
+"26326209", "Hauna",
+"263662137", "Shamva",
+"263420089", "Selous",
+"263672136", "Trelawney",
+"2632020", "Mutare",
+"26366214", "Banket",
+"26327205", "Chimanimani",
+"2636121", "Kariba",
+"263262098", "Nyanga",
+"26325206", "Murambinda",
+"2631", "Victoria\ Falls",
+"2632024", "Penhalonga",
+"2639226", "Queensdale",
+"263204", "Odzi",
+"26368", "Kadoma",
+"2632520", "Rusape",
+"263292803", "Turkmine",
+"2634", "Harare",
+"263420085", "Selous",
+"263672192", "Darwendale",
+"26327523", "Mt\.\ Darwin",
+"2632421", "Chitungwiza",
+"26368215", "Chegutu",
+"26342728", "Marondera",
+"263672196", "Mutorashanga",
+"263956", "Luveve",
+"263552558", "Nkayi",
+"263420086", "Selous",
+"263946", "Bellevue",
+"26366210", "Bindura\/Centenary",
+"263273", "Ruwa",
+"263292802", "Shangani",
+"26329", "Bulawayo",
+"263812856", "Lupane",
+"26342009", "Selous",
+"263392360", "Mberengwa",
+"263812875", "Jotsholo",
+"26342729", "Marondera",
+"263941", "Mabutewni",
+"263229", "Juliasdale",
+"26331233", "Triangle",
+"263929", "Killarney",
+"2639", "Bulawayo",
+"263420107", "Norton",
+"263675", "Murombedzi",
+"263392380", "Nyaningwe",
+"263949", "Nkulumane",
+"263921", "Northend",
+"2638428", "Gwanda",};
 my $timezones = {
                '' => [
                        'Africa/Harare'

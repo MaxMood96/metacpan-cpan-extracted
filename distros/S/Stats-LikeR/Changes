@@ -1,5 +1,343 @@
 Revision history for Stats-LikeR
 
+0.315 2026-09-04 CDT
+
+ - Defect fixes, plus a set of speed and memory changes. No numeric answer
+   moves anywhere in the release except `cov`'s on an incomplete pair, which
+   disagreed with R and is called out below; every reorganised routine was
+   checked against the code it replaced and returns the same bits.
+
+ - The defects came from two sweeps, which is why there are two groups of
+   segmentation faults below.
+
+ - The first sweep was fuzzing rather than reading: every exported
+   function called with a reference where it expected a number, with a code ref or
+   a scalar ref buried inside an otherwise ordinary frame, and with randomly
+   assembled argument lists, all run against an AddressSanitizer/UBSan build. The
+   whole existing suite is clean under those sanitizers and always was; what the
+   fuzzers reached is the argument space the suite does not cover, because it is
+   the space no correct program visits. A user's typo visits it.
+
+ - The second was the argument-validation surface again, under valgrind with
+   `--errors-for-leak-kinds=definite` and with RSS watched over tens of
+   thousands of failing calls. Fuzzing finds the call that dies; a leak on a
+   croak path does not die, so nothing but the allocator notices it. Six
+   functions were leaking, and seven could be made to crash or hang.
+
+ [Six segmentation faults and two runaways]
+
+ - `av_fetch()` returns NULL for a hole in a sparse array -- what `delete $a[2]`
+   leaves behind, and what `$a[0] = 1; $a[3] = 4` makes of indices 1 and 2 --
+   and four readers dereferenced it without looking. None of it could be
+   caught: `eval` does not see a signal.
+
+ - | call | before | now |
+   |---|---|---|
+   | `epi_2x2([10, 20, <hole>, 40])` | `SIGSEGV` | croaks `cell at index 2 is undef` |
+   | `epi_2x2([[1, 2], [<hole>, 4]])` | `SIGSEGV` | croaks `row 1 cell at index 0 is undef` |
+   | `cmh_test([[10, 20, <hole>, 40]])` | `SIGSEGV` | the same reader, same message |
+   | `binom_test([<hole>, 5])` | `SIGSEGV` | croaks `successes is undef` |
+   | `fisher_test([[1, 2], [3, <hole>]])` | `SIGSEGV` | croaks `array cell is undef` |
+   | `coxph(\@t, \@s, \@x)`, hole in any | `SIGSEGV` | croaks, naming the vector and index |
+
+ - `survfit` and `logrank_test` had the same fault with a different ending.
+   `srv_read()` did test the pointer, but mapped the hole to `NaN`, and a `NaN`
+   survival time does not fail the `t < 0` check that follows -- every
+   comparison against one is false -- so it reached the risk-set construction
+   and the fit ran away instead of returning. A time that is not a number is
+   refused outright now.
+
+ - All of it goes through one reader, `av_num_at()`, which names the offending
+   index in the message: a hole is invisible at the call site, since nothing
+   about `[10, 20, 40]` printed from a sparse array says which slot is missing.
+
+ - That reader also rejects a cell that is not a number, where the old code
+   read it as zero. `epi_2x2([1, 2, 'abc', 4])` used to return an odds ratio
+   computed from a silent 0 and now croaks. This is what R does -- `chisq.test`,
+   `fisher.test` and `binom.test` all refuse to coerce -- and what this file's
+   own `ct_cell()`, `ft_cell()` and `bt_check_count()` already did.
+
+ [Six leaks on croak paths]
+
+ - `croak()` longjmps past any `Safefree()` written after it, so a validation
+   failure that fired once the working set was allocated dropped all of it.
+   Found by running the suite under valgrind and by watching RSS over tens of
+   thousands of failing calls; per failing call, before:
+
+ - | call | leaked |
+   |---|---|
+   | `dunn_test(..., method => 'nope')` | 113 KB at n = 2000, growing with n |
+   | `scale([...])` with a non-numeric element | 8 bytes per element (160 KB at n = 20000) |
+   | `aov($d, 'y ~ a:b')` with no main effects | 7.7 KB |
+   | `col2col($d, 'sum', 'nosuchcolumn')` | 3.7 KB, growing with rows x columns |
+   | `fisher_test` with a non-numeric cell | 3.2 KB, growing with the table |
+   | `glm` with a response outside its family | 2.9 KB |
+
+ - Each was fixed at the level it belonged to rather than by one blanket rule.
+   `dunn_test` now settles its method before the first allocation, which is
+   where `cov()` and `p_adjust()` already ask the same question -- it used to
+   be `dunn_padjust()` that noticed, from the bottom of its dispatch chain,
+   with the values, the group labels, the ranks and five p-value arrays all
+   outstanding. `glm`'s three response checks moved above the IRLS working
+   set; all three read nothing but the response, which does not change once
+   the design is built, so asking once is exactly what asking per observation
+   per outer pass did. `aov`'s interaction croak got the free list it was
+   missing. `scale`, `fisher_test`, `coxph` and `srv_read` put their buffers
+   on the save stack, as `wilcox_test` already did.
+
+ - `col2col` needed more than a free list. With `skip.errors` turned off, a
+   caller's block that dies propagates out from the middle of the per-pair
+   loop, past every `Safefree()` in the function, so no hand-written cleanup
+   could cover it; the column tables go on the save stack instead. Separately,
+   none of that function's sixteen croaks released the column-name array, so
+   each also leaked an AV and one SV per column -- it is mortal now.
+
+ [`cov` now agrees with R on an incomplete pair]
+
+ - This one changes an answer. `cov` compacted to the pairwise-complete
+   observations, so `cov([1,2,undef,4,5], [1,2,3,4,6])` was 4. R's `cov`
+   defaults to `use = "everything"` and propagates, so R 4.6.1 gives `NA`
+   there, and `cor` in this same distribution already gave `NaN`. `cov` now
+   gives `NaN` too.
+
+ - `cor_test` still drops incomplete cases, because R's `cor.test` runs
+   `complete.cases()`. So all three now match their R counterparts, where
+   before `cov` was the one that did not. There is no `use` argument to ask
+   for the old behaviour with; drop the pairs before the call to get it.
+
+ - A comment in `LikeR.xs` claimed `cor` dropped pairs the way `cov` did. It
+   never has. Corrected.
+
+ [`cor` on a matrix is up to 24x faster, and holds less]
+
+ - `cor($matrix, undef, 'spearman')` ranked both columns of every pair, so a
+   p-column frame paid p(p-1) rankings where p answer the whole question. Each
+   column is ranked once now and the pairs are Pearson on those ranks, which
+   is the same arithmetic: a column's ranks do not depend on its partner,
+   because `cor` does no pairwise deletion. On 500 rows, 0.0051s to 0.0005s at
+   p = 20, and 0.2955s to 0.0125s at p = 160. Pearson and Kendall are
+   unaffected, and the method string is now resolved once instead of at each
+   of the p(p-1)/2 pairs.
+
+ - `cor($matrix)` built an ncols x ncols scratch matrix of correlations only to
+   copy it cell by cell into the result and free it. Each value is stored at
+   both of its positions directly. Peak memory on a 600-column frame fell from
+   32.1 MB to 29.3 MB.
+
+ [`table_one` no longer rescans the frame once per level]
+
+ - Categorical counts came from a `grep` over a group's rows for each (level,
+   group) pair, run twice over -- once for the table the test statistic sees,
+   again to format the output rows -- plus one scan of every row per level for
+   the Overall column. One pass per group now feeds a lookup. On 20000 rows,
+   0.021s to 0.010s at 5 levels and 0.124s to 0.010s at 40, and flat in the
+   level count rather than unbounded in it.
+
+ [Four segmentation faults and a `SIGFPE`]
+
+ - Each of these ended the interpreter. None of them could be caught: `eval` does
+   not see a signal, so a caller could not even fail gracefully.
+
+ - | call | before | now |
+   |---|---|---|
+   | `matrix([1..6], 0)` | `SIGFPE` | croaks `Dimensions must be greater than 0` |
+   | `matrix([1..6], 'greater')` | `SIGFPE` | croaks `matrix: nrow must be a number` |
+   | `prcomp({ c => {d=>1}, e => undef })` | `SIGSEGV` | croaks `prcomp: HoH value for row 'e' is not a hash-ref` |
+   | `scale([[1,2], sub {1}])` | `SIGSEGV` | the row reads as absent, as a string or `undef` row always did |
+   | `merge(\1, [{a=>1}])` | `SIGSEGV` | croaks `merge: left frame must be AoH/HoA/HoH` |
+
+ - `matrix`. The guard against a zero dimension sat one branch *after* the
+   inference that divides by it, so `ncol = (data_len + nrow - 1) / nrow` ran first
+   with `nrow == 0`. A non-numeric string reached the same division because
+   `SvUV('greater')` is `0`. The guard now runs before the inference, and both
+   dimensions go through the validating reader below.
+
+ - `prcomp`. A HoH frame's shape is decided from whichever row `hv_iternext`
+   reaches first, and nothing checked the rest — both the column-name pass and the
+   extraction pass called `SvRV` on every value and dereferenced the result as an
+   `HV`. HoA and AoA already had a rectangularity pre-pass; HoH now has the same
+   one. Because the deciding row moves with hash order, the crash came and went
+   between runs on identical input, which is the worst way for a bug to present.
+   The HoA branch reached the same null pointer by a second route: column names
+   are copied with `savepv` and looked up again with `strlen`, so a name holding a
+   NUL byte truncates, `hv_fetch` misses, and the `NULL` was dereferenced. That is
+   now a croak naming the column.
+
+ - `scale`. The per-row test in matrix mode was `SvROK()` alone, without the
+   `SvTYPE(...) == SVt_PVAV` half, so a reference to anything that is not an array
+   was handed to `av_fetch` as an `AV`. Only row 0 is checked when the matrix
+   shape is detected; every other row arrived unvalidated. A bad row now takes the
+   same path a plain string or an `undef` row has always taken — it reads as
+   absent — rather than becoming a new croak, which would have changed two cases
+   that were never broken.
+
+ - `merge`. `mg_shape` ran on nothing but an `SvROK` test and treated
+   everything that was not an array as a hash, so it reached `hv_iterinit` on a
+   scalar ref *before* `mg_prep` — which is where a frame is really validated —
+   could reject it. It now answers `0` for anything that is neither, and leaves the
+   croak to `mg_prep`, which is where the message the caller should see comes from.
+
+ [`bw_ucv` and `bw_bcv` could loop forever]
+
+ - Both build their search interval from `sqrt(var(x))`, which squares the data.
+   On a `double` NV the variance of `c(1, 1e300, -1)` is already `+Inf`, and
+   `dens_brent_fmin` — R's `Brent_fmin`, transcribed — iterates until the bracket
+   closes, which a non-finite bound never does, because every comparison against a
+   NaN is false. `bw_ucv([1, 2, 3, 1e300])` and `density(\@x, bw => 'ucv')` on the
+   same data spun with no way out but a signal.
+
+ - R does not reach that loop either: `optimize()` rejects the bounds first, with
+   *invalid 'xmin' value*. This is the same check, moved to where the bounds are
+   built. The threshold is a property of the build — about `1e155` for a `double`
+   NV, far higher for long double and `__float128` — so the check tests the value,
+   not the data.
+
+ - `dens_brent_fmin` also gained an iteration cap as a backstop against a future
+   caller. It is not a working limit: golden-section alone shrinks the bracket by
+   0.382 a step, so even `tol = NV_EPSILON` on a 113-bit `__float128` needs about
+   163 steps, and the cap is 1000.
+
+ [Size arguments are validated in one place]
+
+ - `matrix`, `hist`, `sample`, `rnorm` and `rbinom` each read a count with a bare
+   `SvUV`/`SvIV`. `SvUV` of a non-numeric string is `0`, of `-1` it is `2**64-1`,
+   and of a reference it is the address — and each of those went straight to a
+   divisor or an allocation:
+
+     rnorm(-1)                          # Out of memory in perl:util:safesysmalloc
+     rbinom(n => -1, size => 2, ...)    # Out of memory in perl:util:safesysmalloc
+     sample([1,2,3], $some_ref)         # Out of memory in perl:util:safesysmalloc
+     hist(\@x, sub { ... })             # Out of memory in perl:util:safesysmalloc
+
+ - Perl's out-of-memory death is unrecoverable — it is not a croak and `eval` never
+   sees it either. All five now share one reader, `sv_count_arg`, which refuses
+   `undef`, a non-number, a NaN, a negative and anything above `2**48`, and
+   truncates a fraction toward zero the way R's `as.integer` does — so
+   `matrix(1:6, 2.7)` is a two-row matrix, in R and here. `runif` already had a
+   hand-written check for exactly this; its message is unchanged.
+
+ [`cor_test` reports `NaN` where the correlation is undefined]
+
+ - A column with no variance has no correlation, and R says so:
+   `cor.test(c(1,1,1,1), c(1,2,3,4))` gives `cor = NA`, `t = NA`, `p-value = NA`,
+   `df = 2`. This returned estimate `0`, statistic `0`, p-value `1` — which
+   reads as a real, well-supported null result that no caller can tell apart from
+   one. Three code paths in this module already disagreed with it: `cor()` croaks
+   (*standard deviation of x is 0*), the shared `pearson_cor` helper returns
+   `NV_NAN`, and `cor_test`'s own Kendall branch already answered `NaN` on its
+   degenerate denominator. Only the Pearson and Spearman branches returned `0`.
+
+ - All three methods now report `NaN` for estimate, statistic and p-value, and
+   Pearson reports a `NaN` interval and keeps `df = 2`, as R does. Ordinary
+   correlations are bit-identical.
+
+ [`sample` draws without replacement, and now says so]
+
+ - Asked for more than the population holds, the two shapes disagreed and neither
+   said anything:
+
+     sample([1, 2, 3], 10);        # [3, 2, 1, undef, undef, undef, undef, undef, undef, undef]
+     sample({a=>1, b=>2}, 5);      # two keys, silently
+
+ - Seven undefs that no caller could distinguish from real data is the worse of
+   the two. Both branches now croak, as R does — *cannot take a sample larger than
+   the population when 'replace = FALSE'*. Draw sequences under a fixed `srand` are
+   unchanged: the shuffle makes exactly the same number of `Drand01()` calls for
+   every call that was previously valid. A first argument that is neither an array
+   nor a hash reference is now a usage croak rather than a silent `undef`.
+
+ [`hist` follows R's own `breaks` rule, and its extrema are `NV`-wide]
+
+ - `breaks` went through a bare `SvIV`, so `hist(\@x, -5)` wrapped to a huge
+   `size_t` and silently behaved like `breaks => 1`. The rule is now R's, from
+   `src/library/graphics/R/hist.R`: anything not finite or below 1 is
+   *invalid number of 'breaks'*, and a value above `1e6` warns and clamps, because
+   `pretty()` needs an `n` that fits in an `int`. A fractional value truncates —
+   R's `breaks = 2.7` gives the same four breaks as `breaks = 2`, and so does this.
+
+ - Separately, `hist` seeded its running extrema from `DBL_MAX` rather than
+   `NV_MAX`. On a long-double or `__float128` build every value above `DBL_MAX`
+   fails `val < min_val`, so the minimum stayed at `1.8e308`. Measured on
+   `5.44.0-quadmath`:
+
+ - | | before | now |
+   |---|---|---|
+   | `hist([1e400, 1.05e400, 1.1e400])` | breaks `0 5e399 1e400 1.5e400`, counts `0 1 2` | breaks `1e400 1.05e400 1.1e400`, counts `2 1` |
+
+ - `min()` and `max()` on the same data were always right, which is what made the
+   empty leading bin visible.
+
+ [Smaller things]
+
+ - **`write_table` gained `quiet => 1`.** The confirmation line is deliberately
+     unconditional and deliberately coloured, which is right at a terminal and
+     wrong for a script whose stdout is a pipe or a data file — the SGR bytes go
+     out whatever file descriptor 1 is, and the only advice on offer was to capture
+     and strip them. `quiet` silences the line rather than decolouring it, because
+     the coloured form is the contract every format shares.
+ - **`chunk` owns its argument-list message.** `chunk($aref, 2)` fell into a hash
+     assignment and died as perl's *Odd number of elements in hash assignment at
+     LikeR.pm line 1686*, naming neither `chunk` nor the option it wanted.
+ - **`auto.row.names` is documented where it can be found.** The option has
+     existed and been tested since 0.313, but appeared only in the release notes,
+     not in `read_table`'s own options table — so `h('read_table')` did not list
+     it, and the R-written `mtcars.tsv` in this repository looked unreadable.
+
+ - `aov` allocated its design matrix and the snapshot it keeps for fitted
+   values a row at a time: 2n allocator calls and 2n malloc headers for a
+   matrix `lm` has always taken in one block. They are one block each now. At
+   n = 20000 that is 39,965 fewer allocations, and `aov`'s time relative to
+   `lm` on the same fit went from 1.118x to 1.002x. The block multiply is
+   guarded against wrapping where `size_t` is 32 bits.
+
+ - `wilcox_test`'s exact confidence interval sorted the pairwise differences
+   and the Walsh averages with `nv_heapsort` where the introsort in the same
+   file is 1.6x to 1.9x faster at those sizes. The exact interval at n = 800
+   went from 0.1309s to 0.1162s.
+
+ - `assign(..., map_cell { ... })` on a hash-of-arrays frame assembled the row
+   view before testing whether the cell was `undef`, so a column of `undef`
+   built one view per row and threw every one away unread -- 0.161s of the
+   0.165s a 20000-row, 64-column pass cost. The test comes first now, and the
+   view is one hash refilled per row rather than a fresh hash each time. That
+   last part is visible to a block that keeps `$_[0]`: it now sees the current
+   row through the kept reference rather than the row it was handed, which is
+   what the AoH and HoH forms have always done, since those hand the block the
+   row hash itself.
+
+ [Testing]
+
+ - `t/arg.crash.regressions.t`, 98 assertions. Every crash case runs in a child
+   perl and is judged by how the child exited, because a signal death cannot be
+   caught in the process that provokes it; the `prcomp` cases run 40 fresh
+   interpreters each, since the crash depended on hash order and reproduced within
+   the first two. R provenance for every quoted behaviour (R 4.6.1) is in the file
+   header, and nothing in it needs R, `python3`, NumPy or SciPy at run time. The
+   two `hist` extremum assertions skip on a `double` NV and run for real on
+   quadmath. `t/chunk.t` and `t/write_table.announce.t` gained the cases for the
+   two smaller fixes.
+
+ - `coxph` had no test at all. `t/coxph.R.t` cross-validates it against R's
+   `survival` 3.8.9 on two corpora: `ovarian`, which that package ships and
+   `?coxph` uses, and a 16-observation set built for the purpose with ties at
+   two event times, because `ovarian` has none and Efron and Breslow are
+   therefore indistinguishable on it. Its values are all small integers, so
+   the tie structure does not move with the NV width. Worst disagreement with
+   `survival` across all 22 quantities and both tie methods is 8.88e-16 on the
+   double builds, 3.64e-16 on long double and `__float128`, and 1.11e-15 on
+   the 32-bit one -- 2 to 5 ulp. `t/coxph.R.R` regenerates the frozen table.
+
+ - `t/croak.leaks.t` covers every crash and leak above: that each croaks with
+   a message naming what went wrong, that none leaks an SV, and that the
+   ordinary call still returns what it did.
+
+ - `t/assign.t` gained two checks for the `map_cell` change, one of them a
+   tied sibling column that counts its `FETCH`es, so that a row view built for
+   a cell the block will never see is a failure rather than a slowdown.
+
+ - The whole suite runs clean under valgrind with
+   `--errors-for-leak-kinds=definite`, which it did not before: six functions
+   leaked.
 
 0.314 2026-09-02 CDT
 

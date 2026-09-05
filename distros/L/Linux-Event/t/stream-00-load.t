@@ -3,7 +3,9 @@ use strict;
 use warnings;
 use Test::More;
 
-use_ok('Linux::Event::Stream');
+use_ok('Linux::Event::IO::Pipe');
+use_ok('Linux::Event::IO::TTY');
+use_ok('Linux::Event::IO::Sock::Stream');
 use_ok('Linux::Event::Error');
 require_ok('Linux::Event::Framer');
 use_ok('Linux::Event::Framer::Delimiter');

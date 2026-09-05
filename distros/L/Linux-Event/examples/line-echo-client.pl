@@ -5,7 +5,7 @@ use warnings;
 
 {
     package EchoClient;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Delimiter', "\n";
 
     sub on_ready ($stream) {

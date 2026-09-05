@@ -1,5 +1,8 @@
 Revision history for Music-MelodicDevice-Arpeggiation
 
+0.0502 2026-09-04 17:09:54
+  - Argh missing `int`. :eyeroll:
+
 0.0501 2026-09-03 21:10:00
   - Add the "pedal_updown" type, too!
 

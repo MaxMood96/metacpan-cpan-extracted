@@ -11,7 +11,7 @@ use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC CLOCK_PROCESS_CPUTIME_ID);
 
 use Linux::Event;
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 my $messages = 200_000;
 my $bytes = 64;
@@ -259,13 +259,13 @@ sub benchmark_class ($mode, $batch) {
     if ($mode eq 'framed') {
         eval qq{
             package $class;
-            use parent 'Linux::Event::Stream';
+            use parent 'Linux::Event::IO::Sock::Stream';
             use Linux::Event::Framer 'Delimiter', "\\n";
             1;
         } or die "define framed benchmark class: $@";
     } else {
         no strict 'refs';
-        @{"${class}::ISA"} = ('Linux::Event::Stream');
+        @{"${class}::ISA"} = ('Linux::Event::IO::Sock::Stream');
     }
 
     no strict 'refs';

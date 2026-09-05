@@ -7,12 +7,13 @@ use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 use FindBin qw($Bin);
 
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 use Linux::Event::TLS;
 
 {
     package T::TLSEstablishedDeadline;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
 
     sub on_transport_ready ($stream) {
         $stream->data->{ready}++;

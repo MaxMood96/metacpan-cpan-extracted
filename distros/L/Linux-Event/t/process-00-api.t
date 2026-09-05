@@ -5,26 +5,26 @@ use warnings;
 use Test::More;
 
 use Linux::Event::Loop;
-use Linux::Event::Process;
+use Linux::Event::Kernel::Process;
 
 sub exception ($code) {
     local $@;
     return eval { $code->(); 1 } ? '' : "$@";
 }
 
-like(exception(sub { Linux::Event::Process->new(pid => $$) }),
+like(exception(sub { Linux::Event::Kernel::Process->new(pid => $$) }),
     qr/abstract base class/, 'base Process class is abstract');
 
 {
     package T::Process::Missing;
-    use parent 'Linux::Event::Process';
+    use parent 'Linux::Event::Kernel::Process';
 }
 like(exception(sub { T::Process::Missing->new(pid => $$) }),
     qr/must define on_exit/, 'on_exit is required');
 
 {
     package T::Process::Basic;
-    use parent 'Linux::Event::Process';
+    use parent 'Linux::Event::Kernel::Process';
     sub on_exit ($self) { }
 }
 
@@ -50,7 +50,7 @@ like(exception(sub { T::Process::Basic->spawn(
 
 {
     package T::Process::StdoutCallback;
-    use parent 'Linux::Event::Process';
+    use parent 'Linux::Event::Kernel::Process';
     sub on_stdout ($self, $bytes) { }
     sub on_exit ($self) { }
 }

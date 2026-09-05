@@ -11,7 +11,7 @@ use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC usleep);
 
 use Linux::Event;
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 my $duration = 0.5;
 my $ping_interval_us = 2_000;
@@ -237,7 +237,7 @@ sub run_case ($case) {
 
 {
     package Linux::Event::Bench::BatchFairness::Ping;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Fixed', size => 8;
     sub on_message ($stream, $message) {
         my $sent = unpack('d', $message);
@@ -253,7 +253,7 @@ sub hot_class ($batch_size) {
     my $class = "Linux::Event::Bench::BatchFairness::Hot_$batch_size";
     eval qq{
         package $class;
-        use parent 'Linux::Event::Stream';
+        use parent 'Linux::Event::IO::Sock::Stream';
         use Linux::Event::Framer 'Delimiter', "\\n";
         1;
     } or die "define hot Stream class: $@";

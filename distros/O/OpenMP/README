@@ -1,9 +1,9 @@
 This archive contains the distribution OpenMP,
-version 1.0.2:
+version 1.0.3:
 
   Metapackage for using OpenMP in Perl
 
-This software is copyright (c) 2024 by oodler.
+This software is copyright (c) 2026 by Brett Estrade.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.105';
+our $VERSION = '0.111';
 
 use Carp qw(croak);
 use bytes ();
@@ -31,11 +31,13 @@ sub _frame ($config, $payload) {
     croak "send(): payload length $length exceeds max_frame=$config->{max_frame}"
         if defined($config->{max_frame}) && $length > $config->{max_frame};
 
+    return pack('C', $length) . $payload if $length < 128;
+
     my @octets;
     my $value = $length;
     do {
-        my $byte = $value % 128;
-        $value = int($value / 128);
+        my $byte = $value & 0x7f;
+        $value >>= 7;
         $byte |= 0x80 if $value;
         push @octets, $byte;
     } while ($value);
@@ -53,7 +55,7 @@ Linux::Event::Framer::Varint - native unsigned LEB128 framing declaration
 =head1 SYNOPSIS
 
   package CompactStream;
-  use parent 'Linux::Event::Stream';
+  use parent 'Linux::Event::IO::Sock::Stream';
   use Linux::Event::Framer 'Varint',
       max_frame => 1_048_576; # optional
 

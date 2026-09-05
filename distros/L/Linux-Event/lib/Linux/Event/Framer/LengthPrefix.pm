@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.105';
+our $VERSION = '0.111';
 
 use Carp qw(croak);
 use bytes ();
@@ -23,12 +23,19 @@ sub _build_definition ($class, @args) {
         if defined($max_frame) && ($max_frame !~ /\A\d+\z/ || $max_frame < 0);
     croak 'unknown LengthPrefix options: ' . join(', ', sort keys %opt) if %opt;
 
+    my $little = $endian eq 'little' ? 1 : 0;
+    my $template = $bytes == 1 ? 'C'
+        : $bytes == 2 ? ($little ? 'v' : 'n')
+        :               ($little ? 'V' : 'N');
     my $native = {
-        read_mode      => 4,
-        prefix_bytes   => 0 + $bytes,
-        prefix_little  => $endian eq 'little' ? 1 : 0,
-        include_prefix => $include_prefix ? 1 : 0,
-        max_frame      => $max_frame,
+        read_mode       => 4,
+        prefix_bytes    => 0 + $bytes,
+        prefix_little   => $little,
+        include_prefix  => $include_prefix ? 1 : 0,
+        max_frame       => $max_frame,
+        prefix_template => $template,
+        prefix_max      => $bytes == 1 ? 0xff
+            : $bytes == 2 ? 0xffff : 0xffff_ffff,
     };
     return { native => $native, frame => \&_frame };
 }
@@ -36,21 +43,13 @@ sub _build_definition ($class, @args) {
 sub _frame ($config, $payload) {
     $payload = '' if !defined $payload;
     my $length = bytes::length($payload);
-    my $bytes = $config->{prefix_bytes};
-    my $max = $bytes == 1 ? 0xff : $bytes == 2 ? 0xffff : 0xffffffff;
+    my $max = $config->{prefix_max};
     croak "send(): payload length $length exceeds prefix capacity $max"
         if $length > $max;
     croak "send(): payload length $length exceeds max_frame=$config->{max_frame}"
         if defined($config->{max_frame}) && $length > $config->{max_frame};
 
-    my @octets;
-    my $value = $length;
-    for (1 .. $bytes) {
-        unshift @octets, $value & 0xff;
-        $value >>= 8;
-    }
-    @octets = reverse @octets if $config->{prefix_little};
-    return pack('C*', @octets) . $payload;
+    return pack($config->{prefix_template}, $length) . $payload;
 }
 
 1;
@@ -64,7 +63,7 @@ Linux::Event::Framer::LengthPrefix - native binary length framing declaration
 =head1 SYNOPSIS
 
   package MessageStream;
-  use parent 'Linux::Event::Stream';
+  use parent 'Linux::Event::IO::Sock::Stream';
   use Linux::Event::Framer 'LengthPrefix',
       bytes     => 2,         # optional; default 4
       endian    => 'big',     # default

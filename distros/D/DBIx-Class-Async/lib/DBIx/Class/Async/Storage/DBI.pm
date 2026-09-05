@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use version;
 
-our $VERSION   = qv('v1.0.5');
+our $VERSION   = qv('v1.0.6');
 our $AUTHORITY = 'cpan:MANWAR';
 
 use base 'DBIx::Class::Async::Storage';
@@ -16,7 +16,7 @@ DBIx::Class::Async::Storage::DBI - DBI-based async storage backend for DBIx::Cla
 
 =head1 VERSION
 
-Version v1.0.5
+Version v1.0.6
 
 =head1 SYNOPSIS
 

@@ -1,4 +1,4 @@
-package Dist::Zilla::App::Command::release 6.037;
+package Dist::Zilla::App::Command::release 6.038;
 # ABSTRACT: release your dist to the CPAN
 
 use Dist::Zilla::Pragmas;
@@ -75,7 +75,7 @@ Dist::Zilla::App::Command::release - release your dist to the CPAN
 
 =head1 VERSION
 
-version 6.037
+version 6.038
 
 =head1 SYNOPSIS
 

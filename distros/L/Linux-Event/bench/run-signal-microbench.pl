@@ -8,7 +8,7 @@ use POSIX qw();
 use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 
 use Linux::Event::Loop;
-use Linux::Event::Signal;
+use Linux::Event::Kernel::Signal;
 
 my $deliveries = 10_000;
 my @subscribers = (1, 10, 100);
@@ -32,7 +32,7 @@ my $signal_number = POSIX::SIGRTMIN();
 
 {
     package BenchSignal;
-    use parent 'Linux::Event::Signal';
+    use parent 'Linux::Event::Kernel::Signal';
 
     sub on_signal ($signal, $number, $count) {
         my $run = $signal->data;

@@ -32,7 +32,7 @@ use constant {
 };
 
 
-our $VERSION = v0.35;
+our $VERSION = v0.36;
 
 my %_multiplicity_prefix = (
     total   => '4.1',
@@ -172,8 +172,10 @@ sub integer {
 #@returns Data::Identifier
 sub unicode_character {
     my ($pkg, $type, $request, %opts) = @_;
+    my Data::Identifier $ret;
     my $unicode_cp;
     my $unicode_cp_str;
+    my $tagname;
 
     croak 'No type given' unless defined $type;
     croak 'No/Bad request given' unless defined($request) && length($request);
@@ -208,9 +210,18 @@ sub unicode_character {
         croak 'Rejected use of special character: '.$unicode_cp_str unless $opts{allow_special};
     }
 
-    $opts{displayname} //= $unicode_cp_str;
+    if ($unicode_cp > 31 && $unicode_cp != 127) {
+        $tagname = eval {
+            require charnames;
+            charnames::viacode($unicode_cp);
+        };
+    }
 
-    return Data::Identifier->new(unicodecp => $unicode_cp_str, displayname => $opts{displayname}, generator => WK_UNICODE_CHARACTER_GENERATOR, request => $unicode_cp_str);
+    $opts{displayname} //= $tagname // $unicode_cp_str;
+
+    $ret = Data::Identifier->new(unicodecp => $unicode_cp_str, displayname => $opts{displayname}, generator => WK_UNICODE_CHARACTER_GENERATOR, request => $unicode_cp_str);
+    $ret->_add_tagnames($tagname) if defined $tagname;
+    return $ret;
 }
 
 
@@ -533,7 +544,11 @@ sub generic {
                     eval { $opts{displaycolour} //= Data::URIID::Colour->new(rgb => $request) };
                 }
 
+                # Ensure our requests are always in standard format, at least for now.
+                delete $opts{request} if length($request) != 7;
+
                 $req = sprintf('#%s%s%s', $1 x 6, $2 x 6, $3 x 6) if $req =~ /^#([a-f0-9]{2})([a-f0-9]{2})([a-f0-9]{2})$/;
+                $req = sprintf('#%s%s%s', $1 x 3, $2 x 3, $3 x 3) if $req =~ /^#([a-f0-9]{4})([a-f0-9]{4})([a-f0-9]{4})$/;
 
                 if ($req =~ /^#[a-f0-9]{36}$/) {
                     $opts{input} //= $req;
@@ -552,7 +567,7 @@ sub generic {
         my $ns = ref($opts{namespace}) ? $opts{namespace}->uuid(no_defaults => 1) : $opts{namespace};
         my $uuid = $pkg->_uuid_v5($ns, $opts{input});
         my $tag = Data::Identifier->new(uuid => $uuid, displayname => $opts{displayname});
-        foreach my $key (qw(request displaycolour description icontext)) {
+        foreach my $key (qw(request displaycolour description icontext displayname)) {
             $tag->{$key} //= $opts{$key} if defined $opts{$key};
         }
         $tag->_add_tagnames(ref $opts{tagname} ? @{$opts{tagname}} : $opts{tagname}) if defined $opts{tagname};
@@ -669,7 +684,7 @@ Data::Identifier::Generate - format independent identifier object
 
 =head1 VERSION
 
-version v0.35
+version v0.36
 
 =head1 SYNOPSIS
 

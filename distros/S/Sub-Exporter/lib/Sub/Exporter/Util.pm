@@ -1,10 +1,10 @@
 use v5.12.0;
 use warnings;
-package Sub::Exporter::Util 0.991;
+package Sub::Exporter::Util 0.992;
 # ABSTRACT: utilities to make Sub::Exporter easier
 
 use Data::OptList ();
-use Params::Util ();
+use Params::SomeUtil ();
 
 #pod =head1 DESCRIPTION
 #pod
@@ -107,7 +107,7 @@ sub curry_chain {
       for my $i (0 .. $#$pairs) {
         my $pair = $pairs->[ $i ];
 
-        unless (Params::Util::_INVOCANT($next)) { ## no critic Private
+        unless (Params::SomeUtil::_INVOCANT($next)) { ## no critic Private
           my $str = defined $next ? "'$next'" : 'undef';
           Carp::croak("can't call $pair->[0] on non-invocant $str")
         }
@@ -200,7 +200,7 @@ sub merge_col {
                        ? { %{ $col->{$default_name} }, %$arg }
                        : $arg;
 
-        if (Params::Util::_CODELIKE($gen)) { ## no critic Private
+        if (Params::SomeUtil::_CODELIKE($gen)) { ## no critic Private
           $gen->($class, $name, $merged_arg, $col);
         } else {
           $class->$$gen($name, $merged_arg, $col);
@@ -342,7 +342,7 @@ Sub::Exporter::Util - utilities to make Sub::Exporter easier
 
 =head1 VERSION
 
-version 0.991
+version 0.992
 
 =head1 DESCRIPTION
 

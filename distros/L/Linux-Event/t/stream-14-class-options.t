@@ -9,7 +9,7 @@ use Linux::Event::Loop;
 
 {
     package T::OptionsHash;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     our $CALLS = 0;
     sub stream_options ($class) {
         $CALLS++;
@@ -23,21 +23,21 @@ use Linux::Event::Loop;
 
 {
     package T::OptionsOdd;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub stream_options ($class) { return 'read_size' }
     sub on_data ($stream, $bytes) { }
 }
 
 {
     package T::OptionsUnknown;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub stream_options ($class) { return imaginary => 1 }
     sub on_data ($stream, $bytes) { }
 }
 
 {
     package T::OptionsWatermark;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub stream_options ($class) {
         return high_watermark => 1, low_watermark => 2;
     }
@@ -46,8 +46,15 @@ use Linux::Event::Loop;
 
 {
     package T::OptionsZeroRead;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub stream_options ($class) { return read_size => 0 }
+    sub on_data ($stream, $bytes) { }
+}
+
+{
+    package T::OptionsNegativeBudget;
+    use parent 'Linux::Event::IO::Sock::Stream';
+    sub stream_options ($class) { return read_budget_bytes => -1 }
     sub on_data ($stream, $bytes) { }
 }
 
@@ -67,7 +74,8 @@ is_deeply(
     {
         read_size => 8, high_watermark => 1234,
         low_watermark => 123, max_pending_bytes => 0, max_buffer => 4096,
-        read_batch_bytes => 0, message_batch_size => 0,
+        read_budget_bytes => 0, read_batch_bytes => 0,
+        message_batch_size => 0,
         idle_timeout => 0, read_timeout => 0, write_timeout => 0,
     },
     'hashref class options are validated and cached',
@@ -95,5 +103,8 @@ like(descriptor_error('T::OptionsWatermark'), qr/low_watermark must be <=/,
     'invalid watermark relationship is rejected');
 like(descriptor_error('T::OptionsZeroRead'), qr/read_size must be a positive/,
     'zero read size is rejected');
+like(descriptor_error('T::OptionsNegativeBudget'),
+    qr/read_budget_bytes must be a non-negative/,
+    'negative read budget is rejected');
 
 done_testing;

@@ -1,5 +1,95 @@
 Revision history for Linux-Event
 
+0.111  2026-09-03
+    - Complete the post-0.110 public-surface audit so current architecture,
+      lifecycle, transport, benchmark, and introspection documentation describe
+      the released IO/Kernel taxonomy rather than an unfinished migration.
+    - Align Loop introspection with public resource semantics. Stable type labels
+      are now pipe, tty, stream, listener, dgram, timer, signal, event, and
+      process; stream means IO::Sock::Stream, and the obsolete stream_kind field
+      has been removed.
+    - Restrict installed manpages to the public module list from Makefile.PL.
+      Retained no_index implementation and native ABI host packages remain
+      available internally without being installed as application documentation.
+    - Add a current-document taxonomy regression test that rejects stale
+      migration-state wording and retired top-level subclass examples while
+      preserving historical release records and development history.
+    - Add a dedicated public-API overhead benchmark and CI gate comparing the
+      retained implementation paths with the public IO/Kernel leaves. Pipe
+      lifecycle comparison now performs equivalent resource validation on both
+      sides, while the one-time F_GETPIPE_SZ semantic-validation cost is reported
+      separately as a diagnostic rather than misclassified as wrapper overhead.
+    - Extend the public stream overhead gate through 64-byte, 4 KiB, 64 KiB, and
+      200 KiB payloads and retain the full performance-regression comparison.
+      The audited public/private architecture remains within the regression
+      threshold without adding steady-state Perl dispatch to the hot path.
+    - Refresh benchmark guidance, manifests, release metadata, and public module
+      versions for the corrected 0.111 distribution while leaving historical
+      private XS/ABI identifiers unchanged.
+
+0.110  2026-09-03
+    - Replace the misleading top-level Stream, Socket, Listener, Datagram,
+      Timer, Signal, Wakeup, and Process public model with semantic IO and
+      Kernel leaves. Application data I/O now uses Linux::Event::IO::Pipe,
+      IO::TTY, IO::Sock::Stream, IO::Sock::Listener, and IO::Sock::Dgram;
+      kernel notification/state objects use Linux::Event::Kernel::Timer,
+      Kernel::Signal, Kernel::Event, and Kernel::Process.
+    - Treat IO and Kernel as namespace categories rather than generic public
+      base objects. Keep shared implementation mechanics behind private _IO,
+      _ByteStream, and _Socket boundaries so public inheritance does not imply
+      false Linux relationships.
+    - Make Linux SOCK_STREAM and SOCK_DGRAM type names explicit in the socket
+      namespace while keeping AF_INET, AF_INET6, and AF_UNIX as address-family
+      configuration. Listener remains a distinct public accept-oriented role
+      for listening SOCK_STREAM sockets.
+    - Preserve the native ordered-byte hot path for Pipe, TTY, and stream
+      sockets. The shared engine supports one handle, split read/write handles,
+      read-only or write-only operation, framing, batching, backpressure,
+      output limits, established deadlines, protocol transitions, and
+      directional lifecycle without adding a public generic byte-stream class.
+    - Validate Pipe handles as pipes/FIFOs and TTY handles as terminals/PTYS
+      before attachment. Add tested interactive STDIN/STDOUT terminal usage and
+      pipe-oriented framing examples.
+    - Move connection, address, socket-option, kernel half-close, and TLS
+      semantics to IO::Sock::Stream. Outbound connect retains one object through
+      asynchronous resolution, connection, optional TLS readiness, established
+      I/O, and close. Listener stream_class now names an IO::Sock::Stream
+      subclass.
+    - Keep datagrams packet-oriented under IO::Sock::Dgram. Kernel-provided
+      packet boundaries, per-packet peers, truncation detection, whole-packet
+      queues, and UDP/Unix datagram policy remain separate from byte framing.
+    - Present eventfd through Kernel::Event with on_event while retaining the
+      proven native eventfd implementation privately. Timer, Signal, and
+      Process likewise retain their timerfd, signalfd, and pidfd-backed engines
+      behind the corrected public Kernel leaves.
+    - Make Linux::Event::Framer the public native-framing declaration surface
+      for every ordered-byte leaf. A bare module import is valid for extension
+      authors, and declare_native_consumer() provides the stable declaration
+      boundary for separate XS integrations such as Linux::Event::Async without
+      depending on the historical Stream package.
+    - Retain the versioned native framed-message consumer ABI while hardening
+      pause/resume, terminal flush ordering, provider-frame lifetime,
+      construction failure cleanup, transition safety, and reentrant close.
+      Add optional read_budget_bytes fairness while preserving unlimited drain
+      as the default.
+    - Keep historical Stream XS package/symbol names and consumer/transport ABI
+      headers stable as private native implementation identifiers. They are
+      no_index and are not advertised as application classes; the public API is
+      the IO/Kernel leaf surface.
+    - Move repetitive Process stdout/stderr pipe draining into the native helper
+      while preserving read_size, max_reads_per_tick, callback chunking, EOF
+      order, and error behavior. Retain the gated process-pipe and ordered-byte
+      performance regression coverage.
+    - Rewrite README, module POD, architecture/design guides, framing/TLS/socket
+      documentation, examples, MANIFEST, load contracts, and META provides for
+      the new taxonomy. Rename Stream-, Wakeup-, and Datagram-centric design
+      documents to ordered-byte, Event, and Dgram terminology and prevent the
+      obsolete document names from returning through public-surface tests.
+    - Keep all former top-level implementation packages out of META provides and
+      mark them no_index. Public leaf POD now documents construction, callbacks,
+      framing, flow control, deadlines, TLS, packet semantics, kernel ownership,
+      and lifecycle directly rather than relying on internal implementation POD.
+
 0.105  2026-08-29
     - Add query-driven Loop introspection through running, count, has, objects,
       inspect, census, resources, why_alive, and pressure. Optional profile,

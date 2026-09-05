@@ -6,11 +6,12 @@ use Scalar::Util qw(refaddr);
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 {
     package T::Transition::Handshake;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) {
         my $state = $stream->data;
         $state->{input} .= $bytes;
@@ -22,7 +23,7 @@ use Linux::Event::Stream;
 
 {
     package T::Transition::Line;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Delimiter', "\n";
     sub on_message ($stream, $message) {
         my $state = $stream->data;
@@ -33,7 +34,7 @@ use Linux::Event::Stream;
 
 {
     package T::Transition::Control;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Delimiter', "\n";
     sub on_message ($stream, $message) {
         my $state = $stream->data;
@@ -44,7 +45,7 @@ use Linux::Event::Stream;
 
 {
     package T::Transition::Fixed;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Fixed', size => 3;
     sub on_message ($stream, $message) {
         my $state = $stream->data;
@@ -55,7 +56,7 @@ use Linux::Event::Stream;
 
 {
     package T::Transition::FramedToRaw;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Delimiter', '|';
     sub on_message ($stream, $message) {
         $stream->data->{framed} = $message;
@@ -65,7 +66,7 @@ use Linux::Event::Stream;
 
 {
     package T::Transition::RawTail;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) {
         $stream->data->{raw} .= $bytes;
         $stream->data->{loop}->stop;
@@ -74,13 +75,13 @@ use Linux::Event::Stream;
 
 {
     package T::Transition::OtherRaw;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) { return }
 }
 
 {
     package T::Transition::Small;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Delimiter', "\n";
     sub stream_options ($class) { return max_buffer => 4 }
     sub on_message ($stream, $message) { return }
@@ -88,7 +89,7 @@ use Linux::Event::Stream;
 
 {
     package T::Transition::SourceBase;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_message ($stream, $message) {
         $stream->data->{framed} = $message;
         $stream->transition_to('T::Transition::RawTail');
@@ -227,6 +228,53 @@ for my $case (
     $stream->resume_read;
     is_deeply($state->{messages}, ['held'],
         'resume dispatches input buffered during transition');
+    $stream->close;
+    close $peer;
+}
+
+{
+    package T::Transition::NoMessageSink;
+    use parent 'Linux::Event::IO::Sock::Stream';
+    use Linux::Event::Framer 'Delimiter', "\n";
+}
+
+{
+    package T::Transition::NoDataSink;
+    use parent 'Linux::Event::IO::Sock::Stream';
+}
+
+{
+    my $state = { input => '' };
+    my ($loop, $stream, $peer) = stream_pair(
+        'T::Transition::Handshake', $state,
+    );
+    my $ok = eval {
+        $stream->transition_to('T::Transition::NoMessageSink');
+        1;
+    };
+    ok(!$ok, 'transition without a message sink is rejected');
+    like($@, qr/target readable framed Stream has no message sink/,
+        'transition rejects a readable framed target without delivery');
+    isa_ok($stream, 'T::Transition::Handshake',
+        'failed callback validation leaves source class active');
+    $stream->close;
+    close $peer;
+}
+
+{
+    my $state = { input => '' };
+    my ($loop, $stream, $peer) = stream_pair(
+        'T::Transition::Handshake', $state,
+    );
+    my $ok = eval {
+        $stream->transition_to('T::Transition::NoDataSink');
+        1;
+    };
+    ok(!$ok, 'transition without a raw data sink is rejected');
+    like($@, qr/target readable raw Stream has no on_data callback/,
+        'transition rejects a readable raw target without delivery');
+    isa_ok($stream, 'T::Transition::Handshake',
+        'failed raw callback validation leaves source class active');
     $stream->close;
     close $peer;
 }

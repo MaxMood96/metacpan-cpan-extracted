@@ -1,4 +1,4 @@
-package Dist::Zilla::Util 6.037;
+package Dist::Zilla::Util 6.038;
 # ABSTRACT: random snippets of code that Dist::Zilla wants
 
 use Dist::Zilla::Pragmas;
@@ -173,7 +173,7 @@ Dist::Zilla::Util - random snippets of code that Dist::Zilla wants
 
 =head1 VERSION
 
-version 6.037
+version 6.038
 
 =head1 PERL VERSION
 

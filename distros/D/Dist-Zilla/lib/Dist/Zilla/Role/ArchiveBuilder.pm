@@ -1,4 +1,4 @@
-package Dist::Zilla::Role::ArchiveBuilder 6.037;
+package Dist::Zilla::Role::ArchiveBuilder 6.038;
 # ABSTRACT: something that builds archives
 
 use Moose::Role;
@@ -57,7 +57,7 @@ Dist::Zilla::Role::ArchiveBuilder - something that builds archives
 
 =head1 VERSION
 
-version 6.037
+version 6.038
 
 =head1 DESCRIPTION
 

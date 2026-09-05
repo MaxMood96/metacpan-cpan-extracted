@@ -1,0 +1,23 @@
+lib/VPNDetection.pm
+lib/VPNDetection/Bogon.pm
+lib/VPNDetection/Bogons.pm
+lib/VPNDetection/Cache.pm
+lib/VPNDetection/Database.pm
+lib/VPNDetection/Error.pm
+lib/VPNDetection/Result.pm
+LICENSE
+Makefile.PL
+MANIFEST			This list of files
+MANIFEST.SKIP
+README.md
+t/00-compile.t
+t/01-bogon.t
+t/02-conformance.t
+t/03-client.t
+t/04-live.t
+t/05-download.t
+t/lib/VPNDetectionTest.pm
+t/lib/VPNDetectionTest/Origin.pm
+testdata/testdata.json
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

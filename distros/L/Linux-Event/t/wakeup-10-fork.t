@@ -6,12 +6,12 @@ use POSIX qw(_exit);
 use Test::More;
 
 use Linux::Event::Loop;
-use Linux::Event::Wakeup;
+use Linux::Event::Kernel::Event;
 
 {
     package T::ForkWakeup;
-    use parent 'Linux::Event::Wakeup';
-    sub on_wakeup ($self, $count) {
+    use parent 'Linux::Event::Kernel::Event';
+    sub on_event ($self, $count) {
         ${ $self->data } = $count;
         $self->loop->stop;
     }

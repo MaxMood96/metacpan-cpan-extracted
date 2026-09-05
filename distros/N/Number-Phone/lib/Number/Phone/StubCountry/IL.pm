@@ -22,7 +22,7 @@ use base qw(Number::Phone::StubCountry);
 use strict;
 use warnings;
 use utf8;
-our $VERSION = 1.20260610205503;
+our $VERSION = 1.20260904101550;
 
 my $formatters = [
                 {
@@ -90,9 +90,11 @@ my $validators = {
           55(?:
             4(?:
               0[0-3]|
-              [16]0
+              10|
+              6[015-9]
             )|
-            57[0-289]
+            57[0-289]|
+            8[06][0-2]
           )\\d{4}|
           5(?:
             (?:
@@ -135,9 +137,10 @@ my $validators = {
         ',
                 'voip' => '
           7(?:
+            280[01]|
             38(?:
               [05]\\d|
-              8[0138]
+              8[01358]
             )|
             8(?:
               33|
@@ -159,16 +162,16 @@ my $validators = {
         '
               };
 my %areanames = ();
-$areanames{en} = {"9724", "Haifa\ and\ North\ Regions",
-"9723", "Tel\ Aviv",
-"9728", "Hashfela\ and\ South\ Regions",
-"9729", "Hasharon",
-"9722", "Jerusalem",};
 $areanames{iw} = {"9729", "השרון",
 "9728", "השפלה\ והדרום",
-"9722", "ירושלים",
 "9724", "חיפה\ והצפון",
-"9723", "תל\ אביב\-יפו\ והמרכז",};
+"9723", "תל\ אביב\-יפו\ והמרכז",
+"9722", "ירושלים",};
+$areanames{en} = {"9729", "Hasharon",
+"9724", "Haifa\ and\ North\ Regions",
+"9728", "Hashfela\ and\ South\ Regions",
+"9722", "Jerusalem",
+"9723", "Tel\ Aviv",};
 my $timezones = {
                '' => [
                        'Asia/Jerusalem'

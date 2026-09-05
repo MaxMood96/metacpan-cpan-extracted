@@ -22,7 +22,7 @@ use base qw(Number::Phone::StubCountry);
 use strict;
 use warnings;
 use utf8;
-our $VERSION = 1.20260610205503;
+our $VERSION = 1.20260904101550;
 
 my $formatters = [
                 {
@@ -54,47 +54,47 @@ my $validators = {
                 'voip' => '40\\d{5}'
               };
 my %areanames = ();
-$areanames{en} = {"24544396", "Ingoré",
-"24544320", "Bissau",
-"24544352", "Sonaco",
-"24544393", "S\.\ Domingos",
-"24544351", "Gabu",
-"24544392", "Cacheu",
-"24544353", "Pirada",
-"24544391", "Canchungo",
-"24544397", "Bigene",
-"24544370", "Buba",
+$areanames{en} = {"24544331", "Mansôa",
 "24544334", "Mansaba",
-"24544331", "Mansôa",
-"24544332", "Bissora",
-"24544394", "Bula",
+"24544393", "S\.\ Domingos",
+"24544322", "St\.\ Luzia",
+"24544392", "Cacheu",
+"24544352", "Sonaco",
+"24544353", "Pirada",
 "24544341", "Bafatá",
-"24544325", "Brá",
-"24544342", "Bambadinca",
-"24544354", "Pitche",
 "24544335", "Farim",
+"24544320", "Bissau",
+"24544332", "Bissora",
+"24544396", "Ingoré",
+"24544397", "Bigene",
 "24544321", "Bissau",
-"24544322", "St\.\ Luzia",};
-$areanames{pt} = {"245320", "Bissau",
-"245335", "Farim",
+"24544391", "Canchungo",
+"24544394", "Bula",
+"24544325", "Brá",
+"24544370", "Buba",
+"24544351", "Gabu",
+"24544354", "Pitche",
+"24544342", "Bambadinca",};
+$areanames{pt} = {"245393", "S\.\ Domingos",
+"245320", "Bissau",
+"245391", "Canchungo",
+"245352", "Sonaco",
+"245354", "Pitche",
 "245341", "Bafatá",
+"245321", "Bissau",
 "245331", "Mansôa",
-"245370", "Buba",
-"245334", "Mansaba",
-"245342", "Bambadinca",
 "245332", "Bigene\/Bissorã",
 "245396", "Ingoré",
-"245354", "Pitche",
-"245392", "Cacheu",
-"245351", "Gabú",
-"245353", "Pirada",
+"245334", "Mansaba",
 "245322", "Sta\.\ Luzia",
+"245392", "Cacheu",
 "245394", "Bula",
-"245321", "Bissau",
+"245351", "Gabú",
+"245342", "Bambadinca",
 "245325", "Brá",
-"245393", "S\.\ Domingos",
-"245391", "Canchungo",
-"245352", "Sonaco",};
+"245370", "Buba",
+"245335", "Farim",
+"245353", "Pirada",};
 my $timezones = {
                '' => [
                        'Atlantic/Reykjavik'

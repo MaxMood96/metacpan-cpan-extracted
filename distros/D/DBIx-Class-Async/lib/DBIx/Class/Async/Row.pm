@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use version;
 
-our $VERSION   = qv('v1.0.5');
+our $VERSION   = qv('v1.0.6');
 our $AUTHORITY = 'cpan:MANWAR';
 
 =head1 NAME
@@ -13,7 +13,7 @@ DBIx::Class::Async::Row - Asynchronous Row object representing a single database
 
 =head1 VERSION
 
-Version v1.0.5
+Version v1.0.6
 
 =head1 SYNOPSIS
 

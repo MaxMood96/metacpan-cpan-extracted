@@ -7,14 +7,14 @@ use Config ();
 use lib 't/lib';
 
 use Linux::Event::Loop;
-use Linux::Event::Wakeup;
+use Linux::Event::Kernel::Event;
 
 sub exception ($code) {
     local $@;
     return eval { $code->(); 1 } ? '' : "$@";
 }
 
-my $interpreter_id = Linux::Event::Wakeup::_interpreter_id();
+my $interpreter_id = Linux::Event::Kernel::Event::_interpreter_id();
 like("$interpreter_id", qr/\A\d+\z/,
     'interpreter identity is an unsigned integer');
 is($interpreter_id, 0,
@@ -23,18 +23,18 @@ is($interpreter_id, 0,
 
 {
     package T::Wakeup;
-    use parent 'Linux::Event::Wakeup';
-    sub on_wakeup ($self, $count) { push @{ $self->data }, $count }
+    use parent 'Linux::Event::Kernel::Event';
+    sub on_event ($self, $count) { push @{ $self->data }, $count }
 }
 
-like(exception(sub { Linux::Event::Wakeup->new }), qr/abstract base class/,
+like(exception(sub { Linux::Event::Kernel::Event->new }), qr/abstract base class/,
     'base class is abstract');
 
 {
     package T::Wakeup::Missing;
-    use parent 'Linux::Event::Wakeup';
+    use parent 'Linux::Event::Kernel::Event';
 }
-like(exception(sub { T::Wakeup::Missing->new }), qr/must define on_wakeup/,
+like(exception(sub { T::Wakeup::Missing->new }), qr/must define on_event/,
     'subclass callback is required');
 
 my $loop = Linux::Event::Loop->new;

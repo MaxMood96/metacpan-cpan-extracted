@@ -3,9 +3,9 @@ use warnings;
 use ExtUtils::MakeMaker;
 
 WriteMakefile(
-    NAME             => 'Linux::Event::Stream::_Connection',
-    VERSION_FROM     => '../lib/Linux/Event/Stream.pm',
-    ABSTRACT         => 'Internal nonblocking Stream connection support',
+    NAME             => 'Linux::Event::_Socket::Connection',
+    VERSION_FROM     => '../lib/Linux/Event.pm',
+    ABSTRACT         => 'Internal nonblocking socket connection support',
     AUTHOR           => 'Joshua S. Day <hax@cpan.org>',
     LICENSE          => 'perl_5',
     MIN_PERL_VERSION => '5.036000',

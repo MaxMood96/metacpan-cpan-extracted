@@ -1,0 +1,72 @@
+NAME
+
+    Browser::OIDC - Get an OIDC token for a CLI application
+
+SYNOPSIS
+
+     my $oidc = Browser::OIDC->new($base_url);
+     $oidc->get_token(
+             client_id => 'me',
+             pkce      => 1,
+             scope     => [ 'email' ],
+     );
+
+DESCRIPTION
+
+    This module will open a browser for you to log in
+
+METHODS
+
+ new
+
+     my $oidc = Browser::OIDC->new($base_url);
+
+    This creates a new
+
+ get_token
+
+     $oidc->get_token(%options);
+
+    client_id
+
+      The client identifier. Technically optional but practically required.
+
+    client_secret
+
+      The client secret, if any.
+
+    pkce
+
+      If true this will enable Proof Key for Code Exchange (PKCE)
+
+    scope
+
+      This list will be the scopes of the request. The values are generally
+      service specific.
+
+    message
+
+      The message that will be shown to the user in the browser on
+      completion.
+
+    message_type
+
+      The content type of the message.
+
+TODO
+
+    Open ID Connect and OAuth2 are large standards, so far only a tiny
+    fraction is implemented. Feel free to request specific features if you
+    need them.
+
+AUTHOR
+
+    Leon Timmermans <fawaka@gmail.com>
+
+COPYRIGHT AND LICENSE
+
+    This software is copyright (c) 2026 by Leon Timmermans.
+
+    This is free software; you can redistribute it and/or modify it under
+    the same terms as the Perl 5 programming language system itself.
+

@@ -23,6 +23,31 @@ equivalent `loop` constructor option. The only low-level exception is raw
 API and guarantees are documented in module POD and the focused design files;
 the older sections below remain an implementation history only.
 
+## Native Process pipe draining (after 0.105)
+
+Priority 5 audited the remaining Linux descriptor families after Timer,
+Signal, Wakeup, Resolver, Listener, Datagram, Stream, and pidfd handling were
+already native. Only Process stdout and stderr still contained a repetitive
+Perl `sysread` loop. A gated benchmark pre-spawns every child and starts them
+only after watcher registration, isolating pipe output, callbacks, and Loop
+dispatch from process construction.
+
+The retained XS helper performs the same bounded read loop and invokes the
+same cached callback once per read. It leaves EOF, error, and object lifecycle
+policy in Perl. Balanced seven-repeat matrices covered stdout, stderr, and
+both pipes with 1, 8, and 32 workers. Two independent 4 KiB matrices produced
+paired median throughput improvements of 27.8 and 25.1 percent with lower
+parent CPU in every case. Intermediate 8, 16, and 32 KiB reads improved by
+19.4, 5.3, and 3.3 percent. Two default 64 KiB matrices were neutral overall:
+their combined 126-pair median was 0.2 percent, inside run variance.
+
+A saturated 32-worker run with a 1 ms recurring Timer found no fairness
+regression. On the retained 0.105 measurement, the median worst Timer gap fell
+from 16.881 ms to 5.225 ms with the normal 64-read cap. A longer one-read-cap
+run changed it from 21.335 ms to 15.704 ms while throughput remained within
+1.5 percent. The implementation therefore became the private default without
+adding a public drain API or callback-batching behavior.
+
 ## Stream watcher-state profiling (0.105)
 
 The proposed native Stream-to-Loop watcher ABI was measured before changing

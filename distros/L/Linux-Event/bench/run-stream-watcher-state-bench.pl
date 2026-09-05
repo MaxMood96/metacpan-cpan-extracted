@@ -21,18 +21,19 @@ use Socket qw(
 use Time::HiRes qw(time clock_gettime CLOCK_PROCESS_CPUTIME_ID);
 
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 use Linux::Event::TLS;
 
 {
     package Linux::Event::Bench::WatcherState::Stream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) { return }
 }
 
 {
     package Linux::Event::Bench::WatcherState::TLSStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_transport_ready ($stream) { $stream->data->{ready}++ }
     sub on_data ($stream, $bytes) { return }
     sub on_eof ($stream) { $stream->data->{eof}++ }
@@ -106,7 +107,7 @@ if (grep { /^tls-/ } @cases) {
 }
 
 say 'Linux::Event Stream watcher-state benchmark';
-say "version=$Linux::Event::Stream::VERSION perl=$^V pid=$$";
+say "version=$Linux::Event::IO::Sock::Stream::VERSION perl=$^V pid=$$";
 say "contract=$contract_version cases=" . join(',', @cases);
 say "native_timing=enabled";
 
@@ -652,7 +653,7 @@ sub median (@values) {
 sub environment_info () {
     my ($sysname, $nodename, $release, $version, $machine) = uname();
     return {
-        linux_event_version => $Linux::Event::Stream::VERSION,
+        linux_event_version => $Linux::Event::IO::Sock::Stream::VERSION,
         perl_version => "$^V",
         perl_executable => $^X,
         os => $^O,

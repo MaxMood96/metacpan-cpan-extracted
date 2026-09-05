@@ -8,7 +8,7 @@ use Linux::Event::Loop;
 
 {
     package T::DecimalStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'DecimalLength';
     sub stream_options ($class) { return read_size => 1 }
     sub on_message ($stream, $message) {
@@ -24,14 +24,14 @@ use Linux::Event::Loop;
 
 {
     package T::DecimalPipeStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'DecimalLength', separator => '|';
     sub on_message ($stream, $message) { }
 }
 
 {
     package T::DecimalPrefixStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'DecimalLength',
         separator => '|', include_prefix => 1;
     sub on_message ($stream, $message) {
@@ -42,7 +42,7 @@ use Linux::Event::Loop;
 
 {
     package T::DecimalLimitedStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'DecimalLength', max_frame => 3;
     sub on_message ($stream, $message) {
         Test::More::fail('oversized DecimalLength frame must not emit');
@@ -69,7 +69,7 @@ sub read_exact ($fh, $wanted) {
 
 eval q{
     package T::BadDecimalSeparatorWidth;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'DecimalLength', separator => '12';
     sub on_message { }
     1;
@@ -78,7 +78,7 @@ like($@, qr/exactly one byte/, 'multi-byte decimal separator is rejected');
 
 eval q{
     package T::BadDecimalDigitSeparator;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'DecimalLength', separator => '7';
     sub on_message { }
     1;

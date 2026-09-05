@@ -22,14 +22,14 @@ use base qw(Number::Phone::StubCountry);
 use strict;
 use warnings;
 use utf8;
-our $VERSION = 1.20260610205504;
+our $VERSION = 1.20260904101550;
 
 my $formatters = [
                 {
                   'format' => '$1 $2 $3',
                   'leading_digits' => '
             2|
-            8[2-79]
+            8[2-9]
           ',
                   'pattern' => '(\\d{2})(\\d{3})(\\d{3,4})'
                 },
@@ -57,7 +57,7 @@ my $validators = {
             93
           )\\d{5}
         ',
-                'mobile' => '8[2-79]\\d{7}',
+                'mobile' => '8[2-9]\\d{7}',
                 'pager' => '',
                 'personal_number' => '',
                 'specialrate' => '',
@@ -65,18 +65,18 @@ my $validators = {
                 'voip' => ''
               };
 my %areanames = ();
-$areanames{en} = {"25824", "Quelimane",
-"25823", "Beira",
-"258282", "Xai\-Xai",
-"258281", "Chokwe",
-"258271", "Lichinga",
-"25821", "Maputo",
-"25826", "Nampula",
-"258252", "Tete",
-"258272", "Pemba",
-"258251", "Manica",
-"25829", "Inhambane",};
 $areanames{pt} = {"258281", "Chokwé",};
+$areanames{en} = {"25823", "Beira",
+"258251", "Manica",
+"25824", "Quelimane",
+"25829", "Inhambane",
+"258282", "Xai\-Xai",
+"258271", "Lichinga",
+"258272", "Pemba",
+"25821", "Maputo",
+"258281", "Chokwe",
+"25826", "Nampula",
+"258252", "Tete",};
 my $timezones = {
                '' => [
                        'Africa/Maputo'

@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.105';
+our $VERSION = '0.111';
 
 use Carp qw(croak);
 use Linux::Event::Framer::LengthPrefix ();
@@ -29,7 +29,7 @@ Linux::Event::Framer::U32BE - native 32-bit big-endian framing declaration
 =head1 SYNOPSIS
 
   package MessageStream;
-  use parent 'Linux::Event::Stream';
+  use parent 'Linux::Event::IO::Sock::Stream';
   use Linux::Event::Framer 'U32BE',
       max_frame => 16 * 1024 * 1024; # optional
 

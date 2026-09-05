@@ -10,7 +10,6 @@ if ($^O ne 'linux') {
 my @public_modules = qw(
     Linux::Event
     Linux::Event::Address
-    Linux::Event::Datagram
     Linux::Event::Error
     Linux::Event::Framer
     Linux::Event::Framer::DecimalLength
@@ -20,14 +19,20 @@ my @public_modules = qw(
     Linux::Event::Framer::Netstring
     Linux::Event::Framer::U32BE
     Linux::Event::Framer::Varint
-    Linux::Event::Listener
+    Linux::Event::IO
+    Linux::Event::IO::Pipe
+    Linux::Event::IO::TTY
+    Linux::Event::IO::Sock
+    Linux::Event::IO::Sock::Stream
+    Linux::Event::IO::Sock::Listener
+    Linux::Event::IO::Sock::Dgram
+    Linux::Event::Kernel
+    Linux::Event::Kernel::Timer
+    Linux::Event::Kernel::Signal
+    Linux::Event::Kernel::Event
+    Linux::Event::Kernel::Process
     Linux::Event::Loop
-    Linux::Event::Process
-    Linux::Event::Signal
-    Linux::Event::Stream
     Linux::Event::TLS
-    Linux::Event::Timer
-    Linux::Event::Wakeup
 );
 
 my $distribution_version = MM->parse_version('lib/Linux/Event.pm');
@@ -40,14 +45,21 @@ my %provides = map {
     };
 } @public_modules;
 
+my %man3pods = map {
+    my $module = $_;
+    my $file = "lib/$module.pm";
+    $file =~ s{::}{/}g;
+    $file => "\$(INST_MAN3DIR)/$module.\$(MAN3EXT)";
+} @public_modules;
+
 WriteMakefile(
     NAME             => 'Linux::Event',
     VERSION_FROM     => 'lib/Linux/Event.pm',
-    ABSTRACT         => 'Linux-native reactor, streams, datagrams, and processes',
+    ABSTRACT         => 'Linux-native reactor, I/O, kernel events, and processes',
     AUTHOR           => 'Joshua S. Day <hax@cpan.org>',
     LICENSE          => 'perl_5',
     MIN_PERL_VERSION => '5.036000',
-    DIR              => [qw(xsloop xsstream xstls xsconnection xsresolver xssignal xslistener xswakeup xsdatagram xsprocess)],
+    DIR              => [qw(xsloop xsbytestream xstls xsconnection xsresolver xssignal xslistener xsevent xsdatagram xsprocess)],
     CONFIGURE_REQUIRES => {
         'ExtUtils::CBuilder'  => 0,
         'ExtUtils::MakeMaker' => 0,
@@ -58,6 +70,7 @@ WriteMakefile(
     PREREQ_PM => {
         'Socket' => '2.033',
     },
+    MAN3PODS         => \%man3pods,
     META_MERGE       => {
         'meta-spec' => {
             version => 2,
@@ -65,21 +78,29 @@ WriteMakefile(
         no_index => {
             package => [qw(
                 Linux::Event::_Registration
+                Linux::Event::_IO
+                Linux::Event::_ByteStream
+                Linux::Event::_ByteStream::Descriptor
+                Linux::Event::_Socket
+                Linux::Event::_Socket::Descriptor
+                Linux::Event::_Socket::Stream
+                Linux::Event::_Socket::Listener
+                Linux::Event::_Socket::Dgram
+                Linux::Event::_Socket::Connection
+                Linux::Event::_ByteStream::_Deadline
+                Linux::Event::_ByteStream::Descriptor::Native
+                Linux::Event::_ByteStream::State
+                Linux::Event::_ByteStream::TestSupport
+                Linux::Event::_Socket::Dgram::_ReadyTimer
+                Linux::Event::Kernel::Signal::_Descriptor
+                Linux::Event::Kernel::Signal::_Engine
+                Linux::Event::Kernel::Signal::_Service
+                Linux::Event::Kernel::Event::_OwnerState
+                Linux::Event::Kernel::Timer::_Descriptor
                 Linux::Event::Loop::Introspection
                 Linux::Event::_Resolver
                 Linux::Event::_Resolver::_Native
                 Linux::Event::_SocketConfig
-                Linux::Event::Datagram::_ReadyTimer
-                Linux::Event::Signal::_Descriptor
-                Linux::Event::Signal::_Engine
-                Linux::Event::Signal::_Service
-                Linux::Event::Stream::_Connection
-                Linux::Event::Stream::_Deadline
-                Linux::Event::Stream::_Descriptor
-                Linux::Event::Stream::XSDescriptor
-                Linux::Event::Stream::XSState
-                Linux::Event::Timer::_Descriptor
-                Linux::Event::Wakeup::_OwnerState
             )],
         },
         provides => \%provides,

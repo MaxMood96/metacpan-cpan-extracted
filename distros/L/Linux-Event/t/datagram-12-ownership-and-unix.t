@@ -9,7 +9,7 @@ use Socket qw(
 );
 use Test::More;
 
-use Linux::Event::Datagram;
+use Linux::Event::IO::Sock::Dgram;
 use Linux::Event::Loop;
 
 our (@ERRORS, $CLOSES);
@@ -17,7 +17,7 @@ $CLOSES = 0;
 
 {
     package T::OwnedDatagram;
-    use parent 'Linux::Event::Datagram';
+    use parent 'Linux::Event::IO::Sock::Dgram';
     sub on_datagram ($self, $payload, $peer) { }
     sub on_error ($self, $error) {
         push @main::ERRORS, [$error, !!$self->loop];
@@ -130,7 +130,7 @@ close $occupied_udp;
 our ($CONFIG_CALLS, $CONFIG_ERROR) = (0, undef);
 {
     package T::ConfiguredDatagram;
-    use parent 'Linux::Event::Datagram';
+    use parent 'Linux::Event::IO::Sock::Dgram';
     sub on_datagram ($self, $payload, $peer) { }
     sub configure_socket ($self, $fh, $role, $address) {
         $main::CONFIG_CALLS++;

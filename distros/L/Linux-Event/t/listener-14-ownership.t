@@ -9,11 +9,11 @@ use Socket qw(
 );
 
 use Linux::Event::Loop;
-use Linux::Event::Listener;
+use Linux::Event::IO::Sock::Listener;
 
 {
     package T::OwnedStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) { }
 }
 
@@ -27,7 +27,7 @@ sub raw_listener () {
 my $borrowed = raw_listener();
 my $borrowed_fd = fileno($borrowed);
 my $loop = Linux::Event::Loop->new;
-my $listener = Linux::Event::Listener->new(
+my $listener = Linux::Event::IO::Sock::Listener->new(
     stream_class => 'T::OwnedStream', loop => $loop, fh => $borrowed,
 );
 is($listener->fd, $borrowed_fd, 'adopted listener preserves descriptor');
@@ -47,7 +47,7 @@ close $borrowed;
 my $detached_source = raw_listener();
 my $detached_fd = fileno($detached_source);
 my $loop2 = Linux::Event::Loop->new;
-my $detaching = Linux::Event::Listener->new(
+my $detaching = Linux::Event::IO::Sock::Listener->new(
     stream_class => 'T::OwnedStream',
     loop => $loop2, fh => $detached_source, owns_socket => 1,
 );
@@ -61,7 +61,7 @@ close $detached;
 our $FAILURE_CALLBACK_LOOP;
 {
     package T::FailureListener;
-    use parent 'Linux::Event::Listener';
+    use parent 'Linux::Event::IO::Sock::Listener';
     sub on_error ($self, $error) {
         $main::FAILURE_CALLBACK_LOOP = $self->loop;
     }
@@ -84,7 +84,7 @@ close $failure_source;
 
 my $throwing_source = raw_listener();
 my $throwing_loop = Linux::Event::Loop->new;
-my $throwing = Linux::Event::Listener->new(
+my $throwing = Linux::Event::IO::Sock::Listener->new(
     stream_class => 'T::OwnedStream', # required
     loop         => $throwing_loop,   # optional
     fh           => $throwing_source, # required for adoption

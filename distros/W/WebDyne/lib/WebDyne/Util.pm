@@ -41,6 +41,7 @@ our (
 use Data::Dumper;
 use File::Spec;
 use IO::File;
+use Fcntl;
 use POSIX qw(strftime);
 
 
@@ -58,7 +59,7 @@ require Exporter;
 
 #  Version information
 #
-$VERSION='3.023';
+$VERSION='3.024';
 
 
 #  Var to hold package wide hash, for data shared across package, and error stack

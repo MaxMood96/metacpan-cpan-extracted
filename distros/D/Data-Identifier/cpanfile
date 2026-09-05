@@ -8,9 +8,11 @@ requires "Math::BigInt" => "1.999715";
 requires "URI" => "1.5";
 requires "perl" => "v5.20.0";
 recommends "Crypt::URandom" => "0.36";
+recommends "Data::URIID::Colour" => "v0.24.0";
 recommends "Digest::SHA" => "5.95_01";
 recommends "Math::BigInt::GMP" => "1.6011";
 recommends "Math::Random::Secure" => "0.080001";
+recommends "charnames" => "1.50";
 
 on 'test' => sub {
   requires "Test::Exception" => "0.30";

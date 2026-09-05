@@ -1,4 +1,4 @@
-package Dist::Zilla::Plugin::PruneCruft 6.037;
+package Dist::Zilla::Plugin::PruneCruft 6.038;
 # ABSTRACT: prune stuff that you probably don't mean to include
 
 use Moose;
@@ -71,7 +71,9 @@ sub exclude_file {
   return 1 if $file->name =~ /\A_Inline/;
   return 1 if $file->name eq 'MYMETA.yml';
   return 1 if $file->name eq 'MYMETA.json';
+  return 1 if substr($file->name, -12) eq 'perltidy.ERR';
   return 1 if $file->name eq 'pm_to_blib';
+  return 1 if substr($file->name, -1) eq '~';
   return 1 if substr($file->name, 0, 6) eq '_eumm/';
   # Avoid bundling fatlib/ dir created by App::FatPacker
   # https://github.com/andk/pause/pull/65
@@ -117,7 +119,7 @@ Dist::Zilla::Plugin::PruneCruft - prune stuff that you probably don't mean to in
 
 =head1 VERSION
 
-version 6.037
+version 6.038
 
 =head1 SYNOPSIS
 

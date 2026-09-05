@@ -5,11 +5,12 @@ use Test::More;
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 {
     package T::NativeDelimiterStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Delimiter', "\x02END\x03";
     sub stream_options ($class) { return read_size => 4 }
     sub on_message ($stream, $message) {

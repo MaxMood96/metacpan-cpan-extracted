@@ -5,11 +5,12 @@ use Test::More;
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Pipe;
+use Linux::Event::IO::Sock::Stream;
 
 {
     package T::TransportOne;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) {
         $stream->data->{input} .= $bytes;
         $stream->loop->stop;
@@ -18,7 +19,13 @@ use Linux::Event::Stream;
 
 {
     package T::TransportTwo;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
+    sub on_data ($stream, $bytes) { }
+}
+
+{
+    package T::TransportPipe;
+    use parent 'Linux::Event::IO::Pipe';
     sub on_data ($stream, $bytes) { }
 }
 
@@ -52,6 +59,20 @@ is($output, 'out', 'plain transport drains the existing output engine');
 $stream->transition_to('T::TransportTwo');
 is($stream->transport_name, 'plain',
     'protocol transition retains the connection transport');
+
+my $ok = eval { $stream->transition_to('T::TransportPipe'); 1 };
+ok(!$ok, 'socket stream cannot transition to a pipe protocol');
+like($@, qr/cannot cross the ordered-byte resource boundary/,
+    'socket-to-pipe rejection identifies the resource boundary');
+
+pipe(my $pipe_read, my $pipe_write) or die "pipe: $!";
+my $pipe = T::TransportPipe->new(loop => $loop, read_fh => $pipe_read);
+$ok = eval { $pipe->transition_to('T::TransportTwo'); 1 };
+ok(!$ok, 'pipe cannot transition to a socket-stream protocol');
+like($@, qr/cannot cross the ordered-byte resource boundary/,
+    'pipe-to-socket rejection identifies the resource boundary');
+$pipe->close;
+close $pipe_write;
 
 $stream->end;
 my $eof = sysread($peer, my $after_end, 1);

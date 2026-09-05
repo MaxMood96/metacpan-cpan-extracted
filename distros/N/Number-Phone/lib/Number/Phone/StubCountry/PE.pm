@@ -22,7 +22,7 @@ use base qw(Number::Phone::StubCountry);
 use strict;
 use warnings;
 use utf8;
-our $VERSION = 1.20260610205504;
+our $VERSION = 1.20260904101551;
 
 my $formatters = [
                 {
@@ -54,6 +54,7 @@ my $validators = {
                 'fixed_line' => '
           (?:
             (?:
+              19[02-68]|
               (?:
                 4[34]|
                 5[14]
@@ -92,6 +93,7 @@ my $validators = {
                 'geographic' => '
           (?:
             (?:
+              19[02-68]|
               (?:
                 4[34]|
                 5[14]
@@ -135,32 +137,32 @@ my $validators = {
                 'voip' => ''
               };
 my %areanames = ();
-$areanames{en} = {"5144", "La\ Libertad",
-"5152", "Tacna",
-"5176", "Cajamarca",
-"5174", "Lambayeque",
+$areanames{en} = {"5142", "San\ Martín",
 "5163", "Pasco",
-"5161", "Ucayali",
-"5184", "Cusco",
-"5153", "Moquegua",
-"5151", "Puno",
-"511", "Lima\/Callao",
-"5162", "Huánuco",
-"5165", "Loreto",
 "5182", "Madre\ de\ Dios",
-"5172", "Tumbes",
+"5174", "Lambayeque",
+"5153", "Moquegua",
 "5156", "Ica",
-"5175", "Lima",
 "5167", "Huancavelica",
-"5168", "Lima",
-"5154", "Arequipa",
-"5142", "San\ Martín",
-"5173", "Piura",
-"5164", "Junín",
-"5183", "Apurímac",
+"5166", "Ayacucho",
+"5175", "Lima",
+"5162", "Huánuco",
 "5143", "Ancash",
+"5183", "Apurímac",
+"511", "Lima\/Callao",
+"5152", "Tacna",
+"5164", "Junín",
+"5173", "Piura",
+"5154", "Arequipa",
+"5168", "Lima",
+"5161", "Ucayali",
+"5151", "Puno",
+"5144", "La\ Libertad",
+"5184", "Cusco",
+"5172", "Tumbes",
+"5176", "Cajamarca",
 "5141", "Amazonas",
-"5166", "Ayacucho",};
+"5165", "Loreto",};
 my $timezones = {
                '' => [
                        'America/Lima'

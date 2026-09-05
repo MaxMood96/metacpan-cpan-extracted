@@ -7,11 +7,11 @@ use File::Temp qw(tempdir);
 use Socket qw(AF_UNIX SOCK_STREAM pack_sockaddr_un);
 
 use Linux::Event::Loop;
-use Linux::Event::Listener;
+use Linux::Event::IO::Sock::Listener;
 
 {
     package T::UnixStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_ready ($stream) {
         $stream->data->{peer} = $stream->peer;
         $stream->data->{stream} = $stream;
@@ -26,7 +26,7 @@ my $loop = Linux::Event::Loop->new;
 my $state = {};
 my $listener;
 eval {
-    $listener = Linux::Event::Listener->new(
+    $listener = Linux::Event::IO::Sock::Listener->new(
         stream_class => 'T::UnixStream',
         loop => $loop, unix => $path, permissions => 0600, data => $state,
     );
@@ -53,7 +53,7 @@ ok(!-e $path, 'owned Unix listener removes path on close');
 
 my $original_directory = getcwd();
 chdir $directory or die "chdir $directory: $!";
-my $zero_path_listener = Linux::Event::Listener->new(
+my $zero_path_listener = Linux::Event::IO::Sock::Listener->new(
     stream_class => 'T::UnixStream', # required
     unix         => '0',             # required
 );

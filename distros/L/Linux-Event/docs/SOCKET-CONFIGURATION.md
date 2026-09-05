@@ -1,106 +1,125 @@
 # Socket configuration
 
-Linux::Event applies common Linux socket policy during acquisition and exposes
-live setters only where a post-acquisition change has clear kernel semantics.
-Omitted policy leaves the kernel value untouched.
+Linux::Event applies Linux socket policy to the concrete socket leaves below
+`Linux::Event::IO::Sock`. Omitted policy leaves the kernel value untouched.
+Live setters are exposed only where changing an established socket has clear
+kernel semantics.
+
+## Public socket leaves
+
+Socket policy applies to:
+
+- `Linux::Event::IO::Sock::Stream` for connected `SOCK_STREAM` sockets;
+- `Linux::Event::IO::Sock::Listener` for listening `SOCK_STREAM` sockets;
+- `Linux::Event::IO::Sock::Dgram` for `SOCK_DGRAM` sockets.
+
+Socket type and address family are separate. A Unix-domain stream socket is
+still `IO::Sock::Stream`; a Unix-domain datagram is still `IO::Sock::Dgram`.
+Options are validated against both the socket type and selected family.
 
 ## Precedence
 
-For Stream and Datagram socket policy, precedence is:
+For connected stream-socket and datagram policy, precedence is:
 
-1. constructor option for one object;
-2. cached `stream_options` or `datagram_options` value;
-3. the existing kernel default when both are omitted.
+1. constructor/connect option for one object;
+2. cached `socket_options()` or datagram class policy;
+3. the existing Linux kernel value when both are omitted.
 
-Linux::Event does not manufacture a second set of network defaults. This keeps
-system tuning, container policy, and inherited filehandle configuration
-observable instead of silently replacing them.
+Linux::Event does not invent a parallel set of network defaults. System tuning,
+container policy, and adopted-handle configuration therefore remain visible
+unless an application explicitly overrides them.
 
-## Stream policy
+## Connected stream socket policy
 
-A Stream type may cache policy once:
+A `IO::Sock::Stream` subclass can cache established socket policy once:
 
 ```perl
-sub stream_options ($class) {
+package ClientConnection;
+use parent 'Linux::Event::IO::Sock::Stream';
+
+sub socket_options ($class) {
     return (
-        tcp_nodelay        => 1,       # optional
-        keepalive          => 1,       # optional
-        keepalive_idle     => 60,      # optional; seconds
-        keepalive_interval => 10,      # optional; seconds
-        keepalive_count    => 5,       # optional
-        tcp_user_timeout   => 15,      # optional; seconds
-        send_buffer        => 262_144, # optional; bytes
-        receive_buffer     => 262_144, # optional; bytes
+        tcp_nodelay        => 1,
+        keepalive          => 1,
+        keepalive_idle     => 60,
+        keepalive_interval => 10,
+        keepalive_count    => 5,
+        tcp_user_timeout   => 15,
+        send_buffer        => 262_144,
+        receive_buffer     => 262_144,
     );
 }
 ```
 
-The same names may be supplied to `new` for an established handle or to
-`connect` for one outbound Stream:
+The same supported names can override policy for one outbound connection:
 
 ```perl
-my $stream = ClientStream->connect(
-    host        => '198.51.100.20', # required
-    port        => 443,             # required
-    tcp_nodelay => 0,               # optional constructor override
-    send_buffer => 524_288,         # optional constructor override
+my $connection = ClientConnection->connect(
+    host        => '198.51.100.20',
+    port        => 443,
+    tcp_nodelay => 0,
+    send_buffer => 524_288,
 );
 ```
 
-TCP-only options reject Unix Streams. Send and receive buffers are valid for
-TCP and Unix Stream sockets. `tcp_user_timeout` is public seconds and is
-converted to Linux milliseconds; a positive duration below one millisecond is
-rounded up.
+or for an adopted established descriptor where the constructor supports that
+option.
 
-## Local binding
+TCP-only options are rejected for Unix-domain stream sockets. Send and receive
+buffer sizing is meaningful for both Internet and Unix-domain stream sockets.
+`tcp_user_timeout` is expressed publicly in seconds and converted to Linux
+milliseconds; a positive duration below one millisecond is rounded up.
 
-The remote `host` and `port` identify where a Stream connects. Most clients
-should supply only those values and let Linux choose the source address and
-ephemeral source port.
+## Local source binding
 
-Local binding is an optional source-side constraint:
+For an outbound Internet stream socket, remote `host` and `port` identify the
+peer. Most clients should provide only those and let Linux select the local
+source address and ephemeral port.
+
+Optional source binding is explicit:
 
 ```perl
-my $stream = ClientStream->connect(
-    host       => '203.0.113.10', # required remote address
-    port       => 8443,           # required remote port
-    local_host => '192.0.2.20',   # optional numeric source address
-    local_port => 0,              # optional source port; 0 is ephemeral
+my $connection = ClientConnection->connect(
+    host       => '203.0.113.10',
+    port       => 8443,
+    local_host => '192.0.2.20',
+    local_port => 0,
 );
 ```
 
-`local_host` must be numeric so connection does not start a second DNS lookup.
-`local_port` by itself binds the wildcard address for the candidate family.
-The local and remote families must match. `0.0.0.0` and `::` are wildcard bind
-addresses; they are not normally useful remote destinations.
+`local_host` is numeric so source binding does not trigger a second DNS lookup.
+`local_port` alone binds the wildcard address for the candidate family. Local
+and remote families must match.
 
-`bind_device => 'eth0'` applies Linux `SO_BINDTODEVICE` before local binding or
-connection. The kernel may require privilege. It is separate from
-`local_host`: the former constrains an interface, while the latter selects a
-source address.
+`bind_device => 'eth0'` applies Linux `SO_BINDTODEVICE` before local bind or
+connect. The kernel may require privilege. Interface binding and source-address
+binding are independent constraints.
 
 ## Listener policy
 
-Listener owns policy for the listening socket:
+The listening socket owns its own creation/bind/listen policy:
 
 ```perl
-my $listener = Linux::Event::Listener->new(
-    stream_class => 'ServerStream', # required
-    host         => '0.0.0.0',      # required for TCP
-    port         => 9443,           # required for TCP
-    reuseaddr    => 1,              # default
-    reuseport    => 0,              # default
-    bind_device  => 'eth0',         # optional
+my $listener = Linux::Event::IO::Sock::Listener->new(
+    stream_class => 'ServerConnection',
+    host         => '0.0.0.0',
+    port         => 9443,
+    reuseaddr    => 1,
+    reuseport    => 0,
+    bind_device  => 'eth0',
 );
 ```
 
-That policy does not replace accepted-connection policy. Every accepted
-`ServerStream` independently applies its cached Stream options and
-`configure_socket` hook before plain readiness or TLS startup.
+Listener policy configures the listening descriptor only. It does not stand in
+for accepted-connection policy.
+
+Each accepted `ServerConnection` independently applies its cached ordered-byte
+policy, established socket policy, and optional `configure_socket` hook before
+plain readiness or TLS startup.
 
 ## Datagram policy
 
-Datagram adds packet-socket creation options:
+`IO::Sock::Dgram` has packet-socket creation policy:
 
 | Option | Applicability | Default or omission behavior |
 | --- | --- | --- |
@@ -112,59 +131,88 @@ Datagram adds packet-socket creation options:
 | `send_buffer` | Internet, Unix, adopted | kernel value when omitted |
 | `receive_buffer` | Internet, Unix, adopted | kernel value when omitted |
 
-Unix path options are `unlink`, `unlink_on_close`, and `permissions`.
-Source-specific options are rejected even when explicitly set to zero. This
-prevents a typo such as `unlink => 0` on UDP from appearing to be supported.
+Filesystem Unix-domain datagrams additionally use path policy such as
+`unlink`, `unlink_on_close`, and `permissions`.
 
-## Controlled hook
+Source-specific options are rejected even when set to a false value. An option
+that has no semantic effect for the chosen socket type/family should fail rather
+than appear to be supported.
 
-Stream and Datagram subclasses may define a cached `configure_socket` method:
+## Controlled socket hook
+
+A stream-socket or datagram subclass can define cached low-level socket policy
+for options Linux::Event does not expose directly:
 
 ```perl
 use Socket qw(IPPROTO_TCP TCP_QUICKACK);
 
-sub configure_socket ($stream, $fh, $role, $address) {
+sub configure_socket ($class, $fh, $role, $address) {
     setsockopt($fh, IPPROTO_TCP, TCP_QUICKACK, pack('i', 1))
         or die "setsockopt(TCP_QUICKACK): $!";
 }
 ```
 
-Stream roles are `connect`, `accepted`, and `adopted`. Datagram roles are
-`connect` and `adopted`. Built-in policy runs first. For outbound sockets the
-hook runs before local bind and connect; for accepted or adopted sockets it
-runs before transport startup. An exception becomes a structured
-`socket_configuration` Error and is never ignored for a fallback candidate.
+For stream sockets, roles include `connect`, `accepted`, and `adopted`.
+Datagram roles include the applicable connect/adopted paths.
+
+Built-in policy runs first. For outbound stream sockets the hook runs before
+local bind and connect. For accepted or adopted stream sockets it runs before
+transport startup. A hook exception becomes a structured
+`socket_configuration` error and is not silently treated as a candidate
+fallback.
 
 ## Live values
 
-Established Stream supports live getter/setters for:
+An established `IO::Sock::Stream` supports live access to meaningful options,
+including:
 
 - `tcp_nodelay`;
 - `keepalive`, `keepalive_idle`, `keepalive_interval`, and `keepalive_count`;
 - `tcp_user_timeout`;
 - `send_buffer` and `receive_buffer`.
 
-Datagram supports live `send_buffer`, `receive_buffer`, and IPv4 `broadcast`.
-Setters return the value read back from Linux. Buffer values may be rounded or
-doubled by the kernel.
+`IO::Sock::Dgram` supports live packet-socket values such as send/receive
+buffers and IPv4 broadcast where applicable.
+
+Setters return the value read back from Linux. Socket buffer sizes may be
+rounded or internally adjusted by the kernel.
 
 ## TLS and framing order
 
-Socket configuration is below both TLS and framing:
+Socket policy sits below TLS and ordered-byte framing:
 
 ```text
-socket creation -> socket policy -> local bind/connect or accept
-                -> TLS handshake when declared -> plaintext Stream framing
+socket creation
+  -> socket policy
+  -> local bind/connect or accept
+  -> TLS handshake when declared
+  -> plaintext ordered-byte buffering/framing
+  -> application callbacks
 ```
 
-A framer sees plaintext messages and has no socket options. TLS is a Stream
-transport, not a framer. Protocol `transition_to` changes callbacks and framing
-for an existing connection; it does not reapply acquisition-time socket policy
-or replace TLS.
+TLS is transport policy on `IO::Sock::Stream`; it is not a framer. A framer
+operates on plaintext byte-stream content and has no socket configuration of its
+own.
+
+`transition_to()` changes application protocol/framing policy on an existing
+ordered-byte resource. It does not recreate the socket, reapply acquisition
+policy, change address family, or replace the active TLS transport.
 
 ## Errors
 
-System and hook failures use `Linux::Event::Error` type
-`socket_configuration`. `operation` identifies `setsockopt`, `getsockopt`,
-`bind`, or `configure_socket`; `option` names the affected policy when known.
-Unsupported family combinations fail explicitly instead of being skipped.
+System and hook failures use `Linux::Event::Error` with type
+`socket_configuration`. `operation` identifies work such as `setsockopt`,
+`getsockopt`, `bind`, or `configure_socket`; `option` identifies the affected
+policy where known.
+
+Unsupported socket type/family combinations fail explicitly rather than being
+skipped.
+
+## Internal implementation
+
+Common conversion and validation currently live in private historical socket
+implementation packages. Those package names are not the public application
+API. The public contract is the concrete `Linux::Event::IO::Sock::*` leaf.
+
+Keeping policy conversion on a cold acquisition/configuration path ensures the
+public semantic cleanup does not add dispatch overhead to steady-state I/O.

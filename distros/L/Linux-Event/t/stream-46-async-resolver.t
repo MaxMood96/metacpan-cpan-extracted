@@ -7,10 +7,11 @@ use Scalar::Util qw(refaddr);
 use Socket qw(AF_INET AF_INET6);
 
 use Linux::Event::Loop;
-use Linux::Event::Listener;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Listener;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 use Linux::Event::_Resolver ();
-use Linux::Event::Timer;
+use Linux::Event::Kernel::Timer;
 
 our ($RESOLVED, $READY, $ERROR, $LOOP);
 
@@ -25,19 +26,19 @@ our ($RESOLVED, $READY, $ERROR, $LOOP);
 
 {
     package T::ResolverStop;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     sub on_timer ($timer) { $timer->data->stop }
 }
 
 {
     package T::ResolverServer;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) { }
 }
 
 {
     package T::ResolverClient;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) { }
     sub on_ready ($stream) {
         $main::READY++;
@@ -50,7 +51,7 @@ our ($RESOLVED, $READY, $ERROR, $LOOP);
     }
 }
 
-my $order = Linux::Event::Stream::_Connection::_happy_eyeballs_order([
+my $order = Linux::Event::_Socket::Connection::_happy_eyeballs_order([
     { family => AF_INET6, sockaddr => 'v6-a' },
     { family => AF_INET6, sockaddr => 'v6-b' },
     { family => AF_INET,  sockaddr => 'v4-a' },
@@ -79,7 +80,7 @@ $resolver_loop->run;
 ok(!defined $RESOLVED, 'late resolver completion is discarded after cancellation');
 
 $LOOP = Linux::Event::Loop->new;
-my $listener = Linux::Event::Listener->new(
+my $listener = Linux::Event::IO::Sock::Listener->new(
     stream_class => 'T::ResolverServer', host => '127.0.0.1', port => 0,
 );
 $LOOP->add($listener);

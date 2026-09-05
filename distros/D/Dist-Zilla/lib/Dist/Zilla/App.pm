@@ -1,4 +1,4 @@
-package Dist::Zilla::App 6.037;
+package Dist::Zilla::App 6.038;
 # ABSTRACT: Dist::Zilla's App::Cmd
 
 use Dist::Zilla::Pragmas;
@@ -177,7 +177,7 @@ Dist::Zilla::App - Dist::Zilla's App::Cmd
 
 =head1 VERSION
 
-version 6.037
+version 6.038
 
 =head1 PERL VERSION
 

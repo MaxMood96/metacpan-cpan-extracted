@@ -5,7 +5,7 @@ use warnings;
 use Test::More;
 
 use Linux::Event::Loop;
-use Linux::Event::Process;
+use Linux::Event::Kernel::Process;
 
 our ($STDOUT, $STDERR, @EVENTS, @ERRORS);
 $STDOUT = '';
@@ -13,7 +13,7 @@ $STDERR = '';
 
 {
     package T::Process::Echo;
-    use parent 'Linux::Event::Process';
+    use parent 'Linux::Event::Kernel::Process';
     sub on_stdout ($self, $bytes) {
         $main::STDOUT .= $bytes;
         push @main::EVENTS, 'stdout';

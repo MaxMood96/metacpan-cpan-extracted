@@ -16,7 +16,7 @@ use parent 'Data::Identifier::Interface::Userdata';
 use Carp;
 use Scalar::Util qw(weaken);
 
-our $VERSION = v0.35;
+our $VERSION = v0.36;
 
 my %_types = (
     db          => 'Data::TagDB',
@@ -103,7 +103,7 @@ Data::Identifier::Interface::Subobjects - format independent identifier object
 
 =head1 VERSION
 
-version v0.35
+version v0.36
 
 =head1 SYNOPSIS
 
@@ -117,7 +117,8 @@ B<Note:>
 This interface reserves all method (and constant) names C<so_*> and C<SO_*>.
 
 B<Note:>
-This interface is experimental. Details may change or it may be removed completely.
+This interface is experimental. Details may change.
+However, it is most unlikely to be removed.
 
 This package inherits from L<Data::Identifier::Interface::Userdata>.
 
@@ -172,9 +173,14 @@ For every passed object it returns an instance of a hashref (initially empty) th
 The default implementation expects the object to be a (blessed) hashref. It uses the key C<subobjects> to store the hashref.
 It is equivalent to:
 
-    return $obj->{subobjects} //= {};
+    return $obj->{subobjects} //= {}; # See below!
 
 If all other methods are overridden this method can stay unimplemented.
+
+B<Note:>
+This method maybe be removed in future if the default implementations of the other methods
+are switched to make use of L<Data::Identifier::Interface::Userdata>.
+It is therefore discouraged depend on any implementation specifics of this method.
 
 =head2 so_new
 

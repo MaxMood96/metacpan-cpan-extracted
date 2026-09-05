@@ -34,7 +34,7 @@ use File::Spec;
 #  Version information in a formate suitable for CPAN etc. Must be
 #  all on one line
 #
-$VERSION='3.023';
+$VERSION='3.024';
 
 
 #  Debug
@@ -126,9 +126,9 @@ sub source_mtime {
     #  Get full path, mtime of menu template
     #
     my $template_cn=${$self->template() || return err()};
-    my $template_mtime=(stat($template_cn))[9] ||
+    my $template_mtime=(stat($template_cn))[9];
+    defined($template_mtime) ||
         return err("could not stat $template_cn, $!");
-
 
     #  Get appropriate mtime
     #

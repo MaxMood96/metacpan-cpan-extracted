@@ -19,7 +19,7 @@ use Carp;
 use Math::BigInt lib => 'GMP';
 use URI;
 
-our $VERSION = v0.35;
+our $VERSION = v0.36;
 
 use constant {
     RE_UUID         => qr/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\z/,
@@ -333,60 +333,94 @@ sub new {
     if (!ref($type) && $type eq 'from') {
         if (ref($id)) {
             my $from = $id;
-            if ($id->isa('Data::Identifier')) {
-                if (scalar(keys %opts)) {
-                    $type = $id->type;
-                    $id   = $id->id;
+
+            if ($from->isa('Convert::Color')) {
+                if ($from->isa('Convert::Color::RGB16')) {
+                    require Data::Identifier::Generate;
+
+                    # For now Data::URIID::Colour doesn't support this space.
+                    if (exists &Data::URIID::Colour::new) {
+                        require Convert::Color::RGB8;
+                        eval { $opts{displaycolour} //= Data::URIID::Colour->new(from => $from->as_rgb8) };
+                    }
+
+                    $from = Data::Identifier::Generate->colour('#'.$from->hex);
+                } elsif ($from->isa('Convert::Color::X11')) {
+                    require Data::Identifier::Generate;
+                    my $name = $from->name;
+
+                    # For now Data::URIID::Colour doesn't support this space.
+                    if (exists &Data::URIID::Colour::new) {
+                        require Convert::Color::RGB8;
+                        eval { $opts{displaycolour} //= Data::URIID::Colour->new(from => $from->as_rgb8) };
+                    }
+
+                    $from = Data::Identifier::Generate->colour('#'.$from->hex, displayname => $name);
+                    $from->{id_cache} //= {};
+                    $from->{id_cache}{'135032f7-cc60-46ee-8f64-1724c2a56fa2'} //= $name;
                 } else {
-                    return $id;
+                    require Data::URIID::Colour;
+                    $from = Data::URIID::Colour->new(from => $from);
                 }
-            } elsif ($id->isa('URI')) {
+            }
+
+            if ($from->isa('Data::Identifier')) {
+                if (scalar(keys %opts)) {
+                    $type = $from->type;
+                    $id   = $from->id;
+                } else {
+                    return $from;
+                }
+            } elsif ($from->isa('URI')) {
                 $type = 'uri';
-            } elsif ($id->isa('Mojo::URL')) {
+            } elsif ($from->isa('Mojo::URL')) {
                 $type = 'uri';
-                $id = $id->to_string;
-            } elsif ($id->isa('Data::URIID::Result')) {
+                $id = $from->to_string;
+            } elsif ($from->isa('Data::URIID::Result')) {
                 $opts{displayname}   //= sub { return $from->attribute('displayname',   default => undef) };
                 $opts{description}   //= sub { return $from->attribute('description',   default => undef) };
                 $opts{displaycolour} //= sub { return $from->attribute('displaycolour', default => undef) };
                 $opts{icontext}      //= sub { return $from->attribute('icon_text',     default => undef) };
-                $type = $id->id_type;
-                $id   = $id->id;
-            } elsif ($id->isa('Data::URIID::Base') || $id->isa('Data::URIID::Colour') || $id->isa('Data::URIID::Service')) {
-                #$opts{displayname} //= $id->name if $id->isa('Data::URIID::Service');
-                $opts{displayname} //= $id->displayname(default => undef, no_defaults => 1);
-                $opts{displaycolour} //= $id if $id->isa('Data::URIID::Colour');
+                $type = $from->id_type;
+                $id   = $from->id;
+            } elsif ($from->isa('Data::URIID::Base') || $from->isa('Data::URIID::Colour') || $from->isa('Data::URIID::Service')) {
+                $opts{displayname} //= $from->displayname(default => undef, no_defaults => 1);
+                if ($from->isa('Data::URIID::Colour')) {
+                    $opts{displaycolour} //= $from;
+                    $opts{request} //= $from->rgb;
+                    $opts{generator} //= state $generator = Data::Identifier->new(uuid => '55febcc4-6655-4397-ae3d-2353b5856b34')->register;
+                }
                 $type = 'ise';
-                $id   = $id->ise;
-            } elsif ($id->isa('Data::TagDB::Tag')) {
+                $id   = $from->ise;
+            } elsif ($from->isa('Data::TagDB::Tag')) {
                 $opts{displayname} //= sub { $from->displayname(default => undef, no_defaults => 1) };
                 $type = 'ise';
-                $id   = $id->ise;
-            } elsif ($id->isa('File::FStore::File') || $id->isa('File::FStore::Adder') || $id->isa('File::FStore::Base')) {
+                $id   = $from->ise;
+            } elsif ($from->isa('File::FStore::File') || $from->isa('File::FStore::Adder') || $from->isa('File::FStore::Base')) {
                 $type = 'ise';
-                $id = $id->contentise;
-            } elsif ($id->isa('SIRTX::Datecode')) {
-                $id = $id->as('Data::Identifier');
+                $id = $from->contentise;
+            } elsif ($from->isa('SIRTX::Datecode')) {
+                $id = $from->as('Data::Identifier');
                 unless (scalar(keys %opts)) {
-                    return $id->as('Data::Identifier');
+                    return $from;
                 }
-                $type = $id->type;
-                $id   = $id->id;
-            } elsif ($id->isa('Business::ISBN')) {
+                $type = $from->type;
+                $id   = $from->id;
+            } elsif ($from->isa('Business::ISBN')) {
                 $type = $well_known{gtin};
-                $id   = $id->as_isbn13->as_string([]);
-            } elsif ($id->isa('Data::Identifier::Interface::Simple')) {
-                # TODO: We cannot call $id->as('Data::Identifier') here as much as that would be fun,
+                $id   = $from->as_isbn13->as_string([]);
+            } elsif ($from->isa('Data::Identifier::Interface::Simple')) {
+                # TODO: We cannot call $from->as('Data::Identifier') here as much as that would be fun,
                 #       as this might in turn call exactly this code again resulting in a deep recursion.
                 #       A future version might come up with some trick here.
                 $type = 'ise';
-                $id   = $id->ise;
-            } elsif ($id->isa('JSON::PP::Boolean') || $id->isa('JSON::XS::Boolean')) {
+                $id   = $from->ise;
+            } elsif ($from->isa('JSON::PP::Boolean') || $from->isa('JSON::XS::Boolean')) {
                 require Data::Identifier::Util;
-                return Data::Identifier::Util->from_bool($id);
-            } elsif ($id->isa('Math::BigInt')) {
+                return Data::Identifier::Util->from_bool($from);
+            } elsif (($from->isa('Math::BigInt') || $from->isa('Math::BigRat') || $from->isa('Math::BigFloat')) && $from->is_int) {
                 require Data::Identifier::Generate;
-                return Data::Identifier::Generate->integer($id);
+                return Data::Identifier::Generate->integer($from->bstr);
             } else {
                 croak 'Unsupported input data';
             }
@@ -479,7 +513,18 @@ sub new {
         }
     }
 
+    if (defined($opts{displaycolour}) && !ref($opts{displaycolour})) {
+        croak 'Invalid value for displaycolour passed: not an object. This should be a Data::URIID::Colour';
+    }
+
     if (defined(my $v = $registered{$type->uuid}{$id})) {
+        foreach my $key (qw(displayname displaycolour icontext description)) {
+            next unless defined $opts{$key};
+            $v->{$key} //= $opts{$key};
+        }
+        if (defined(my $tagname = $opts{tagname})) {
+            $v->_add_tagnames(ref($tagname) ? @{$tagname} : ($tagname));
+        }
         return $v;
     }
 
@@ -764,9 +809,31 @@ sub as {
         require Business::ISBN;
         my $val = Business::ISBN->new($self->id);
         return $val if defined($val) && $val->is_valid;
-    } elsif ($as eq 'Math::BigInt' && defined($self->request(default => undef, no_defaults => 1)) && eval { $self->generator->eq('53863a15-68d4-448d-bd69-a9b19289a191') || $self->generator->eq('e8aa9e01-8d37-4b4b-8899-42ca0a2a906f')}) {
-        require Math::BigInt;
-        return Math::BigInt->new($self->request);
+    } elsif ($as =~ /^Math::Big(?:Int|Rat|Float)\z/ &&
+        defined($self->request(default => undef, no_defaults => 1)) && eval { $self->generator->eq('53863a15-68d4-448d-bd69-a9b19289a191') || $self->generator->eq('e8aa9e01-8d37-4b4b-8899-42ca0a2a906f')}) {
+        if ($as eq 'Math::BigInt') {
+            # Already loaded.
+            return Math::BigInt->new($self->request);
+        } elsif ($as eq 'Math::BigRat') {
+            require Math::BigRat;
+            state $x = Math::BigRat->import;
+            return Math::BigRat->new($self->request);
+        } elsif ($as eq 'Math::BigFloat') {
+            require Math::BigFloat;
+            state $x = Math::BigFloat->import;
+            return Math::BigFloat->new($self->request);
+        } else {
+            croak 'BUG';
+        }
+    } elsif ($as =~ /^Convert::Color(?:::.+)?\z/) {
+        if ($as eq 'Convert::Color' || $as eq 'Convert::Color::X11') {
+            my $x11_name = $self->as(state $type = Data::Identifier->new(uuid => '135032f7-cc60-46ee-8f64-1724c2a56fa2')->register, default => undef);
+            if (defined $x11_name) {
+                require Convert::Color::X11;
+                return Convert::Color::X11->new($x11_name);
+            }
+        }
+        return $self->as('Data::URIID::Colour')->as($as, %opts);
     }
 
     return $opts{default} if exists $opts{default};
@@ -1122,7 +1189,7 @@ Data::Identifier - format independent identifier object
 
 =head1 VERSION
 
-version v0.35
+version v0.36
 
 =head1 SYNOPSIS
 
@@ -1234,6 +1301,9 @@ L<File::FStore::Base> (see limitations of L<File::FStore::Base/contentise>),
 L<SIRTX::Datecode>,
 L<Data::Identifier::Interface::Simple>,
 L<Math::BigInt>,
+L<Math::BigRat> (if the value is an integer),
+L<Math::BigFloat> (if the value is an integer),
+L<Convert::Color> (requires L<Data::URIID::Colour> v0.24 or later),
 and L<Business::ISBN>. If C<$id> is not a reference it is parsed as with C<ise>.
 
 The following type names are currently well known:
@@ -1474,6 +1544,10 @@ L<Data::TagDB::Tag>,
 L<File::FStore::File> (requires version v0.03 or later),
 L<SIRTX::Datecode> (requires version v0.03 or later),
 L<Math::BigInt>,
+L<Math::BigRat>,
+L<Math::BigFloat>,
+L<Convert::Color> (requires L<Data::URIID::Colour> v0.24 or later),
+L<Convert::Color::X11>,
 L<Business::ISBN>.
 Other packages might be supported. Packages need to be installed in order to be supported.
 Also some packages need special options to be passed to be available.

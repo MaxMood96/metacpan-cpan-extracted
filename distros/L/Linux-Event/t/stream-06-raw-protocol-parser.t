@@ -8,7 +8,7 @@ use Linux::Event::Loop;
 
 {
     package T::RawU32Protocol;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) {
         my $state = $stream->data;
         $state->{buffer} .= $bytes;

@@ -1,0 +1,10 @@
+Revision history for perlomp
+
+0.01  2026-09-05
+      - Initial release.
+      - Added a perl*-style manual page for using OpenMP from Perl.
+      - Documented the roles of OpenMP, OpenMP::Environment,
+        OpenMP::Simple, and Alien::OpenMP.
+      - Added quick starts for Inline::C and external OpenMP executables.
+      - Documented OpenMP runtime initialization, environment validation,
+        native-thread safety considerations, portability, and installation.

@@ -20,6 +20,8 @@
 \bscratch\b
 ^wiki/
 ^bin/run_tests\.pl$
+^walkthrough\.md$
+^implementation_plan\.md$
 \b\.DS_Store\b
 \bThumbs\.db\b
 \bDesktop\.ini\b
@@ -59,3 +61,6 @@
 \bcover_db\b
 \bnytprof\b
 \.out$
+
+# Benchmark temporary and generated files
+^benchmark/

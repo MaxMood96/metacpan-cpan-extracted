@@ -22,7 +22,7 @@ use base qw(Number::Phone::StubCountry);
 use strict;
 use warnings;
 use utf8;
-our $VERSION = 1.20260610205500;
+our $VERSION = 1.20260904101548;
 
 my $formatters = [
                 {
@@ -126,11 +126,10 @@ my $validators = {
                   50
                 )\\d|
                 3(?:
-                  [034679]\\d|
+                  [0346-9]\\d|
                   1[0-35-9]|
                   2[1-9]|
-                  5[0-24-9]|
-                  8[0-389]
+                  5[0-24-9]
                 )|
                 600
               )|
@@ -199,11 +198,10 @@ my $validators = {
                   50
                 )\\d|
                 3(?:
-                  [034679]\\d|
+                  [0346-9]\\d|
                   1[0-35-9]|
                   2[1-9]|
-                  5[0-24-9]|
-                  8[0-389]
+                  5[0-24-9]
                 )|
                 600
               )|
@@ -272,11 +270,10 @@ my $validators = {
                   50
                 )\\d|
                 3(?:
-                  [034679]\\d|
+                  [0346-9]\\d|
                   1[0-35-9]|
                   2[1-9]|
-                  5[0-24-9]|
-                  8[0-389]
+                  5[0-24-9]
                 )|
                 600
               )|
@@ -337,80 +334,79 @@ my $validators = {
                 'voip' => '44\\d{7}'
               };
 my %areanames = ();
-$areanames{es} = {"56211", "Santiago\,\ Región\ Metropolitana",
-"5661", "Punta\ Arenas\,\ Magallanes",
-"5622", "Santiago\,\ Región\ Metropolitana",
+$areanames{es} = {"5622", "Santiago\,\ Región\ Metropolitana",
 "5623", "Santiago\,\ Región\ Metropolitana",
-"562198", "Santiago\,\ Región\ Metropolitana",
 "5658", "Arica\,\ Arica\ y\ Parinacota",
+"56211", "Santiago\,\ Región\ Metropolitana",
+"5626", "Santiago\,\ Región\ Metropolitana",
+"562198", "Santiago\,\ Región\ Metropolitana",
 "5667", "Coihaique\,\ Aysén",
-"5626", "Santiago\,\ Región\ Metropolitana",};
-$areanames{en} = {"56539", "Ovalle\,\ Coquimbo",
-"56532455", "Ovalle\,\ Coquimbo",
+"5661", "Punta\ Arenas\,\ Magallanes",};
+$areanames{en} = {"56538", "Ovalle\,\ Coquimbo",
+"5634", "San\ Felipe\,\ Valparaíso",
+"56532453", "Ovalle\,\ Coquimbo",
+"56532452", "Ovalle\,\ Coquimbo",
+"5653246", "Ovalle\,\ Coquimbo",
 "56211", "Santiago\,\ Metropolitan\ Region",
-"56531", "Ovalle\,\ Coquimbo",
-"56532459", "Ovalle\,\ Coquimbo",
-"5663", "Valdivia\,\ Los\ Ríos",
-"5653248", "Ovalle\,\ Coquimbo",
-"5661", "Punta\ Arenas\,\ Magallanes\ and\ Antártica\ Chilena",
-"565326", "Ovalle\,\ Coquimbo",
-"5622", "Santiago\,\ Metropolitan\ Region",
+"5641", "Concepción\,\ Biobío",
+"5665", "Puerto\ Montt\,\ Los\ Lagos",
+"5655", "Antofagasta",
+"5653241", "Ovalle\,\ Coquimbo",
+"56532457", "Ovalle\,\ Coquimbo",
+"56535", "Ovalle\,\ Coquimbo",
+"5658", "Arica\,\ Arica\ and\ Parinacota",
+"5653247", "Ovalle\,\ Coquimbo",
+"5653243", "Ovalle\,\ Coquimbo",
+"56533", "Ovalle\,\ Coquimbo",
+"5675", "Curicó\,\ Maule",
+"5623", "Santiago\,\ Metropolitan\ Region",
+"5643", "Los\ Angeles\,\ Biobío",
+"56534", "Ovalle\,\ Coquimbo",
 "5633", "Quillota\,\ Valparaíso",
 "5653242", "Ovalle\,\ Coquimbo",
-"5652", "Copiapó\,\ Atacama",
-"5655", "Antofagasta",
-"5657", "Iquique\,\ Tarapacá",
-"5634", "San\ Felipe\,\ Valparaíso",
-"5643", "Los\ Angeles\,\ Biobío",
-"5641", "Concepción\,\ Biobío",
-"5664", "Osorno\,\ Los\ Lagos",
-"5673", "Linares\,\ Maule",
-"5671", "Talca\,\ Maule",
 "5653240", "Ovalle\,\ Coquimbo",
-"56536", "Ovalle\,\ Coquimbo",
-"5653247", "Ovalle\,\ Coquimbo",
-"56532452", "Ovalle\,\ Coquimbo",
-"5665", "Puerto\ Montt\,\ Los\ Lagos",
-"5632", "Valparaíso",
-"5635", "San\ Antonio\,\ Valparaíso",
-"56532456", "Ovalle\,\ Coquimbo",
-"5651", "La\ Serena\,\ Coquimbo",
-"5623", "Santiago\,\ Metropolitan\ Region",
-"565325", "Ovalle\,\ Coquimbo",
-"565320", "Ovalle\,\ Coquimbo",
-"5653244", "Ovalle\,\ Coquimbo",
-"56534", "Ovalle\,\ Coquimbo",
-"56538", "Ovalle\,\ Coquimbo",
-"56532457", "Ovalle\,\ Coquimbo",
-"56537", "Ovalle\,\ Coquimbo",
-"565328", "Ovalle\,\ Coquimbo",
-"565322", "Ovalle\,\ Coquimbo",
-"562198", "Santiago\,\ Metropolitan\ Region",
-"565327", "Ovalle\,\ Coquimbo",
-"5653249", "Ovalle\,\ Coquimbo",
-"5658", "Arica\,\ Arica\ and\ Parinacota",
-"565329", "Ovalle\,\ Coquimbo",
-"565321", "Ovalle\,\ Coquimbo",
+"5622", "Santiago\,\ Metropolitan\ Region",
 "565323", "Ovalle\,\ Coquimbo",
-"56530", "Ovalle\,\ Coquimbo",
-"56532453", "Ovalle\,\ Coquimbo",
-"56535", "Ovalle\,\ Coquimbo",
-"5653241", "Ovalle\,\ Coquimbo",
+"5632", "Valparaíso",
 "5642", "Chillán\,\ Biobío",
-"5653243", "Ovalle\,\ Coquimbo",
-"5645", "Temuco\,\ Araucanía",
-"5653246", "Ovalle\,\ Coquimbo",
+"56532455", "Ovalle\,\ Coquimbo",
 "5672", "Rancagua\,\ O\'Higgins",
-"5667", "Coyhaique\,\ Aisén",
-"5675", "Curicó\,\ Maule",
-"56533", "Ovalle\,\ Coquimbo",
+"565328", "Ovalle\,\ Coquimbo",
+"565327", "Ovalle\,\ Coquimbo",
 "56532458", "Ovalle\,\ Coquimbo",
-"5626", "Santiago\,\ Metropolitan\ Region",
-"56532454", "Ovalle\,\ Coquimbo",};
+"5653244", "Ovalle\,\ Coquimbo",
+"5653248", "Ovalle\,\ Coquimbo",
+"565322", "Ovalle\,\ Coquimbo",
+"5673", "Linares\,\ Maule",
+"5664", "Osorno\,\ Los\ Lagos",
+"56532456", "Ovalle\,\ Coquimbo",
+"5653249", "Ovalle\,\ Coquimbo",
+"5651", "La\ Serena\,\ Coquimbo",
+"565320", "Ovalle\,\ Coquimbo",
+"5661", "Punta\ Arenas\,\ Magallanes\ and\ Antártica\ Chilena",
+"56536", "Ovalle\,\ Coquimbo",
+"5645", "Temuco\,\ Araucanía",
+"5635", "San\ Antonio\,\ Valparaíso",
+"56532459", "Ovalle\,\ Coquimbo",
+"5657", "Iquique\,\ Tarapacá",
+"565325", "Ovalle\,\ Coquimbo",
+"5667", "Coyhaique\,\ Aisén",
+"56530", "Ovalle\,\ Coquimbo",
+"565326", "Ovalle\,\ Coquimbo",
+"5652", "Copiapó\,\ Atacama",
+"56539", "Ovalle\,\ Coquimbo",
+"5671", "Talca\,\ Maule",
+"562198", "Santiago\,\ Metropolitan\ Region",
+"565321", "Ovalle\,\ Coquimbo",
+"56531", "Ovalle\,\ Coquimbo",
+"56532454", "Ovalle\,\ Coquimbo",
+"56537", "Ovalle\,\ Coquimbo",
+"565329", "Ovalle\,\ Coquimbo",
+"5663", "Valdivia\,\ Los\ Ríos",
+"5626", "Santiago\,\ Metropolitan\ Region",};
 my $timezones = {
                '' => [
-                       'America/Santiago',
-                       'Pacific/Easter'
+                       'America/Santiago'
                      ],
                '1' => [
                         'America/Santiago'
@@ -418,24 +414,9 @@ my $timezones = {
                '2' => [
                         'America/Santiago'
                       ],
-               '32' => [
-                         'Pacific/Easter'
-                       ],
-               '322' => [
-                          'America/Santiago'
-                        ],
-               '323' => [
-                          'America/Santiago'
-                        ],
-               '33' => [
-                         'America/Santiago'
-                       ],
-               '34' => [
-                         'America/Santiago'
-                       ],
-               '35' => [
-                         'America/Santiago'
-                       ],
+               '3' => [
+                        'America/Santiago'
+                      ],
                '4' => [
                         'America/Santiago'
                       ],

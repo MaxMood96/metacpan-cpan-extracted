@@ -6,12 +6,13 @@ use Test::More;
 use Socket qw(AF_UNIX SOCK_STREAM SOL_SOCKET SO_SNDBUF);
 
 use Linux::Event::Loop;
-use Linux::Event::Stream;
-use Linux::Event::Timer;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::Kernel::Timer;
 
 {
     package T::DeadlineStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
 
     sub on_data ($stream, $bytes) {
         $stream->data->{bytes} .= $bytes;
@@ -53,13 +54,13 @@ sub timeout_case (%option) {
 {
     my $clock_calls = 0;
     my $rearm_calls = 0;
-    my $real_rearm = \&Linux::Event::Stream::_rearm_stream_deadline;
+    my $real_rearm = \&Linux::Event::_ByteStream::_rearm_stream_deadline;
     no warnings 'redefine';
-    local *Linux::Event::Stream::_deadline_now = sub {
+    local *Linux::Event::_ByteStream::_deadline_now = sub {
         $clock_calls++;
-        return Linux::Event::Timer->now;
+        return Linux::Event::Kernel::Timer->now;
     };
-    local *Linux::Event::Stream::_rearm_stream_deadline = sub {
+    local *Linux::Event::_ByteStream::_rearm_stream_deadline = sub {
         $rearm_calls++;
         return $real_rearm->(@_);
     };
@@ -203,7 +204,7 @@ sub timeout_case (%option) {
 
 {
     my ($loop, $stream, $peer, $state) = timeout_case();
-    my $at = Linux::Event::Timer->now + test_seconds(0.04);
+    my $at = Linux::Event::Kernel::Timer->now + test_seconds(0.04);
     $stream->set_deadline(at => $at, operation => 'absolute');
     cmp_ok abs($stream->deadline - $at), '<', 0.000_001,
         'absolute operation deadline is retained';

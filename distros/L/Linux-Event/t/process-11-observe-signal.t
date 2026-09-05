@@ -6,13 +6,13 @@ use POSIX qw(SIGTERM _exit);
 use Test::More;
 
 use Linux::Event::Loop;
-use Linux::Event::Process;
+use Linux::Event::Kernel::Process;
 
 our @EXIT;
 
 {
     package T::Process::Observed;
-    use parent 'Linux::Event::Process';
+    use parent 'Linux::Event::Kernel::Process';
     sub on_exit ($self) {
         push @main::EXIT, [$self->exit_code, $self->term_signal];
         $self->loop->stop;

@@ -1,12 +1,13 @@
 # Core Reactor Guide
 
 This document describes the low-level Linux::Event XS reactor. Applications
-that want resource ownership should normally use Stream, Listener, Datagram,
-Timer, Signal, Wakeup, or Process on top of this layer.
+that want resource ownership should normally choose a concrete public leaf
+below `Linux::Event::IO` or `Linux::Event::Kernel` instead of implementing fd
+lifecycle themselves.
 
 ## Mental model
 
-Linux::Event separates **readiness** from **I/O policy**:
+Linux::Event separates readiness from I/O policy:
 
 ```text
 kernel epoll
@@ -22,9 +23,25 @@ opaque native registration
     `-- write callback   EPOLLOUT
 ```
 
-The core tells you *what can be attempted*. Your callback decides whether to
-`sysread`, `syswrite`, accept a connection, drain a Linux fd, or perform another
-operation appropriate to that descriptor.
+The reactor tells you what can be attempted. A raw callback decides whether to
+`sysread`, `syswrite`, accept, drain a Linux fd, or perform another operation
+appropriate to that descriptor.
+
+Higher-level public leaves own those policies for common resources:
+
+```text
+Linux::Event::IO::Pipe
+Linux::Event::IO::TTY
+Linux::Event::IO::Sock::Stream
+Linux::Event::IO::Sock::Listener
+Linux::Event::IO::Sock::Dgram
+Linux::Event::Kernel::Timer
+Linux::Event::Kernel::Signal
+Linux::Event::Kernel::Event
+Linux::Event::Kernel::Process
+```
+
+`IO` and `Kernel` are namespace categories, not public base objects.
 
 ## Constructing a loop
 
@@ -33,21 +50,25 @@ use Linux::Event::Loop;
 my $loop = Linux::Event::Loop->new;
 ```
 
-Each loop owns one epoll instance, an event buffer, a native fd-indexed
-registration registry, and its attached high-level objects. Stream, Listener,
-Datagram, Timer, Signal, Wakeup, and Process accept `loop => $loop` or attach
-through `$loop->add($object)`.
-`watch()` is the immediate raw-descriptor API.
+Each Loop owns one epoll instance, its native fd registry, scheduled timer
+state, and the private registrations used by attached higher-level resources.
+Concrete public objects can accept `loop => $loop` or attach later through:
 
-## Registering a handle
+```perl
+$loop->add($object);
+```
 
-Normal application code should label the watched resource explicitly:
+`add()` returns the same object.
+
+## Registering a handle directly
+
+Normal raw application code should label the watched resource explicitly:
 
 ```perl
 my $registration = $loop->watch(
-    fh    => $fh,
-    data  => { connection_id => 42 },
-    read  => sub ($registration) {
+    fh   => $fh,
+    data => { connection_id => 42 },
+    read => sub ($registration) {
         my $count = sysread($registration->fh, my $bytes, 8192);
         $registration->cancel if defined($count) && $count == 0;
     },
@@ -61,12 +82,10 @@ my $registration = $loop->watch(
 ```
 
 The returned value is an opaque native registration handle. Its internal class
-name is not a public contract and it must not be subclassed.
+name is not public and it must not be subclassed.
 
-When `fh` is supplied, Linux::Event resolves its integer file descriptor once at
-registration and retains the handle for `$registration->fh`.
-
-If an application has only a raw descriptor, use:
+Supplying `fh` lets Linux::Event retain the handle and resolve its integer fd
+once at registration. If only an integer descriptor is available:
 
 ```perl
 my $registration = $loop->watch(
@@ -75,11 +94,10 @@ my $registration = $loop->watch(
 );
 ```
 
-Exactly one of `fh` or `fd` is required. Every registration has an integer fd,
-available through `$registration->fd`. A registration created from `fd` alone
-has no stored filehandle, so `$registration->fh` is `undef`.
+Exactly one of `fh` or `fd` is required. A registration created from `fd`
+alone has no retained filehandle, so `$registration->fh` is `undef`.
 
-The lower-level positional method remains available:
+The lower-level positional form remains available:
 
 ```perl
 $loop->watch_fd($fd, read => sub ($registration) {
@@ -87,21 +105,18 @@ $loop->watch_fd($fd, read => sub ($registration) {
 });
 ```
 
-`watch_fd` is retained for low-level/internal code and unusual
-workloads where watcher-registration throughput itself has been measured as a
-bottleneck. Prefer `watch()` in normal application code. Both forms create the
-same native registration and have the same readiness-dispatch hot path.
+`watch_fd` is useful for internal code and measured registration-heavy
+workloads. `watch()` and `watch_fd()` create the same native readiness record
+and have the same steady-state dispatch path.
 
-Only the callbacks you need are required. Read interest is enabled when a read
-callback exists; write interest is enabled when a write callback exists.
-Terminal/error flags are always watched so the reactor can surface fd closure
-and failure conditions.
+## Registration replacement and lifetime
 
-Registering the same fd again replaces its existing registration. The old
-handle becomes inert: its methods cannot affect the replacement even if native
-watcher storage or the fd number is reused. Cancellation and Loop destruction
-release the handle's retained filehandle, callbacks, data, and Loop reference as
-soon as no callback is actively dispatching through that registration.
+One active registration is allowed per integer fd. Registering the fd again
+replaces the old native record. The old opaque handle becomes inert and cannot
+cancel or alter the replacement even if the kernel later reuses the fd number.
+
+Cancellation and Loop destruction release retained Perl state as soon as no
+active callback is dispatching through the registration.
 
 ## Callback order
 
@@ -111,13 +126,12 @@ For one returned epoll event the dispatch order is:
 2. read callback
 3. write callback
 
-After each callback the reactor checks whether the registration is still active.
-This lets a callback cancel its own registration safely before later readiness types
-for the same event are considered.
+The registration is rechecked after every callback. Self-cancellation can
+therefore prevent later readiness types for the same returned event.
 
 ## Reading until EAGAIN
 
-A normal level-triggered read callback can drain the fd:
+A level-triggered raw callback normally drains the fd:
 
 ```perl
 read => sub ($registration) {
@@ -143,33 +157,33 @@ read => sub ($registration) {
 },
 ```
 
-This repeated Perl socket/buffer work is intentionally visible in the raw
-reactor API. A `Linux::Event::Stream` subclass moves the mechanical
-read/write/buffering work into native code when that higher-level ownership
-model is desired.
+The repeated Perl syscall, buffering, queue, and lifecycle work is intentionally
+visible in this low-level API. The ordered-byte engine used by
+`IO::Pipe`, `IO::TTY`, and `IO::Sock::Stream` moves those mechanics into native
+code when Linux::Event should own them.
 
 ## Writable interest
 
-Writable readiness should generally be enabled only when output is blocked:
+Raw code should generally enable writable readiness only while output is
+blocked:
 
 ```perl
 $registration->enable_write;
 $registration->disable_write;
 ```
 
-Linux::Event::Stream subclasses manage these transitions in the native write
-queue.
-Applications using the core directly remain free to control them.
+The ordered-byte public leaves manage this transition automatically through
+their native write queue.
 
-## Stopping and driving the loop
+## Driving the loop
 
-Persistent loop:
+Persistent drive:
 
 ```perl
 $loop->run;
 ```
 
-Stop it from a callback:
+Stop from a callback:
 
 ```perl
 $loop->stop;
@@ -178,31 +192,26 @@ $loop->stop;
 Single iteration:
 
 ```perl
-my $events = $loop->run_once(-1);   # block indefinitely
-my $events = $loop->run_once(0);    # poll without blocking
-my $events = $loop->run_once(50);   # wait at most 50 ms
+my $events = $loop->run_once(-1);  # block indefinitely
+my $events = $loop->run_once(0);   # poll
+my $events = $loop->run_once(50);  # wait at most 50 ms
 ```
 
-Bounded execution:
+Bounded drive:
 
 ```perl
 $loop->run_for(0.250);
 ```
 
-`run_for` uses a monotonic deadline.
-
-Only one driver method may be active on a particular Loop. Calling `run`,
-`run_once`, or `run_for` recursively for that same Loop throws; a callback may
-drive a different Loop. A callback exception propagates after restoring the
-Loop's driver and dispatch state, so the same Loop remains usable after the
-application catches it. `set_event_capacity` is rejected while the Loop is
-running or dispatching. A prior `stop` request does not suppress a later
-`run_once` call.
+`run_for` uses a monotonic deadline. Only one driver method may be active on a
+particular Loop. Recursive drive of the same Loop throws; a callback may drive
+a different Loop. Callback exceptions propagate after Loop driver and dispatch
+state has been restored.
 
 ## No-argument fast callbacks
 
-When a closure already captures everything it needs, the registration argument can
-be omitted:
+A closure that already captures everything it needs can omit the registration
+argument:
 
 ```perl
 my $registration = $loop->watch(
@@ -213,79 +222,8 @@ my $registration = $loop->watch(
 );
 ```
 
-`lean` is available only with the no-argument path. It avoids retaining Perl
-references used solely by registration accessors. This is an expert performance
-option; prefer the normal callback until profiling demonstrates that
-the extra reduction matters.
-
-## One registration per fd
-
-The registry enforces one active registration per integer fd. Re-registering an fd
-replaces the old registration. `unwatch_fd` and handle `cancel` are safe when the
-registration is already absent/inactive. An obsolete handle cannot observe or
-mutate a later registration that happens to reuse the same native storage.
-
-This model also prevents ambiguous dispatch when file-descriptor numbers are
-reused by the operating system.
-
-## Introspection
-
-The Loop exposes current managed objects, native resources, liveness reasons,
-and conservative capacity pressure without adding work to readiness dispatch:
-
-```perl
-my $objects   = $loop->objects;
-my $snapshot  = $loop->inspect($objects->[0]);
-my $census    = $loop->census;
-my $resources = $loop->resources;
-my $reasons   = $loop->why_alive;
-my $pressure  = $loop->pressure;
-```
-
-`running` is an O(1) native driver-state query. `count`, `objects`, `has`, and
-`census` enumerate existing native and service registries at query time;
-`has($object)` uses exact identity. Raw registrations and private helper
-objects are excluded from that managed-object view. `resources` still reports their native footprint,
-while `why_alive` reports public raw registrations without duplicating the
-private registrations behind managed objects.
-
-See [Loop Introspection](INTROSPECTION.md) for exact return shapes, field
-definitions, and complexity.
-
-## Statistics
-
-```perl
-my $stats = $loop->stats;
-$loop->reset_stats;
-```
-
-Counters cover epoll waits, ready-event classes, callback calls, epoll_ctl
-operations, batching, watcher allocation/lifecycle, Timer heap and timerfd
-activity, and loop drive methods.
-
-Optional nanosecond profiling:
-
-```perl
-$loop->profile(1);
-# run workload
-my $stats = $loop->stats;
-$loop->profile(0);
-```
-
-Profiling intentionally adds overhead. Do not enable it for ordinary throughput
-comparisons.
-
-## Tuning controls
-
-The current measured defaults are:
-
-- event capacity: 8192
-- callback scope limit: 128
-- watcher reclaim: disabled
-
-The corresponding setters remain for controlled experiments, but are not part
-of the recommended application configuration. Earlier experiments found that
-more aggressive watcher reclamation reduced memory while costing throughput.
+`lean` is available only on this no-argument path. It reduces retained Perl
+state and is intended for expert, measured hot paths.
 
 ## Edge-triggered and oneshot modes
 
@@ -296,33 +234,83 @@ edge_triggered => 1
 oneshot        => 1
 ```
 
-Use these only when your application implements the required semantics. In
-particular, edge-triggered readers must fully drain until EAGAIN. Oneshot
-registrations require rearming before further events can be delivered.
+Use them only when the application implements their Linux semantics. An
+edge-triggered reader must drain until EAGAIN. An oneshot registration must be
+rearmed before more readiness can be delivered.
 
-## What the core intentionally does not do
+## Introspection
 
-The raw reactor does not own:
+The Loop can query managed objects, native resources, liveness reasons, and
+conservative capacity pressure without maintaining duplicate hot-path
+bookkeeping:
 
-- input buffers
-- output queues
-- partial-write queues
-- framing or codecs
-- application backpressure policy
-- protocol parsing
-- Future, Promise, or async/await scheduling
+```perl
+my $objects   = $loop->objects;
+my $snapshot  = $loop->inspect($objects->[0]);
+my $census    = $loop->census;
+my $resources = $loop->resources;
+my $reasons   = $loop->why_alive;
+my $pressure  = $loop->pressure;
+```
 
-Those responsibilities belong to `Linux::Event::Stream` subclasses. Keeping
-that separation gives Linux::Event both a low-level general reactor and a
-high-level native stream-processing path.
+`running` is an O(1) native driver-state query. Other object/resource views are
+assembled from authoritative registries when requested. See
+[Loop Introspection](INTROSPECTION.md) for exact shapes and complexity.
 
-Packet boundaries belong to Datagram, listening ownership to Listener,
-eventfd clone rules to Wakeup, and pidfd/stdio lifecycle to Process. Raw
-`watch` remains appropriate when an application intentionally owns a different
-descriptor protocol and all of its cleanup rules.
+## Statistics and profiling
 
-Third-party asynchronous abstractions may compose the public driver, Timer,
-object lifecycle, deadline, error, and Wakeup primitives. Their continuation,
-microtask, and Future policies remain outside the core distribution. A missing
-general reactor primitive may be considered when an external implementation
-demonstrates that the existing surface cannot express it safely.
+```perl
+my $stats = $loop->stats;
+$loop->reset_stats;
+```
+
+Cheap counters cover epoll waits, readiness classes, callback calls,
+`epoll_ctl`, batching, watcher lifecycle, timers, and drive methods.
+
+Optional nanosecond profiling is explicit:
+
+```perl
+$loop->profile(1);
+# measured workload
+my $stats = $loop->stats;
+$loop->profile(0);
+```
+
+Profiling changes the measured workload and should remain disabled for normal
+throughput comparisons.
+
+## Measured reactor defaults
+
+The current measured defaults are:
+
+- event capacity: 8192
+- callback scope limit: 128
+- aggressive watcher reclaim: disabled
+
+Setters remain available for controlled experiments. They are not general
+application tuning requirements.
+
+## What the raw reactor intentionally does not own
+
+The low-level reactor does not provide application-level:
+
+- input buffering;
+- output queues;
+- partial-write management;
+- framing or codecs;
+- backpressure policy;
+- socket connection semantics;
+- packet semantics;
+- process lifecycle semantics;
+- Future, Promise, or coroutine scheduling.
+
+Those responsibilities belong to the appropriate semantic layer. Ordered bytes
+belong to the private engine behind `IO::Pipe`, `IO::TTY`, and
+`IO::Sock::Stream`; packet boundaries belong to `IO::Sock::Dgram`; listening
+ownership belongs to `IO::Sock::Listener`; kernel scheduling/notification state
+belongs to the concrete `Kernel::*` leaves.
+
+Third-party async/await or Future layers may compose Linux::Event without
+changing that division. A new core primitive should be added only when an
+external implementation demonstrates that the existing reactor cannot express
+the required behavior safely or efficiently.

@@ -14,24 +14,25 @@ use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 use Time::HiRes qw(time clock_gettime CLOCK_PROCESS_CPUTIME_ID);
 
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 {
     package Linux::Event::Bench::RawNamed;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) { return }
 }
 
 {
     package Linux::Event::Bench::FramedMinimal;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Delimiter', "\n";
     sub on_message ($stream, $message) { return }
 }
 
 {
     package Linux::Event::Bench::FramedFullNamed;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Delimiter', "\n";
     sub on_message ($stream, $message) { return }
     sub on_drain ($stream) { return }
@@ -94,7 +95,7 @@ my @memory_rows;
 my @lifecycle_rows;
 
 say "Linux::Event Stream lifecycle benchmark";
-say "version=$Linux::Event::Stream::VERSION perl=$^V pid=$$";
+say "version=$Linux::Event::IO::Sock::Stream::VERSION perl=$^V pid=$$";
 say "contract=$contract_version api_style=$api_style";
 say "cases=" . join(',', @cases);
 
@@ -433,7 +434,7 @@ sub median (@values) {
 sub environment_info () {
     my ($sysname, $nodename, $release, $version, $machine) = uname();
     return {
-        linux_event_version => $Linux::Event::Stream::VERSION,
+        linux_event_version => $Linux::Event::IO::Sock::Stream::VERSION,
         perl_version => "$^V",
         perl_executable => $^X,
         os => $^O,

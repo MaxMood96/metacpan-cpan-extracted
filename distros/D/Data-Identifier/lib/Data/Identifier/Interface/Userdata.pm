@@ -13,7 +13,7 @@ use warnings;
 
 use Carp;
 
-our $VERSION = v0.35;
+our $VERSION = v0.36;
 
 my %_package_storage;
 
@@ -56,7 +56,7 @@ Data::Identifier::Interface::Userdata - format independent identifier object
 
 =head1 VERSION
 
-version v0.35
+version v0.36
 
 =head1 SYNOPSIS
 
@@ -67,7 +67,8 @@ version v0.35
 Interface for modules implementing C<userdata()>.
 
 B<Note:>
-This interface is experimental. Details may change or it may be removed completely.
+This interface is experimental. Details may change.
+However, it is most unlikely to be removed.
 
 =head1 METHODS
 

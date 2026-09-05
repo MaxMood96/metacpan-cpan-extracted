@@ -8,14 +8,14 @@ use Socket qw(
 );
 use Test::More;
 
-use Linux::Event::Datagram;
+use Linux::Event::IO::Sock::Dgram;
 use Linux::Event::Loop;
 
 our (@ERRORS, @PACKETS);
 
 {
     package T::Datagram::LimitedClient;
-    use parent 'Linux::Event::Datagram';
+    use parent 'Linux::Event::IO::Sock::Dgram';
     sub datagram_options ($class) {
         return max_pending_bytes => 4, max_pending_datagrams => 1;
     }
@@ -52,7 +52,7 @@ close $receiver;
 @ERRORS = ();
 {
     package T::Datagram::TinyServer;
-    use parent 'Linux::Event::Datagram';
+    use parent 'Linux::Event::IO::Sock::Dgram';
     sub datagram_options ($class) { return max_datagram_size => 4 }
     sub on_datagram ($self, $payload, $peer) { push @main::PACKETS, $payload }
     sub on_error ($self, $error) {

@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.105';
+our $VERSION = '0.111';
 
 use Carp qw(croak);
 use bytes ();
@@ -47,7 +47,7 @@ Linux::Event::Framer::Delimiter - native delimiter framing declaration
 =head1 SYNOPSIS
 
   package LineStream;
-  use parent 'Linux::Event::Stream';
+  use parent 'Linux::Event::IO::Sock::Stream';
   use Linux::Event::Framer 'Delimiter', "\n"; # required delimiter
 
 =head1 DESCRIPTION

@@ -1,4 +1,4 @@
-package Dist::Zilla::Role::ExecFiles 6.037;
+package Dist::Zilla::Role::ExecFiles 6.038;
 # ABSTRACT: something that finds files to install as executables
 
 use Moose::Role;
@@ -34,7 +34,7 @@ Dist::Zilla::Role::ExecFiles - something that finds files to install as executab
 
 =head1 VERSION
 
-version 6.037
+version 6.038
 
 =head1 PERL VERSION
 

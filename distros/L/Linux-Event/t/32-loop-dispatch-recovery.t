@@ -4,11 +4,11 @@ use warnings;
 use Test::More;
 
 use Linux::Event::Loop;
-use Linux::Event::Timer;
+use Linux::Event::Kernel::Timer;
 
 {
     package T::DispatchErrorTimer;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     sub on_timer ($timer) {
         $timer->data->{registration}->cancel;
         die "timer dispatch failure\n";

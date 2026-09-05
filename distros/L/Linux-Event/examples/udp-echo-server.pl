@@ -3,12 +3,12 @@ use v5.36;
 use strict;
 use warnings;
 
-use Linux::Event::Datagram;
+use Linux::Event::IO::Sock::Dgram;
 use Linux::Event::Loop;
 
 {
     package Example::UdpEcho;
-    use parent 'Linux::Event::Datagram';
+    use parent 'Linux::Event::IO::Sock::Dgram';
 
     sub on_datagram ($socket, $payload, $peer) {
         say 'received ' . length($payload) . ' bytes from '

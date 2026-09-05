@@ -5,13 +5,14 @@ use Test::More;
 use Socket qw(AF_UNIX);
 
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 our ($LOOP, $ERROR);
 
 {
     package T::TimedClientStream;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) { }
     sub on_error ($stream, $error) {
         $main::ERROR = $error;
@@ -22,7 +23,7 @@ our ($LOOP, $ERROR);
 $LOOP = Linux::Event::Loop->new;
 {
     no warnings 'redefine';
-    local *Linux::Event::Stream::_Connection::_attempt_next = sub ($state) { };
+    local *Linux::Event::_Socket::Connection::_attempt_next = sub ($state) { };
     my $stream = T::TimedClientStream->connect(
         loop => $LOOP, sockaddr => '', family => AF_UNIX, timeout => 0.01,
     );

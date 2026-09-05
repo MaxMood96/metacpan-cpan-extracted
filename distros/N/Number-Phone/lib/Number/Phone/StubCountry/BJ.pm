@@ -22,7 +22,7 @@ use base qw(Number::Phone::StubCountry);
 use strict;
 use warnings;
 use utf8;
-our $VERSION = 1.20260610205500;
+our $VERSION = 1.20260904101547;
 
 my $formatters = [
                 {
@@ -53,43 +53,43 @@ my $validators = {
               };
 my %areanames = ();
 $areanames{fr} = {};
-$areanames{en} = {"229012246", "Dogbo",
-"229012254", "Savalou",
-"229012249", "Mono\/Kouffo\/Zou\/Collines\ departments",
-"229012361", "Parakou",
-"229012134", "Ouidah",
-"229012026", "Sakété\/Igolo",
-"229012022", "Kandiévé",
-"229012029", "Ouémé\/Plateau\ departments",
-"229012243", "Come",
-"229012241", "Lokossa",
-"229012135", "Godomey",
-"229012363", "Kandi\/Gogounou\/Ségbana",
-"229012362", "Nikki\/Ndali",
-"229012021", "Ongala",
-"229012255", "Savè",
-"229012137", "Allada",
-"229012130", "Cadjehoun",
-"229012251", "Bohicon",
-"229012383", "Tanguiéta",
-"229012025", "Pobè\/Kétou",
+$areanames{en} = {"229012029", "Ouémé\/Plateau\ departments",
 "229012382", "Natitingou",
-"229012250", "Abomey",
-"229012131", "Ganhi",
-"229012027", "Adjohoun",
-"229012380", "Djougou",
-"229012365", "Banikoara",
-"229012138", "Kouhounou",
-"229012133", "Akpakpa",
-"229012252", "Covè",
-"229012259", "Mono\/Kouffo\/Zou\/Collines\ departments",
-"229012024", "Sèmè",
 "229012253", "Dassa\-Zoumé",
+"229012130", "Cadjehoun",
+"229012243", "Come",
+"229012134", "Ouidah",
+"229012255", "Savè",
+"229012254", "Savalou",
 "2290124", "Tanguiéta",
-"229012367", "Malanville",
-"229012136", "Abomey\-Calaci",
+"229012362", "Nikki\/Ndali",
+"229012135", "Godomey",
+"229012022", "Kandiévé",
+"229012361", "Parakou",
+"229012021", "Ongala",
+"229012250", "Abomey",
+"229012026", "Sakété\/Igolo",
+"229012137", "Allada",
+"229012133", "Akpakpa",
+"229012139", "Littoral\/Atlantique\ departments",
+"229012251", "Bohicon",
+"229012138", "Kouhounou",
+"229012241", "Lokossa",
+"229012252", "Covè",
+"229012383", "Tanguiéta",
+"229012024", "Sèmè",
+"229012246", "Dogbo",
 "229012132", "Jéricho",
-"229012139", "Littoral\/Atlantique\ departments",};
+"229012249", "Mono\/Kouffo\/Zou\/Collines\ departments",
+"229012365", "Banikoara",
+"229012025", "Pobè\/Kétou",
+"229012380", "Djougou",
+"229012027", "Adjohoun",
+"229012136", "Abomey\-Calaci",
+"229012367", "Malanville",
+"229012363", "Kandi\/Gogounou\/Ségbana",
+"229012131", "Ganhi",
+"229012259", "Mono\/Kouffo\/Zou\/Collines\ departments",};
 my $timezones = {
                '' => [
                        'Africa/Porto-Novo'

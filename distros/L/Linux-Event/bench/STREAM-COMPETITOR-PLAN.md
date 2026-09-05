@@ -1,16 +1,17 @@
-# Stream competitor benchmark plan
+# Stream-socket competitor benchmark plan
 
-The public Stream comparison must measure stream abstractions, not merely their
-underlying poller. Linux::Event's reactor comparison remains a separate suite.
+The high-level stream-socket comparison must measure application stream
+abstractions, not merely their underlying poller. Linux::Event's reactor
+comparison remains a separate suite.
 
 ## Candidate systems
 
 Perl stream layer:
 
-- Linux::Event::Stream
-- AnyEvent::Handle on the EV backend
-- IO::Async::Stream on IO::Async::Loop::Epoll
-- Mojo::IOLoop::Stream / low-level Mojo stream facilities
+- `Linux::Event::IO::Sock::Stream`
+- `AnyEvent::Handle` on the EV backend
+- `IO::Async::Stream` on `IO::Async::Loop::Epoll`
+- `Mojo::IOLoop::Stream` / low-level Mojo stream facilities
 
 Other runtimes:
 
@@ -22,7 +23,7 @@ cleanly to the same contract.
 
 ## Benchmark categories
 
-### Raw byte-stream echo
+### Raw stream-socket echo
 
 Each server receives bytes through its normal high-level stream abstraction and
 writes the same bytes back. Framework buffering/backpressure machinery is part
@@ -58,3 +59,5 @@ Keep raw and framed rankings separate.
 The comparison should not force every runtime to mimic Linux::Event internals.
 It should require the same observable application work while allowing each
 runtime's recognizable stream abstraction to do that work in its intended way.
+For Linux::Event, the tested application surface is the public
+`IO::Sock::Stream` leaf, not the retained private historical Stream engine.

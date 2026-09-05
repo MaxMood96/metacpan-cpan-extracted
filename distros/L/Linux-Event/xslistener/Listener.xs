@@ -1,11 +1,4 @@
-/*
- * Linux::Event::Listener native accept drain
- * =========================================
- *
- * Readiness remains owned by XSLoop. This extension absorbs the repetitive
- * accept4() loop and returns accepted descriptors plus packed peer addresses
- * to Perl, where subclass callbacks make semantic ownership decisions.
- */
+/* Linux::Event private listener accept drain. */
 
 #include "EXTERN.h"
 #include "perl.h"
@@ -16,7 +9,7 @@
 #include <unistd.h>
 #include <sys/socket.h>
 
-MODULE = Linux::Event::Listener    PACKAGE = Linux::Event::Listener
+MODULE = Linux::Event::_Socket::Listener    PACKAGE = Linux::Event::_Socket::Listener
 PROTOTYPES: DISABLE
 
 SV *

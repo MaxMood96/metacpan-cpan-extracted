@@ -5,7 +5,7 @@ use Test::More;
 use POSIX qw(SIGUSR1);
 
 use Linux::Event::Loop;
-use Linux::Event::Signal;
+use Linux::Event::Kernel::Signal;
 
 our ($VICTIM, $SECOND_CALLS);
 
@@ -18,7 +18,7 @@ our ($VICTIM, $SECOND_CALLS);
 
 {
     package T::SignalFirstError;
-    use parent 'Linux::Event::Signal';
+    use parent 'Linux::Event::Kernel::Signal';
     sub on_signal ($signal, $number, $count) {
         $main::VICTIM->cancel;
         die "first Signal callback failed\n";
@@ -27,7 +27,7 @@ our ($VICTIM, $SECOND_CALLS);
 
 {
     package T::SignalSecondSubscriber;
-    use parent 'Linux::Event::Signal';
+    use parent 'Linux::Event::Kernel::Signal';
     sub on_signal ($signal, $number, $count) {
         $main::SECOND_CALLS++;
     }

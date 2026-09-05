@@ -1,5 +1,10 @@
 Revision history for Dist-Zilla
 
+6.038     2026-09-05 17:05:22+09:30 Australia/Adelaide
+        - now requires v5.22.0 (now ten years old), which was effectively true
+          because of some upstream libraries already
+        - switch from Params::Util to Params::SomeUtil
+
 6.037     2026-01-25 16:18:09-05:00 America/New_York
         - avoid warning on undef input to prompts
         - when prompting for PAUSE password, suggest that leaving it blank is

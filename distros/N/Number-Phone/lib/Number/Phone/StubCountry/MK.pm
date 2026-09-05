@@ -22,7 +22,7 @@ use base qw(Number::Phone::StubCountry);
 use strict;
 use warnings;
 use utf8;
-our $VERSION = 1.20260610205504;
+our $VERSION = 1.20260904101550;
 
 my $formatters = [
                 {
@@ -166,45 +166,45 @@ my $validators = {
                 'voip' => ''
               };
 my %areanames = ();
-$areanames{en} = {"3894862", "Prilep\/Krusevo",
-"389485", "Prilep\/Krusevo",
-"3894765", "Bitola\/Demir\ Hisar\/Resen",
-"389484", "Prilep\/Krusevo",
-"3894864", "Prilep\/Krusevo",
-"38944", "Tetovo",
-"3894868", "Prilep\/Krusevo",
-"3894769", "Bitola\/Demir\ Hisar\/Resen",
-"389472", "Bitola\/Demir\ Hisar\/Resen",
-"3894766", "Bitola\/Demir\ Hisar\/Resen",
-"38933", "Kocani\/Berovo\/Delcevo\/Vinica",
-"38942", "Gostivar",
-"389478", "Bitola\/Demir\ Hisar\/Resen",
-"3894763", "Bitola\/Demir\ Hisar\/Resen",
-"3894767", "Bitola\/Demir\ Hisar\/Resen",
-"3894761", "Bitola\/Demir\ Hisar\/Resen",
-"38947608", "Bitola\/Demir\ Hisar\/Resen",
-"389477", "Bitola\/Demir\ Hisar\/Resen",
-"38947609", "Bitola\/Demir\ Hisar\/Resen",
-"38931", "Kumanovo\/Kriva\ Palanka\/Kratovo",
-"3894866", "Prilep\/Krusevo",
-"38943", "Veles\/Kavadarci\/Negotino",
-"3894867", "Prilep\/Krusevo",
-"3894861", "Prilep\/Krusevo",
-"3894863", "Prilep\/Krusevo",
-"389488", "Prilep\/Krusevo",
-"38932", "Stip\/Probistip\/Sveti\ Nikole\/Radovis",
-"38934", "Gevgelija\/Valandovo\/Strumica\/Dojran",
-"38947600", "Bitola\/Demir\ Hisar\/Resen",
+$areanames{en} = {"3894768", "Bitola\/Demir\ Hisar\/Resen",
 "3894764", "Bitola\/Demir\ Hisar\/Resen",
-"3894768", "Bitola\/Demir\ Hisar\/Resen",
-"3894869", "Prilep\/Krusevo",
-"3892", "Skopje",
+"3894862", "Prilep\/Krusevo",
+"38947609", "Bitola\/Demir\ Hisar\/Resen",
+"3894766", "Bitola\/Demir\ Hisar\/Resen",
 "389475", "Bitola\/Demir\ Hisar\/Resen",
-"3894762", "Bitola\/Demir\ Hisar\/Resen",
-"3894865", "Prilep\/Krusevo",
+"3894765", "Bitola\/Demir\ Hisar\/Resen",
+"3894767", "Bitola\/Demir\ Hisar\/Resen",
+"38944", "Tetovo",
+"389484", "Prilep\/Krusevo",
+"3894863", "Prilep\/Krusevo",
+"38943", "Veles\/Kavadarci\/Negotino",
+"3894769", "Bitola\/Demir\ Hisar\/Resen",
+"389488", "Prilep\/Krusevo",
+"3894761", "Bitola\/Demir\ Hisar\/Resen",
+"38942", "Gostivar",
+"38947608", "Bitola\/Demir\ Hisar\/Resen",
 "38946", "Ohrid\/Struga\/Debar",
+"3894869", "Prilep\/Krusevo",
+"389478", "Bitola\/Demir\ Hisar\/Resen",
+"3894861", "Prilep\/Krusevo",
+"38931", "Kumanovo\/Kriva\ Palanka\/Kratovo",
+"389477", "Bitola\/Demir\ Hisar\/Resen",
+"389474", "Bitola\/Demir\ Hisar\/Resen",
+"389472", "Bitola\/Demir\ Hisar\/Resen",
+"3894867", "Prilep\/Krusevo",
+"3894865", "Prilep\/Krusevo",
 "38945", "Kicevo\/Makedonski\ Brod",
-"389474", "Bitola\/Demir\ Hisar\/Resen",};
+"3894763", "Bitola\/Demir\ Hisar\/Resen",
+"38933", "Kocani\/Berovo\/Delcevo\/Vinica",
+"38932", "Stip\/Probistip\/Sveti\ Nikole\/Radovis",
+"38947600", "Bitola\/Demir\ Hisar\/Resen",
+"38934", "Gevgelija\/Valandovo\/Strumica\/Dojran",
+"3894868", "Prilep\/Krusevo",
+"3894864", "Prilep\/Krusevo",
+"3894762", "Bitola\/Demir\ Hisar\/Resen",
+"3892", "Skopje",
+"389485", "Prilep\/Krusevo",
+"3894866", "Prilep\/Krusevo",};
 my $timezones = {
                '' => [
                        'Europe/Skopje'

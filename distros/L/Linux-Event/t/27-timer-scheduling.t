@@ -6,13 +6,13 @@ use Test::More;
 use Time::HiRes qw(sleep);
 
 use Linux::Event::Loop;
-use Linux::Event::Timer;
+use Linux::Event::Kernel::Timer;
 
 our @ORDER;
 
 {
     package T::Timer::Ordered;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     sub on_timer ($timer) {
         push @main::ORDER, $timer->data->{number};
         $timer->loop->stop if @main::ORDER == $timer->data->{total};
@@ -21,7 +21,7 @@ our @ORDER;
 
 {
     package T::Timer::Recurring;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     sub on_timer ($timer) {
         my $state = $timer->data;
         push @{ $state->{expirations} }, $timer->expirations;
@@ -37,7 +37,7 @@ our @ORDER;
 
 {
     package T::Timer::Reschedule;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     sub on_timer ($timer) {
         my $state = $timer->data;
         $state->{calls}++;
@@ -53,7 +53,7 @@ our @ORDER;
 
 {
     package T::Timer::Spawn;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     sub on_timer ($timer) {
         my $state = $timer->data;
         push @{ $state->{events} }, $state->{name};
@@ -75,12 +75,12 @@ our @ORDER;
 
 {
     package T::Timer::Batch;
-    use parent 'Linux::Event::Timer';
+    use parent 'Linux::Event::Kernel::Timer';
     sub on_timer ($timer) { return }
 }
 
 my $order_loop = Linux::Event::Loop->new;
-my $deadline = Linux::Event::Timer->now + 0.01;
+my $deadline = Linux::Event::Kernel::Timer->now + 0.01;
 for my $number (1 .. 8) {
     $order_loop->add(T::Timer::Ordered->new(
         at => $deadline,

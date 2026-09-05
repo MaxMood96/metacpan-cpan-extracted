@@ -6,12 +6,13 @@ use FindBin qw($Bin);
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 
 use Linux::Event::Loop;
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
+use Linux::Event::IO::Sock::Stream;
 use Linux::Event::TLS;
 
 {
     package T::TLSUpgradeServer;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_ready ($stream) {
         $stream->write(
             "HTTP/1.1 101 Switching Protocols\r\n"
@@ -28,7 +29,7 @@ use Linux::Event::TLS;
 
 {
     package T::TLSUpgradeClient;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) {
         my $state = $stream->data;
         $state->{http} .= $bytes;
@@ -47,7 +48,7 @@ use Linux::Event::TLS;
 
 {
     package T::TLSWebSocketBytes;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     sub on_data ($stream, $bytes) {
         $stream->data->{frame} .= $bytes;
         $stream->loop->stop if length($stream->data->{frame}) >= 4;

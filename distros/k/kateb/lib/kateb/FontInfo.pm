@@ -1,5 +1,5 @@
 package kateb::FontInfo;
-$kateb::FontInfo::VERSION = '1.1.0';
+$kateb::FontInfo::VERSION = '1.2.1';
 
 use strict;
 use warnings;
@@ -153,7 +153,21 @@ sub _sources {
 			publisher => 'https://github.com/BornaIz',
 			repo => 'https://github.com/BornaIz/Lalezar/',
 			publisher_name => 'Borna Izadpanah'
-		}
+		},
+		nastaliq => {
+			name => 'font-IranNastaliq',
+			api => 'https://api.github.com/repos/font-store/font-IranNastaliq/tags',
+			publisher => 'https://github.com/font-store',
+			repo => 'https://github.com/BornaIz/Lalezar/',
+			publisher_name => 'Saleh Souzanchi'
+		},
+		arad => {
+			name => 'Arad',
+			api => 'https://api.github.com/repos/MDarvishi5124/Arad/releases',
+			publisher => 'https://github.com/MDarvishi5124',
+			repo => 'https://github.com/MDarvishi5124/Arad/',
+			publisher_name => 'Mohammad Darvishi'
+		},
 	};
 	return $github_apis;
 }
@@ -161,6 +175,31 @@ sub _sources {
 sub lalezar {
 	my $link    =
         'https://raw.githubusercontent.com/BornaIz/Lalezar/master/fonts/Lalezar-Regular.ttf';
+	return $link;
+}
+
+sub nastaliq {
+	my $link =
+	    'https://github.com/font-store/font-IranNastaliq/raw/master/WebFonts/IranNastaliq-Web.ttf';
+	return $link;
+}
+
+# sub arad {
+#     my $link =
+# 	    'https://github.com/MDarvishi5124/Arad/releases/download/1.0.1v/Arad.zip';
+# 	return $link;
+# }
+sub arad {
+	my $self    = shift;
+	my $version = shift;
+	my $link =
+		$self->{arad}->{publisher} . "/" .
+		$self->{arad}->{name} .
+		"/releases/download/" .
+		$version . "/" .
+		$self->{arad}->{name} .
+		".zip"
+	;
 	return $link;
 }
 

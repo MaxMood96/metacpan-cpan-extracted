@@ -95,6 +95,24 @@ like($multi, qr/ok:POST:foobarbazquux!/, 'multi-chunk body (with chunk-ext) reas
     like($buf, qr/ok:GET:/,     'pipelined: following GET framed correctly');
 }
 
+# A chunk-size line that has not arrived yet is not a missing one. The header
+# block reaching the server in its own packet is an ordinary segment boundary -
+# and the certain outcome for any client that waits for a 100-continue - but
+# the scanner read "no hex digits available" as "no hex digits", and refused
+# the request with a 400 before its body was ever sent.
+{
+    my $s = IO::Socket::INET->new(PeerAddr => "127.0.0.1:$port") or die;
+    $s->syswrite("POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n"
+               . "Connection: close\r\n\r\n");
+    Time::HiRes::sleep(0.3);              # the boundary, made certain
+    $s->syswrite("3\r\nfoo\r\n0\r\n\r\n");
+    my $buf = '';
+    eval { local $SIG{ALRM} = sub { die }; alarm 3;
+           while (my $n = $s->sysread(my $c, 4096)) { $buf .= $c } alarm 0; };
+    is(status($buf), '200', 'a chunked body arriving after its headers is served');
+    like($buf, qr/ok:POST:foo/, '...and decoded whole');
+}
+
 # Unsupported transfer coding -> 501.
 is(status(raw("POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: gzip\r\n\r\n")),
    '501', 'an unsupported Transfer-Encoding is 501');

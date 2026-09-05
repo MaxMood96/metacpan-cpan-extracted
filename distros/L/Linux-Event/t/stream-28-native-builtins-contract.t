@@ -5,7 +5,7 @@ use Test::More;
 use FindBin qw($Bin);
 use File::Spec;
 
-use Linux::Event::Stream;
+use Linux::Event::IO::Sock::Stream;
 
 for my $package (qw(
     Linux::Event::Framer::Delimiter
@@ -26,12 +26,12 @@ eval q{
     use Linux::Event::Framer 'Fixed', size => 4;
     1;
 };
-like($@, qr/must inherit from Linux::Event::Stream/,
-    'framer declaration requires explicit Stream inheritance first');
+like($@, qr/must be a Linux::Event byte-stream subclass/,
+    'framer declaration requires an explicit byte-stream leaf first');
 
 eval q{
     package T::LowercaseDeclaration;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'delimiter', "\n";
     sub on_message { }
     1;
@@ -41,7 +41,7 @@ like($@, qr/cannot declare framer 'delimiter'/,
 
 eval q{
     package T::InvalidDeclarationName;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer '../Delimiter', "\n";
     sub on_message { }
     1;
@@ -51,17 +51,18 @@ like($@, qr/invalid framer name/,
 
 eval q{
     package T::DuplicateDeclaration;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Fixed', size => 4;
     use Linux::Event::Framer 'Fixed', size => 4;
     sub on_message { }
     1;
 };
-like($@, qr/already declares a framer/, 'a Stream type declares exactly one framer');
+like($@, qr/already declares a framer/,
+    'a byte-stream type declares exactly one framer');
 
 eval q{
     package T::BadFixedDeclaration;
-    use parent 'Linux::Event::Stream';
+    use parent 'Linux::Event::IO::Sock::Stream';
     use Linux::Event::Framer 'Fixed', size => 0;
     sub on_message { }
     1;
