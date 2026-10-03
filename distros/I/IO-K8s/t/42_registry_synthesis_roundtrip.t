@@ -245,6 +245,14 @@ sub synth_scalar {
         $v = $opts->{maximum} if defined $opts->{maximum} && $v > $opts->{maximum};
         return $v;
     }
+    if ($info->{is_num}) {
+        # A numeric string on purpose (k196): the way a quoted YAML value
+        # arrives, and TO_JSON must still put it out as a JSON number.
+        my $v = '1.5';
+        $v = $opts->{minimum} if defined $opts->{minimum} && $v < $opts->{minimum};
+        $v = $opts->{maximum} if defined $opts->{maximum} && $v > $opts->{maximum};
+        return $v;
+    }
     if ($info->{is_int_or_string}) {
         # IntOrStr must survive whichever form the caller gave it - toggle
         # between a numeric-looking string and a real string so both forms
@@ -355,7 +363,7 @@ sub synth_value {
     return [ '8080', 'http' ]                         if $info->{is_array_of_int_or_string};
     return [ '100m', '1Gi' ]                          if $info->{is_array_of_quantity};
     return [ '2024-01-01T00:00:00Z' ]                 if $info->{is_array_of_time};
-    return { 'sample-key' => 'sample-value' } if $info->{is_hash_of_str};
+    return { 'sample-key' => 'sample-value' } if $info->{is_hash_of_str} || $info->{is_hash_opaque};
     # Typed value maps -- the { TypeName => 1 } DSL form (k63). Each value
     # must satisfy the scalar constraint the map carries.
     return { 'sample-key' => '100m' }                 if $info->{is_hash_of_quantity};
@@ -465,11 +473,22 @@ for my $class (@classes) {
                     like($json_iso->encode($out1->{$key}), qr/^-?\d+\z/,
                         "$class ($mode) .$key serializes as an unquoted number");
                 }
+                elsif ($info->{is_num}) {
+                    like($json_iso->encode($out1->{$key}), qr/^-?[\d.]+(?:[eE][-+]?\d+)?\z/,
+                        "$class ($mode) .$key serializes as an unquoted number");
+                }
                 elsif ($info->{is_array_of_int}) {
                     my @encoded = map { $json_iso->encode($_) } @{ $out1->{$key} };
                     ok((@encoded && !grep { !/^-?\d+\z/ } @encoded),
                         "$class ($mode) .$key elements serialize as unquoted numbers")
                         or diag("encoded: @encoded");
+                }
+                elsif ($info->{is_hash_of_str}) {
+                    # map[string]string: every value must hit the wire as a JSON string
+                    my %encoded = map { $_ => $json_iso->encode($out1->{$key}{$_}) } keys %{ $out1->{$key} };
+                    ok((%encoded && !grep { !/^"/ } values %encoded),
+                        "$class ($mode) .$key values serialize as JSON strings")
+                        or diag("encoded: " . join(', ', map { "$_=$encoded{$_}" } sort keys %encoded));
                 }
             }
 

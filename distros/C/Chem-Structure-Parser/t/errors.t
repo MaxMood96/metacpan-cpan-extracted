@@ -5,7 +5,7 @@
 # reader that quietly returns an empty structure for a missing file turns a
 # typo in a path into an afternoon of wondering why every protein came back
 # with no chains.
-require 5.010;
+require 5.010001;
 use strict;
 use warnings FATAL => 'all';
 use Cwd 'abs_path';
@@ -27,21 +27,22 @@ throws_ok { structure_info("$data/no.such.file.pdb") } qr/does not exist/,
 	'a file that is not there dies, and says which one';
 throws_ok { structure_info($data) } qr/is a directory/, 'a directory dies';
 {
-	# only gzip is unpacked; the other two suffixes the name rule strips used
-	# to be read as the compressed bytes and come back with no atoms at all
+	# gzip and bzip2 are unpacked (t/compressed.t); a .Z, the one other suffix
+	# the name rule strips, used to be read as the compressed bytes and come back
+	# with no atoms at all.  The bytes are compress(1)'s magic number.
 	my $dir = tempdir(CLEANUP => 1);
-	for my $f ('mini.pdb.bz2', 'mini.pdb.Z', 'mini.cif.BZ2') {
+	for my $f ('mini.pdb.Z', 'mini.cif.z') {
 		open my $fh, '>:raw', "$dir/$f" or die $!;
-		print {$fh} "BZh91AY&SY";
+		print {$fh} "\x1f\x9d\x90";
 		close $fh or die $!;
 	}
-	throws_ok { structure_info("$dir/mini.pdb.bz2") }
-		qr/^structure_info: '[^']*mini\.pdb\.bz2' is compressed with bzip2, which this module does not unpack/,
-		'a .bz2 dies rather than coming back empty';
-	throws_ok { structure_info("$dir/mini.pdb.Z") } qr/is compressed with compress/,
-		'and so does a .Z';
-	throws_ok { structure_info("$dir/mini.cif.BZ2") } qr/is compressed with bzip2/,
+	throws_ok { structure_info("$dir/mini.pdb.Z") }
+		qr/^structure_info: '[^']*mini\.pdb\.Z' is compressed with compress, which this module does not unpack/,
+		'a .Z dies rather than coming back empty';
+	throws_ok { structure_info("$dir/mini.cif.z") } qr/is compressed with compress/,
 		'whatever case the suffix is in';
+	throws_ok { structure_info("$dir/mini.pdb.Z") } qr/gzip or bzip2 it/,
+		'and says what would be read instead';
 }
 
 #--------
@@ -344,6 +345,22 @@ SKIP: {
 	throws_ok { Chem::Structure::Parser::_features($info,
 	                { %o, sides => [ $A, $B ], pocket_distance => 0 }, 'x') }
 		qr/^x: the interface distances must be positive numbers/, 'XS: a pocket of no size';
+
+	# Every option is checked before anything is computed.  A bad threshold
+	# used to be found where its calculation was reached, by which time the
+	# surface had been worked out and written into every atom of $info: the
+	# call died and left the structure half-annotated.
+	my $bare = structure_info("$data/fold.pdb", features => 0);
+	throws_ok { Chem::Structure::Parser::_features($bare,
+	                { %o, sasa => 1, store => 1, contacts => 1, contact_distance => -1 }, 'x') }
+		qr/^x: contact_distance must be a positive number/, 'XS: a negative contact distance';
+	my $any = 0;
+	for my $c (values %{ $bare->{chains} }) {
+		for my $r (values %{ $c->{residues} }) {
+			$any++ if exists $r->{sasa} || grep { exists $_->{sasa} } values %{ $r->{atoms} };
+		}
+	}
+	is($any, 0, 'and it died before the surface was computed and stored');
 }
 
 done_testing();

@@ -4,7 +4,7 @@ Database::Join - Read-only combined view across two or more Database::Abstractio
 
 ## Version
 
-Version 0.008.0
+Version 0.008.2
 
 ## Synopsis
 
@@ -429,6 +429,18 @@ preserve both values under distinct names instead.
     the call will `croak` with `error_sqlite_connect`.  Check permissions and
     free space if you see that error.
 
+- `join =>` criteria are not supported
+
+    `Database::Abstraction` accepts a `join => { table => ..., on => ... }`
+    key in its criteria hashrefs to express an SQL JOIN within a single table.
+    `Database::Join` cannot route this to a component DA meaningfully: the merged
+    view has no concept of a single underlying table.  Passing `join =>` to any
+    query method will `croak` with `error_join_criterion`.
+
+    **Fix:** Model the joined table as a separate `Database::Abstraction` object and
+    add it to the `databases => []` list.  Use `join_column` or `join_map` to
+    specify the shared key.
+
 ## Methods
 
 ### New
@@ -511,6 +523,30 @@ filters        => { type => 'hashref',  optional => 1 }
                   # Zero-based database index => criteria hashref.
                   # Permanent row restrictions on individual databases.
                   # See the filters section for full details.
+
+base_criteria  => { type => 'hashref',  optional => 1 }
+                  # Column name => value hashref.
+                  # Permanent criteria applied to every query, specified by
+                  # column name rather than database index.  Each key must
+                  # be a column that appears in the merged view (or the
+                  # join_column); each value is a plain scalar or an
+                  # operator hashref in the same format as
+                  # selectall_arrayref accepts.  Criteria are automatically
+                  # routed to the database that owns each column (same
+                  # routing used by selectall_arrayref).
+                  # Equivalent to filters but more convenient when you know
+                  # the column name but not which database index owns it.
+                  # When a column appears in both base_criteria and filters,
+                  # the filters entry takes precedence.
+                  # See the base_criteria section for full details.
+                  #
+                  # DOMAIN -- EP valid:   hashref of column-name => scalar or
+                  #                       operator-hashref pairs.  Unknown column
+                  #                       names emit warn_unknown_column (carp)
+                  #                       and are silently dropped.
+                  # DOMAIN -- EP invalid: non-hashref value => croak from
+                  #                       validate_strict.
+                  # DOMAIN -- BVA:        {} empty hashref is a safe no-op.
 
 collision_prefix => { type => 'hashref', optional => 1 }
                   # Zero-based database index (>0) => prefix string.
@@ -622,6 +658,11 @@ croak if any element of databases is not a Database::Abstraction subclass
 bless the object with all fields initialised
 call _build_col_index to map every column to its owning database
     and verify join_column presence in each database
+if base_criteria given:
+    partition base_criteria by column ownership into per-db slices
+    for each database with a non-empty slice:
+        merge the slice into _filters[i]
+        (explicit filters win on plain-scalar conflicts)
 for each column in remove_columns: call remove_column
 return the new object
 ```
@@ -768,6 +809,45 @@ criteria for the new database:
 ```perl
 $join->add_database($orders, filter => { age_days => { '>' => 60 } });
 ```
+
+### Base\_Criteria - Permanent View-Level Row Filters by Column Name
+
+`base_criteria` is a convenience alternative to `filters` for callers who
+know the column names they want to restrict but prefer not to track database
+indices.
+
+```perl
+my $join = Database::Join->new(
+    databases     => [ $customers, $orders ],
+    join_column   => 'entry',
+    base_criteria => { active => 1, deleted_at => undef },
+);
+
+# Every query automatically sees only active, non-deleted rows.
+my $rows = $join->selectall_arrayref();
+```
+
+At construction time `base_criteria` is partitioned by column ownership
+using the same routing logic as `selectall_arrayref`.  Each criterion is
+sent to the database that owns that column and stored as a permanent base
+filter (equivalent to the corresponding `filters` entry).
+
+**Unknown columns** emit a `warn_unknown_column` carp and are silently
+dropped, just as they would be in a query call.
+
+**Key-set semantics** are identical to `filters`: any database that receives
+a `base_criteria` slice acts as an inner-join partner regardless of
+`join_type`.
+
+**Precedence**: when a column appears in both `base_criteria` and `filters`,
+the `filters` entry wins on plain-scalar conflicts; operator-hashref values
+are combined with AND semantics.
+
+**Use cases**
+
+- Row-level security: `base_criteria => { tenant_id => $tid }`
+- Soft-delete filtering: `base_criteria => { deleted_at => undef }`
+- Status gates: `base_criteria => { active => 1 }`
 
 ### Collision\_Prefix - Preserve Colliding Columns From Secondary Databases
 
@@ -1149,10 +1229,13 @@ for my $row (@{$vip}) {
 
 #### Messages
 
-```
+```perl
 warn_unknown_column (carp)
     -- A criterion key names a column not present in any component database;
        the criterion is silently dropped and all rows are returned.
+error_join_criterion (croak)
+    -- A criterion hashref contains a join => key (DA SQL-JOIN syntax).
+       Use a separate DA object for the joined table instead.
 sort_by column unknown (carp)
     -- The column given in sort_by is not in the merged view; the result
        is returned in the default join_column ascending order instead.
@@ -1224,6 +1307,18 @@ print $first_vip->{name}, "\n" if defined $first_vip;
 #### Messages
 
 Same messages as `selectall_arrayref`.
+
+### Selectall\_Hashref
+
+Deprecated alias for ["selectall\_arrayref"](#selectall_arrayref), present for compatibility with
+callers written against `Database::Abstraction`'s deprecated API.  Use
+`selectall_arrayref` in new code.
+
+### Selectall\_Hash
+
+Deprecated alias for ["selectall\_array"](#selectall_array), present for compatibility with
+callers written against `Database::Abstraction`'s deprecated API.  Use
+`selectall_array` in new code.
 
 ### Fetchrow\_Hashref
 
@@ -1613,8 +1708,9 @@ empty list).
 
 #### Synopsis
 
-```
+```perl
 $join->set_logger($log);
+$join->set_logger(logger => $log);   # named-pair form also accepted
 ```
 
 #### Description
@@ -1622,13 +1718,18 @@ $join->set_logger($log);
 Attaches a new logger object to the join and propagates it to every component
 database.  The logger is used for diagnostic output by all component databases.
 
+Non-blessed values (a log-level string such as `"debug"`, a filename, or a
+code reference) are wrapped in `Log::Abstraction-`new(...)> automatically,
+matching the behaviour of `Database::Abstraction::set_logger`.
+
 #### Api Specification
 
 ##### Input
 
 ```
-$log    Positional: a logger object (required).
-        Must support whatever interface Database::Abstraction expects.
+logger  Positional or named: a logger object, log-level string, filename,
+        or code reference (required).  Non-blessed values are wrapped in
+        Log::Abstraction automatically.
 ```
 
 ##### Output
@@ -1648,12 +1749,15 @@ use Log::Any qw($log);
 my $join = Database::Join->new(databases => [$db1, $db2], join_column => 'entry');
 $join->set_logger($log);
 # $log is now used by $join and by $db1 and $db2
+
+# Named-pair form (mirrors Database::Abstraction API):
+$join->set_logger(logger => $log);
 ```
 
 #### Messages
 
-```
-(croak) Usage: set_logger($logger)
+```perl
+(croak) Usage: set_logger(logger => $logger)
     -- Called with an undefined argument.  Pass a valid logger object.
 ```
 
@@ -1868,11 +1972,13 @@ error_remove_join_col -- attempt to remove the join_column itself
 
 ### Query
 
-Not supported.  `Database::Join` does not implement the chained query
-builder.  Calling this method will always `croak` with an explanatory message.
+Not supported.  `Database::Join` does not implement the
+`Database::Abstraction::Query` chained builder because the builder's
+`.all()` / `.first()` methods would be targeting a single component DA
+rather than the merged view.  Calling this method will always `croak`.
 
-Use `selectall_arrayref`, `selectall_array`, `fetchrow_hashref`, or
-`count` instead.
+Use `selectall_arrayref`, `selectall_array`, `fetchrow_hashref`,
+`count`, or `each_row` against the `Database::Join` object instead.
 
 ### Execute
 
@@ -2050,6 +2156,16 @@ can be localised by supplying an `i18n` object to `new`.
     component database (or has been removed with `remove_column`).
 
     **Fix:** Check the column name spelling.  The criterion is ignored.
+
+- `error_join_criterion`
+
+    **When:** A criterion hashref contains a `join =>` key (the
+    `Database::Abstraction` SQL-JOIN syntax).
+
+    **Fix:** `join =>` targets a single table inside one DA; it cannot be
+    routed through a merged view.  Express multi-table relationships by adding
+    the joined table as a separate `Database::Abstraction` object in the
+    `databases => []` constructor list instead.
 
 - `error_query_unsupported`
 
@@ -2257,27 +2373,34 @@ join_col ∉ removed
 
 ─── Init ──────────────────────────────────────────────────────────
 ΔDatabase_Join
-dbs?           : seq DATABASE_ABSTRACTION
-join_col?      : NAME
-join_type?     : {left, inner, outer}
-join_map?      : ℕ ⇸ NAME
-filters?       : ℕ ⇸ CRITERIA
-removed?       : ℙ NAME
-backend?       : {array, sqlite, auto}   -- default auto
+dbs?            : seq DATABASE_ABSTRACTION
+join_col?       : NAME
+join_type?      : {left, inner, outer}
+join_map?       : ℕ ⇸ NAME
+filters?        : ℕ ⇸ CRITERIA
+base_criteria?  : CRITERIA              -- optional; column-name keyed
+removed?        : ℙ NAME
+backend?        : {array, sqlite, auto}   -- default auto
 max_array_rows? : ℕ                      -- default 10000
-tmpdir?        : PATH                    -- default File::Spec->tmpdir
+tmpdir?         : PATH                    -- default File::Spec->tmpdir
 ───────────────────────────────────────────────────────────────────
 #dbs? ≥ 1
-dbs'           = dbs?
-join_col'      = join_col?
-join_type'     = join_type?
-join_map'      = join_map?
-filters'       = filters?
-col_db'        = buildColIndex(dbs?, join_col?, join_map?)
-removed'       = removed?
-backend'       = backend?
+dbs'            = dbs?
+join_col'       = join_col?
+join_type'      = join_type?
+join_map'       = join_map?
+-- base_criteria is partitioned by column ownership and merged into filters:
+-- bc_slice(i) = partition(base_criteria?, i)
+-- filters'(i) = merge_criteria(bc_slice(i), filters?(i))
+--             when bc_slice(i) ≠ ∅; otherwise filters?(i)
+-- (filters? wins on plain-scalar conflicts; operator hashrefs are ANDed)
+filters'        = ∀ i : 0 ‥ #dbs?-1 •
+                      merge_criteria(partition(base_criteria?, i), filters?(i) ∪ ∅)
+col_db'         = buildColIndex(dbs?, join_col?, join_map?)
+removed'        = removed?
+backend'        = backend?
 max_array_rows' = max_array_rows?
-tmpdir'        = tmpdir?
+tmpdir'         = tmpdir?
 
 ─── SelectAllArrayref ─────────────────────────────────────────────
 ΞDatabase_Join        -- state unchanged
@@ -2404,6 +2527,31 @@ merge_criteria(base, extra) ==
            ∧ base(col) ∈ HASHREF ∧ extra(col) ∈ HASHREF
         then col ↦ base(col) ∪ extra(col)   -- operator union
         else col ↦ (if col ∈ dom extra then extra(col) else base(col)) }
+```
+
+### Base\_Criteria
+
+```
+─── BaseCriteria ────────────────────────────────────────────────
+base_criteria : CRITERIA              -- column-name keyed
+col_db        : NAME ⇸ ℕ
+filters       : ℕ ⇸ CRITERIA         -- after Init
+─────────────────────────────────────────────────────────────────
+-- base_criteria is applied once at construction by partitioning
+-- its columns into per-db slices and merging into filters:
+∀ i : 0 ‥ #dbs-1 •
+    bc_slice(i) = partition(base_criteria, i)
+    filters(i)  = merge_criteria(bc_slice(i), filters_explicit(i))
+
+-- where filters_explicit is the filters parameter as supplied.
+-- merge_criteria semantics: explicit filters win on plain-scalar
+-- conflicts; operator hashrefs are combined (AND).
+
+-- Unknown columns are dropped (warn_unknown_column carp);
+-- the join_column is broadcast to all databases.
+
+-- Key-set semantics: any database that receives a non-empty
+-- bc_slice acts as an inner-join partner (same as filters).
 ```
 
 ### Selectall\_Arrayref

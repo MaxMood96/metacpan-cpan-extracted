@@ -213,10 +213,14 @@ every function here is exported, so Perl parses the bareword as a call to
 
 Reads `$file` and returns a hash reference. The format is worked out from the
 file name — `.pdb`, `.ent`, `.cif`, `.mmcif`, `.pdbx` — and from the first
-records in the file when the name gives nothing away. `.gz` files are read as
-they are, without unpacking to a temporary file — a file of several gzip members,
-as `bgzip` writes, included. A `.bz2` or `.Z` file dies saying so: only gzip is
-unpacked, and read as it stands one would be a structure with no atoms in it.
+records in the file when the name gives nothing away. `.gz` and `.bz2` files
+are read as they are, without unpacking to a temporary file — a file of several
+gzip or bzip2 members, as `bgzip` and `pbzip2` write, included — and so is every
+function below that takes a file name in place of a structure. The suffix is
+what says a file is compressed, in either case (`.GZ`, `.BZ2`), and the name
+with it taken off is what says the format. Both are read through IO::Compress,
+which is part of perl. A `.Z` file dies saying so: `compress` is
+not unpacked, and read as it stands one would be a structure with no atoms in it.
 
 A plain string in second place names a *view*, and asks for that and nothing
 else: the file is read, the view is taken out of it, and the rest is thrown
@@ -463,6 +467,14 @@ By residue number with the insertion code appended, so `100`, `100A` and
 `100B` are three separate keys and nothing is silently overwritten. Waters and
 ligands are in `residues` alongside the polymer, which is why chain A above
 has 206 residues to its 191-long SEQRES.
+
+A number too big for its columns is read the way cctbx, phenix and gemmi write
+it, in [hybrid-36](https://cci.lbl.gov/hybrid_36/): a residue numbered `A000`
+in a PDB file is residue `10000`, and an atom serial of `A0000` is `100000`,
+so a chain past 9,999 residues reads the same from a PDB file as from its
+mmCIF. A residue whose number field is blank, or is not a number in either
+spelling, has an `undef` number and the empty key `''`; it is still a residue
+of its own and not part of the one before it.
 
 The name is not part of a residue's identity. One position is sometimes
 modelled in two chemical states at once, written as complementary altloc
@@ -2226,3 +2238,7 @@ David E. Condon <dec986@gmail.com>
 
 This library is free software; you can redistribute it and/or modify it under
 the same terms as Perl itself.
+
+# Thanks
+
+Most of this was done with the help of Claude models, which was paid for by the University of Idaho's IMCI.

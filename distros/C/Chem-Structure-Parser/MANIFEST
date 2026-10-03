@@ -15,6 +15,7 @@ ppport.h
 t/00-load.t
 t/cif.t
 t/classify.t
+t/compressed.t
 t/data/aform.cif
 t/data/aform.pdb
 t/data/bare.cif
@@ -39,6 +40,8 @@ t/data/mini.cif
 t/data/mini.pdb
 t/data/nmr.cif
 t/data/nmr.pdb
+t/data/numbering.cif
+t/data/numbering.pdb
 t/data/oracle.pl
 t/data/oracle.py
 t/data/oracle.txt
@@ -57,7 +60,6 @@ t/data/wobble.pdb
 t/errors.t
 t/features.t
 t/foreign.t
-t/gzip.t
 t/header.t
 t/interface.t
 t/leaks.t
